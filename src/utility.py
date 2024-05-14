@@ -3,11 +3,28 @@ A module for various helper methods
 """
 
 
+def Legendre_symbol(a: int, p: int):
+    """
+    Returns (a | p) = {
+        0 if a % p == 0
+        1 if a % p != 0 and a is a quadratic residue mod p
+        -1 if a % p != 0 and a is a quadratic non-residue mod p
+    }
+    We use Euler's criterion which states:
+        (a | p) = a^((p-1)/1) (mod p)
+    """
+    if a % p == 0:
+        return 0
+    else:
+        criterion = pow(a, (p - 1) // 2, p)
+        return -1 if criterion == p - 1 else 1
+
+
 def is_quadratic_residue(n: int, p: int) -> bool:
     '''
     Returns True if (n|p) != -1
     '''
-    return True if pow(n, (p - 1) // 2, p) == -1 else False
+    return True if Legendre_symbol(n, p) != -1 else False
 
 
 def tonelli_shanks(n: int, p: int):

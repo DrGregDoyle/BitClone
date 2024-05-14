@@ -2,11 +2,11 @@
 A module for dealing with elliptic curve cryptography (ecc)
 
 """
+# --- IMPORTS --- #
 import logging
 import sys
 
-# --- IMPORTS --- #
-from utility import is_quadratic_residue, tonelli_shanks
+from src.utility import is_quadratic_residue, tonelli_shanks
 
 # --- CONSTANTS --- #
 log_level = logging.DEBUG
@@ -34,6 +34,9 @@ class Point:
     def __repr__(self):
         return f"({self.x},{self.y})"
 
+    def __eq__(self, other):
+        return self.x == other.x and self.y == other.y
+
     @property
     def is_point_at_infinity(self) -> bool:
         return True if self.x is None and self.y is None else False
@@ -48,12 +51,17 @@ class EllipticCurve:
     We let E = E(a,b;p) denote the elliptic curve over F_p given by
         y^2 = x^3 + ax + b (mod p).
     """
+    MAX_PRIME = pow(2, 19) - 1  # 7th Mersenne prime
 
-    def __init__(self, a: int, b: int, p: int):
+    def __init__(self, a: int, b: int, p: int, generator: Point | None = None, order: int | None = None):
         # Curve constants
         self.a = a
         self.b = b
         self.p = p
+        self.g = generator
+        self.order = order
+        if self.order is None and self.p < self.MAX_PRIME:
+            self.order = self.get_order()
 
     def rhs(self, x: int):
         return pow(x, 3) + self.a * x + self.b
@@ -62,6 +70,7 @@ class EllipticCurve:
         '''
         A residue x is on the curve E iff x^3 + ax + b is a quadratic residue modulo p.
         '''
+        temp = self.rhs(x)
         return is_quadratic_residue(self.rhs(x), self.p)
 
     def is_point_on_curve(self, point: Point) -> bool:
@@ -140,9 +149,9 @@ class EllipticCurve:
         # Get slope if it exists
         if x1 == x2:
             if y1 != y2:  # Points are inverses
-                return None
+                return Point(None)
             elif y1 == 0:  # Point is its own inverse when lying on the x-axis
-                return None
+                return Point(None)
             else:  # Points are the same
                 m = ((3 * x1 * x1 + self.a) * pow(2 * y1, -1, self.p)) % self.p
         else:  # Points are distinct
@@ -220,21 +229,38 @@ class EllipticCurve:
     def get_order(self):
         '''
         We naively calculate the order by iterating over all x in F_p. If x is on the curve we
-        obtain y. If y is not zero, then we known (x,y) and (x,p-y) are two points on the curve. Otherwise, (x,
+        obtain y. If y is not zero, then we know (x,y) and (x,p-y) are two points on the curve. Otherwise, (x,
         0) is a point on the curve (on the x-axis). Hence, we sum up these values and add the point at infinity to
         return the order.
 
         NOTE: This should only be used for small primes.
         '''
 
-        sum = 1  # Start with point of infinity
+        # Get all x values on the curve
+        x_vals_on_curve = []
         for x in range(0, self.p):
             if self.is_x_on_curve(x):
-                y = self.find_y_from_x(x)
-                if y == 0:
-                    sum += 1
-                else:
-                    sum += 2
-        return sum
+                x_vals_on_curve.append(x)
+        logger.debug(f"Total number of x-coordinates: {len(x_vals_on_curve)}")
+        logger.debug(f"List of x-values on the curve: {x_vals_on_curve}")
+
+        # Extract all x values which have self.rhs(x) == 0
+        x_vals_with_zero_y = []
+        temp_index = x_vals_on_curve.copy()
+        for t in temp_index:
+            temp_y = self.rhs(t)
+            if temp_y % self.p == 0:
+                x_vals_on_curve.remove(t)
+                x_vals_with_zero_y.append(t)
+        logger.debug(f"Total number of x-coordinates on the axis: {len(x_vals_with_zero_y)}")
+        logger.debug(f"List of x-coordinates on the axis: {x_vals_with_zero_y}")
+
+        # Calculate order
+        return 2 * len(x_vals_on_curve) + 1 * len(x_vals_with_zero_y) + 1  # Add 1 for point at infinity
+
 
 # --- MAIN --- #
+if __name__ == "__main__":
+    # curve = EllipticCurve(a=0, b=7, p=11)
+    point = Point(None)
+    print(f"POINT: {point}")
