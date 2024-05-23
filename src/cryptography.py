@@ -64,7 +64,7 @@ class EllipticCurve:
             self.order = self.get_order()
 
     def rhs(self, x: int):
-        return pow(x, 3) + self.a * x + self.b
+        return (pow(x, 3) + self.a * x + self.b) % self.p
 
     def is_x_on_curve(self, x: int) -> bool:
         """
@@ -90,7 +90,7 @@ class EllipticCurve:
         x, y = pt
         return (self.rhs(x) - pow(y, 2)) % self.p == 0
 
-    def find_y_from_x(self, x: int):
+    def get_y_from_x(self, x: int):
         """
         Using tonelli shanks, we return y such that E(x,y) = 0, if x is on the curve.
         Note that if (x,y) is a point then (x,p-y) will be a point as well.
@@ -200,8 +200,8 @@ class EllipticCurve:
             return None
 
         # Scalar multiple divides group order
-        # if n % self.order == 0:
-        #     return Point(None)
+        if n % self.order == 0:
+            return None
 
         # Take residue of n modulo the group order
         n = n % self.order
@@ -234,27 +234,33 @@ class EllipticCurve:
         NOTE: This should only be used for small primes.
         """
 
-        # Get all x values on the curve
-        x_vals_on_curve = []
+        sum = 1  # Start with point of infinity
         for x in range(0, self.p):
+            if self.is_x_on_curve(x):  # If x is on the curve
+                y = self.get_y_from_x(x)  # Find corresponding y
+                if y == 0:
+                    sum += 1  # Only 1 pt if x is on the y-axis
+                else:
+                    sum += 2  # Symmetric points if y is non-zero
+        return sum
+
+    def get_list_of_points(self):
+        """
+        Used for debugging
+        :return:
+        """
+        if self.order is None:
+            return []
+        point_list = [None]
+        for x in range(self.p):
             if self.is_x_on_curve(x):
-                x_vals_on_curve.append(x)
-        logger.debug(f"Total number of x-coordinates: {len(x_vals_on_curve)}")
-        logger.debug(f"List of x-values on the curve: {x_vals_on_curve}")
-
-        # Extract all x values which have self.rhs(x) == 0
-        x_vals_with_zero_y = []
-        temp_index = x_vals_on_curve.copy()
-        for t in temp_index:
-            temp_y = self.rhs(t)
-            if temp_y % self.p == 0:
-                x_vals_on_curve.remove(t)
-                x_vals_with_zero_y.append(t)
-        logger.debug(f"Total number of x-coordinates on the axis: {len(x_vals_with_zero_y)}")
-        logger.debug(f"List of x-coordinates on the axis: {x_vals_with_zero_y}")
-
-        # Calculate order
-        return 2 * len(x_vals_on_curve) + 1 * len(x_vals_with_zero_y) + 1  # Add 1 for point at infinity
+                y = self.get_y_from_x(x)  # Find corresponding y
+                if y == 0:
+                    point_list.append((x, y))
+                else:
+                    neg_y = -y % self.p
+                    point_list.extend([(x, y), (x, neg_y)])
+        return point_list
 
 
 class SECP256K1(EllipticCurve):
@@ -273,4 +279,21 @@ class SECP256K1(EllipticCurve):
 
 # --- TESTING --- #
 if __name__ == "__main__":
-    curve = EllipticCurve(a=0, b=7, p=11)
+    test_curve = EllipticCurve(
+        a=7,
+        b=13,
+        p=17
+    )
+    list_of_points = test_curve.get_list_of_points()
+    print(f"Calculated order: {test_curve.order}")
+    print(f"List of point: {list_of_points}")
+    print(f"Number of points + 1: {len(list_of_points)}")
+
+    for known_pt in list_of_points:
+        print(f"Initial point: {known_pt}")
+        temp_pt = None
+        for y in range(test_curve.order):
+            temp_pt = test_curve.add_points(temp_pt, known_pt)
+            scalar_multiple = test_curve.scalar_multiplication(y + 1, known_pt)
+            print(f"Temp point after {y} iterations: {temp_pt}")
+            print(f"Scalar multiplication using {y + 1} multiplier: {scalar_multiple}")

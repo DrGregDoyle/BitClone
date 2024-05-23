@@ -18,7 +18,7 @@ class Wallet:
         self.private_key = secrets.randbits(self.BIT_LENGTH) % (self.curve.p - 1)
         self.public_key_point = self.curve.scalar_multiplication(
             n=self.private_key,
-            point=self.curve.g
+            pt=self.curve.g
         )
         self.pub_key_hash = ripemd160(
             sha256()
