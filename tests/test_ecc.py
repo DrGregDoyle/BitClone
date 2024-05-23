@@ -1,7 +1,9 @@
 """
 Testing the Point and EllipticCurve classes and methods
 """
-from src.cryptography import Point, EllipticCurve
+import secrets
+
+from src.cryptography import EllipticCurve, SECP256K1
 
 
 def test_infinity_point():
@@ -31,19 +33,26 @@ def test_elliptic_curve_functions():
     (2,2) + (2,9) = point at infinity
     (2,2) + (3,1) = (7.3)
     """
-    KNOWN_ORDER = 12
-    KNOWN_POINT = Point(7, 3)
-    INFINITY_POINT = Point(None)
+    known_order = 12
+    known_point = Point(7, 3)
+    infinity_point = Point(None)
     test_curve = EllipticCurve(a=0, b=7, p=11)
 
     # Verify order calculation
-    assert test_curve.order == KNOWN_ORDER
+    assert test_curve.order == known_order
 
     # Verify point addition
     p1 = Point(2, 2)
     p2 = Point(2, 9)
     p3 = Point(3, 1)
-    assert test_curve.add_points(p1, p2) == INFINITY_POINT
-    assert test_curve.add_points(p2, p1) == INFINITY_POINT
-    assert test_curve.add_points(p1, p3) == KNOWN_POINT
-    assert test_curve.add_points(p3, p1) == KNOWN_POINT
+    assert test_curve.add_points(p1, p2) == infinity_point
+    assert test_curve.add_points(p2, p1) == infinity_point
+    assert test_curve.add_points(p1, p3) == known_point
+    assert test_curve.add_points(p3, p1) == known_point
+
+
+def test_secp256k1():
+    nist_curve = SECP256K1()
+    random_256_bit_integer = secrets.randbits(256)
+    random_point = nist_curve.scalar_multiplication(random_256_bit_integer, nist_curve.g)
+    assert nist_curve.scalar_multiplication(nist_curve.order, random_point) == Point(None)

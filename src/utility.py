@@ -3,34 +3,34 @@ A module for various helper methods
 """
 
 
-def Legendre_symbol(a: int, p: int):
+def legendre_symbol(r: int, p: int):
     """
-    Returns (a | p) = {
-        0 if a % p == 0
-        1 if a % p != 0 and a is a quadratic residue mod p
-        -1 if a % p != 0 and a is a quadratic non-residue mod p
+    Returns (r | p) = {
+        0 if r % p == 0
+        1 if r % p != 0 and r is a quadratic residue mod p
+        -1 if r % p != 0 and r is a quadratic non-residue mod p
     }
     We use Euler's criterion which states:
-        (a | p) = a^((p-1)/1) (mod p)
+        (r | p) = r^((p-1)/1) (mod p)
     """
-    if a % p == 0:
+    if r % p == 0:
         return 0
     else:
-        criterion = pow(a, (p - 1) // 2, p)
+        criterion = pow(r, (p - 1) // 2, p)
         return -1 if criterion == p - 1 else 1
 
 
 def is_quadratic_residue(n: int, p: int) -> bool:
-    '''
-    Returns True if (n|p) != -1
-    '''
-    return True if Legendre_symbol(n, p) != -1 else False
+    """
+    Returns True if (n|p) != -1. (We include 0 as quadratic residues.)
+    """
+    return True if legendre_symbol(n, p) != -1 else False
 
 
 def tonelli_shanks(n: int, p: int):
-    '''
+    """
     If n is a quadratic residue mod p, then we return an integer r such that r^2 = n (mod p).
-    '''
+    """
 
     # Verify n is a quadratic residue
     if not is_quadratic_residue(n, p):
@@ -45,12 +45,12 @@ def tonelli_shanks(n: int, p: int):
         return pow(n, (p + 1) // 4, p)
 
     # --- GENERAL CASE --- #
-    # 1) Divide p-1 into its even and odd components by p-1 = 2^s * Q, where Q is odd and s >=1
-    Q = p - 1
+    # 1) Divide p-1 into its even and odd components by p-1 = 2^s * q, where q is odd and s >=1
+    q = p - 1
     s = 0
-    while Q % 2 == 0:
+    while q % 2 == 0:
         s += 1
-        Q //= 2
+        q //= 2
 
     # 2) Find a quadratic non residue
     z = 2
@@ -58,10 +58,10 @@ def tonelli_shanks(n: int, p: int):
         z += 1
 
     # 3) Configure initial variables
-    M = s
-    c = pow(z, Q, p)
-    t = pow(n, Q, p)
-    R = pow(n, (Q + 1) // 2, p)
+    m = s
+    c = pow(z, q, p)
+    t = pow(n, q, p)
+    r = pow(n, (q + 1) // 2, p)
 
     # 4) Repeat until t == 1
     while t != 1:
@@ -74,11 +74,11 @@ def tonelli_shanks(n: int, p: int):
             factor = (factor * factor) % p
 
         # Reassign variables
-        exp = 2 ** (M - i - 1)
+        exp = 2 ** (m - i - 1)
         b = pow(c, exp, p)
-        M = i
+        m = i
         c = (b * b) % p
         t = (t * c) % p
-        R = (R * b) % p
+        r = (r * b) % p
 
-    return R
+    return r
