@@ -5,7 +5,10 @@ TODO:
     -Link recovery phrase seed to private key generation
     -Add recovery function 
 """
+
 # --- IMPORTS --- #
+import logging
+import sys
 from hashlib import sha256
 from secrets import randbits
 
@@ -14,11 +17,20 @@ from ripemd.ripemd160 import ripemd160
 from src.cryptography import SECP256K1
 from src.word_list import WORDLIST
 
+# --- LOGGING --- #
+log_level = logging.DEBUG
+logger = logging.getLogger(__name__)
+logger.setLevel(log_level)
+handler = logging.StreamHandler(stream=sys.stdout)
+logger.addHandler(handler)
 
+
+# --- HELPERS --- #
 def hash160(my_string: str):
     return ripemd160(sha256(my_string.encode()).hexdigest().encode()).hex().upper()
 
 
+# --- CLASSES --- #
 class WalletFactory:
 
     def new_wallet(self):
@@ -49,8 +61,9 @@ class WalletFactory:
         # Verify checksum
         assert bin(int(sha256(entropy.encode()).hexdigest(), 16))[2:2 + Wallet.BIT_LENGTH // 32] == checksum
 
-        # Return seed
-        return int(entropy, 2)
+        # Return Wallet
+        seed = int(entropy, 2)
+        return Wallet(seed=seed)
 
 
 class Wallet:
@@ -101,7 +114,6 @@ class Wallet:
 
         # 3 - Add checksum to entropy
         entropy += checksum
-        print(f"ENTROPY + CHECKSUM: {entropy}")
 
         # 4 - Split entropy into 11-bit length segments
         number_of_words = len(entropy) // 11
@@ -115,19 +127,13 @@ class Wallet:
             words.append(WORDLIST[i])
 
         # 6 - Recovery code is the sequence of words
-        print("===== RECOVERY PHRASE =====")
+        logger.debug("===== RECOVERY PHRASE =====")
         for w in words:
-            print(w)
-        print("===== ===== ===== ===== =====")
+            logger.debug(w)
+        logger.debug("===== ===== ===== ===== =====")
         return words
 
 
 # --- TESTING --- #
 if __name__ == "__main__":
     w = Wallet()
-    print(f"WALLET SEED: {w._seed}")
-    seed_phrase = w.seed_phrase
-
-    wf = WalletFactory()
-    recovered_seed = wf.recover_wallet(seed_words=seed_phrase)
-    print(f"RECOVERED SEED: {recovered_seed}")
