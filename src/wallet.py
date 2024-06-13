@@ -18,7 +18,7 @@ from src.cryptography import SECP256K1
 from src.word_list import WORDLIST
 
 # --- LOGGING --- #
-log_level = logging.DEBUG
+log_level = logging.INFO
 logger = logging.getLogger(__name__)
 logger.setLevel(log_level)
 handler = logging.StreamHandler(stream=sys.stdout)
@@ -59,7 +59,11 @@ class WalletFactory:
         entropy = entropy[:-Wallet.BIT_LENGTH // 32]
 
         # Verify checksum
-        assert bin(int(sha256(entropy.encode()).hexdigest(), 16))[2:2 + Wallet.BIT_LENGTH // 32] == checksum
+        try:
+            assert bin(int(sha256(entropy.encode()).hexdigest(), 16))[2:2 + Wallet.BIT_LENGTH // 32] == checksum
+        except AssertionError:
+            logger.error(f"Given seed phrase {seed_words} does not have matching checksum")
+            return None
 
         # Return Wallet
         seed = int(entropy, 2)
