@@ -11,7 +11,7 @@ import sys
 from collections import deque
 from typing import Any
 
-from op_codes import OPCODES
+from .op_codes import OPCODES
 
 # --- LOGGING --- #
 log_level = logging.DEBUG
@@ -88,7 +88,7 @@ class Script:
         self.main_stack.push(pubKey)
 
         # Evaluate scriptPubKey
-        
+
 
 # --- TESTING --- #
 if __name__ == "__main__":

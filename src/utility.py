@@ -1,7 +1,23 @@
 """
 A module for various helper methods
 """
+# --- IMPORTS --- #
+import random
+import string
 
+
+# --- HELPERS --- #
+def get_random_string(max_chars=64):
+    """
+    We return a random string with max chars
+    """
+    random_string = ""
+    for x in range(max_chars):
+        random_string += random.choice(string.ascii_letters)
+    return random_string
+
+
+# --- MATH --- #
 
 def legendre_symbol(r: int, p: int):
     """
