@@ -2,6 +2,7 @@
 A module for Merkle trees
 """
 
+import json
 # --- IMPORTS --- #
 import logging
 import sys
@@ -26,13 +27,16 @@ class Leaf:
         self.value = data
 
     def __repr__(self):
-        return self.value
+        return self.to_json()
 
     def __add__(self, other):
         return self.value + other.value
 
     def __eq__(self, other):
         return self.value == other.value
+
+    def to_json(self):
+        return json.dumps(self.value)
 
 
 class Branch:
@@ -44,17 +48,17 @@ class Branch:
     def __init__(self, left: Leaf, right: Leaf):
         self.left = left
         self.right = right
-        self.value = self.hash(self.left + self.right)
+        self.value = Leaf(self.hash(self.left + self.right))
 
     def __repr__(self):
-        return self.value
+        return self.to_json()
 
     @staticmethod
     def hash(hash_string: str) -> str:
         return sha256(hash_string.encode()).hexdigest()
 
-    def to_leaf(self):
-        return Leaf(self.value)
+    def to_json(self):
+        return json.dumps(self.value)
 
 
 class MerkleTree:
@@ -75,7 +79,10 @@ class MerkleTree:
         # Find height of tree
         self.height = self.get_height(self.elements)
 
+        # Create Merkle Tree
         self.merkle_tree = self.create_tree(self.elements)
+
+        # Get Merkle Root
         self.merkle_root = self.merkle_tree.get(0)[0]
 
     def get_height(self, elements: list):
@@ -127,7 +134,7 @@ class MerkleTree:
                 left=leaf_list[2 * x],
                 right=leaf_list[2 * x + 1]
             )
-            branch_list.append(temp_branch.to_leaf())
+            branch_list.append(temp_branch.value)
 
         return branch_list
 
@@ -158,10 +165,10 @@ class MerkleTree:
             order = 1 - (current_index % 2)
             if order == 1:
                 partner_leaf = leaf_list[current_index + 1]
-                current_leaf = Branch(current_leaf, partner_leaf).to_leaf()
+                current_leaf = Branch(current_leaf, partner_leaf).value
             else:
                 partner_leaf = leaf_list[current_index - 1]
-                current_leaf = Branch(partner_leaf, current_leaf).to_leaf()
+                current_leaf = Branch(partner_leaf, current_leaf).value
 
             # Create partner_dict
             partner_dict = {"leaf": partner_leaf, "order": order}
@@ -195,13 +202,11 @@ class MerkleTree:
             partner_order = partner_dict["order"]
 
             # Create new branch
-            if partner_order == 0:
-                temp_branch = Branch(partner_leaf, current_leaf)
-            else:
-                temp_branch = Branch(current_leaf, partner_leaf)
+            (left, right) = (partner_leaf, current_leaf) if partner_order == 0 else (current_leaf, partner_leaf)
+            temp_branch = Branch(left, right)
 
             # Update current leaf
-            current_leaf = temp_branch.to_leaf()
+            current_leaf = temp_branch.value
 
             # Decrement height
             height -= 1
@@ -225,3 +230,4 @@ if __name__ == "__main__":
     print(test_tree.verify_element(hash1))
     print(test_tree.verify_element(hash2))
     print(test_tree.find_path(hash3))
+    # print(test_tree.to_json())
