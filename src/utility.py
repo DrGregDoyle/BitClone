@@ -4,6 +4,7 @@ A module for various helper methods
 # --- IMPORTS --- #
 import random
 import string
+from hashlib import sha256
 
 
 # --- HELPERS --- #
@@ -15,6 +16,10 @@ def get_random_string(max_chars=64):
     for x in range(max_chars):
         random_string += random.choice(string.ascii_letters)
     return random_string
+
+
+def hash(hash_string: str) -> str:
+    return sha256(hash_string.encode()).hexdigest()
 
 
 # --- MATH --- #

@@ -1,25 +1,10 @@
 """
 A file for testing leaves and merkle trees
 """
-import random
-import string
 from hashlib import sha256
 
 from src.merkle import MerkleTree, Branch, Leaf
-
-
-def get_random_string(max_chars=64):
-    """
-    We return a random string with max chars
-    """
-    random_string = ""
-    for x in range(max_chars):
-        random_string += random.choice(string.ascii_letters)
-    return random_string
-
-
-def hash(my_string: str):
-    return sha256(my_string.encode()).hexdigest()
+from src.utility import get_random_string
 
 
 def test_tree_methods():
