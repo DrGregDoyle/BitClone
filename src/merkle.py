@@ -37,7 +37,8 @@ class Leaf:
 
 class Branch:
     """
-    In a Merkle Tree, we create Branches by taking the hash of the concatenation of the left and right leaves
+    In a Merkle Tree, we create Branches by taking the hash of the concatenation of the left and right leaves.
+    We will create a Branch using a factory method to guarantee that one leaf is left and one leaf is not left
     """
 
     def __init__(self, left: Leaf, right: Leaf):
@@ -68,8 +69,20 @@ class MerkleTree:
         """
         Using a Tree Factory, we are guaranteed to be given a non-empty list of string elements.
         """
+        # Elements of the MerkleTree are the initial list of hash values
         self.elements = elements
+
+        # Find height of tree
+        self.height = self.get_height(self.elements)
+
         self.merkle_tree = self.create_tree(self.elements)
+        self.merkle_root = self.merkle_tree.get(0)[0]
+
+    def get_height(self, elements: list):
+        height = 0
+        while pow(2, height) < len(elements):
+            height += 1
+        return height
 
     def create_tree(self, elements: list):
         """
@@ -79,10 +92,8 @@ class MerkleTree:
         if len(elements) % 2 == 1:
             elements.append(elements[-1])
 
-        # Calculate height
-        height = 0
-        while pow(2, height) < len(elements):
-            height += 1
+        # Create height variable
+        height = self.height
 
         # Create initial list of leaves
         leaf_list = [Leaf(e) for e in elements]
@@ -120,6 +131,84 @@ class MerkleTree:
 
         return branch_list
 
+    def find_path(self, element: str | Leaf):
+        """
+        We find a list of corresponding hash values necessary to verify the element is in the tree.
+        """
+        # Get element as Leaf
+        if isinstance(element, str):
+            current_leaf = Leaf(element)
+        else:
+            current_leaf = element
+
+        # Verify leaf at each level and append opposite leaf
+        height = self.height
+        hash_dict = {}
+        while height > 0:
+            # Get leaves at height
+            leaf_list = self.merkle_tree.get(height)
+
+            # Verify current leaf
+            if current_leaf not in leaf_list:
+                logger.error(f"Did not find leaf with value {current_leaf} at height {height}")
+                return None
+
+            # Find partner leaf
+            current_index = leaf_list.index(current_leaf)
+            order = 1 - (current_index % 2)
+            if order == 1:
+                partner_leaf = leaf_list[current_index + 1]
+                current_leaf = Branch(current_leaf, partner_leaf).to_leaf()
+            else:
+                partner_leaf = leaf_list[current_index - 1]
+                current_leaf = Branch(partner_leaf, current_leaf).to_leaf()
+
+            # Create partner_dict
+            partner_dict = {"leaf": partner_leaf, "order": order}
+
+            # Save partner leaf
+            hash_dict.update({height: partner_dict})
+
+            # Decrement height
+            height -= 1
+
+        return hash_dict
+
+    def verify_element(self, element: str | Leaf):
+        """
+        We verify the element is in the merkle tree
+        """
+        # Get element path
+        element_path = self.find_path(element)
+
+        # Return False if path is None
+        if element_path is None:
+            return False
+
+        # At each level, concat the current and partner leaf into new branch, which becomes current leaf
+        height = self.height
+        current_leaf = Leaf(element) if isinstance(element, str) else element
+        while height > 0:
+            # Get partner leaf and order
+            partner_dict = element_path.get(height)
+            partner_leaf = partner_dict["leaf"]
+            partner_order = partner_dict["order"]
+
+            # Create new branch
+            if partner_order == 0:
+                temp_branch = Branch(partner_leaf, current_leaf)
+            else:
+                temp_branch = Branch(current_leaf, partner_leaf)
+
+            # Update current leaf
+            current_leaf = temp_branch.to_leaf()
+
+            # Decrement height
+            height -= 1
+
+        # Verify final leaf agrees with merkle root
+        return current_leaf == self.merkle_root
+
 
 # --- TESTING --- #
 if __name__ == "__main__":
@@ -133,17 +222,6 @@ if __name__ == "__main__":
     hash1233 = sha256((hash12 + hash33).encode()).hexdigest()
 
     test_tree = MerkleTree(elements)
-    for k in test_tree.merkle_tree.keys():
-        print(f"LEVEL: {k}")
-        print(f"ELEMENTS: {test_tree.merkle_tree.get(k)}")
-        print("=====")
-        element_list = test_tree.merkle_tree.get(k)
-        for e in element_list:
-            print(f"ELEMENT: {e}")
-            print(f"TYPE: {type(e)}")
-            print("-----")
-        print("=====")
-
-    print(f"HASH123: {hash1233}")
-    print(f"HASH12: {hash12}")
-    print(f"HASH33: {hash33}")
+    print(test_tree.verify_element(hash1))
+    print(test_tree.verify_element(hash2))
+    print(test_tree.find_path(hash3))

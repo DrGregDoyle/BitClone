@@ -42,6 +42,10 @@ class Stack:
             return_val = None
         return return_val
 
+    @property
+    def top(self):
+        return self.stack[0]
+
 
 class Script:
     """

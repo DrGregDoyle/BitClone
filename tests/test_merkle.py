@@ -31,3 +31,11 @@ def test_tree_methods():
     assert test_tree.merkle_tree.get(0) == [branch1233.to_leaf()]
     assert test_tree.merkle_tree.get(1) == [branch12.to_leaf(), branch33.to_leaf()]
     assert test_tree.merkle_tree.get(2) == [leaf1, leaf2, leaf3, leaf3]
+
+    assert test_tree.verify_element(leaf1)
+    assert test_tree.verify_element(leaf2)
+    assert test_tree.verify_element(leaf3)
+    assert test_tree.verify_element(hash_list[0])
+    assert test_tree.verify_element(hash_list[1])
+    assert test_tree.verify_element(hash_list[2])
+    assert not test_tree.verify_element(branch12.to_leaf())
