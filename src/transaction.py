@@ -47,7 +47,20 @@ Notes:
     Lock Time:
 
 """
+# --- IMPORTS --- #
+import logging
+import sys
 
+from src.utility import hash
+
+# --- LOGGING --- #
+log_level = logging.DEBUG
+logger = logging.getLogger(__name__)
+logger.setLevel(log_level)
+logger.addHandler(logging.StreamHandler(stream=sys.stdout))
+
+
+# --- CLASSES --- #
 
 class CompactSize:
 
@@ -85,11 +98,77 @@ class CompactSize:
         return prepend + raw_hex
 
 
+class Outpoint:
+    """
+    Used as reference to previous UTXO
+    """
+    INDEX_BYTES = 4
+
+    def __init__(self, txid: str, output_index: int):
+        # Get tx_id
+        self.txid = txid
+
+        # Get output index and format it
+        self.index_int = output_index
+        self.index = format(self.index_int, f"0{2 * self.INDEX_BYTES}x")
+
+    @property
+    def encoded(self):
+        return self.txid + self.index
+
+
+class Input:
+    """
+    Inputs for Transactions
+    """
+    SEQUENCE_BYTES = 4
+
+    def __init__(self, outpoint: Outpoint, input_script: str, sequence: int):
+        self.outpoint = outpoint
+        self.script_length = CompactSize(len(input_script))
+        self.script = input_script
+        self.sequence = sequence
+
+    @property
+    def encoded(self):
+        return (self.outpoint.encoded + self.script_length.encoded + self.script +
+                format(self.sequence, f"0{2 * self.SEQUENCE_BYTES}x"))
+
+
+class Output:
+    """
+    Outputs for Transactions
+    """
+    AMOUNT_BYTES = 8
+
+    def __init__(self, amount: int, output_script: str):
+        # Get amount and format it
+        self.amount_int = amount
+        self.amount = format(amount, f"0{2 * self.AMOUNT_BYTES}x")
+
+        # Get output script along with length of script
+        self.script = output_script
+        self.script_length = CompactSize(len(self.script))
+
+    @property
+    def encoded(self):
+        return self.amount + self.script_length.encoded + self.script
+
+
 class Transaction:
     VERSION = 4  # 4 bytes for version field
 
-    def __init__(self):
-        pass
+    def __init__(self, inputs: list, outputs: list):
+        """
+        We assume the inputs list is not empty.
+        """
+        # Get lists
+        self.inputs = inputs
+        self.outputs = outputs
+
+        # Get size of lists as compactSize elements
+        self.num_inputs = CompactSize(len(self.inputs))
+        self.num_outputs = CompactSize(len(self.outputs))
 
 
 # --- TESTING --- #
@@ -99,3 +178,9 @@ if __name__ == "__main__":
     print(cs.unencoded)
     print(cs.encoded)
     print(cs.byte_length)
+    hash1 = hash("String1")
+    hash2 = hash("String2")
+    outpoint1 = Outpoint(hash1, 1)
+    print(outpoint1)
+    print(outpoint1.txid)
+    print(outpoint1.index)
