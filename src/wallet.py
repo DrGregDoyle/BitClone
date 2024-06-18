@@ -11,10 +11,8 @@ import sys
 from hashlib import sha256
 from secrets import randbits
 
-from primefac import isprime
-from ripemd.ripemd160 import ripemd160
-
 from src.cryptography import SECP256K1
+from src.utility import hash160
 from src.word_list import WORDLIST
 
 # --- LOGGING --- #
@@ -23,11 +21,6 @@ logger = logging.getLogger(__name__)
 logger.setLevel(log_level)
 handler = logging.StreamHandler(stream=sys.stdout)
 logger.addHandler(handler)
-
-
-# --- HELPERS --- #
-def hash160(my_string: str):
-    return ripemd160(sha256(my_string.encode()).hexdigest().encode()).hex().upper()
 
 
 # --- CLASSES --- #
@@ -143,49 +136,40 @@ class Wallet:
         Using the private key associated with the wallet, we follow the ECDSA to sign the transaction id.
 
         Algorithm:
-        ---------
-        Let E denote the elliptic curve of the wallet and let n denote the group order.
-        We emphasize that n IS NOT necessarily equal to the characteristic p of F_p.
-        Let t denote the private_key.
+        =========
+        Let E denote the elliptic curve of the wallet and let n denote the group order. As we
+        are using the SECP256K1 curve, we know that n is prime. (This is a necessary condition for the ECDSA.) We
+        emphasize that n IS NOT necessarily equal to the characteristic p of F_p. Let t denote the private_key.
 
-        1) Verify that n is prime - the signature will not work if we do not have prime group order.
-        2) Let Z denote the integer value of the first n BITS of the transaction hash.
-        3) Select a cryptographically secure random integer k in [1, n-1]. As n is prime, k will be invertible.
-        4) Calculate the curve point (x,y) =  k * generator
-        5) Compute r = x (mod n) and s = k^(-1)(Z + r * t) (mod n). If either r or s = 0, repeat from step 3.
-        6) The signature is the pair (r, s)
+        1) Let Z denote the integer value of the first n BITS of the transaction hash.
+        2) Select a cryptographically secure random integer k in [1, n-1]. As n is prime, k will be invertible.
+        3) Calculate the curve point (x,y) =  k * generator
+        4) Compute r = x (mod n) and s = k^(-1)(Z + r * t) (mod n). If either r or s = 0, repeat from step 2.
+        5) The signature is the pair (r, s), formatted to hex_r + hex_s.
         """
-        # 1 - Verify n (curve order) is prime
+        # Assign known variables
         n = self.curve.order
-        curve_order_prime = isprime(n)
-        if not curve_order_prime:
-            logger.error(f"Given elliptic curve doesn't have prime group order, a necessary condition for the ECDSA.")
-            return None
-
-        # 2 - Let Z denote the first n bits of the tx_id
-        tx_id_int = int(tx_id, 16)
-        Z = format(tx_id_int, "b")[:n]
-        Z = int(Z, 2)
-
         r = 0
         s = 0
+
+        # 1 - Let Z denote the first n bits of the tx_id
+        Z = int(format(int(tx_id, 16), "b")[:n], 2)
+
         while r == 0 or s == 0:
-            # 3 - Select a cryptographically secure random integer k in [1,n-1]
+            # 2 - Select a cryptographically secure random integer k in [1,n-1]
             k = secrets.randbelow(n - 1)
 
-            # 4 - Calculate k * generator
+            # 3 - Calculate k * generator
             point = self.curve.scalar_multiplication(k, self.curve.g)
             (x, y) = point
 
-            # 5 - Compute r and s. If either r or s = 0 repeat from step 3
+            # 4 - Compute r and s. If either r or s = 0 repeat from step 3
             r = x % n
             s = (pow(k, -1, n) * (Z + r * self._private_key)) % n
 
-        # 6 - Format r and s to each be 64 character hex strings (32 bytes)
+        # 5 - Return formatted signature
         hex_r = format(r, f"0{2 * self.SIGNATURE_BYTES}x")
         hex_s = format(s, f"0{2 * self.SIGNATURE_BYTES}x")
-
-        # 7 - Signature = hex_r + hex_s (64 bytes | 128 characters)
         return hex_r + hex_s
 
     def verify_signature(self, signature: str, tx_id: str, public_key: tuple) -> bool:
@@ -197,7 +181,7 @@ class Wallet:
         --------
         Let n denote the group order of the elliptic curve wrt the Wallet.
 
-        1) Verify that n is prime and that (r,s) are integers in the interval [1,n-1]
+        1) Verify (r,s) are integers in the interval [1,n-1]
         2) Let Z be the integer value of the first n BITS of the transaction hash
         3) Let u1 = Z * s^(-1) (mod n) and u2 = r * s^(-1) (mod n)
         4) Calculate the curve point (x,y) = (u1 * generator) + (u2 * public_key)
@@ -210,13 +194,10 @@ class Wallet:
         r = int(hex_r, 16)
         s = int(hex_s, 16)
 
-        # 1 - Verify n and (r,s)
+        # Assign known variables
         n = self.curve.order
-        curve_order_prime = isprime(n)
-        if not curve_order_prime:
-            logger.error(f"Given elliptic curve doesn't have prime group order, a necessary condition for the ECDSA.")
-            return False
 
+        # 1 - Verify (r,s)
         try:
             assert 1 <= r <= n - 1
             assert 1 <= s <= n - 1
@@ -225,9 +206,7 @@ class Wallet:
             return False
 
         # 2 - Let Z be the first n bits of tx_id
-        tx_id_int = int(tx_id, 16)
-        Z = format(tx_id_int, "b")[:n]
-        Z = int(Z, 2)
+        Z = int(format(int(tx_id, 16), "b")[:n], 2)
 
         # 3 - Calculate u1 and u2
         s_inv = pow(s, -1, n)
