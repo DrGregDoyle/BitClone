@@ -51,7 +51,7 @@ Notes:
 import logging
 import sys
 
-from src.utility import hash
+from src.utility import hash256
 
 # --- LOGGING --- #
 log_level = logging.DEBUG
@@ -178,8 +178,8 @@ if __name__ == "__main__":
     print(cs.unencoded)
     print(cs.encoded)
     print(cs.byte_length)
-    hash1 = hash("String1")
-    hash2 = hash("String2")
+    hash1 = hash256("String1")
+    hash2 = hash256("String2")
     outpoint1 = Outpoint(hash1, 1)
     print(outpoint1)
     print(outpoint1.txid)

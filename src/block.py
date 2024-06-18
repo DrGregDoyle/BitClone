@@ -8,7 +8,7 @@ A module for the Block class
     4 bytes             Block size              The size of the block in bytes
     80 bytes            Block header            Standard Header formatting
     1-3 compactSize     Transaction counter     Number of transactions
-    :var                Transactions            The transactions for the block
+    var                 Transactions            The transactions for the block
     ======================================================================
 """
 

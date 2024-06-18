@@ -18,7 +18,7 @@ def get_random_string(max_chars=64):
     return random_string
 
 
-def hash(hash_string: str) -> str:
+def hash256(hash_string: str) -> str:
     return sha256(hash_string.encode()).hexdigest()
 
 

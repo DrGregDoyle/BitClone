@@ -20,31 +20,6 @@ logger.addHandler(handler)
 
 # --- CLASSES --- #
 
-# class Point:
-#     """
-#     A class to handle cryptographic points for use in ecc. We adopt the convention that if either of the initial x or
-#     y values is equal to None, then this becomes the point at infinity.
-#     """
-#
-#     def __init__(self, x=None, y=None):
-#         poi = (x is None or y is None)
-#         self.x = x if not poi else None
-#         self.y = y if not poi else None
-#
-#     def __repr__(self):
-#         return f"({self.x},{self.y})"
-#
-#     def __eq__(self, other):
-#         return self.x == other.x and self.y == other.y
-#
-#     @property
-#     def is_point_at_infinity(self) -> bool:
-#         return True if self.x is None and self.y is None else False
-#
-#     @property
-#     def coords(self):
-#         return self.x, self.y
-
 
 class EllipticCurve:
     """

@@ -1,9 +1,10 @@
 """
 A file for testing the Wallet and WalletFactory classes
 """
-from secrets import randbelow
 
 # --- IMPORTS --- #
+from secrets import randbelow
+
 from src.wallet import WalletFactory, Wallet
 from src.word_list import WORDLIST
 
