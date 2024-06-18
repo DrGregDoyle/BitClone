@@ -20,6 +20,16 @@ def get_random_string(max_chars=64):
     return random_string
 
 
+def random_hash256(max_chars=64):
+    random_string = get_random_string(max_chars)
+    return hash256(random_string)
+
+
+def random_hash160(max_chars=64):
+    random_string = get_random_string(max_chars)
+    return hash160(random_string)
+
+
 # --- HASH FUNCTIONS --- #
 def hash160(hash_string: str):
     hash_256 = hash256(hash_string)
