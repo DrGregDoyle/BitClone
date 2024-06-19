@@ -455,6 +455,8 @@ class Transaction:
         # Set locktime
         if locktime is None:
             self.locktime = format(0, f"0{2 * self.LOCKTIME_BYTES}x")[::-1]  # Little Endian
+        else:
+            self.locktime = format(locktime, f"0{2 * self.LOCKTIME_BYTES}x")[::-1]
 
     @property
     def encoded(self):
@@ -598,11 +600,12 @@ def decode_transaction(tx_string: str) -> Transaction:
         current_index += len(temp_output.encoded)
 
     # Get witness
+    witness_list = []
     if segwit:
-        witness = decode_witness(tx_string[current_index:])
-        current_index += len(witness.encoded)
-    else:
-        witness = None
+        for z in range(num_inputs_int):
+            temp_witness = decode_witness(tx_string[current_index:])
+            current_index += len(temp_witness.encoded)
+            witness_list.append(temp_witness)
 
     # Get locktime
     locktime = tx_string[current_index:current_index + locktime_chars]
@@ -612,18 +615,18 @@ def decode_transaction(tx_string: str) -> Transaction:
     constructed_encoding = version  # Version
     if segwit:  # Marker and Flag if segwit
         constructed_encoding += "0001"
-    constructed_encoding += CompactSize(num_inputs_int)  # Number of inputs
+    constructed_encoding += CompactSize(num_inputs_int).encoded  # Number of inputs
     for t_input in input_list:  # Inputs
         constructed_encoding += t_input.encoded
-    constructed_encoding += CompactSize(num_outputs_int)  # Number of outputs
+    constructed_encoding += CompactSize(num_outputs_int).encoded  # Number of outputs
     for t_output in output_list:  # Outputs
         constructed_encoding += t_output.encoded
     if segwit:
-        constructed_encoding += witness  # Witness if segwit
+        for w in witness_list:
+            constructed_encoding += w.encoded  # Witness if segwit
     constructed_encoding += locktime
 
     # Construct Transaction and verify
-    witness_list = witness.witness_items if witness else []
     constructed_transaction = Transaction(inputs=input_list, outputs=output_list, witness_list=witness_list,
                                           locktime=locktime_int)
     if constructed_transaction.encoded != constructed_encoding:
@@ -662,3 +665,5 @@ if __name__ == "__main__":
     # Create Transaction
     tx1 = Transaction(inputs=[input1, input2], outputs=[output1], witness_list=[witness1, witness2])
     print(tx1.to_json())
+    constructed_tx = decode_transaction(tx1.encoded)
+    print(constructed_tx.encoded == tx1.encoded)
