@@ -152,15 +152,11 @@ class Input:
         return self.tx_id + self.v_out + self.script_sig_size + self.script_sig + self.sequence
 
     @property
-    def index_int(self):
+    def v_out_int(self):
         return int(self.v_out[::-1], 16)
 
     def outpoint(self):
-        outpoint_dict = {
-            "tx_id": self.tx_id,
-            "v_out": self.v_out
-        }
-        return json.dumps(outpoint_dict, indent=2)
+        return self.tx_id + self.v_out
 
     def to_json(self):
         input_dict = {
