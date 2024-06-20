@@ -1,10 +1,13 @@
 """
 A file for testing db
 """
+from pathlib import Path
 
 from src.database import Database
 from src.utility import *
 from src.utxo import Outpoint, UTXO
+
+DB_DIR = Path(__file__).parent / "db"
 
 
 def random_utxo():
@@ -22,7 +25,9 @@ def random_utxo():
 
 def test_db():
     # Create new db
-    _db = Database()
+    _db = Database(db_dir=DB_DIR, db_file="utxo_test_set.db")
+    print(_db.db_file)
+    print(_db.db_dir)
     _db._wipe_db()
 
     # Post UTXOS
