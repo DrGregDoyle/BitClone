@@ -111,7 +111,7 @@ of 'bat' is
 but the hash value of 'cat' is
 
 ```
-175cc6f362b2f75acd08a373e000144fdb8d14a833d4b70fd743f16a7039103f.
+175cc6f362b2f75acd08a373e000144fdb8d14a833d4b70fd743f16a7039103f
 ```
 
 In this fashion, a hash value provides security as we cannot know ahead of time what the output of a hash function is
