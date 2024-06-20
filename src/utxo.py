@@ -159,6 +159,7 @@ if __name__ == "__main__":
     print(f"BLOCK HEIGHT LE: {block_height_le}")
 
     coinbase = random.choice([True, False])
+    not_coinbase = not coinbase
     print(f"COINBASE: {coinbase}")
     amount = random_integer(8)
     amount_hex = format(amount, f"0{2 * UTXO.AMOUNT_BYTES}x")
@@ -172,3 +173,11 @@ if __name__ == "__main__":
                      coinbase=coinbase)
     constructed_utxo = decode_utxo(test_utxo.encoded)
     print(f"TEST UTXO: {test_utxo.to_json()}")
+    print(f"TEST UTXO KEY: {test_utxo.key}")
+    print(f"TEST UTXO VALUE: {test_utxo.value}")
+    fake_utxo = UTXO(outpoint=test_outpoint, height=block_height, amount=amount, locking_code=locking_code,
+                     coinbase=not_coinbase)
+    print(f"FAKE UTXO: {fake_utxo.to_json()}")
+    print(f"FAKE UTXO KEY: {fake_utxo.key}")
+    print(f"FAKE UTXO VALUE: {fake_utxo.value}")
+    print(f"FAKE UTXO equals TEST UTXO: {test_utxo.encoded == fake_utxo.encoded}")
