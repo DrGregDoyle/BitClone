@@ -4,23 +4,9 @@ A file for testing db
 from pathlib import Path
 
 from src.database import Database
-from src.utility import *
-from src.utxo import Outpoint, UTXO
+from tests.utility import random_utxo, random_integer_range
 
 DB_DIR = Path(__file__).parent / "db"
-
-
-def random_utxo():
-    tx_id = random_tx_id()
-    v_out = random_v_out()
-    outpoint = Outpoint(tx_id, v_out)
-
-    height = random_height()
-    amount = random_amount()
-    locking_code = random_hash256(128)
-    coinbase = random_bool()
-
-    return UTXO(outpoint=outpoint, height=height, amount=amount, locking_code=locking_code, coinbase=coinbase)
 
 
 def test_db():
@@ -29,7 +15,7 @@ def test_db():
     _db._wipe_db()
 
     # Post UTXOS
-    random_range = random.randint(5, 15)
+    random_range = random_integer_range(5, 15)
     utxo_list = [random_utxo() for _ in range(random_range)]
     for utxo in utxo_list:
         _db.post_utxo(utxo)

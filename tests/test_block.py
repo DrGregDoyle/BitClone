@@ -2,7 +2,8 @@
 Testing Block and related classes
 """
 
-from src.decoder_lib import random_header, decode_block, decode_header, random_block
+from src.decoder_lib import decode_block, decode_header
+from tests.utility import random_header, random_block
 
 
 def test_header():
