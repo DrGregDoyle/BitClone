@@ -3,7 +3,7 @@ A file for testing the UTXO class and similar methods
 """
 from random import randint
 
-from src.library import decode_outpoint, random_outpoint, decode_utxo, random_utxo
+from src.decoder_lib import decode_outpoint, random_outpoint, decode_utxo, random_utxo
 
 
 def test_outpoint():

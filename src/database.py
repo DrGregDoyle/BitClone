@@ -8,8 +8,7 @@ import sys
 import time
 from pathlib import Path
 
-from src.library import decode_outpoint, decode_utxo
-from src.utility import random_tx_id, random_bool, random_amount, random_height, random_v_out, random_hash256
+from src.decoder_lib import decode_outpoint, decode_utxo
 from src.utxo import UTXO, Outpoint
 
 # --- LOGGING --- #
@@ -150,45 +149,3 @@ class Database:
         self.query_db(DELETE_UTXO_QUERY, (_utxo.key,))
         # logger.debug(f"UTXO DELETED: {_utxo.to_json()}")
         return True
-
-
-# --- TESTING --- #
-if __name__ == "__main__":
-    test_db = Database()
-
-    # Outpoint
-    tx_id = random_tx_id()
-    v_out1 = random_v_out()
-    v_out2 = random_v_out()
-
-    # tx_id = hash256("GREG")
-    # v_out1 = 16
-    # v_out2 = 32
-    outpoint = Outpoint(tx_id=tx_id, v_out=v_out1)
-    fake_outpoint = Outpoint(tx_id=tx_id, v_out=v_out2)
-
-    # Value
-    height = random_height()
-    amount = random_amount()
-    locking_code = random_hash256(128)
-    coinbase = random_bool()
-    not_coinbase = not coinbase
-    # height = 0x00FFFF00
-    # amount = 0xFF0000FF
-    # locking_code = hash256("MATH")
-    # coinbase = True
-    # not_coinbase = False
-
-    utxo = UTXO(outpoint=outpoint, height=height, amount=amount, locking_code=locking_code, coinbase=coinbase)
-    utxo_false = UTXO(outpoint=outpoint, height=height, amount=amount, locking_code=locking_code, coinbase=not_coinbase)
-
-    # Test db
-    print(f"OUTPOINT: {outpoint.to_json()}")
-    print(f"UTXO: {utxo.to_json()}")
-    print(f"UTXO KEY: {utxo.key}")
-    print(f"UTXO VALUE: {utxo.value}")
-    print(f"POST UTXO: {test_db.post_utxo(utxo)}")
-    print(f"GET UTXO: {test_db.get_utxo(utxo.outpoint)}")
-    print(f"GET FAKE UTXO: {test_db.get_utxo(fake_outpoint)}")
-    # print(f"DELETE UTXO: {test_db.delete_utxo(utxo)}")
-    # print(f"DELETE FAKE UTXO: {test_db.delete_utxo(utxo_false)}")

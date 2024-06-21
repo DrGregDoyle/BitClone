@@ -1,17 +1,17 @@
 """
-Various common methods
-# TODO: Move random to tests.utility
+A library for common decoder functions
 """
 
-from random import randint
-
-from src.transaction import Input, Output, WitnessItem, Witness, Transaction
-from src.utility import random_tx_id, random_v_out, random_height, random_amount, random_hash256, hash160, random_bool, \
-    random_integer, hash256, random_hash160
 # --- IMPORTS --- #
+from hashlib import sha256
+from random import randint, choice
+from string import ascii_letters
+
+from src.block import Header, Block
+from src.transaction import Input, Output, WitnessItem, Witness, Transaction
 from src.utxo import Outpoint, UTXO
 
-# --- METHODS --- #
+# --- FORMATTING --- #
 BYTE_DICT = {
     "tx": 32,
     "v_out": 4,
@@ -20,28 +20,16 @@ BYTE_DICT = {
     "sequence": 4,
     "byte": 1,
     "version": 4,
-    "locktime": 4
+    "locktime": 4,
+    "hash": 32,
+    "target": 4,
+    "time": 4,
+    "nonce": 4
 }
 
 
 def get_chars(byte_dict_key):
     return 2 * BYTE_DICT.get(byte_dict_key)
-
-
-# --- ENCODE --- #
-
-def encode_compact_size(n: int) -> str:
-    """
-    We return a variable length integer in hex such that the first byte indicates the length
-    """
-    if 0 <= n <= 0xFC:
-        return format(n, f"02x")
-    elif 0xFD <= n <= 0xFFFF:
-        return "fd" + format(n, f"04x")
-    elif 0X10000 <= n <= 0xFFFFFFFF:
-        return "fe" + format(n, f"08x")
-    elif 0x100000000 <= n <= 0xffffffffffffffff:
-        return "ff" + format(n, f"016x")
 
 
 # --- DECODE --- #
@@ -257,40 +245,130 @@ def decode_tx(s: str) -> Transaction:
     return constructed_tx
 
 
+def decode_header(s: str) -> Header:
+    # Chars
+    version_chars = get_chars("version")
+    prev_block_chars = get_chars("hash")
+    merkle_root_chars = get_chars("hash")
+    time_chars = get_chars("time")
+    target_chars = get_chars("target")
+    nonce_chars = get_chars("nonce")
+
+    # Running index
+    i = 0
+
+    # Version
+    version = int(s[i:i + version_chars][::-1], 16)  # Little Endian
+    i += version_chars
+
+    # Previous block
+    prev_block = s[i:i + prev_block_chars]
+    i += prev_block_chars
+
+    # Merkle root
+    merkle_root = s[i: i + merkle_root_chars]
+    i += merkle_root_chars
+
+    # Time
+    time = int(s[i: i + time_chars][::-1], 16)  # Little Endian
+    i += time_chars
+
+    # Target
+    target = int(s[i:i + target_chars][::-1], 16)  # Little Endian
+    i += target_chars
+
+    # Nonce
+    nonce = int(s[i: i + nonce_chars][::-1], 16)  # Nonce
+    i += nonce_chars
+
+    # Verify
+    string_encoding = s[:i]
+    constructed_header = Header(prev_block, merkle_root, time, target, nonce, version=version)
+    if constructed_header.encoded != string_encoding:
+        raise TypeError("Input string did not generate same Header object")
+    return constructed_header
+
+
+def decode_block(s: str) -> Block:
+    # Header
+    header = decode_header(s)
+    i = len(header.encoded)  # Running index
+
+    # Txs
+    tx_count, increment = decode_compact_size(s[i:], return_length=True)
+    i += increment
+    tx_list = []
+    for _ in range(tx_count):
+        temp_tx = decode_tx(s[i:])
+        tx_list.append(temp_tx)
+        i += len(temp_tx.encoded)
+
+    # Verify
+    string_encoding = s[:i]
+    constructed_block = Block(header, tx_list)
+    if constructed_block.encoded != string_encoding:
+        raise TypeError("Input string did not generate same Block object")
+    return constructed_block
+
+
 # --- RANDOM --- #
+
+def get_random_string(max_chars=64):
+    random_string = ""
+    for _ in range(max_chars):
+        random_string += choice(ascii_letters)
+    return random_string
+
+
+def random_tx_id():
+    random_string = get_random_string()
+    return sha256(random_string.encode()).hexdigest()
+
+
+def random_bool():
+    return choice([True, False])
+
+
+def get_random_integer(bytes=4):
+    upper = pow(2, bytes)
+    return randint(1, upper)
+
+
+def random_byte_element(element: str):
+    return get_random_integer(BYTE_DICT.get(element))
 
 
 def random_outpoint():
     tx_id = random_tx_id()
-    v_out = random_v_out()
+    v_out = random_byte_element("v_out")
     return Outpoint(tx_id, v_out)
 
 
 def random_utxo():
     outpoint = random_outpoint()
-    height = random_height()
-    amount = random_amount()
-    locking_code = hash160(random_hash256())
+    height = random_byte_element("height")
+    amount = random_byte_element("amount")
+    locking_code = random_tx_id()
     coinbase = random_bool()
     return UTXO(outpoint, height, amount, locking_code, coinbase)
 
 
 def random_input():
     tx_id = random_tx_id()
-    v_out = random_v_out()
-    script_sig = hash160(random_hash256()) + hash160(random_hash256())
-    sequence = random_integer(4)
+    v_out = random_byte_element("v_out")
+    script_sig = random_tx_id()
+    sequence = random_byte_element("sequence")
     return Input(tx_id, v_out, script_sig, sequence)
 
 
 def random_output():
-    amount = random_amount()
-    output_script = hash160(random_hash256()) + hash256(random_hash160())
+    amount = random_byte_element("amount")
+    output_script = random_tx_id()
     return Output(amount, output_script)
 
 
 def random_witness_item():
-    item = random_hash256() + random_hash160()
+    item = random_tx_id() + random_tx_id()
     return WitnessItem(item)
 
 
@@ -300,6 +378,16 @@ def random_witness():
     for _ in range(random_num_of_wi):
         items.append(random_witness_item())
     return Witness(items)
+
+
+def random_header() -> Header:
+    prev_block = random_tx_id()
+    merkle_root = random_tx_id()
+    target = random_byte_element("target")
+    time = random_byte_element("time")
+    nonce = random_byte_element("nonce")
+    version = random_byte_element("version")
+    return Header(prev_block, merkle_root, time, target, nonce, version)
 
 
 def random_tx():
@@ -319,17 +407,21 @@ def random_tx():
         for _ in range(input_count):
             witness_list.append(random_witness())
 
-    version = random_integer(BYTE_DICT.get("version"))
-    locktime = random_integer(BYTE_DICT.get("locktime"))
+    version = random_byte_element("version")
+    locktime = random_byte_element("locktime")
     return Transaction(inputs, outputs, witness_list=witness_list, version=version, locktime=locktime)
+
+
+def random_block():
+    header = random_header()
+    tx_count = randint(3, 5)
+    tx_list = [random_tx() for _ in range(tx_count)]
+    return Block(header, tx_list)
 
 
 # --- TESTING --- #
 if __name__ == "__main__":
-    tx1 = random_tx()
-
-    print(f"TX1: {tx1.to_json()}")
-    tx2 = decode_tx(tx1.encoded)
-    print(f"TX2: {tx2.to_json()}")
-    print(f"TX1 ENCODED: {tx1.encoded}")
-    print(f"TX2 ENCODED: {tx2.encoded}")
+    b1 = random_block()
+    print(b1.header.to_json())
+    b2 = decode_block(b1.encoded)
+    print(f"HEADER 2: {b2.header.to_json()}")

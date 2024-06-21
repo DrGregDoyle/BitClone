@@ -4,7 +4,7 @@ A file for testing Transaction and its related classes. Both decoding and encodi
 # --- IMPORTS --- #
 from random import randint
 
-from src.library import decode_input, decode_output, decode_witness_item, decode_witness, decode_tx
+from src.decoder_lib import decode_input, decode_output, decode_witness_item, decode_witness, decode_tx
 from src.transaction import Input, Output, WitnessItem, Witness, Transaction
 from src.utility import random_hash160, hash256
 from src.wallet import WalletFactory
