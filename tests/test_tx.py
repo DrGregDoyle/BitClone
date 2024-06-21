@@ -7,10 +7,6 @@ from src.decoder_lib import decode_input, decode_witness_item, decode_witness, d
 from tests.utility import random_input, random_output, random_witness_item, random_witness, random_tx
 
 
-# from src.utility import random_hash160, hash256
-# from src.wallet import WalletFactory
-
-
 # --- TESTS --- #
 
 

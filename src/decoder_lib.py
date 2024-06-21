@@ -25,13 +25,27 @@ BYTE_DICT = {
 }
 
 
-def get_chars(byte_dict_key):
-    return 2 * BYTE_DICT.get(byte_dict_key)
+def parse_string(s: str, index: int, length: int):
+    string_length = index + length
+    return s[index: string_length], string_length
+
+
+def parse_num(s: str, index, length, internal=False):
+    """
+    Set internal=True to parse a number given in internal byte order (little-endian).
+    Default is for internal=False and the chars are in display byte order (big-endian).
+    """
+    inc = index + length
+    num = s[index: inc]
+    if internal:
+        num = num[::-1]
+    return int(num, 16), inc
 
 
 # --- DECODE --- #
 
-def decode_compact_size(s: str, return_length=False) -> int | tuple:
+
+def decode_compact_size(s: str) -> int | tuple:
     chunk = s[:2]
     chunk_int = int(chunk, 16)
     match chunk_int:
@@ -43,23 +57,19 @@ def decode_compact_size(s: str, return_length=False) -> int | tuple:
             n = s[2:18]
         case _:
             n = chunk
-    length = len(n)
-    if return_length:
-        return int(n, 16), length
-    else:
-        return int(n, 16)
+    return int(n, 16), len(n)
 
 
 def decode_outpoint(s: str) -> Outpoint:
     # Hex characters
-    tx_chars = get_chars("tx")
-    v_out_chars = get_chars("v_out")
+    tx_chars = 2 * BYTE_DICT.get("tx")
+    v_out_chars = 2 * BYTE_DICT.get("v_out")
 
     # tx_id
-    tx_id = s[:tx_chars]
+    tx_id, i = parse_string(s, index=0, length=tx_chars)
 
-    # v_out - Little Endian
-    v_out = int(s[tx_chars:tx_chars + v_out_chars][::-1], 16)
+    # v_out - little-endian
+    v_out, i = parse_num(s, index=i, length=v_out_chars, internal=True)
 
     # verify and return
     string_encoding = s[:tx_chars + v_out_chars]
@@ -71,33 +81,29 @@ def decode_outpoint(s: str) -> Outpoint:
 
 def decode_utxo(s: str) -> UTXO:
     # Chars
-    height_chars = get_chars("height")
-    amount_chars = get_chars("amount")
+    height_chars = 2 * BYTE_DICT.get("height")
+    amount_chars = 2 * BYTE_DICT.get("amount")
 
     # Outpoint
     outpoint = decode_outpoint(s)
     i = len(outpoint.encoded)  # Running index
 
     # Height
-    height = int(s[i: i + height_chars], 16)
-    i += height_chars
+    height, i = parse_num(s, i, height_chars)
 
     # Coinbase
-    val = int(s[i:i + 2], 16)
-    coinbase = True if val > 0 else False
-    i += 2
+    val, i = parse_string(s, i, 2)
+    coinbase = True if int(val, 16) > 0 else False
 
-    # Amount
-    amount = int(s[i: i + amount_chars][::-1], 16)  # Little Endian
-    i += amount_chars
+    # Amount - little endian
+    amount, i = parse_num(s, i, amount_chars, internal=True)
 
     # Locking Code
-    size, increment = decode_compact_size(s[i:], return_length=True)
-    i += increment
-    locking_code = s[i: i + size]
+    size, increment = decode_compact_size(s[i:])
+    locking_code, i = parse_string(s, i + increment, size)
 
     # Verify
-    string_encoding = s[:i + size]
+    string_encoding = s[:i]
     constructed_utxo = UTXO(outpoint, height, amount, locking_code, coinbase)
     if constructed_utxo.encoded != string_encoding:
         raise TypeError("Input string did not generate same UTXO object")
@@ -106,27 +112,22 @@ def decode_utxo(s: str) -> UTXO:
 
 def decode_input(s: str) -> Input:
     # Chars
-    tx_chars = get_chars("tx")
-    v_out_chars = get_chars("v_out")
-    sequence_chars = get_chars("sequence")
+    tx_chars = 2 * BYTE_DICT.get("tx")
+    v_out_chars = 2 * BYTE_DICT.get("v_out")
+    sequence_chars = 2 * BYTE_DICT.get("sequence")
 
     # tx_id
-    tx_id = s[:tx_chars]
-    i = tx_chars  # Running index
+    tx_id, i = parse_string(s, 0, tx_chars)
 
-    # v_out
-    v_out = int(s[i: i + v_out_chars][::-1], 16)  # Little Endian
-    i += v_out_chars
+    # v_out - little endian
+    v_out, i = parse_num(s, i, v_out_chars, internal=True)
 
     # script_sig
-    script_sig_size, increment = decode_compact_size(s[i:], return_length=True)
-    i += increment
-    script_sig = s[i: i + script_sig_size]
-    i += script_sig_size
+    script_sig_size, increment = decode_compact_size(s[i:])
+    script_sig, i = parse_string(s, i + increment, script_sig_size)
 
-    # sequence
-    sequence = int(s[i: i + sequence_chars][::-1], 16)  # Little Endian
-    i += sequence_chars
+    # sequence - little endian
+    sequence, i = parse_num(s, i, sequence_chars, internal=True)
 
     # Verify
     string_encoding = s[:i]
@@ -138,19 +139,17 @@ def decode_input(s: str) -> Input:
 
 def decode_output(s: str) -> Output:
     # Chars
-    amount_chars = get_chars("amount")
+    amount_chars = 2 * BYTE_DICT.get("amount")
 
-    # Amount
-    amount = int(s[:amount_chars][::-1], 16)  # Little Endian
-    i = amount_chars  # Index
+    # Amount - little endian
+    amount, i = parse_num(s, 0, amount_chars, internal=True)
 
     # Output script
-    script_size, increment = decode_compact_size(s[i:], return_length=True)
-    i += increment
-    output_script = s[i:i + script_size]
+    script_size, increment = decode_compact_size(s[i:])
+    output_script, i = parse_string(s, i + increment, script_size)
 
     # Verify
-    string_encoding = s[:i + script_size]
+    string_encoding = s[:i]
     constructed_output = Output(amount, output_script)
     if constructed_output.encoded != string_encoding:
         raise TypeError("Input string did not generate same Output object")
@@ -159,7 +158,7 @@ def decode_output(s: str) -> Output:
 
 def decode_witness_item(s: str) -> WitnessItem:
     # Item
-    item_size, i = decode_compact_size(s, return_length=True)
+    item_size, i = decode_compact_size(s)
     item = s[i:i + item_size]
 
     # Verify
@@ -172,7 +171,7 @@ def decode_witness_item(s: str) -> WitnessItem:
 
 def decode_witness(s: str) -> Witness:
     # Stack items
-    stack_items, i = decode_compact_size(s, return_length=True)
+    stack_items, i = decode_compact_size(s)
 
     # Iterate over stack items to get witness items
     items = []
@@ -191,21 +190,20 @@ def decode_witness(s: str) -> Witness:
 
 def decode_tx(s: str) -> Transaction:
     # Chars
-    version_chars = get_chars("version")
-    locktime_chars = get_chars("locktime")
+    version_chars = 2 * BYTE_DICT.get("version")
+    locktime_chars = 2 * BYTE_DICT.get("locktime")
 
-    # Version
-    version = int(s[:version_chars][::-1], 16)  # Little Endian
-    i = version_chars  # Running index
+    # Version - little endian
+    version, i = parse_num(s, 0, version_chars, internal=True)
 
-    # Handle MarkerFlag
-    markerflag = s[i:i + 4]
-    segwit = (markerflag == "0001")
-    if segwit: i += 4
+    # Handle Marker/Flag
+    segwit = (s[i:i + 4] == "0001")
+    if segwit:
+        i += 4
 
     # Get inputs
     input_list = []
-    num_inputs, increment = decode_compact_size(s[i:], return_length=True)
+    num_inputs, increment = decode_compact_size(s[i:])
     i += increment
     for _ in range(num_inputs):
         temp_input = decode_input(s[i:])
@@ -214,7 +212,7 @@ def decode_tx(s: str) -> Transaction:
 
     # Get outputs
     output_list = []
-    num_outputs, increment = decode_compact_size(s[i:], return_length=True)
+    num_outputs, increment = decode_compact_size(s[i:])
     i += increment
     for _ in range(num_outputs):
         temp_output = decode_output(s[i:])
@@ -244,39 +242,33 @@ def decode_tx(s: str) -> Transaction:
 
 def decode_header(s: str) -> Header:
     # Chars
-    version_chars = get_chars("version")
-    prev_block_chars = get_chars("hash")
-    merkle_root_chars = get_chars("hash")
-    time_chars = get_chars("time")
-    target_chars = get_chars("target")
-    nonce_chars = get_chars("nonce")
+    version_chars = 2 * BYTE_DICT.get("version")
+    prev_block_chars = 2 * BYTE_DICT.get("hash")
+    merkle_root_chars = 2 * BYTE_DICT.get("hash")
+    time_chars = 2 * BYTE_DICT.get("time")
+    target_chars = 2 * BYTE_DICT.get("target")
+    nonce_chars = 2 * BYTE_DICT.get("nonce")
 
     # Running index
     i = 0
 
-    # Version
-    version = int(s[i:i + version_chars][::-1], 16)  # Little Endian
-    i += version_chars
+    # Version - little endian
+    version, i = parse_num(s, 0, version_chars, internal=True)
 
     # Previous block
-    prev_block = s[i:i + prev_block_chars]
-    i += prev_block_chars
+    prev_block, i = parse_string(s, i, prev_block_chars)
 
     # Merkle root
-    merkle_root = s[i: i + merkle_root_chars]
-    i += merkle_root_chars
+    merkle_root, i = parse_string(s, i, merkle_root_chars)
 
     # Time
-    time = int(s[i: i + time_chars][::-1], 16)  # Little Endian
-    i += time_chars
+    time, i = parse_num(s, i, time_chars, internal=True)
 
     # Target
-    target = int(s[i:i + target_chars][::-1], 16)  # Little Endian
-    i += target_chars
+    target, i = parse_num(s, i, target_chars, internal=True)
 
     # Nonce
-    nonce = int(s[i: i + nonce_chars][::-1], 16)  # Nonce
-    i += nonce_chars
+    nonce, i = parse_num(s, i, nonce_chars, internal=True)
 
     # Verify
     string_encoding = s[:i]
@@ -292,7 +284,7 @@ def decode_block(s: str) -> Block:
     i = len(header.encoded)  # Running index
 
     # Txs
-    tx_count, increment = decode_compact_size(s[i:], return_length=True)
+    tx_count, increment = decode_compact_size(s[i:])
     i += increment
     tx_list = []
     for _ in range(tx_count):

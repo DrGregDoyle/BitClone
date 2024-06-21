@@ -1,20 +1,9 @@
 """
 A module for the Block class
-
-    Block Structure
-    ======================================================================
-    Size                Field                   Description
-    ======================================================================
-    4 bytes             Block size              The size of the block in bytes
-    80 bytes            Block header            Standard Header formatting
-    1-3 compactSize     Transaction counter     Number of transactions
-    var                 Transactions            The transactions for the block
-    ======================================================================
 """
 # --- IMPORTS --- #
 import json
 
-# from src.library import encode_compact_size
 from src.encoder_lib import encode_compact_size
 from src.utility import hash256
 
@@ -76,6 +65,16 @@ class Header:
 
 
 class Block:
+    """
+    Block fields
+    =========================================================
+    |   field       |   size (bytes)    |   format          |
+    =========================================================
+    |   header      |   4               |   header.encoded  |
+    |   tx_count    |   var             |   compactSize     |
+    |   tx_list     |   var             |   tx.encoded      |
+    =========================================================
+    """
 
     def __init__(self, header: Header, tx_list: list):
         # Header
@@ -91,8 +90,7 @@ class Block:
 
     @property
     def encoded(self):
-        encoded_string = self.header.encoded
-        encoded_string += self.tx_count
+        encoded_string = self.header.encoded + self.tx_count
         for tx in self.tx_list:
             encoded_string += tx.encoded
         return encoded_string

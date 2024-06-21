@@ -3,7 +3,7 @@ A class for BitClone UTXOs
 """
 import json
 
-from src.transaction import CompactSize
+from src.encoder_lib import encode_compact_size
 
 
 class Outpoint:
@@ -43,7 +43,7 @@ class UTXO:
         self.amount = format(amount, f"0{2 * self.AMOUNT_BYTES}x")[::-1]  # Little Endian
         self.coinbase = "01" if coinbase else "00"
         self.locking_code = locking_code
-        self.locking_code_size = CompactSize(len(self.locking_code)).encoded
+        self.locking_code_size = encode_compact_size(len(self.locking_code))
 
     @property
     def key(self):
