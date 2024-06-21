@@ -4,8 +4,8 @@ A file for testing Transaction and its related classes. Both decoding and encodi
 # --- IMPORTS --- #
 from random import randint
 
-from src.transaction import Input, decode_input, Output, decode_output, WitnessItem, decode_witness_item, Witness, \
-    decode_witness, Transaction, decode_transaction
+from src.library import decode_input, decode_output, decode_witness_item, decode_witness, decode_tx
+from src.transaction import Input, Output, WitnessItem, Witness, Transaction
 from src.utility import random_hash160, hash256
 from src.wallet import WalletFactory
 
@@ -71,6 +71,6 @@ def test_transaction():
     witness_list = [witness1, witness2]
 
     test_tx = Transaction(inputs=[input1, input2], outputs=[output1], witness_list=witness_list)
-    constructed_tx = decode_transaction(test_tx.encoded)
+    constructed_tx = decode_tx(test_tx.encoded)
 
     assert constructed_tx.encoded == test_tx.encoded

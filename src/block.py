@@ -15,8 +15,8 @@ import json
 from datetime import datetime
 from random import randint
 
-from src.transaction import CompactSize, Transaction, Input, Output, Witness, WitnessItem, match_byte_chunk, \
-    decode_transaction
+from src.library import decode_tx
+from src.transaction import CompactSize, Transaction, Input, Output, Witness, WitnessItem, match_byte_chunk
 from src.utility import *
 from src.wallet import WalletFactory
 
@@ -187,7 +187,7 @@ def decode_block(block_string: str):
     tx_list = []
     tx_verify_string = ""
     for _ in range(tx_int):
-        temp_tx = decode_transaction(block_string[current_index:])
+        temp_tx = decode_tx(block_string[current_index:])
         tx_list.append(temp_tx)
         current_index += len(temp_tx.encoded)
         tx_verify_string += temp_tx.encoded
