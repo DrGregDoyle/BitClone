@@ -8,8 +8,9 @@ import sys
 import time
 from pathlib import Path
 
+from src.library import decode_outpoint, decode_utxo
 from src.utility import random_tx_id, random_bool, random_amount, random_height, random_v_out, random_hash256
-from src.utxo import UTXO, Outpoint, decode_outpoint, decode_utxo
+from src.utxo import UTXO, Outpoint
 
 # --- LOGGING --- #
 log_level = logging.DEBUG
