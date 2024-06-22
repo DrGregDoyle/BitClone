@@ -1,10 +1,10 @@
 """
-A module for the Block class
+A module for the Block classes
 """
 # --- IMPORTS --- #
 import json
 
-from src.encoder_lib import encode_compact_size
+from src.encoder_lib import encode_compact_size, encode_byte_format
 from src.utility import hash256
 
 
@@ -25,24 +25,19 @@ class Header:
     =====================================================================
 
     """
-    VERSION_BYTES = 4
-    HASH_BYTES = 32
-    MERKLE_BYTES = 32
-    TIME_BYTES = 4
-    TARGET_BYTES = 4
-    NONCE_BYTES = 4
+    HASH_CHARS = 64
 
     def __init__(self, prev_block: str, merkle_root: str, time: int, target: int, nonce: int, version=1):
         """
         Todo: Write function to encode target into bits
         """
         # Get and format variables
-        self.version = format(version, f"0{2 * self.VERSION_BYTES}x")[::-1]  # Little Endian
-        self.prev_block = prev_block.zfill(2 * self.HASH_BYTES)
-        self.merkle_root = merkle_root.zfill(2 * self.MERKLE_BYTES)
-        self.time = format(time, f"0{2 * self.TIME_BYTES}x")[::-1]  # Little Endian
-        self.target = format(target, f"0{2 * self.TARGET_BYTES}x")[::-1]  # Little Endian
-        self.nonce = format(nonce, f"0{2 * self.NONCE_BYTES}x")[::-1]  # Little Endian
+        self.version = encode_byte_format(version, "version", True)  # Little Endian
+        self.prev_block = prev_block.zfill(self.HASH_CHARS)
+        self.merkle_root = merkle_root.zfill(self.HASH_CHARS)
+        self.time = encode_byte_format(time, "time", True)  # Little Endian
+        self.target = encode_byte_format(target, "target", True)  # Little Endian
+        self.nonce = encode_byte_format(nonce, "nonce", True)  # Little Endian
 
     @property
     def encoded(self):
@@ -70,7 +65,7 @@ class Block:
     =========================================================
     |   field       |   size (bytes)    |   format          |
     =========================================================
-    |   header      |   4               |   header.encoded  |
+    |   header      |   80              |   header.encoded  |
     |   tx_count    |   var             |   compactSize     |
     |   tx_list     |   var             |   tx.encoded      |
     =========================================================

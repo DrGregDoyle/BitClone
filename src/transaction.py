@@ -53,7 +53,7 @@ import json
 import logging
 import sys
 
-from src.encoder_lib import encode_compact_size
+from src.encoder_lib import encode_compact_size, encode_byte_format
 
 # --- LOGGING --- #
 log_level = logging.DEBUG
@@ -63,20 +63,6 @@ logger.addHandler(logging.StreamHandler(stream=sys.stdout))
 
 
 # --- CLASSES --- #
-
-
-def match_byte_chunk(byte_chunk: str) -> int:
-    """
-    Given a byte chunk, we return the necessary index to increment by to capture the number in a string
-    """
-    match byte_chunk.upper():
-        case "FD":
-            return 4
-        case "FE":
-            return 8
-        case "FF":
-            return 16
-    return 0
 
 
 class Input:
@@ -92,21 +78,21 @@ class Input:
     |   sequence        |   4           |   little-endian   |
     =========================================================
     """
-    TX_BYTES = 32
-    INDEX_BYTES = 4
-    SEQUENCE_BYTES = 4
+    HASH_CHARS = 64
 
     def __init__(self, tx_id: str, v_out: int, script_sig: str, sequence: int):
-        # Format tx_id
-        self.tx_id = tx_id.zfill(2 * self.TX_BYTES)
+        # tx_id
+        self.tx_id = tx_id.zfill(self.HASH_CHARS)
 
-        # Little endian format for v_out and sequence
-        self.v_out = format(v_out, f"0{2 * self.INDEX_BYTES}x")[::-1]
-        self.sequence = format(sequence, f"0{2 * self.SEQUENCE_BYTES}x")[::-1]
+        # v_out - little endian
+        self.v_out = encode_byte_format(v_out, "v_out", internal=True)
 
-        # Get script and script_size
+        # script_sig and script_sig_size
         self.script_sig = script_sig
         self.script_sig_size = encode_compact_size(len(self.script_sig))
+
+        # sequence
+        self.sequence = encode_byte_format(sequence, "sequence", internal=True)
 
     def __eq__(self, other):
         return self.encoded == other.encoded
@@ -114,13 +100,6 @@ class Input:
     @property
     def encoded(self):
         return self.tx_id + self.v_out + self.script_sig_size + self.script_sig + self.sequence
-
-    @property
-    def v_out_int(self):
-        return int(self.v_out[::-1], 16)
-
-    def outpoint(self):
-        return self.tx_id + self.v_out
 
     def to_json(self):
         input_dict = {
@@ -147,20 +126,16 @@ class Output:
     AMOUNT_BYTES = 8
 
     def __init__(self, amount: int, output_script: str):
-        # Get amount and format it
-        self.amount = format(amount, f"0{2 * self.AMOUNT_BYTES}x")[::-1]  # Little Endian
+        # amount - little endian
+        self.amount = encode_byte_format(amount, "amount", internal=True)
 
-        # Get script and script size
+        # script and script size
         self.script_pub_key = output_script
         self.script_pub_key_size = encode_compact_size(len(self.script_pub_key))
 
     @property
     def encoded(self):
         return self.amount + self.script_pub_key_size + self.script_pub_key
-
-    @property
-    def amount_int(self):
-        return int(self.amount[::-1], 16)
 
     def to_json(self):
         output_dict = {
@@ -219,9 +194,7 @@ class Witness:
         Input is a list of WitnessItems. We create a witness_dict for each such item.
         """
         # Get count
-        num_of_items = len(items)
-        self.stack_items = encode_compact_size(num_of_items)
-        self.stack_items_int = num_of_items
+        self.stack_items = encode_compact_size(len(items))
 
         # Get items
         self.witness_items = items
@@ -234,14 +207,10 @@ class Witness:
         return witness_string
 
     def to_json(self):
-        witness_dict = {
-            "stack_items": self.stack_items
-        }
-        for x in range(self.stack_items_int):
+        witness_dict = {"stack_items": self.stack_items}
+        for x in range(len(self.witness_items)):
             temp_wi = self.witness_items[x]
-            witness_dict.update({
-                x: json.loads(temp_wi.to_json())
-            })
+            witness_dict.update({x: json.loads(temp_wi.to_json())})
         return json.dumps(witness_dict, indent=2)
 
 
@@ -263,20 +232,15 @@ class Transaction:
     =========================================================
 
     """
-    VERSION_BYTES = 4
-    MARKER_BYTES = 1
-    FLAG_BYTES = 1
-    LOCKTIME_BYTES = 4
     MARKER = "00"
     FLAG = "01"
-    VERSION = 1
 
-    def __init__(self, inputs: list, outputs: list, version=16, witness_list=None, locktime=None):
+    def __init__(self, inputs: list, outputs: list, witness_list=None, locktime=None, version=16):
         """
         We assume the inputs list is not empty.
         """
-        # Format version
-        self.version = format(version, f"0{2 * self.VERSION_BYTES}x")[::-1]  # Little Endian
+        # version - little endian
+        self.version = encode_byte_format(version, "version", internal=True)
 
         # Get lists
         self.inputs = inputs
@@ -294,11 +258,10 @@ class Transaction:
         self.marker = self.MARKER if self.segwit else None
         self.flag = self.FLAG if self.segwit else None
 
-        # Set locktime
+        # locktime - little endian
         if locktime is None:
-            self.locktime = format(0, f"0{2 * self.LOCKTIME_BYTES}x")[::-1]  # Little Endian
-        else:
-            self.locktime = format(locktime, f"0{2 * self.LOCKTIME_BYTES}x")[::-1]
+            locktime = 0
+        self.locktime = encode_byte_format(locktime, "locktime", internal=True)
 
     @property
     def encoded(self):

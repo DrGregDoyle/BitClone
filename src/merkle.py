@@ -2,13 +2,11 @@
 A module for Merkle trees
 """
 
-import json
 # --- IMPORTS --- #
+import json
 import logging
 import sys
 from hashlib import sha256
-
-from src.utility import get_random_string
 
 # --- LOGGING --- #
 log_level = logging.DEBUG
@@ -213,21 +211,3 @@ class MerkleTree:
 
         # Verify final leaf agrees with merkle root
         return current_leaf == self.merkle_root
-
-
-# --- TESTING --- #
-if __name__ == "__main__":
-    hash1 = sha256(get_random_string().encode()).hexdigest()
-    hash2 = sha256(get_random_string().encode()).hexdigest()
-    hash3 = sha256(get_random_string().encode()).hexdigest()
-    elements = [hash1, hash2, hash3]
-
-    hash12 = sha256((hash1 + hash2).encode()).hexdigest()
-    hash33 = sha256((hash3 + hash3).encode()).hexdigest()
-    hash1233 = sha256((hash12 + hash33).encode()).hexdigest()
-
-    test_tree = MerkleTree(elements)
-    print(test_tree.verify_element(hash1))
-    print(test_tree.verify_element(hash2))
-    print(test_tree.find_path(hash3))
-    # print(test_tree.to_json())

@@ -12,7 +12,6 @@ from hashlib import sha256
 from secrets import randbits
 
 from src.cryptography import SECP256K1
-from src.utility import hash160
 from src.word_list import WORDLIST
 
 # --- LOGGING --- #
@@ -223,13 +222,3 @@ class Wallet:
             return False
         x, _ = curve_point
         return r == x % n
-
-
-# --- TESTING --- #
-if __name__ == "__main__":
-    w = Wallet()
-    tx_id = hash160("Hello world!")
-    sig = w.sign_transaction(tx_id)
-    print(f"SIGNATURE: {sig}")
-    verified = w.verify_signature(signature=sig, tx_id=tx_id, public_key=w.pk_point)
-    print(f"SIGNATURE VERIFIED: {verified}")

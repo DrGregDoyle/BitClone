@@ -5,41 +5,26 @@ A library for common decoder functions
 # --- IMPORTS --- #
 
 from src.block import Header, Block
+from src.encoder_lib import BYTE_DICT
 from src.transaction import Input, Output, WitnessItem, Witness, Transaction
 from src.utxo import Outpoint, UTXO
 
-# --- FORMATTING --- #
-BYTE_DICT = {
-    "tx": 32,
-    "v_out": 4,
-    "height": 16,
-    "amount": 8,
-    "sequence": 4,
-    "byte": 1,
-    "version": 4,
-    "locktime": 4,
-    "hash": 32,
-    "target": 4,
-    "time": 4,
-    "nonce": 4
-}
 
-
+# --- PARSERS --- #
 def parse_string(s: str, index: int, length: int):
     string_length = index + length
     return s[index: string_length], string_length
 
 
-def parse_num(s: str, index, length, internal=False):
+def parse_num(s: str, index: int, length: int, internal=False):
     """
     Set internal=True to parse a number given in internal byte order (little-endian).
     Default is for internal=False and the chars are in display byte order (big-endian).
     """
-    inc = index + length
-    num = s[index: inc]
-    if internal:
-        num = num[::-1]
-    return int(num, 16), inc
+    string_length = index + length
+    temp_string = s[index:string_length]
+    num = temp_string[::-1] if internal else temp_string
+    return int(num, 16), string_length
 
 
 # --- DECODE --- #
@@ -249,25 +234,16 @@ def decode_header(s: str) -> Header:
     target_chars = 2 * BYTE_DICT.get("target")
     nonce_chars = 2 * BYTE_DICT.get("nonce")
 
-    # Running index
-    i = 0
-
     # Version - little endian
     version, i = parse_num(s, 0, version_chars, internal=True)
 
-    # Previous block
+    # Previous block, merkle_root
     prev_block, i = parse_string(s, i, prev_block_chars)
-
-    # Merkle root
     merkle_root, i = parse_string(s, i, merkle_root_chars)
 
-    # Time
+    # Time, target, nonce - little endian
     time, i = parse_num(s, i, time_chars, internal=True)
-
-    # Target
     target, i = parse_num(s, i, target_chars, internal=True)
-
-    # Nonce
     nonce, i = parse_num(s, i, nonce_chars, internal=True)
 
     # Verify
