@@ -7,6 +7,7 @@ from secrets import randbelow
 
 from src.wallet import WalletFactory, Wallet
 from src.word_list import WORDLIST
+from tests.utility import random_tx_id
 
 
 # --- TESTS --- #
@@ -31,3 +32,10 @@ def test_recovery_phrase():
 
     phony_recovery_wallet = wf.recover_wallet(phony_seed_phrase)
     assert phony_recovery_wallet is None
+
+
+def test_signature():
+    tx_id = random_tx_id()
+    test_wallet = WalletFactory().new_wallet()
+    sig = test_wallet.sign_transaction(tx_id)
+    assert test_wallet.verify_signature(sig, tx_id, test_wallet.pk_point)
