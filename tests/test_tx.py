@@ -36,5 +36,6 @@ def test_witness():
 
 def test_transaction():
     test_tx = random_tx()
+    print(f"TEST TX: {test_tx.to_json()}")
     constructed_tx = decode_tx(test_tx.encoded)
     assert constructed_tx.encoded == test_tx.encoded

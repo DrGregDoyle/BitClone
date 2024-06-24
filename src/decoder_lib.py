@@ -205,12 +205,12 @@ def decode_tx(s: str) -> Transaction:
         i += len(temp_output.encoded)
 
     # Handle Witness
-    witnesses = []
     if segwit:
         # Number of Witnesses must agree with number of inputs
-        for _ in range(num_inputs):
+        for n in range(num_inputs):
             temp_witness = decode_witness(s[i:])
-            witnesses.append(temp_witness)
+            temp_input = input_list[n]
+            temp_input.add_witness(temp_witness)
             i += len(temp_witness.encoded)
 
     # Locktime
@@ -219,7 +219,7 @@ def decode_tx(s: str) -> Transaction:
 
     # Verify
     string_encoding = s[:i]
-    constructed_tx = Transaction(input_list, output_list, witness_list=witnesses, version=version, locktime=locktime)
+    constructed_tx = Transaction(input_list, output_list, version=version, locktime=locktime)
     if constructed_tx.encoded != string_encoding:
         raise TypeError("Input string did not generate same Transaction object")
     return constructed_tx

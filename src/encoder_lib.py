@@ -16,6 +16,16 @@ BYTE_DICT = {
     "nonce": 4
 }
 
+WEIGHT_UNIT_DICT = {
+    "version": 4,
+    "marker": 1,
+    "flag": 1,
+    "input": 4,
+    "output": 4,
+    "witness": 1,
+    "locktime": 4
+}
+
 
 def encode_compact_size(n: int) -> str:
     """

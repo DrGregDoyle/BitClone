@@ -58,12 +58,14 @@ def random_utxo():
     return UTXO(outpoint, height, amount, locking_code, coinbase)
 
 
-def random_input():
+def random_input(segwit=None):
     tx_id = random_tx_id()
     v_out = random_byte_element("v_out")
     script_sig = random_tx_id()
     sequence = random_byte_element("sequence")
-    return Input(tx_id, v_out, script_sig, sequence)
+    segwit = random_bool() if segwit is None else segwit
+    witness = random_witness() if segwit else None
+    return Input(tx_id, v_out, script_sig, sequence, witness)
 
 
 def random_output():
@@ -98,23 +100,18 @@ def random_header() -> Header:
 def random_tx():
     input_count = randint(2, 5)
     inputs = []
+    segwit = random_bool()
     for _ in range(input_count):
-        inputs.append(random_input())
+        inputs.append(random_input(segwit))
 
     output_count = randint(1, 3)
     outputs = []
     for _ in range(output_count):
         outputs.append(random_output())
 
-    witness_list = []
-    segwit = random_bool()
-    if segwit:
-        for _ in range(input_count):
-            witness_list.append(random_witness())
-
     version = random_byte_element("version")
     locktime = random_byte_element("locktime")
-    return Transaction(inputs, outputs, witness_list=witness_list, version=version, locktime=locktime)
+    return Transaction(inputs, outputs, version=version, locktime=locktime)
 
 
 def random_block():

@@ -52,8 +52,9 @@ Notes:
 import json
 import logging
 import sys
+from hashlib import sha256
 
-from src.encoder_lib import encode_compact_size, encode_byte_format
+from src.encoder_lib import encode_compact_size, encode_byte_format, WEIGHT_UNIT_DICT
 
 # --- LOGGING --- #
 log_level = logging.DEBUG
@@ -63,89 +64,6 @@ logger.addHandler(logging.StreamHandler(stream=sys.stdout))
 
 
 # --- CLASSES --- #
-
-
-class Input:
-    """
-    Input Fields
-    =========================================================
-    |   field           |   byte size   |   format          |
-    =========================================================
-    |   tx_id           |   32          |   big-endian      |
-    |   v_out           |   4           |   little-endian   |
-    |   script_sig_size |   var         |   CompactSize     |
-    |   script_sig      |   var         |   Script          |
-    |   sequence        |   4           |   little-endian   |
-    =========================================================
-    """
-    HASH_CHARS = 64
-
-    def __init__(self, tx_id: str, v_out: int, script_sig: str, sequence: int):
-        # tx_id
-        self.tx_id = tx_id.zfill(self.HASH_CHARS)
-
-        # v_out - little endian
-        self.v_out = encode_byte_format(v_out, "v_out", internal=True)
-
-        # script_sig and script_sig_size
-        self.script_sig = script_sig
-        self.script_sig_size = encode_compact_size(len(self.script_sig))
-
-        # sequence
-        self.sequence = encode_byte_format(sequence, "sequence", internal=True)
-
-    def __eq__(self, other):
-        return self.encoded == other.encoded
-
-    @property
-    def encoded(self):
-        return self.tx_id + self.v_out + self.script_sig_size + self.script_sig + self.sequence
-
-    def to_json(self):
-        input_dict = {
-            "tx_id": self.tx_id,
-            "v_out": self.v_out,
-            "script_sig_size": self.script_sig_size,
-            "script_sig": self.script_sig,
-            "sequence": self.sequence
-        }
-        return json.dumps(input_dict, indent=2)
-
-
-class Output:
-    """
-    Output Fields
-    =============================================================
-    |   field               |   byte size   |   format          |
-    =============================================================
-    |   amount              |   8           |   little-endian   |
-    |   script_pub_key_size |   var         |   CompactSize     |
-    |   script_pub_key      |   var         |   Script          |
-    =============================================================
-    """
-    AMOUNT_BYTES = 8
-
-    def __init__(self, amount: int, output_script: str):
-        # amount - little endian
-        self.amount = encode_byte_format(amount, "amount", internal=True)
-
-        # script and script size
-        self.script_pub_key = output_script
-        self.script_pub_key_size = encode_compact_size(len(self.script_pub_key))
-
-    @property
-    def encoded(self):
-        return self.amount + self.script_pub_key_size + self.script_pub_key
-
-    def to_json(self):
-        output_dict = {
-            "amount": self.amount,
-            "script_pub_key_size": self.script_pub_key_size,
-            "script_pub_key": self.script_pub_key
-        }
-        return json.dumps(output_dict, indent=2)
-
-
 class WitnessItem:
     """
     Item Fields
@@ -214,6 +132,109 @@ class Witness:
         return json.dumps(witness_dict, indent=2)
 
 
+class Input:
+    """
+    Input Fields
+    =========================================================
+    |   field           |   byte size   |   format          |
+    =========================================================
+    |   tx_id           |   32          |   big-endian      |
+    |   v_out           |   4           |   little-endian   |
+    |   script_sig_size |   var         |   CompactSize     |
+    |   script_sig      |   var         |   Script          |
+    |   sequence        |   4           |   little-endian   |
+    |   witness         |   var         |   Witness.encoded |
+    =========================================================
+    """
+    HASH_CHARS = 64
+
+    def __init__(self, tx_id: str, v_out: int, script_sig: str, sequence: int, witness=None):
+        # tx_id
+        self.tx_id = tx_id.zfill(self.HASH_CHARS)
+
+        # v_out - little endian
+        self.v_out = encode_byte_format(v_out, "v_out", internal=True)
+
+        # script_sig and script_sig_size
+        self.script_sig = script_sig
+        self.script_sig_size = encode_compact_size(len(self.script_sig))
+
+        # sequence
+        self.sequence = encode_byte_format(sequence, "sequence", internal=True)
+
+        # witness
+        self.witness = witness
+
+    def __eq__(self, other):
+        return self.encoded == other.encoded
+
+    @property
+    def segwit(self):
+        return True if self.witness else False
+
+    @property
+    def encoded(self):
+        return self.tx_id + self.v_out + self.script_sig_size + self.script_sig + self.sequence
+
+    @property
+    def witness_encoded(self):
+        encoded_string = ""
+        if self.segwit:
+            encoded_string = self.witness.encoded
+        return encoded_string
+
+    def to_json(self):
+        input_dict = {
+            "tx_id": self.tx_id,
+            "v_out": self.v_out,
+            "script_sig_size": self.script_sig_size,
+            "script_sig": self.script_sig,
+            "sequence": self.sequence,
+        }
+        if self.segwit:
+            input_dict.update({"witness": json.loads(self.witness.to_json())})
+        return json.dumps(input_dict, indent=2)
+
+    def add_witness(self, witness: Witness):
+        if self.witness is None:
+            self.witness = witness
+
+
+class Output:
+    """
+    Output Fields
+    =============================================================
+    |   field               |   byte size   |   format          |
+    =============================================================
+    |   amount              |   8           |   little-endian   |
+    |   script_pub_key_size |   var         |   CompactSize     |
+    |   script_pub_key      |   var         |   Script          |
+    =============================================================
+    NOTE: Created outputs will get added to UTXO DB
+    """
+    AMOUNT_BYTES = 8
+
+    def __init__(self, amount: int, output_script: str):
+        # amount - little endian
+        self.amount = encode_byte_format(amount, "amount", internal=True)
+
+        # script and script size
+        self.script_pub_key = output_script
+        self.script_pub_key_size = encode_compact_size(len(self.script_pub_key))
+
+    @property
+    def encoded(self):
+        return self.amount + self.script_pub_key_size + self.script_pub_key
+
+    def to_json(self):
+        output_dict = {
+            "amount": self.amount,
+            "script_pub_key_size": self.script_pub_key_size,
+            "script_pub_key": self.script_pub_key
+        }
+        return json.dumps(output_dict, indent=2)
+
+
 class Transaction:
     """
     Transaction Fields
@@ -235,7 +256,7 @@ class Transaction:
     MARKER = "00"
     FLAG = "01"
 
-    def __init__(self, inputs: list, outputs: list, witness_list=None, locktime=None, version=16):
+    def __init__(self, inputs: list, outputs: list, locktime=None, version=16):
         """
         We assume the inputs list is not empty.
         """
@@ -247,14 +268,17 @@ class Transaction:
         self.outputs = outputs
 
         # Get size of lists as compactSize elements
-        self.num_inputs = encode_compact_size(len(self.inputs))
-        self.num_outputs = encode_compact_size(len(self.outputs))
+        self.input_count = encode_compact_size(len(self.inputs))
+        self.output_count = encode_compact_size(len(self.outputs))
 
-        # Get witness structure
-        self.witness_list = witness_list
-        self.segwit = True if self.witness_list else False
+        # Check segwit - handle malformed transaction
+        segwit_list = [i.segwit for i in self.inputs]
+        self.segwit = all(segwit_list)
+        if not self.segwit and True in segwit_list:
+            raise TypeError("All inputs must have a witness.")
 
-        # Set marker and flag
+        # Witness
+        self.witness_list = [i.witness for i in self.inputs] if self.segwit else []
         self.marker = self.MARKER if self.segwit else None
         self.flag = self.FLAG if self.segwit else None
 
@@ -272,30 +296,61 @@ class Transaction:
         encoded_string = self.version
 
         # Handle segwit
-        segwit = False
-        if self.marker and self.flag:
+        if self.segwit:
             encoded_string += self.marker + self.flag
-            segwit = True
 
         # Encode inputs
-        encoded_string += self.num_inputs
-        for input_item in self.inputs:
-            encoded_string += input_item.encoded
+        encoded_string += self.input_count + self._encoded_list(self.inputs)
 
         # Encode outputs
-        encoded_string += self.num_outputs
-        for output_item in self.outputs:
-            encoded_string += output_item.encoded
+        encoded_string += self.output_count + self._encoded_list(self.outputs)
 
         # Handle witness
-        if segwit:
-            for witness in self.witness_list:
-                encoded_string += witness.encoded
+        if self.segwit:
+            encoded_string += self._encoded_list(self.witness_list)
 
         # Locktime
         encoded_string += self.locktime
 
         return encoded_string
+
+    @property
+    def byte_size(self):
+        return len(self.encoded) // 2
+
+    @property
+    def weight(self):
+        # Legacy
+        if not self.segwit:
+            return self.byte_size * 4
+
+        # Divide number of hex chars by 2 and multiply by WEIGHT_UNIT_DICT factor, for each field
+        total = 0
+        total += (len(self.version) // 2) * WEIGHT_UNIT_DICT.get("version")
+        total += (len(self.marker) // 2) * WEIGHT_UNIT_DICT.get("marker")
+        total += (len(self.flag) // 2) * WEIGHT_UNIT_DICT.get("flag")
+        total += (len(self.input_count) + len(self._encoded_list(self.inputs)) // 2) * WEIGHT_UNIT_DICT.get("input")
+        total += (len(self.output_count) + len(self._encoded_list(self.outputs)) // 2) * WEIGHT_UNIT_DICT.get("output")
+        total += (len(self._encoded_list(self.witness_list)) // 2) * WEIGHT_UNIT_DICT.get("witness")
+        total += (len(self.locktime) // 2) * WEIGHT_UNIT_DICT.get("locktime")
+
+        return total
+
+    @property
+    def vbytes(self):
+        if not self.segwit:
+            return self.byte_size
+        else:
+            return self.weight / 4
+
+    @property
+    def id(self):
+        if self.segwit:
+            unhashed_data = self.version + self.input_count + self._encoded_list(
+                self.inputs) + self.output_count + self._encoded_list(self.outputs) + self.locktime
+        else:
+            unhashed_data = self.encoded
+        return sha256(sha256(unhashed_data.encode()).hexdigest().encode()).hexdigest()
 
     def to_json(self):
         # Version
@@ -317,7 +372,7 @@ class Transaction:
             temp_input = self.inputs[x]
             input_list.append(json.loads(temp_input.to_json()))
         tx_dict.update({
-            "input_count": self.num_inputs,
+            "input_count": self.input_count,
             "inputs": input_list
         })
 
@@ -328,7 +383,7 @@ class Transaction:
             temp_output = self.outputs[y]
             output_list.append(json.loads(temp_output.to_json()))
         tx_dict.update({
-            "output_count": self.num_outputs,
+            "output_count": self.output_count,
             "outputs": output_list
         })
 
@@ -349,3 +404,9 @@ class Transaction:
         })
 
         return json.dumps(tx_dict, indent=2)
+
+    def _encoded_list(self, item_list: list):
+        encoded_string = ""
+        for item in item_list:
+            encoded_string += item.encoded
+        return encoded_string
