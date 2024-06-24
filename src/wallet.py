@@ -9,9 +9,13 @@ import logging
 import secrets
 import sys
 from hashlib import sha256
+from random import choice
 from secrets import randbits
 
+from ripemd.ripemd160 import ripemd160
+
 from src.cryptography import SECP256K1
+from src.encoder_lib import int_to_base58
 from src.word_list import WORDLIST
 
 # --- LOGGING --- #
@@ -71,6 +75,7 @@ class Wallet:
     """
     BIT_LENGTH = 256
     SIGNATURE_BYTES = 32
+    PUBLIC_KEY_BYTES = 32
 
     def __init__(self, seed=None):
         self.curve = SECP256K1()
@@ -84,9 +89,48 @@ class Wallet:
         self._private_key, self.pk_point = self.get_keys(self._seed)  # Get first keypair
         self.seed_phrase = self.get_recovery_code(self._seed)  # Get seed phrase
 
+    @property
+    def compressed_public_key(self):
+        # 33 bytes
+        x, y = self.pk_point
+        prefix = "02" if y % 2 == 0 else "03"
+        return prefix + format(x, f"0{2 * self.PUBLIC_KEY_BYTES}x")
+
+    @property
+    def public_key(self):
+        # 65 bytes
+        x, y = self.pk_point
+        hex_x = format(x, f"0{2 * self.PUBLIC_KEY_BYTES}x")
+        hex_y = format(y, f"0{2 * self.PUBLIC_KEY_BYTES}x")
+        return "04" + hex_x + hex_y
+
+    def legacy_address(self, prefix="00"):
+        """
+        We return a base58 address of the compressed public key. The prefix corresponds to the type of locking script
+        used.
+        """
+        match prefix:
+            case "05":
+                base58_prefix = "3"
+            case "80":
+                base58_prefix = choice(["K", "L", "5"])
+            case "0488ADE4":
+                base58_prefix = "xprv"
+            case "0488B21E":
+                base58_prefix = "xpub"
+            case _:
+                base58_prefix = "1"
+
+        base58_cpk = int_to_base58(int(self.compressed_public_key, 16))
+        return base58_prefix + base58_cpk
+
+    @staticmethod
+    def hash160(data: str):
+        return ripemd160(sha256(data.encode()).hexdigest().encode()).hex()
+
     def get_keys(self, seed: int):
         """
-        We assign the private key, the public key point and the compressed public key
+        We assign the private key and the public key point.
         """
         _private_key = int(sha256(hex(seed).encode()).hexdigest()[2:], 16)
         pk_point = self.curve.scalar_multiplication(_private_key, self.curve.g)
@@ -222,3 +266,9 @@ class Wallet:
             return False
         x, _ = curve_point
         return r == x % n
+
+
+# --- TESTING --- #
+if __name__ == "__main__":
+    w = Wallet()
+    print(w.legacy_address(prefix="0488ADE4"))

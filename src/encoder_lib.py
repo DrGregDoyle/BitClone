@@ -26,6 +26,45 @@ WEIGHT_UNIT_DICT = {
     "locktime": 4
 }
 
+# --- BASE58 ENCODING/DECODING --- #
+BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+BASE58_LIST = [x for x in BASE58_ALPHABET]
+
+
+def int_to_base58(num: int) -> str:
+    """
+    We create the string by successively dividing by 58 and appending the corresponding symbol to our string.
+    """
+    # Start with empty string
+    base58_string = ''
+
+    # Return empty string if integer is negative
+    if num < 0:
+        return base58_string
+
+    # Catch zero case
+    if num == 0:
+        base58_string = '1'
+
+    # Create string from successive residues
+    else:
+        while num > 0:
+            remainder = num % 58
+            base58_string = BASE58_LIST[remainder] + base58_string
+            num = num // 58
+    return base58_string
+
+
+def base58_to_int(base58_string: str) -> int:
+    """
+    To convert a base58 string back to an int:
+        -For each character, find the numeric index in the list of alphabet characters
+        -Multiply this numeric value by a corresponding power of 58
+        -Sum all values
+    """
+    return sum([BASE58_LIST.index(base58_string[x:x + 1]) * pow(58, len(base58_string) - x - 1) for x in
+                range(0, len(base58_string))])
+
 
 def encode_compact_size(n: int) -> str:
     """

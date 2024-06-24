@@ -59,11 +59,11 @@ def random_utxo():
 
 
 def random_input(segwit=None):
+    segwit = random_bool() if segwit is None else segwit
     tx_id = random_tx_id()
     v_out = random_byte_element("v_out")
-    script_sig = random_tx_id()
+    script_sig = random_tx_id() if not segwit else ""
     sequence = random_byte_element("sequence")
-    segwit = random_bool() if segwit is None else segwit
     witness = random_witness() if segwit else None
     return Input(tx_id, v_out, script_sig, sequence, witness)
 
