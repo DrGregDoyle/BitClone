@@ -1,214 +1,125 @@
 """
 A module for Merkle trees
 """
-
-# --- IMPORTS --- #
-import json
-import logging
-import sys
 from hashlib import sha256
 
-# --- LOGGING --- #
-log_level = logging.DEBUG
-logger = logging.getLogger(__name__)
-logger.setLevel(log_level)
-logger.addHandler(logging.StreamHandler(stream=sys.stdout))
 
-
-# --- CLASSES --- #
-class Leaf:
+def create_merkle_tree(tx_list: list) -> dict:
     """
-    In a Merkle Tree, those elements composing the initial data elements of the tree.
+    Given a tx_list, we return a merkle tree in dictionary form. The levels of the tree will be the keys, with root =
+    0. The values will be a list of 32-byte hash strings, where the parity of the index corresponds to left (even) or
+    right (odd).
     """
+    # Get height of tree
+    height = 0
+    while pow(2, height) < len(tx_list):
+        height += 1
 
-    def __init__(self, data: str):
-        self.value = data
+    # Create merkle branch for all non-zero heights
+    merkle_tree = {}
+    leaf_list = tx_list.copy()
+    while height > 0:
 
-    def __repr__(self):
-        return self.to_json()
-
-    def __add__(self, other):
-        return self.value + other.value
-
-    def __eq__(self, other):
-        return self.value == other.value
-
-    def to_json(self):
-        return json.dumps(self.value)
-
-
-class Branch:
-    """
-    In a Merkle Tree, we create Branches by taking the hash of the concatenation of the left and right leaves.
-    We will create a Branch using a factory method to guarantee that one leaf is left and one leaf is not left
-    """
-
-    def __init__(self, left: Leaf, right: Leaf):
-        self.left = left
-        self.right = right
-        self.value = Leaf(self.hash(self.left + self.right))
-
-    def __repr__(self):
-        return self.to_json()
-
-    @staticmethod
-    def hash(hash_string: str) -> str:
-        return sha256(hash_string.encode()).hexdigest()
-
-    def to_json(self):
-        return json.dumps(self.value)
-
-
-class MerkleTree:
-    """
-    We create a Merkle Tree from an initial list of elements. The tree is given in dictionary form, where each level
-    of the tree has the associated hash of the leaves in the next level.
-
-    We will use a Tree Factory for creating trees.
-    """
-
-    def __init__(self, elements: list):
-        """
-        Using a Tree Factory, we are guaranteed to be given a non-empty list of string elements.
-        """
-        # Elements of the MerkleTree are the initial list of hash values
-        self.elements = elements
-
-        # Find height of tree
-        self.height = self.get_height(self.elements)
-
-        # Create Merkle Tree
-        self.merkle_tree = self.create_tree(self.elements)
-
-        # Get Merkle Root
-        print(self.merkle_tree)
-        self.merkle_root = self.merkle_tree.get(0)[0]
-
-    def get_height(self, elements: list):
-        height = 0
-        while pow(2, height) < len(elements):
-            height += 1
-        return height
-
-    def create_tree(self, elements: list):
-        """
-        We create the merkle tree
-        """
-        # Odd number of elements
-        if len(elements) % 2 == 1:
-            elements.append(elements[-1])
-
-        # Create height variable
-        height = self.height
-
-        # Create initial list of leaves
-        leaf_list = [Leaf(e) for e in elements]
-
-        # Create lowest level of merkle tree
-        merkle_tree = {height: leaf_list}
-
-        # Create remaining levels of merkle tree
-        while height > 0:
-            height -= 1
-            leaf_list = self.create_branches(leaf_list)
-            merkle_tree.update({height: leaf_list})
-
-        # Return merkle tree dict
-        return merkle_tree
-
-    def create_branches(self, leaf_list: list):
-        """
-        Given a list of leaves, we create the associated branches and return as a list of branch.to_leaf
-        """
-        branch_list = []
-        cardinality = len(leaf_list)
-
-        # Odd number of leaves
-        if cardinality % 2 == 1:
+        # Make sure list has even number of elements
+        if len(leaf_list) % 2 == 1:
             leaf_list.append(leaf_list[-1])
 
-        # Create branches
-        for x in range(cardinality // 2):
-            temp_branch = Branch(
-                left=leaf_list[2 * x],
-                right=leaf_list[2 * x + 1]
-            )
-            branch_list.append(temp_branch.value)
+        # Create current branch
+        merkle_tree.update({height: leaf_list})
 
-        return branch_list
+        # Update leaf list
+        leaves = [leaf_list[2 * x] + leaf_list[2 * x + 1] for x in range(len(leaf_list) // 2)]
+        leaf_list = [sha256(leaf.encode()).hexdigest() for leaf in leaves]
 
-    def find_path(self, element: str | Leaf):
-        """
-        We find a list of corresponding hash values necessary to verify the element is in the tree.
-        """
-        # Get element as Leaf
-        if isinstance(element, str):
-            current_leaf = Leaf(element)
+        # Move up in height
+        height -= 1
+
+    # Verify and add merkle root
+    if len(leaf_list) != 1:
+        raise IndexError("More than one value left for merkle root")
+    merkle_tree.update({0: leaf_list[0]})
+
+    return merkle_tree
+
+
+def get_merkle_proof(tx_id: str, tree: dict):
+    """
+    Given a tx_id and a merkle tree, we return the merkle proof.
+    """
+    # Get height of tree
+    height = max(tree.keys())
+
+    # Track tx_id
+    current_id = tx_id
+
+    # Iterate over the levels of the tree
+    proof = {}
+    while height > 0:
+        # Get leaves at height
+        leaves = tree.get(height)
+
+        # Verify current_id is in leaves
+        if current_id not in leaves:
+            raise ValueError(f"tx_id {tx_id} not found at height {height} in given merkle tree.")
+
+        # Find partner_id
+        temp_index = leaves.index(current_id)
+        parity = temp_index % 2
+
+        # current_id is left leaf
+        if parity == 0:
+            partner_id = leaves[temp_index + 1]
+            concat = current_id + partner_id
+        # current_id is right leaf
         else:
-            current_leaf = element
+            partner_id = leaves[temp_index - 1]
+            concat = partner_id + current_id
 
-        # Verify leaf at each level and append opposite leaf
-        height = self.height
-        hash_dict = {}
-        while height > 0:
-            # Get leaves at height
-            leaf_list = self.merkle_tree.get(height)
+        # Update proof with partner info
+        proof.update({
+            height: {
+                "tx_id": partner_id,
+                "parity": 1 - parity
+            }
+        })
 
-            # Verify current leaf
-            if current_leaf not in leaf_list:
-                logger.error(f"Did not find leaf with value {current_leaf} at height {height}")
-                return None
+        # Get info for next level
+        current_id = sha256(concat.encode()).hexdigest()
+        height -= 1
 
-            # Find partner leaf
-            current_index = leaf_list.index(current_leaf)
-            order = 1 - (current_index % 2)
-            if order == 1:
-                partner_leaf = leaf_list[current_index + 1]
-                current_leaf = Branch(current_leaf, partner_leaf).value
-            else:
-                partner_leaf = leaf_list[current_index - 1]
-                current_leaf = Branch(partner_leaf, current_leaf).value
+    # Verify merkle root
+    merkle_root = tree.get(0)
+    if current_id != merkle_root:
+        raise ValueError(
+            f"Finished with merkle root {current_id} which doesn't agree with merkle root given in tree {merkle_root}")
+    proof.update({0: merkle_root})
 
-            # Create partner_dict
-            partner_dict = {"leaf": partner_leaf, "order": order}
+    return proof
 
-            # Save partner leaf
-            hash_dict.update({height: partner_dict})
 
-            # Decrement height
-            height -= 1
+def verify_element(tx_id: str, proof: dict) -> bool:
+    """
+    Given a tx_id and a proof dict, we return True if the proof dict arrives at the merkle_root.
+    """
+    height = max(proof.keys())
+    current_id = tx_id
 
-        return hash_dict
+    while height > 0:
+        # Get partner_dict at height
+        partner_dict = proof.get(height)
+        parity = partner_dict.get("parity")
+        partner_id = partner_dict.get("tx_id")
 
-    def verify_element(self, element: str | Leaf):
-        """
-        We verify the element is in the merkle tree
-        """
-        # Get element path
-        element_path = self.find_path(element)
+        # Update current_id
+        if parity == 0:  # Partner is left leaf
+            concat = partner_id + current_id
+        else:  # Partner is right leaf
+            concat = current_id + partner_id
+        current_id = sha256(concat.encode()).hexdigest()
 
-        # Return False if path is None
-        if element_path is None:
-            return False
+        # Move up in height
+        height -= 1
 
-        # At each level, concat the current and partner leaf into new branch, which becomes current leaf
-        height = self.height
-        current_leaf = Leaf(element) if isinstance(element, str) else element
-        while height > 0:
-            # Get partner leaf and order
-            partner_dict = element_path.get(height)
-            partner_leaf = partner_dict["leaf"]
-            partner_order = partner_dict["order"]
-
-            # Create new branch
-            (left, right) = (partner_leaf, current_leaf) if partner_order == 0 else (current_leaf, partner_leaf)
-            temp_branch = Branch(left, right)
-
-            # Update current leaf
-            current_leaf = temp_branch.value
-
-            # Decrement height
-            height -= 1
-
-        # Verify final leaf agrees with merkle root
-        return current_leaf == self.merkle_root
+    # Return True/False
+    merkle_root = proof.get(0)
+    return current_id == merkle_root

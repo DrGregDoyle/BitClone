@@ -277,6 +277,9 @@ class EllipticCurve:
         # Return point
         return temp_pt
 
+    def generator_multiplication(self, n: int):
+        return self.scalar_multiplication(n, self.g)
+
     def get_order(self):
         """
         We naively calculate the order by iterating over all x in F_p. If x is on the curve we

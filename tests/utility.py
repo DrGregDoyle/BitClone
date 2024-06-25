@@ -116,6 +116,6 @@ def random_tx():
 
 def random_block():
     header = random_header()
-    tx_count = 1  # randint(3, 5)
+    tx_count = randint(3, 5)
     tx_list = [random_tx() for _ in range(tx_count)]
     return Block(header.prev_block, header.time, header.target, header.nonce, tx_list)

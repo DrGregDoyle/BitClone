@@ -1,41 +1,27 @@
 """
 A file for testing leaves and merkle trees
 """
-from hashlib import sha256
+from random import randint
 
-from src.merkle import MerkleTree, Branch, Leaf
-from src.utility import get_random_string
+from src.merkle import create_merkle_tree, get_merkle_proof, verify_element
+from tests.utility import random_tx_id
+
+UPPER = 10
+LOWER = 5
 
 
 def test_tree_methods():
     """
     We create a Merkle tree then use the Leaf class to verify the levels of the tree
     """
-    hash_list = []
-    random_length = 3  # Todo: Make true random length
-    for x in range(random_length):
-        hash_list.append(
-            sha256(get_random_string().encode()).hexdigest()
-        )
-    test_tree = MerkleTree(elements=hash_list)
+    length = randint(LOWER, UPPER)
+    tx_id_list = [random_tx_id() for _ in range(length)]
 
-    leaf1 = Leaf(hash_list[0])
-    leaf2 = Leaf(hash_list[1])
-    leaf3 = Leaf(hash_list[2])
+    # Get merkle tree
+    test_tree = create_merkle_tree(tx_id_list)
 
-    branch12 = Branch(leaf1, leaf2)
-    branch33 = Branch(leaf3, leaf3)
-
-    branch1233 = Branch(branch12.value, branch33.value)
-
-    assert test_tree.merkle_tree.get(0) == [branch1233.value]
-    assert test_tree.merkle_tree.get(1) == [branch12.value, branch33.value]
-    assert test_tree.merkle_tree.get(2) == [leaf1, leaf2, leaf3, leaf3]
-
-    assert test_tree.verify_element(leaf1)
-    assert test_tree.verify_element(leaf2)
-    assert test_tree.verify_element(leaf3)
-    assert test_tree.verify_element(hash_list[0])
-    assert test_tree.verify_element(hash_list[1])
-    assert test_tree.verify_element(hash_list[2])
-    assert not test_tree.verify_element(branch12.value)
+    # Verify each tx in tx_list
+    for tx_id in tx_id_list:
+        tx_proof = get_merkle_proof(tx_id, test_tree)
+        assert verify_element(tx_id, tx_proof), \
+            f"Did not verify element {tx_id} for merkle proof {tx_proof} for merkle tree {test_tree}"
