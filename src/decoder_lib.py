@@ -270,7 +270,7 @@ def decode_block(s: str) -> Block:
 
     # Verify
     string_encoding = s[:i]
-    constructed_block = Block(header, tx_list)
+    constructed_block = Block(header.prev_block, header.time, header.target, header.nonce, tx_list)
     if constructed_block.encoded != string_encoding:
         raise TypeError("Input string did not generate same Block object")
     return constructed_block
