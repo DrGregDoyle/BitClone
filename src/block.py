@@ -5,6 +5,7 @@ A module for the Block classes
 import json
 
 from src.encoder_lib import encode_compact_size, encode_byte_format
+from src.merkle import MerkleTree, Leaf
 from src.utility import hash256
 
 
@@ -27,17 +28,17 @@ class Header:
     """
     HASH_CHARS = 64
 
-    def __init__(self, prev_block: str, merkle_root: str, time: int, target: int, nonce: int, version=1):
+    def __init__(self, prev_block: str, merkle_root: str | Leaf, time: int | str, target: int, nonce: int, version=1):
         """
         Todo: Write function to encode target into bits
         """
         # Get and format variables
         self.version = encode_byte_format(version, "version", True)  # Little Endian
         self.prev_block = prev_block.zfill(self.HASH_CHARS)
-        self.merkle_root = merkle_root.zfill(self.HASH_CHARS)
-        self.time = encode_byte_format(time, "time", True)  # Little Endian
-        self.target = encode_byte_format(target, "target", True)  # Little Endian
-        self.nonce = encode_byte_format(nonce, "nonce", True)  # Little Endian
+        self.merkle_root = merkle_root.zfill(self.HASH_CHARS) if isinstance(merkle_root, str) else merkle_root.value
+        self.time = encode_byte_format(time, "time", True) if isinstance(time, int) else time  # Little Endian
+        self.target = encode_byte_format(target, "target", True) if isinstance(time, int) else target  # Little Endian
+        self.nonce = encode_byte_format(nonce, "nonce", True) if isinstance(time, int) else nonce  # Little Endian
 
     @property
     def encoded(self):
@@ -62,22 +63,35 @@ class Header:
 class Block:
     """
     Block fields
-    =========================================================
-    |   field       |   size (bytes)    |   format          |
-    =========================================================
-    |   header      |   80              |   header.encoded  |
-    |   tx_count    |   var             |   compactSize     |
-    |   tx_list     |   var             |   tx.encoded      |
-    =========================================================
+    =====================================================================
+    |   field               |   size (bytes)    |   format              |
+    =====================================================================
+    |   version             |   4               |   little-endian       |
+    |   previous block hash |   32              |   natural byte order  |
+    |   merkle root         |   32              |   natural byte order  |
+    |   timestamp           |   4               |   little-endian       |
+    |   bits (target)       |   4               |   little-endian       |
+    |   nonce               |   4               |   little-endian       |
+    |   tx_count            |   var             |   compactSize         |
+    |   tx_list             |   var             |   tx.encoded          |
+    =====================================================================
     """
 
-    def __init__(self, header: Header, tx_list: list):
-        # Header
-        self.header = header
-
+    def __init__(self, prev_block: str, time: int, target: int, nonce: int, tx_list: list, version=1):
         # TXs
         self.tx_count = encode_compact_size(len(tx_list))
         self.tx_list = tx_list
+
+        # Create merkle root
+        self.merkle_root = MerkleTree(elements=[tx.id for tx in self.tx_list]).merkle_root
+
+        # Create Header
+        self.prev_block = prev_block
+        self.time = time
+        self.target = target
+        self.nonce = nonce
+        self.version = version
+        self.header = Header(self.prev_block, self.merkle_root, self.time, self.target, self.nonce, self.version)
 
     @property
     def block_hash(self):
@@ -97,3 +111,10 @@ class Block:
             tx_dict.update({x: json.loads(self.tx_list[x].to_json())})
         block_dict.update({"txs": tx_dict})
         return json.dumps(block_dict, indent=2)
+
+
+# --- TESTING --- #
+
+
+if __name__ == "__main__":
+    print("Hello world!")

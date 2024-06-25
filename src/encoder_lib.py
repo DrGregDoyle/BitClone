@@ -1,6 +1,8 @@
 """
 A library for common encoding functions
 """
+from hashlib import sha256
+
 BYTE_DICT = {
     "tx": 32,
     "v_out": 4,
@@ -31,39 +33,41 @@ BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 BASE58_LIST = [x for x in BASE58_ALPHABET]
 
 
-def int_to_base58(num: int) -> str:
-    """
-    We create the string by successively dividing by 58 and appending the corresponding symbol to our string.
-    """
-    # Start with empty string
-    base58_string = ''
+def base58_check(data: int | str, checksum=True):
+    # Make sure data is in hex format
+    if isinstance(data, int):
+        data = format(data, "0x")
 
-    # Return empty string if integer is negative
-    if num < 0:
-        return base58_string
+    # Checksum
+    if checksum:
+        _checksum = sha256(data.encode()).hexdigest()[:8]
+        data += _checksum
 
-    # Catch zero case
-    if num == 0:
-        base58_string = '1'
+    # Convert
+    buffer = ""
+    data_int = int(data, 16)
+    while data_int > 0:
+        r = data_int % 58
+        buffer = BASE58_LIST[r] + buffer
+        data_int = data_int // 58
 
-    # Create string from successive residues
+    return buffer
+
+
+def decode_base58_check(encoded_data: str, checksum=True):
+    total = 0
+    data_range = len(encoded_data)
+    for x in range(data_range):
+        total += BASE58_LIST.index(encoded_data[x:x + 1]) * pow(58, data_range - x - 1)
+
+    if checksum:
+        datacheck = format(total, "0x")
+        data = datacheck[:-8]
+        check = datacheck[-8:]
+        assert sha256(data.encode()).hexdigest()[:8] == check
     else:
-        while num > 0:
-            remainder = num % 58
-            base58_string = BASE58_LIST[remainder] + base58_string
-            num = num // 58
-    return base58_string
-
-
-def base58_to_int(base58_string: str) -> int:
-    """
-    To convert a base58 string back to an int:
-        -For each character, find the numeric index in the list of alphabet characters
-        -Multiply this numeric value by a corresponding power of 58
-        -Sum all values
-    """
-    return sum([BASE58_LIST.index(base58_string[x:x + 1]) * pow(58, len(base58_string) - x - 1) for x in
-                range(0, len(base58_string))])
+        data = format(total, "0x")
+    return data
 
 
 def encode_compact_size(n: int) -> str:
@@ -89,3 +93,10 @@ def encode_byte_format(element: int, byte_dict_key: str, internal=False):
     if internal:
         formatted_element = formatted_element[::-1]
     return formatted_element
+
+
+# -- TESTING
+if __name__ == "__main__":
+    var = base58_check("5ecf8d3148fdd6b374d10d2f279efffad56a2421")
+    print(var)
+    print(len(var))

@@ -81,6 +81,7 @@ class MerkleTree:
         self.merkle_tree = self.create_tree(self.elements)
 
         # Get Merkle Root
+        print(self.merkle_tree)
         self.merkle_root = self.merkle_tree.get(0)[0]
 
     def get_height(self, elements: list):

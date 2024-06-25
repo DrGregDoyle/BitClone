@@ -15,7 +15,7 @@ from secrets import randbits
 from ripemd.ripemd160 import ripemd160
 
 from src.cryptography import SECP256K1
-from src.encoder_lib import int_to_base58
+from src.encoder_lib import base58_check
 from src.word_list import WORDLIST
 
 # --- LOGGING --- #
@@ -27,6 +27,8 @@ logger.addHandler(handler)
 
 
 # --- CLASSES --- #
+
+
 class WalletFactory:
 
     def new_wallet(self):
@@ -121,7 +123,7 @@ class Wallet:
             case _:
                 base58_prefix = "1"
 
-        base58_cpk = int_to_base58(int(self.compressed_public_key, 16))
+        base58_cpk = base58_check(self.hash160(self.compressed_public_key))
         return base58_prefix + base58_cpk
 
     @staticmethod
@@ -271,4 +273,6 @@ class Wallet:
 # --- TESTING --- #
 if __name__ == "__main__":
     w = Wallet()
-    print(w.legacy_address(prefix="0488ADE4"))
+    address = w.legacy_address()
+    print(f"ADDRESS: {address}")
+    print(f"CHARS: {len(address)}")
