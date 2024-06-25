@@ -4,7 +4,7 @@ A library for common decoder functions
 
 # --- IMPORTS --- #
 
-from src.block import Header, Block
+from src.block import Block
 from src.encoder_lib import BYTE_DICT
 from src.transaction import Input, Output, WitnessItem, Witness, Transaction
 from src.utxo import Outpoint, UTXO
@@ -225,7 +225,9 @@ def decode_tx(s: str) -> Transaction:
     return constructed_tx
 
 
-def decode_header(s: str) -> Header:
+def decode_block(s: str) -> Block:
+    # -- Header
+
     # Chars
     version_chars = 2 * BYTE_DICT.get("version")
     prev_block_chars = 2 * BYTE_DICT.get("hash")
@@ -246,31 +248,18 @@ def decode_header(s: str) -> Header:
     target, i = parse_num(s, i, target_chars, internal=True)
     nonce, i = parse_num(s, i, nonce_chars, internal=True)
 
-    # Verify
-    string_encoding = s[:i]
-    constructed_header = Header(prev_block, merkle_root, time, target, nonce, version=version)
-    if constructed_header.encoded != string_encoding:
-        raise TypeError("Input string did not generate same Header object")
-    return constructed_header
-
-
-def decode_block(s: str) -> Block:
-    # Header
-    header = decode_header(s)
-    i = len(header.encoded)  # Running index
-
     # Txs
     tx_count, increment = decode_compact_size(s[i:])
     i += increment
     tx_list = []
-    for _ in range(tx_count):
+    for x in range(tx_count):
         temp_tx = decode_tx(s[i:])
         tx_list.append(temp_tx)
         i += len(temp_tx.encoded)
 
     # Verify
     string_encoding = s[:i]
-    constructed_block = Block(header.prev_block, header.time, header.target, header.nonce, tx_list)
+    constructed_block = Block(prev_block, tx_list, nonce, time, target, version)
     if constructed_block.encoded != string_encoding:
         raise TypeError("Input string did not generate same Block object")
     return constructed_block

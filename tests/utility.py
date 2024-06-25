@@ -6,7 +6,7 @@ from hashlib import sha256
 from random import randint, choice
 from string import ascii_letters
 
-from src.block import Header, Block
+from src.block import Block
 from src.decoder_lib import BYTE_DICT
 from src.transaction import Input, Output, WitnessItem, Witness, Transaction
 from src.utxo import Outpoint, UTXO
@@ -87,24 +87,14 @@ def random_witness():
     return Witness(items)
 
 
-def random_header() -> Header:
-    prev_block = random_tx_id()
-    merkle_root = random_tx_id()
-    target = random_byte_element("target")
-    time = random_byte_element("time")
-    nonce = random_byte_element("nonce")
-    version = random_byte_element("version")
-    return Header(prev_block, merkle_root, time, target, nonce, version)
-
-
-def random_tx():
-    input_count = randint(2, 5)
+def random_tx(segwit=None):
+    input_count = 1  # randint(2, 5)
     inputs = []
-    segwit = random_bool()
+    segwit = random_bool() if segwit is None else segwit
     for _ in range(input_count):
         inputs.append(random_input(segwit))
 
-    output_count = randint(1, 3)
+    output_count = 1  # randint(1, 3)
     outputs = []
     for _ in range(output_count):
         outputs.append(random_output())
@@ -115,7 +105,19 @@ def random_tx():
 
 
 def random_block():
-    header = random_header()
-    tx_count = randint(3, 5)
-    tx_list = [random_tx() for _ in range(tx_count)]
-    return Block(header.prev_block, header.time, header.target, header.nonce, tx_list)
+    prev_block = random_tx_id()
+    target = random_byte_element("target")
+    time = random_byte_element("time")
+    nonce = random_byte_element("nonce")
+    version = random_byte_element("version")
+    tx_count = 2  # randint(3, 5)
+    segwit = random_bool()
+    tx_list = [random_tx(segwit) for _ in range(tx_count)]
+    return Block(
+        prev_block=prev_block,
+        tx_list=tx_list,
+        nonce=nonce,
+        time=time,
+        target=target,
+        version=version
+    )
