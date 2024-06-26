@@ -23,11 +23,13 @@ class Block:
     |   previous block hash |   32              |   natural byte order  |
     |   merkle root         |   32              |   natural byte order  |
     |   timestamp           |   4               |   little-endian       |
-    |   bits (target)       |   4               |   little-endian       |
+    |   bits                |   4               |   little-endian*      |
     |   nonce               |   4               |   little-endian       |
     |   tx_count            |   var             |   compactSize         |
     |   tx_list             |   var             |   tx.encoded          |
     =====================================================================
+    *bits encoding: the first byte is kept in big-endian order but appended to end of remaining 3 bytes placed in
+                    little-endian order
     """
     DEFAULT_VERSION = 1
     DEFAULT_BITS = 0x1d00ffff
@@ -54,7 +56,7 @@ class Block:
         # Time as unix timestamp
         self.time = time if time else datetime.now().timestamp()
 
-        # Target and version
+        # Bits and version
         self.bits = bits if bits else self.DEFAULT_BITS
         self.version = version if version else self.DEFAULT_VERSION
 
@@ -70,7 +72,6 @@ class Block:
         self.version = format(self.version, "08x")[::-1]
 
         # Bits formatting
-        self.bits = format(self.bits, "08x") if isinstance(self.bits, int) else self.bits
         exp = self.bits[:2]  # Big-Endian
         coeff = self.bits[2:][::-1]  # Little-Endian
         self.bits = coeff + exp

@@ -1,7 +1,7 @@
 """
 A module for Merkle trees
 """
-from hashlib import sha256
+from src.encoder_lib import hash256
 
 
 def create_merkle_tree(tx_list: list) -> dict:
@@ -29,7 +29,7 @@ def create_merkle_tree(tx_list: list) -> dict:
 
         # Update leaf list
         leaves = [leaf_list[2 * x] + leaf_list[2 * x + 1] for x in range(len(leaf_list) // 2)]
-        leaf_list = [sha256(leaf.encode()).hexdigest() for leaf in leaves]
+        leaf_list = [hash256(leaf) for leaf in leaves]
 
         # Move up in height
         height -= 1
@@ -84,7 +84,7 @@ def get_merkle_proof(tx_id: str, tree: dict):
         })
 
         # Get info for next level
-        current_id = sha256(concat.encode()).hexdigest()
+        current_id = hash256(concat)
         height -= 1
 
     # Verify merkle root
@@ -115,7 +115,7 @@ def verify_element(tx_id: str, proof: dict) -> bool:
             concat = partner_id + current_id
         else:  # Partner is right leaf
             concat = current_id + partner_id
-        current_id = sha256(concat.encode()).hexdigest()
+        current_id = hash256(concat)
 
         # Move up in height
         height -= 1

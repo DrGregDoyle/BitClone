@@ -243,9 +243,16 @@ def decode_block(s: str) -> Block:
     prev_block, i = parse_string(s, i, prev_block_chars)
     merkle_root, i = parse_string(s, i, merkle_root_chars)
 
-    # Time, target, nonce - little endian
+    # Time - little endian
     time, i = parse_num(s, i, time_chars, internal=True)
-    bits, i = parse_num(s, i, bits_chars, internal=True)
+
+    # Bits - unique little-endian formatting
+    bits, i = parse_string(s, i, bits_chars)
+    coeff = bits[:6][::-1]  # Little-endian coeff
+    exp = bits[6:]  # Big-endian exp
+    bits = exp + coeff
+
+    # Nonce - little endian
     nonce, i = parse_num(s, i, nonce_chars, internal=True)
 
     # Txs

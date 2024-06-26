@@ -1,21 +1,16 @@
 """
 A class for BitClone wallets
-
-
 """
 
 # --- IMPORTS --- #
 import logging
 import secrets
 import sys
-from hashlib import sha256
 from random import choice
 from secrets import randbits
 
-from ripemd.ripemd160 import ripemd160
-
 from src.cryptography import SECP256K1
-from src.encoder_lib import base58_check
+from src.encoder_lib import base58_check, hash160, hash256
 from src.word_list import WORDLIST
 
 # --- LOGGING --- #
@@ -58,7 +53,7 @@ class WalletFactory:
 
         # Verify checksum
         try:
-            assert bin(int(sha256(entropy.encode()).hexdigest(), 16))[2:2 + Wallet.BIT_LENGTH // 32] == checksum
+            assert bin(int(hash256(entropy), 16))[2:2 + Wallet.BIT_LENGTH // 32] == checksum
         except AssertionError:
             logger.error(f"Given seed phrase {seed_words} does not have matching checksum")
             return None
@@ -123,18 +118,14 @@ class Wallet:
             case _:
                 base58_prefix = "1"
 
-        base58_cpk = base58_check(self.hash160(self.compressed_public_key))
+        base58_cpk = base58_check(hash160(self.compressed_public_key))
         return base58_prefix + base58_cpk
-
-    @staticmethod
-    def hash160(data: str):
-        return ripemd160(sha256(data.encode()).hexdigest().encode()).hex()
 
     def get_keys(self, seed: int):
         """
         We assign the private key and the public key point.
         """
-        _private_key = int(sha256(hex(seed).encode()).hexdigest()[2:], 16)
+        _private_key = int(hash256(hex(seed))[2:], 16)
         pk_point = self.curve.scalar_multiplication(_private_key, self.curve.g)
 
         return _private_key, pk_point
@@ -153,7 +144,7 @@ class Wallet:
         assert len(entropy) == self.BIT_LENGTH
 
         # 2 - Create a checksum of the entropy
-        checksum = bin(int(sha256(entropy.encode()).hexdigest(), 16))[2:2 + self.BIT_LENGTH // 32]
+        checksum = bin(int(hash256(entropy), 16))[2:2 + self.BIT_LENGTH // 32]
 
         # 3 - Add checksum to entropy
         entropy += checksum

@@ -113,7 +113,8 @@ def random_tx(segwit=None):
 
 def random_block():
     prev_block = random_tx_id()
-    bits = random_byte_element("bits")
+    # bits = random_byte_element("bits")
+    bits = get_random_bits()
     time = random_byte_element("time")
     nonce = random_byte_element("nonce")
     version = random_byte_element("version")

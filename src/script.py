@@ -11,7 +11,7 @@ import sys
 from collections import deque
 from typing import Any
 
-from .op_codes import OPCODES
+from src.op_codes import OPCODES
 
 # --- LOGGING --- #
 log_level = logging.DEBUG

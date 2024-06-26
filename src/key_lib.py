@@ -1,25 +1,11 @@
 """
 A library file for public key encryption
 """
-import binascii
-import hmac
-from hashlib import sha256, sha512
+
 from secrets import randbits
 
-from ripemd.ripemd160 import ripemd160
-
 from src.cryptography import SECP256K1
-
-
-def hash160(data: str) -> str:
-    sha_data = sha256(data.encode()).hexdigest()
-    return ripemd160(sha_data.encode()).hex()
-
-
-def hmac512(key: str, data: str) -> str:
-    byte_key = binascii.unhexlify(key)
-    byte_data = binascii.unhexlify(data)
-    return hmac.new(key=byte_key, msg=byte_data, digestmod=sha512).hexdigest()
+from src.encoder_lib import hmac512
 
 
 def str2hex(ascii_string: str) -> str:
@@ -27,13 +13,17 @@ def str2hex(ascii_string: str) -> str:
     return "".join(hex_list)
 
 
-def get_compressed_key(private_key: int | str):
+def get_compressed_key_from_priv(private_key: int | str):
     # Get integer value for private_key
     privkey = int(private_key, 16) if isinstance(private_key, str) else private_key
 
     # Get public key point
     curve = SECP256K1()
-    x, y = curve.scalar_multiplication(privkey, curve.g)
+    return get_compressed_key_from_pub(curve.scalar_multiplication(privkey, curve.g))
+
+
+def get_compressed_key_from_pub(public_key_point: tuple) -> str:
+    x, y = public_key_point
     prefix = "02" if y % 2 == 0 else "03"
     hex_x = format(x, f"064x")
     return prefix + hex_x
@@ -61,7 +51,7 @@ class ExtendedPrivateKey:
         self.xpriv = hmac512(key, seed)
         self.privkey = self.xpriv[:self.KEY_CHARS]
         self.chain_code = self.xpriv[self.KEY_CHARS:]
-        self.pubkey = get_compressed_key(self.privkey)
+        self.pubkey = get_compressed_key_from_priv(self.privkey)
         self.xpub = self.pubkey + self.chain_code
 
     def generate_xpriv(self, index: int):
@@ -91,7 +81,10 @@ class ExtendedPrivateKey:
         pt1 = get_public_key_point(self.pubkey)
         pt2 = curve.scalar_multiplication(int(pub_key_exp, 16), curve.g)
         new_pk_point = curve.add_points(pt1, pt2)
-        new_cpk = g
+        new_cpk = get_compressed_key_from_pub(new_pk_point)
+
+        # Return new xpub
+        return new_cpk + child_cc
 
 
 class KeyLib:
