@@ -6,7 +6,7 @@ A module for the Block classes
 import json
 from datetime import datetime
 
-from src.encoder_lib import encode_compact_size
+from src.encoder_lib import encode_compact_size, hash256
 from src.merkle import create_merkle_tree
 
 
@@ -85,7 +85,7 @@ class Block:
 
     @property
     def id(self):
-        return sha256(self.header.encode()).hexdigest()
+        return hash256(self.header)
 
     def to_json(self):
         header_dict = {
@@ -104,9 +104,6 @@ class Block:
             "txs": tx_dict
         }
         return json.dumps(block_dict, indent=2)
-
-
-from hashlib import sha256
 
 # # -- TESTING
 # if __name__ == "__main__":

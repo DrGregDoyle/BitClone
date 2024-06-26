@@ -95,6 +95,11 @@ def encode_byte_format(element: int, byte_dict_key: str, internal=False):
     return formatted_element
 
 
+def hash256(data: str):
+    sha1_data = sha256(data.encode()).hexdigest()
+    return sha256(sha1_data.encode()).hexdigest()
+
+
 # -- TESTING
 if __name__ == "__main__":
     var = base58_check("5ecf8d3148fdd6b374d10d2f279efffad56a2421")

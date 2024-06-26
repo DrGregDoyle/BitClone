@@ -52,9 +52,8 @@ Notes:
 import json
 import logging
 import sys
-from hashlib import sha256
 
-from src.encoder_lib import encode_compact_size, encode_byte_format, WEIGHT_UNIT_DICT
+from src.encoder_lib import encode_compact_size, encode_byte_format, WEIGHT_UNIT_DICT, hash256
 
 # --- LOGGING --- #
 log_level = logging.DEBUG
@@ -350,7 +349,7 @@ class Transaction:
                 self.inputs) + self.output_count + self._encoded_list(self.outputs) + self.locktime
         else:
             unhashed_data = self.encoded
-        return sha256(sha256(unhashed_data.encode()).hexdigest().encode()).hexdigest()
+        return hash256(unhashed_data)
 
     def to_json(self):
         # Version
