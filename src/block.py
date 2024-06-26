@@ -105,10 +105,8 @@ class Block:
         }
         return json.dumps(block_dict, indent=2)
 
-# # -- TESTING
-# if __name__ == "__main__":
-#     prev_block = random_tx_id()
-#     segwit = random_bool()
-#     tx_list = [random_tx(segwit), random_tx(segwit)]
-#     nonce = 0
-#     test_block = Block(prev_block, tx_list, nonce, bits="1d00ffff")
+    def get_tx_weight(self):
+        total = 0
+        for tx in self.tx_list:
+            total += tx.weight
+        return total
