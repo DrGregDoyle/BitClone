@@ -5,13 +5,14 @@ A module for the Block classes
 
 import json
 from datetime import datetime
-from hashlib import sha256
 
 from src.encoder_lib import encode_compact_size
 from src.merkle import create_merkle_tree
 
 
 # --- CLASSES --- #
+
+
 class Block:
     """
     Block fields
@@ -29,11 +30,11 @@ class Block:
     =====================================================================
     """
     DEFAULT_VERSION = 1
-    DEFAULT_TARGET = 0xFF00FF00
+    DEFAULT_BITS = 0x1d00ffff
     HASH_CHARS = 64
     SMALL_CHARS = 8
 
-    def __init__(self, prev_block: str, tx_list: list, nonce: int, time=None, target=None, version=None):
+    def __init__(self, prev_block: str, tx_list: list, nonce: int, time=None, bits=None, version=None):
         # Previous block_id
         self.prev_block = prev_block
 
@@ -54,7 +55,7 @@ class Block:
         self.time = time if time else datetime.now().timestamp()
 
         # Target and version
-        self.target = target if target else self.DEFAULT_TARGET
+        self.bits = bits if bits else self.DEFAULT_BITS
         self.version = version if version else self.DEFAULT_VERSION
 
         # -- Formatting -- #
@@ -63,15 +64,20 @@ class Block:
         self.prev_block.zfill(self.HASH_CHARS)
         self.merkle_root.zfill(self.HASH_CHARS)
 
-        # Nonce, time, target and version are 8 char little endian
+        # Nonce, time, and version are 8 char little endian
         self.nonce = format(self.nonce, "08x")[::-1]
         self.time = format(self.time, "08x")[::-1]
-        self.target = format(self.target, "08x")[::-1]
         self.version = format(self.version, "08x")[::-1]
+
+        # Bits formatting
+        self.bits = format(self.bits, "08x") if isinstance(self.bits, int) else self.bits
+        exp = self.bits[:2]  # Big-Endian
+        coeff = self.bits[2:][::-1]  # Little-Endian
+        self.bits = coeff + exp
 
     @property
     def header(self):
-        return self.version + self.prev_block + self.merkle_root + self.time + self.target + self.nonce
+        return self.version + self.prev_block + self.merkle_root + self.time + self.bits + self.nonce
 
     @property
     def encoded(self):
@@ -87,12 +93,11 @@ class Block:
             "previous_block": self.prev_block,
             "merkle_root": self.merkle_root,
             "time": self.time,
-            "target": self.target,
+            "bits": self.bits,
             "nonce": self.nonce
         }
         tx_dict = {}
-        tx_num = len(self.tx_list)
-        for x in range(tx_num):
+        for x in range(len(self.tx_list)):
             tx_dict.update({x: json.loads(self.tx_list[x].to_json())})
         block_dict = {
             "header": header_dict,
@@ -101,8 +106,12 @@ class Block:
         return json.dumps(block_dict, indent=2)
 
 
-# --- TESTING --- #
+from hashlib import sha256
 
-
-if __name__ == "__main__":
-    print("Hello world!")
+# # -- TESTING
+# if __name__ == "__main__":
+#     prev_block = random_tx_id()
+#     segwit = random_bool()
+#     tx_list = [random_tx(segwit), random_tx(segwit)]
+#     nonce = 0
+#     test_block = Block(prev_block, tx_list, nonce, bits="1d00ffff")

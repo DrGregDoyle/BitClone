@@ -88,7 +88,7 @@ def random_witness():
 
 
 def random_tx(segwit=None):
-    input_count = 1  # randint(2, 5)
+    input_count = randint(2, 5)
     inputs = []
     segwit = random_bool() if segwit is None else segwit
     for _ in range(input_count):
@@ -106,7 +106,7 @@ def random_tx(segwit=None):
 
 def random_block():
     prev_block = random_tx_id()
-    target = random_byte_element("target")
+    bits = random_byte_element("target")  # TODO: Create bits encoding/random bits function
     time = random_byte_element("time")
     nonce = random_byte_element("nonce")
     version = random_byte_element("version")
@@ -118,6 +118,6 @@ def random_block():
         tx_list=tx_list,
         nonce=nonce,
         time=time,
-        target=target,
+        bits=bits,
         version=version
     )
