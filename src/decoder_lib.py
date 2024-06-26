@@ -233,7 +233,7 @@ def decode_block(s: str) -> Block:
     prev_block_chars = 2 * BYTE_DICT.get("hash")
     merkle_root_chars = 2 * BYTE_DICT.get("hash")
     time_chars = 2 * BYTE_DICT.get("time")
-    target_chars = 2 * BYTE_DICT.get("target")
+    bits_chars = 2 * BYTE_DICT.get("bits")
     nonce_chars = 2 * BYTE_DICT.get("nonce")
 
     # Version - little endian
@@ -245,7 +245,7 @@ def decode_block(s: str) -> Block:
 
     # Time, target, nonce - little endian
     time, i = parse_num(s, i, time_chars, internal=True)
-    target, i = parse_num(s, i, target_chars, internal=True)
+    bits, i = parse_num(s, i, bits_chars, internal=True)
     nonce, i = parse_num(s, i, nonce_chars, internal=True)
 
     # Txs
@@ -259,7 +259,7 @@ def decode_block(s: str) -> Block:
 
     # Verify
     string_encoding = s[:i]
-    constructed_block = Block(prev_block, tx_list, nonce, time, target, version)
+    constructed_block = Block(prev_block, tx_list, nonce, time, bits, version)
     if constructed_block.encoded != string_encoding:
         raise TypeError("Input string did not generate same Block object")
     return constructed_block

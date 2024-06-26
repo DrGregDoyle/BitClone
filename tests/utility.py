@@ -1,8 +1,9 @@
 """
 Helper functions for tests
 """
-from hashlib import sha256
+
 # --- IMPORTS --- #
+from hashlib import sha256
 from random import randint, choice
 from string import ascii_letters
 
@@ -37,6 +38,12 @@ def random_integer_range(lower=1, upper=10):
 def get_random_integer(int_bytes=4):
     upper = pow(2, int_bytes)
     return randint(1, upper)
+
+
+def get_random_bits():
+    random_exp = randint(16, 32)
+    random_coeff = randint(pow(2, 16), pow(2, 24) - 1)
+    return format(random_exp, "02x") + format(random_coeff, "06x")
 
 
 def random_byte_element(element: str):
@@ -106,7 +113,7 @@ def random_tx(segwit=None):
 
 def random_block():
     prev_block = random_tx_id()
-    bits = random_byte_element("target")  # TODO: Create bits encoding/random bits function
+    bits = random_byte_element("bits")
     time = random_byte_element("time")
     nonce = random_byte_element("nonce")
     version = random_byte_element("version")

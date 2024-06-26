@@ -13,7 +13,8 @@ BYTE_DICT = {
     "version": 4,
     "locktime": 4,
     "hash": 32,
-    "target": 4,
+    "target": 64,
+    "bits": 4,
     "time": 4,
     "nonce": 4
 }
@@ -100,8 +101,61 @@ def hash256(data: str):
     return sha256(sha1_data.encode()).hexdigest()
 
 
+def bits_to_target(bits: str) -> str:
+    """
+    Given an 4-byte (8 character) bits string, we return the 64-character hex string.
+    """
+    exp = bits[:2]
+    coeff = bits[2:]
+
+    trailing_zeros = "00" * (int(exp, 16) - len(coeff) // 2)
+    target_int = int(coeff + trailing_zeros, 16)
+    return format(target_int, f"064x")
+
+
+def target_to_bits(hex_target: str):
+    """
+    Given a 64-character target string we return the corresponding exponent (bit shift) as 2-char hex string (1-byte)
+    """
+    # Find significant byte
+    byte = 0
+    significant_bit_found = False
+    while not significant_bit_found:
+        temp_bit = hex_target[byte:byte + 2]
+        if temp_bit != "00":
+            significant_bit_found = True
+        else:
+            byte += 2
+
+    # Get coeff
+    coeff = hex_target[byte:]
+
+    # -- Formatting -- #
+    exp = format(32 - byte // 2, "02x")
+    coeff = coeff[:6]
+    return exp + coeff
+
+
+from random import randint
+
+
+def random_hex_string(length=8):
+    hex_string = ""
+    for x in range(length):
+        num = randint(0, 15)
+        hex_string += format(num, "0x")
+    assert len(hex_string) == length
+    return hex_string
+
+
 # -- TESTING
 if __name__ == "__main__":
-    var = base58_check("5ecf8d3148fdd6b374d10d2f279efffad56a2421")
-    print(var)
-    print(len(var))
+    exp = randint(16, 32)
+    coeff = randint(pow(2, 16), pow(2, 24) - 1)
+
+    test_bits = format(exp, "02x") + format(coeff, "06x")
+    print(f"BITS: {test_bits}")
+    test_target = bits_to_target(test_bits)
+    print(f"TARGET: {test_target}")
+    print(f"len(TARGET): {len(test_target)}")
+    print(f"DECODE SUCCESSFUL: {target_to_bits(test_target) == test_bits}")
