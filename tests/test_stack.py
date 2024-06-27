@@ -22,4 +22,9 @@ def test_stack():
     assert in_test_stack.pop() == element3
     assert in_test_stack.pop() == element2
     assert in_test_stack.pop() == element1
-    assert in_test_stack.pop() is None
+    error = False
+    try:
+        in_test_stack.pop()
+    except IndexError:
+        error = True
+    assert error
