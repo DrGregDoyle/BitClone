@@ -31,8 +31,12 @@ class Stack:
     element (i.e. the element indexed at 0) is the TOP of the stack.
     """
 
-    def __init__(self):
+    def __init__(self, items: list | None = None):
         self.stack = deque()
+        if items:
+            items = items[::-1]
+            for i in items:
+                self.push(i)
 
     def push(self, element: Any):
         self.stack.appendleft(element)
@@ -95,7 +99,6 @@ class ScriptEngine:
             elif 0x61 <= byte <= 0x6a:
                 increment = self.control_flow(script[i:])
             elif 0x6b <= byte <= 0x7d:
-                print("Stack operators")
                 increment = self.stack_operator(script[i:])
             elif 0x7e <= byte <= 0x82:
                 print("Strings")
@@ -199,12 +202,14 @@ class ScriptEngine:
                 self.main_stack.push(item0)  # Push top element
             elif op_code == 0x6f:
                 # OP_3DUP
-                item2 = self.main_stack.stack[2]
-                item1 = self.main_stack.stack[1]
-                item0 = self.main_stack.top
-                self.main_stack.push(item2)
-                self.main_stack.push(item1)
-                self.main_stack.push(item0)
+                item0 = self.main_stack.pop()
+                item1 = self.main_stack.pop()
+                item2 = self.main_stack.pop()
+                for _ in range(2):
+                    self.main_stack.push(item2)
+                    self.main_stack.push(item1)
+                    self.main_stack.push(item0)
+
             elif op_code == 0x70:
                 # OP_2OVER - copies pair of items 2 spaces back to the front
                 # e.g: if stack = [ a, b, c, d] (a=top, d = bottom) - then OP_2OVER(stack) = [c, d, a, b, c, d]
