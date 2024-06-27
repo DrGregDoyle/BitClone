@@ -52,6 +52,17 @@ class Stack:
             raise IndexError("Empty stack")
         return val
 
+    @property
+    def height(self):
+        return len(self.stack)
+
+    def clear_stack(self):
+        while True:
+            try:
+                self.stack.pop()
+            except IndexError:
+                break
+
 
 class ScriptEngine:
     """
