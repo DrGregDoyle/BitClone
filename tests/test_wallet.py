@@ -3,39 +3,27 @@ A file for testing the Wallet and WalletFactory classes
 """
 
 # --- IMPORTS --- #
-from secrets import randbelow
-
-from src.wallet import WalletFactory, Wallet
-from src.word_list import WORDLIST
+from src.wallet import HDWallet, ExtendedPrivateKey
 from tests.utility import random_tx_id
 
 
 # --- TESTS --- #
 
-def test_recovery_phrase():
-    # Verify recovery works
-    test_wallet = Wallet()
-    wf = WalletFactory()
-
-    recovery_wallet = wf.recover_wallet(
-        test_wallet.seed_phrase
-    )
-    assert recovery_wallet._seed == test_wallet._seed
-    assert recovery_wallet.pk_point == test_wallet.pk_point
-
-    # Verify recovery fails
-    phony_wallet = Wallet()
-    random_index = randbelow(len(WORDLIST))
-    random_word = WORDLIST[random_index]
-    phony_seed_phrase = phony_wallet.seed_phrase
-    phony_seed_phrase[-1] = random_word
-
-    phony_recovery_wallet = wf.recover_wallet(phony_seed_phrase)
-    assert phony_recovery_wallet is None
+def test_seed_phrase():
+    random_wallet = HDWallet()
+    seed_phrase = random_wallet.seed_phrase
+    recovered_wallet = HDWallet(seed_phrase)
+    assert random_wallet.keys["master"] == recovered_wallet.keys["master"]
 
 
 def test_signature():
     tx_id = random_tx_id()
-    test_wallet = WalletFactory().new_wallet()
-    sig = test_wallet.sign_transaction(tx_id)
-    assert test_wallet.verify_signature(sig, tx_id, test_wallet.pk_point)
+    test_wallet = HDWallet()
+    test_xpriv = ExtendedPrivateKey(test_wallet.keys["master"])
+    print(f"XPRIV: {test_xpriv.xpriv}")
+    print(f"XPUB: {test_xpriv.xpub}")
+    xpriv_int = int(test_xpriv.priv, 16)
+    xpub_pt = test_xpriv.get_pt(test_xpriv.pub)
+
+    sig = test_wallet.sign_transaction(tx_id, xpriv_int)
+    assert test_wallet.verify_signature(sig, tx_id, xpub_pt)

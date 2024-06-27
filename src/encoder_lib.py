@@ -10,6 +10,13 @@ from ripemd.ripemd160 import ripemd160
 
 
 # --- HASH FUNCTIONS --- #
+def secure_hash_256(data: str):
+    """
+    Returns hex digest of SHA256(data)
+    """
+    return sha256(data.encode()).hexdigest()
+
+
 def hash256(data: str) -> str:
     """
     Returns the hex digest of SHA256(SHA256(data)) - 32-bytes
@@ -26,11 +33,22 @@ def hash160(data: str) -> str:
 
 def hmac512(key: str, data: str) -> str:
     """
-    Returns the hex digest of the HMAC-SHA512(key, data) hash function - 64-bytes
+    Returns the hex digest of the HMAC-SHA512(key, data) hash function - 64-bytes (we force 128-char length)
     """
     byte_key = unhexlify(key)  # HMAC takes byte values for key and data
     byte_data = unhexlify(data)
-    return hmac.new(key=byte_key, msg=byte_data, digestmod=sha512).hexdigest()
+    return hmac.new(key=byte_key, msg=byte_data, digestmod=sha512).hexdigest().zfill(128)
+
+
+def pbkdf2(key: str, data: str, iterations=2048):
+    """
+    For the PBKDF2, we assume the key and data are arbitrary strings. Hence we can byte-encode them using .encode().
+    """
+    byte_key = key.encode()
+    message = data.encode()
+    for _ in range(iterations):
+        message = hmac.new(byte_key, message, sha512).hexdigest().encode()
+    return message.decode()
 
 
 # --- BASE 58 --- #

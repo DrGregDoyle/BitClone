@@ -277,7 +277,10 @@ class EllipticCurve:
         # Return point
         return temp_pt
 
-    def generator_multiplication(self, n: int):
+    def generator(self, n: int):
+        """
+        We calculate g^n, where g is the generator point of the curve
+        """
         return self.scalar_multiplication(n, self.g)
 
     def get_order(self):
