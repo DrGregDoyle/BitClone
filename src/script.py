@@ -29,6 +29,8 @@ class Stack:
     We use the deque class from the collections model to create a Stack class. This will be used in Script class for
     a stack of bytes. The stack can be viewed as a list of data running from left to right, where the left most
     element (i.e. the element indexed at 0) is the TOP of the stack.
+
+    The Stack will implement various methods to be used by OP-codes
     """
 
     def __init__(self, items: list | None = None):
@@ -60,13 +62,6 @@ class Stack:
     def height(self):
         return len(self.stack)
 
-    def clear_stack(self):
-        while True:
-            try:
-                self.stack.pop()
-            except IndexError:
-                break
-
 
 class ScriptEngine:
     """
@@ -80,7 +75,7 @@ class ScriptEngine:
         self.main_stack = Stack()
         self.alt_stack = Stack()
 
-    def parse_script(self, script: str):
+    def parse_script(self, script: str) -> bool:
         """
         We parse the script from left to right 1-byte at a time and act based on the corresponding op code
         """
@@ -101,14 +96,11 @@ class ScriptEngine:
             elif 0x6b <= byte <= 0x7d:
                 increment = self.stack_operator(script[i:])
             elif 0x7e <= byte <= 0x82:
-                print("Strings")
-                increment = 2
+                increment = self.strings(script[i:])
             elif 0x83 <= byte <= 0x8a:
-                print("Bitwise logic")
-                increment = 2
+                increment = self.bitwise_logic(script[i:])
             elif 0x8b <= byte <= 0xa5:
-                print("Numeric")
-                increment = 2
+                increment = self.numeric(script[i:])
             elif 0xa6 <= byte <= 0xaf:
                 print("Cryptography")
                 increment = 2
@@ -116,6 +108,7 @@ class ScriptEngine:
                 print("Other")
                 increment = 2
             i += increment
+        return True
 
     def push_data(self, script: str):
         op_code = int(script[:2], 16)
@@ -174,7 +167,7 @@ class ScriptEngine:
             # OP_VERIFY
             top = self.main_stack.pop()
             if not top:
-                raise ValueError(f"OP_VERIFY command failed. Top of stack is empty: {top}")
+                raise ValueError(f"OP_VERIFY command failed. Top of stack is false: {top}")
         return current_index
 
     def stack_operator(self, script: str):
@@ -307,6 +300,106 @@ class ScriptEngine:
 
         return current_index
 
+    def strings(self, script: str):
+        op_code = int(script[:2], 16)
+        current_index = 2
+
+        if op_code in [0x7e, 0x7f, 0x80, 0x81]:
+            # OP_CAT, OP_SUBSTR, OP_LEFT, OP_SIZE
+            raise ValueError("Script contains disabled string OP_ codes")
+        else:
+            # OP_SIZE - push string length of top element to stack
+            top_element = self.main_stack.top
+            str_len = len(top_element) if isinstance(top_element, str) else len(str(top_element))
+            self.main_stack.push(str_len)
+
+        return current_index
+
+    def bitwise_logic(self, script: str):
+        op_code = int(script[:2], 16)
+        current_index = 2
+
+        if op_code in [0x83, 0x84, 0x85, 0x86]:
+            # OP_INVERT, OP_AND, OP_OR, OP_XOR
+            raise ValueError(f"Script contains disabled bitwise logic OP-code: {hex(op_code)}")
+        elif op_code in [0x87, 0x88]:
+            # OP_EQUAL - Pushes True to the stack if top 2 elements are equal, False otherwise
+            item1 = self.main_stack.pop()
+            item2 = self.main_stack.pop()
+            self.main_stack.push(item1 == item2)
+
+            # OP_EQUALVERIFY
+            if op_code == 0x88:
+                val = self.main_stack.pop()
+                if not val:
+                    raise ValueError("OP_EQUALVERIFY fails verification")
+
+        return current_index
+
+    def numeric(self, script: str):
+        op_code = int(script[:2], 16)
+        current_index = 2
+
+        if op_code in [0x8d, 0x8e, 0x95, 0x96, 0x97, 0x98, 0x99]:
+            # OP_2MUL, OP_2DIV, OP_MUL, OP_DIV, OP_MOD, OP_LSHIFT, OP_RSHIFT
+            raise ValueError(f"Script contains disabled numeric op-code: {hex(op_code)}")
+        else:
+            # Valid numeric op-code
+            verify = False  # Flag for OP_NUMEQUALVERIFY
+            v0 = self.main_stack.pop()
+            match op_code:
+                case 0x8b:  # OP_1ADD
+                    val = v0 + 1
+                case 0x8c:  # OP_1SUB
+                    val = v0 - 1
+                case 0x8f:  # OP_NEGATE
+                    val = v0 * -1
+                case 0x90:  # OP_ABS
+                    val = -v0 if v0 < 0 else v0
+                case 0x91:  # OP_NOT
+                    val = (v0 + 1) % 2 if v0 in [0, 1] else 0
+                case 0x92:  # OP_0NOTEQUAL
+                    val = 1 if v0 != 0 else v0
+                case _:
+                    v1 = self.main_stack.pop()
+                    match op_code:
+                        case 0x93:  # OP_ADD
+                            val = v0 + v1
+                        case 0x94:  # OP_SUB
+                            val = v0 - v1
+                        case 0x9a:  # OP_BOOLAND
+                            val = 1 if (v0 != 0 and v1 != 0) else 0
+                        case 0x9b:  # OP_BOOLOR
+                            val = 1 if (v0 != 0 or v1 != 0) else 0
+                        case 0x9c | 0x9d:  # OP_NUMEQUAL
+                            val = 1 if (v0 == v1) else 0
+                            # OP_NUMEQUAL_VERIFY
+                            if op_code == 0x9d:
+                                verify = True
+                                if val == 0:
+                                    raise ValueError("Script failed OP_NUMEQUALVERIFY")
+                        case 0x9e:  # OP_NUMNOTEQUAL
+                            val = 1 if (v0 != v1) else 0
+                        case 0x9f:  # OP_LESSTHAN
+                            val = 1 if v0 < v1 else 0
+                        case 0xa0:  # OP_GREATERTHAN
+                            val = 1 if v0 > v1 else 0
+                        case 0xa1:  # OP_LESSTHANOREQUAL
+                            val = 1 if v0 <= v1 else 0
+                        case 0xa2:  # OP_GREATERTHANOREQUAL
+                            val = 1 if v0 >= v1 else 0
+                        case 0xa3:  # OP_MIN
+                            val = v0 if v0 < v1 else v1
+                        case 0xa4:  # OP_MAX
+                            val = v0 if v0 > v1 else v1
+                        case 0xa5:  # OP_WITHIN
+                            v2 = self.main_stack.pop()
+                            val = 1 if v1 <= v0 < v2 else 0
+            self.main_stack.push(val)
+            if verify:
+                self.main_stack.pop()
+            return current_index
+
 
 from src.encoder_lib import hash256
 
@@ -315,6 +408,6 @@ if __name__ == "__main__":
     engine = ScriptEngine()
     tx_id = hash256("DATA")
 
-    script = "51527d"
+    script = "515194"
     engine.parse_script(script)
     print(engine.main_stack.stack)

@@ -202,5 +202,166 @@ def test_stack_operators():
     test_stack = Stack([1, 3, 1, 2, 1])
     assert_stacks()
 
-    print(f"MAIN STACK: {test_engine.main_stack.stack}")
-    print(f"ALT STACK: {test_engine.alt_stack.stack}")
+
+def test_strings():
+    # Config
+    test_engine = ScriptEngine()
+
+    # OP_SIZE
+    script = "08ffeeddccbbaa998882"  # Push 8 bytes of data, <data>, OP_
+    test_engine.parse_script(script)
+    test_stack = Stack([16, "ffeeddccbbaa9988"])
+    assert assert_stacks(test_stack, test_engine.main_stack)
+
+
+def test_bitwise_operators():
+    # Config
+    engine = ScriptEngine()
+    script = ""
+
+    def run_engine():
+        engine.parse_script(script)
+
+    # OP_EQUAL True/False
+    script = "515287515187"  # Push 1, Push 2, OP_, Push 1, Push 1, OP_ -> main_stack = [True, False]
+    run_engine()
+    test_stack = Stack([True, False])
+    assert assert_stacks(test_stack, engine.main_stack)
+
+    # OP_EQUALVERIFY
+    script = "51518788"  # Push 1, Push 1, OP_EQUAL, OP_EQUALVERIFY -> main_stack = [False]
+    run_engine()
+    test_stack = Stack([False])
+    assert assert_stacks(test_stack, engine.main_stack)
+
+
+def test_numeric():
+    # Config
+    engine = ScriptEngine()
+    script = ""
+    test_stack = Stack()
+
+    def run_engine():
+        engine.parse_script(script)
+
+    def assert_stacks():
+        assert test_stack.height == engine.main_stack.height
+        assert all([test_stack.stack[i] == engine.main_stack.stack[i] for i in range(test_stack.height)])
+
+    # OP_1ADD
+    script = "518b"
+    run_engine()  # Main stack = [2]
+    test_stack.push(2)
+    assert_stacks()
+
+    # OP_1SUB
+    script = "8c"
+    run_engine()  # Main stack = [1]
+    test_stack = Stack([1])
+    assert_stacks()
+
+    # OP_NEGATE
+    script = "8f"
+    run_engine()  # Main stack = [-1]
+    test_stack = Stack([-1])
+    assert_stacks()
+
+    # OP_ABS
+    script = "90"
+    run_engine()  # Main stack = [1]
+    test_stack = Stack([1])
+    assert_stacks()
+
+    # OP_NOT
+    script = "91"
+    run_engine()  # Main stack = [0]
+    test_stack = Stack([0])
+    assert_stacks()
+
+    # OP_0NOTEQUAL
+    script = "925192"  # OP_, Push 1, OP_
+    run_engine()  # Main stack = [1, 0]
+    test_stack = Stack([1, 0])
+    assert_stacks()
+
+    # OP_ADD
+    script = "5293"  # Push 2, OP_
+    run_engine()  # Main stack = [3, 1, 0]
+    test_stack = Stack([3, 0])
+    assert_stacks()
+
+    # OP_SUB
+    script = "94"
+    run_engine()  # Main stack = [3]
+    test_stack = Stack([3])
+    assert_stacks()
+
+    # OP_BOOLAND
+    script = "519a"
+    run_engine()  # Main stack = [1]
+    test_stack = Stack([1])
+    assert_stacks()
+
+    # OP_BOOLOR
+    script = "518c9b"  # Push 1, SUB1, OP_ | main stack = [0, 1]
+    run_engine()  # Main stack = [1]
+    assert_stacks()
+
+    # OP_NUMEQUAL
+    script = "529c"  # Push 2, OP_
+    run_engine()  # Main stack = [0]
+    test_stack = Stack([0])
+    assert_stacks()
+
+    # OP_NUMEQUALVERIFY
+    script = "518c9d"  # Push 1, SUB1, OP_ | main stack = [0, 0]
+    run_engine()  # Main stack = []
+    test_stack = Stack()
+    assert_stacks()
+
+    # OP_NUMNOTEQUAL
+    script = "51529e"  # Push 1, Push 2, OP_
+    run_engine()  # Main stack = [1]
+    test_stack = Stack([1])
+    assert_stacks()
+
+    # OP_LESSTHAN
+    script = "529f"  # Push 1, OP_
+    run_engine()  # Main stack = [0]
+    test_stack = Stack([0])
+    assert_stacks()
+
+    # OP_GREATERTHAN
+    script = "53a0"  # Push 3, OP_
+    run_engine()  # Main stack = [1]
+    test_stack = Stack([1])
+    assert_stacks()
+
+    # OP_LESSTHANOREQUAL
+    script = "5554a1"  # Push 5, Push 4, OP_
+    run_engine()  # Main stack = [1, 1]
+    test_stack = Stack([1, 1])
+    assert_stacks()
+
+    # OP_GREATERTHANOREQUAL
+    script = "a2"
+    run_engine()  # Main stack = [1]
+    test_stack = Stack([1])
+    assert_stacks()
+
+    # OP_MIN
+    script = "52a3"  # Push 2, OP_
+    run_engine()  # Main stack = [1]
+    assert_stacks()
+
+    # OP_MAX
+    script = "52a4"  # Push 2, OP_
+    run_engine()  # Main stack = [2]
+    test_stack = Stack([2])
+    assert_stacks()
+
+    # OP_WITHIN
+    script = "5151a5"  # Push 1, Push 1, OP_
+    run_engine()  # Main stack = [1]
+    test_stack = Stack([1])
+    assert_stacks()
