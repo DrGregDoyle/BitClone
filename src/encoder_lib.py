@@ -4,12 +4,17 @@ A library for common encoding functions
 # --- IMPORTS --- #
 import hmac
 from binascii import unhexlify
-from hashlib import sha256, sha512
+from hashlib import sha256, sha512, sha1
 
 from ripemd.ripemd160 import ripemd160
 
 
 # --- HASH FUNCTIONS --- #
+
+def op_sha1(data: str):
+    return sha1(data.encode()).hexdigest()
+
+
 def secure_hash_256(data: str):
     """
     Returns hex digest of SHA256(data)

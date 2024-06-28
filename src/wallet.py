@@ -278,8 +278,10 @@ class HDWallet:
             s = (pow(k, -1, n) * (Z + r * private_key)) % n
 
         # 5 - Return formatted signature
-        hex_r = format(r, f"0{2 * self.CHAR_SIZE}x")
-        hex_s = format(s, f"0{2 * self.CHAR_SIZE}x")
+        hex_r = format(r, f"0{self.CHAR_SIZE}x")
+        hex_s = format(s, f"0{self.CHAR_SIZE}x")
+        print(f"HEX_R: {hex_r}")
+        print(f"HEX_S: {hex_s}")
         return hex_r + hex_s
 
     def verify_signature(self, signature: str, tx_id: str, public_key: tuple) -> bool:
@@ -299,8 +301,8 @@ class HDWallet:
         5) If r = x (mod n), the signature is valid.
         """
         # Decode signature
-        hex_r = signature[:2 * self.CHAR_SIZE]
-        hex_s = signature[2 * self.CHAR_SIZE:]
+        hex_r = signature[:self.CHAR_SIZE]
+        hex_s = signature[self.CHAR_SIZE:]
         r = int(hex_r, 16)
         s = int(hex_s, 16)
 

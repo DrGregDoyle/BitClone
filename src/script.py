@@ -13,6 +13,8 @@ import sys
 from collections import deque
 from typing import Any
 
+from src.cryptography import SECP256K1
+from src.encoder_lib import ripemd160, op_sha1, secure_hash_256, hash160
 from src.op_codes import OPCODES
 
 # --- LOGGING --- #
@@ -74,6 +76,7 @@ class ScriptEngine:
         self.opcode_dict = OPCODES
         self.main_stack = Stack()
         self.alt_stack = Stack()
+        self.curve = SECP256K1()
 
     def parse_script(self, script: str) -> bool:
         """
@@ -103,7 +106,7 @@ class ScriptEngine:
                 increment = self.numeric(script[i:])
             elif 0xa6 <= byte <= 0xaf:
                 print("Cryptography")
-                increment = 2
+                increment = self.crypto(script[i:])
             else:
                 print("Other")
                 increment = 2
@@ -399,6 +402,80 @@ class ScriptEngine:
             if verify:
                 self.main_stack.pop()
             return current_index
+
+    def crypto(self, script: str):
+        op_code = int(script[:2], 16)
+        current_index = 2
+
+        v0 = self.main_stack.pop()
+        if op_code == 0xa6:
+            # OP_RIPEMD160
+            val = ripemd160(v0)
+        elif op_code == 0xa7:
+            # OP_SHA1
+            val = op_sha1(v0)
+        elif op_code == 0xa8:
+            # OP_SHA256
+            val = secure_hash_256(v0)
+        elif op_code == 0xa9:
+            # OP_HASH160
+            val = hash160(v0)
+        elif op_code == 0xaa:
+            # OP_HASH256
+            val = hash256(v0)
+        elif op_code == 0xab:
+            # OP_CODESEPARATOR
+            print("OP_CODESEPARATOR")
+        elif op_code in [0xac, 0xad]:
+            # OP_CHECKSIG
+            # v0 = pubkey
+            v1 = self.main_stack.pop()  # sig
+            # TODO: signature checking function here
+            val = True
+            # OP_CHECKSIGVERIFY
+            if not val:
+                raise ValueError("Script failed OP_CHECKSIGVERIFY")
+        elif op_code == 0xa:
+            # OP_CHECKMULTISIG
+            print("OP_CHECKMULTISIG")
+            val = 0
+        elif op_code == 0xab:
+            # OP_CHECKMULTISIGVERIFY
+            print("OP CHECKMULTISIGVERIFY")
+            val = 0
+        else:
+            val = 0
+
+        self.main_stack.push(val)
+        return current_index
+
+    def other(self, script: str):
+        op_code = int(script[:2], 16)
+        current_index = 2
+
+        if op_code == 0xb0:
+            # OP_NOP1
+            pass
+        elif op_code == 0xb1:
+            # OP_CHECKLOCKTIMEVERIFY
+            v0 = self.main_stack.pop()
+            print("OP_CHECKLOCKTIMEVERIFY")
+            self.main_stack.push(v0)
+        elif op_code == 0xb2:
+            # OP_CHECKSEQUENCEVERIFY
+            v0 = self.main_stack.pop()
+            print("OP_CHECKSEQUENCEVERIFY")
+            self.main_stack.push(v0)
+        elif op_code in [range(0xb3, 0xb9)]:
+            # OP_NOP4 -- OP_NOP10
+            pass
+        elif op_code == 0xba:
+            # OP_CHECKSIGADD
+            print("OP_CHECKSIGADD")
+        else:
+            raise ValueError(f"Script used invalid code: {hex(op_code)}")
+
+        return current_index
 
 
 from src.encoder_lib import hash256
