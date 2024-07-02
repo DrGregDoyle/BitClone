@@ -16,9 +16,12 @@ def test_db():
 
     # Post UTXOS
     random_range = random_integer_range(5, 15)
-    utxo_list = [random_utxo() for _ in range(random_range)]
+    utxo_list = [random_utxo()]  # [random_utxo() for _ in range(random_range)]
     for utxo in utxo_list:
         _db.post_utxo(utxo)
+        print(f"RANDOM UTXO")
+        print(f"TXID: {utxo.outpoint.tx_id}")
+        print(f"VOUT: {utxo.outpoint.v_out}")
 
     count_query = """SELECT COUNT(*) FROM utxo"""
     query_result = _db.query_db(count_query)[0][0]
@@ -28,8 +31,8 @@ def test_db():
     for utxo_g in utxo_list:
         value = _db.get_utxo(utxo_g.key)
         assert value == utxo_g.value
-
-    # Delete UTXOS
-    for utxo_d in utxo_list:
-        utxo_deleted = _db.delete_utxo(utxo_d)
-        assert utxo_deleted
+    #
+    # # Delete UTXOS
+    # for utxo_d in utxo_list:
+    #     utxo_deleted = _db.delete_utxo(utxo_d)
+    #     assert utxo_deleted

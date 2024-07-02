@@ -27,6 +27,13 @@ def parse_num(s: str, index: int, length: int, internal=False):
     return int(num, 16), string_length
 
 
+def parse_vout(s: str, index: int, length: int):
+    string_length = index + length
+    temp_string = s[index:string_length]
+    num = int.from_bytes(bytes.fromhex(temp_string), byteorder="little")
+    return num, string_length
+
+
 # --- DECODE --- #
 
 
@@ -54,12 +61,15 @@ def decode_outpoint(s: str) -> Outpoint:
     tx_id, i = parse_string(s, index=0, length=tx_chars)
 
     # v_out - little-endian
-    v_out, i = parse_num(s, index=i, length=v_out_chars, internal=True)
+    # v_out, i = parse_num(s, index=i, length=v_out_chars, internal=True)
+    v_out, i = parse_vout(s, index=i, length=v_out_chars)
 
     # verify and return
     string_encoding = s[:tx_chars + v_out_chars]
     outpoint = Outpoint(tx_id, v_out)
     if outpoint.encoded != string_encoding:
+        print(f"ENCODED OUTPOINT: {outpoint.encoded}")
+        print(f"STRING ENCODING: {string_encoding}")
         raise TypeError("Input string did not generate same Outpoint object")
     return outpoint
 

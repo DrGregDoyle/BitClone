@@ -6,7 +6,7 @@ A module for the Block classes
 import json
 from datetime import datetime
 
-from src.encoder_lib import encode_compact_size, hash256
+from src.encoder_lib import EncodedNum, hash256
 from src.merkle import create_merkle_tree
 
 
@@ -41,7 +41,8 @@ class Block:
         self.prev_block = prev_block
 
         # Transactions
-        self.tx_count = encode_compact_size(len(tx_list))
+        # self.tx_count = encode_compact_size(len(tx_list))
+        self.tx_count = EncodedNum(len(tx_list), encoding="compact").display
         self.tx_list = tx_list
         self.tx_data = "".join([tx.encoded for tx in self.tx_list])
         self.tx_id_list = [tx.id for tx in self.tx_list]

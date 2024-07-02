@@ -5,6 +5,7 @@ A library for common encoding functions
 import hmac
 from binascii import unhexlify
 from hashlib import sha256, sha512, sha1
+from math import ceil
 
 from ripemd.ripemd160 import ripemd160
 
@@ -160,18 +161,18 @@ WEIGHT_UNIT_DICT = {
 }
 
 
-def encode_compact_size(n: int) -> str:
-    """
-    We return a variable length integer in hex such that the first byte indicates the length
-    """
-    if 0 <= n <= 0xFC:
-        return format(n, f"02x")
-    elif 0xFD <= n <= 0xFFFF:
-        return "fd" + format(n, f"04x")
-    elif 0X10000 <= n <= 0xFFFFFFFF:
-        return "fe" + format(n, f"08x")
-    elif 0x100000000 <= n <= 0xffffffffffffffff:
-        return "ff" + format(n, f"016x")
+# def encode_compact_size(n: int) -> str:
+#     """
+#     We return a variable length integer in hex such that the first byte indicates the length
+#     """
+#     if 0 <= n <= 0xFC:
+#         return format(n, f"02x")
+#     elif 0xFD <= n <= 0xFFFF:
+#         return "fd" + format(n, f"04x")
+#     elif 0X10000 <= n <= 0xFFFFFFFF:
+#         return "fe" + format(n, f"08x")
+#     elif 0x100000000 <= n <= 0xffffffffffffffff:
+#         return "ff" + format(n, f"016x")
 
 
 def encode_byte_format(element: int, byte_dict_key: str, internal=False):
@@ -183,3 +184,66 @@ def encode_byte_format(element: int, byte_dict_key: str, internal=False):
     if internal:
         formatted_element = formatted_element[::-1]
     return formatted_element
+
+
+class EncodedNum:
+    """
+    A class for encoding integers as bytes. Can be either of big or little endianness or in variable length CompactSize.
+    """
+
+    def __init__(self, num: int, byte_size=None, encoding=None):
+        # Get byte_size
+        if byte_size is None:
+            byte_size = ceil(num.bit_length() // 8)
+
+        # Get num
+        self.num = num
+
+        # Get endianness, determine if CompactSize num
+        self.little_endian, self.compact = self._get_encoding(encoding)
+
+        # Handle Compact size
+        if self.compact:
+            self.value = self._encode_compact_size(num)
+        else:
+            # Not compact means endian specific encoding
+            encoding = "little" if self.little_endian else "big"
+            self.value = num.to_bytes(length=byte_size, byteorder=encoding, signed=False)
+
+        # Hex display
+        self.display = self.value.hex()
+
+    def _get_encoding(self, encoding: str):
+        match encoding:
+            case "little":
+                return True, False
+            case "compact":
+                return False, True
+            case _:
+                return False, False
+
+    def _encode_compact_size(self, num: int):
+        if 0 <= num <= 0xfc:
+            return num.to_bytes(length=1, byteorder="little")
+        elif 0xfd <= num <= 0xffff:
+            b1 = 0xfd.to_bytes(length=1, byteorder="big")
+            b2 = num.to_bytes(length=2, byteorder="little")
+            return b1 + b2
+        elif 0x10000 <= num <= 0xffffffff:
+            b1 = 0xfe.to_bytes(length=1, byteorder="big")
+            b2 = num.to_bytes(length=4, byteorder="little")
+            return b1 + b2
+        elif 0x100000000 <= num <= 0xffffffffffffffff:
+            b1 = 0xff.to_bytes(length=1, byteorder="big")
+            b2 = num.to_bytes(length=8, byteorder="little")
+            return b1 + b2
+
+
+# -- TESTING
+if __name__ == "__main__":
+    data = "Hello world"
+    # val = secure_hash_256(data)
+    # print(f"DIGEST: {val.digest()}")
+    # print(f"DIGEST TYPE: {type(val.digest())}")
+    # print(f"HEX DIGEST: {val.hexdigest()}")
+    # print(f"TYPE HEX DIGEST: {type(val.hexdigest())}")

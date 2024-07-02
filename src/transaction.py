@@ -53,7 +53,7 @@ import json
 import logging
 import sys
 
-from src.encoder_lib import encode_compact_size, encode_byte_format, WEIGHT_UNIT_DICT, hash256
+from src.encoder_lib import EncodedNum, encode_byte_format, WEIGHT_UNIT_DICT, hash256
 
 # --- LOGGING --- #
 log_level = logging.DEBUG
@@ -75,7 +75,8 @@ class WitnessItem:
     """
 
     def __init__(self, item: str):
-        self.size = encode_compact_size(len(item))
+        # self.size = encode_compact_size(len(item))
+        self.size = EncodedNum(len(item), encoding="compact").display
         self.item = item
 
     @property
@@ -111,8 +112,8 @@ class Witness:
         Input is a list of WitnessItems. We create a witness_dict for each such item.
         """
         # Get count
-        self.stack_items = encode_compact_size(len(items))
-
+        # self.stack_items = encode_compact_size(len(items))
+        self.stack_items = EncodedNum(len(items), encoding="compact").display
         # Get items
         self.witness_items = items
 
@@ -156,7 +157,8 @@ class Input:
 
         # script_sig and script_sig_size
         self.script_sig = script_sig
-        self.script_sig_size = encode_compact_size(len(self.script_sig))
+        # self.script_sig_size = encode_compact_size(len(self.script_sig))
+        self.script_sig_size = EncodedNum(len(self.script_sig), encoding="compact").display
 
         # sequence
         self.sequence = encode_byte_format(sequence, "sequence", internal=True)
@@ -219,7 +221,8 @@ class Output:
 
         # script and script size
         self.script_pub_key = output_script
-        self.script_pub_key_size = encode_compact_size(len(self.script_pub_key))
+        # self.script_pub_key_size = encode_compact_size(len(self.script_pub_key))
+        self.script_pub_key_size = EncodedNum(len(self.script_pub_key), encoding="compact").display
 
     @property
     def encoded(self):
@@ -267,8 +270,10 @@ class Transaction:
         self.outputs = outputs
 
         # Get size of lists as compactSize elements
-        self.input_count = encode_compact_size(len(self.inputs))
-        self.output_count = encode_compact_size(len(self.outputs))
+        # self.input_count = encode_compact_size(len(self.inputs))
+        # self.output_count = encode_compact_size(len(self.outputs))
+        self.input_count = EncodedNum(len(self.inputs), encoding="compact").display
+        self.output_count = EncodedNum(len(self.outputs), encoding="compact").display
 
         # Check segwit - handle malformed transaction
         segwit_list = [i.segwit for i in self.inputs]

@@ -3,20 +3,22 @@ A class for BitClone UTXOs
 """
 import json
 
-from src.encoder_lib import encode_compact_size, encode_byte_format
+from src.encoder_lib import encode_byte_format, EncodedNum
 
 
 class Outpoint:
     HASH_CHARS = 64
+    VOUT_BYTES = 4  # Little Endian
 
     def __init__(self, tx_id: str, v_out: int):
         # tx_id
-        self.tx_id = tx_id.zfill(self.HASH_CHARS)
+        self.tx_id = tx_id.zfill(self.HASH_CHARS)  # TODO: Verify if zfill is necessary
 
         # v_out - little endian
-        self.v_out = encode_byte_format(v_out, "v_out", internal=True)
+        # self.v_out = encode_byte_format(v_out, "v_out", internal=True)
+        self.v_out = EncodedNum(v_out, byte_size=self.VOUT_BYTES, encoding="little").display
 
-    @property
+    @property  # TODO: Turn encoded into bytestream and display into hex strings
     def encoded(self):
         return self.tx_id + self.v_out
 
@@ -45,7 +47,8 @@ class UTXO:
 
         # locking_code and locking_code_size
         self.locking_code = locking_code
-        self.locking_code_size = encode_compact_size(len(self.locking_code))
+        # self.locking_code_size = encode_compact_size(len(self.locking_code))
+        self.locking_code_size = EncodedNum(len(self.locking_code), encoding="compact").display
 
     @property
     def key(self):
