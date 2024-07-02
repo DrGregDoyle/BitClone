@@ -254,14 +254,16 @@ def decode_block(s: str) -> Block:
     nonce_chars = 2 * BYTE_DICT.get("nonce")
 
     # Version - little endian
-    version, i = parse_num(s, 0, version_chars, internal=True)
+    # version, i = parse_num(s, 0, version_chars, internal=True)
+    version, i = parse_vout(s, 0, version_chars)
 
     # Previous block, merkle_root
     prev_block, i = parse_string(s, i, prev_block_chars)
     merkle_root, i = parse_string(s, i, merkle_root_chars)
 
     # Time - little endian
-    time, i = parse_num(s, i, time_chars, internal=True)
+    # time, i = parse_num(s, i, time_chars, internal=True)
+    time, i = parse_vout(s, i, time_chars)
 
     # Bits - unique little-endian formatting
     bits, i = parse_string(s, i, bits_chars)
@@ -270,7 +272,8 @@ def decode_block(s: str) -> Block:
     bits = exp + coeff
 
     # Nonce - little endian
-    nonce, i = parse_num(s, i, nonce_chars, internal=True)
+    # nonce, i = parse_num(s, i, nonce_chars, internal=True)
+    nonce, i = parse_vout(s, i, nonce_chars)
 
     # Txs
     tx_count, increment = decode_compact_size(s[i:])

@@ -15,7 +15,6 @@ class Outpoint:
         self.tx_id = tx_id.zfill(self.HASH_CHARS)  # TODO: Verify if zfill is necessary
 
         # v_out - little endian
-        # self.v_out = encode_byte_format(v_out, "v_out", internal=True)
         self.v_out = EncodedNum(v_out, byte_size=self.VOUT_BYTES, encoding="little").display
 
     @property  # TODO: Turn encoded into bytestream and display into hex strings
@@ -39,19 +38,16 @@ class UTXO:
         self.outpoint = outpoint
 
         # height
-        # self.height = encode_byte_format(height, "height")
         self.height = EncodedNum(height, byte_size=self.HEIGHT_BYTES).display
 
         # amount - little endian
-        # self.amount = encode_byte_format(amount, "amount", internal=True)
         self.amount = EncodedNum(amount, byte_size=self.AMOUNT_BYTES, encoding="little").display
-        
+
         # coinbase
         self.coinbase = "01" if coinbase else "00"
 
         # locking_code and locking_code_size
         self.locking_code = locking_code
-        # self.locking_code_size = encode_compact_size(len(self.locking_code))
         self.locking_code_size = EncodedNum(len(self.locking_code), encoding="compact").display
 
     @property

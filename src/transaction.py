@@ -155,17 +155,15 @@ class Input:
         self.tx_id = tx_id.zfill(self.HASH_CHARS)
 
         # v_out - little endian
-        # self.v_out = encode_byte_format(v_out, "v_out", internal=True)
         self.v_out = EncodedNum(v_out, self.VOUT_BYTES, encoding="little").display
 
         # script_sig and script_sig_size
         self.script_sig = script_sig
-        # self.script_sig_size = encode_compact_size(len(self.script_sig))
         self.script_sig_size = EncodedNum(len(self.script_sig), encoding="compact").display
 
         # sequence
-        # self.sequence = encode_byte_format(sequence, "sequence", internal=True)
         self.sequence = EncodedNum(sequence, self.SEQUENCE_BYTES, encoding="little").display
+
         # witness
         self.witness = witness
 
@@ -220,12 +218,10 @@ class Output:
 
     def __init__(self, amount: int, output_script: str):
         # amount - little endian
-        # self.amount = encode_byte_format(amount, "amount", internal=True)
         self.amount = EncodedNum(amount, self.AMOUNT_BYTES, encoding="little").display
 
         # script and script size
         self.script_pub_key = output_script
-        # self.script_pub_key_size = encode_compact_size(len(self.script_pub_key))
         self.script_pub_key_size = EncodedNum(len(self.script_pub_key), encoding="compact").display
 
     @property
@@ -269,15 +265,12 @@ class Transaction:
         We assume the inputs list is not empty.
         """
         # version - little endian
-        # self.version = encode_byte_format(version, "version", internal=True)
         self.version = EncodedNum(version, self.VERSION_BYTES, encoding="little").display
         # Get lists
         self.inputs = inputs
         self.outputs = outputs
 
         # Get size of lists as compactSize elements
-        # self.input_count = encode_compact_size(len(self.inputs))
-        # self.output_count = encode_compact_size(len(self.outputs))
         self.input_count = EncodedNum(len(self.inputs), encoding="compact").display
         self.output_count = EncodedNum(len(self.outputs), encoding="compact").display
 
@@ -295,7 +288,6 @@ class Transaction:
         # locktime - little endian
         if locktime is None:
             locktime = 0
-        # self.locktime = encode_byte_format(locktime, "locktime", internal=True)
         self.locktime = EncodedNum(locktime, self.LOCKTIME_BYTES, encoding="little").display
 
     @property

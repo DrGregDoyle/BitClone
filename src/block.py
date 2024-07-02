@@ -35,13 +35,15 @@ class Block:
     DEFAULT_BITS = 0x1d00ffff
     HASH_CHARS = 64
     SMALL_CHARS = 8
+    NONCE_BYTES = 4
+    TIME_BYTES = 4
+    VERSION_BYTES = 4
 
     def __init__(self, prev_block: str, tx_list: list, nonce: int, time=None, bits=None, version=None):
         # Previous block_id
         self.prev_block = prev_block
 
         # Transactions
-        # self.tx_count = encode_compact_size(len(tx_list))
         self.tx_count = EncodedNum(len(tx_list), encoding="compact").display
         self.tx_list = tx_list
         self.tx_data = "".join([tx.encoded for tx in self.tx_list])
@@ -51,26 +53,23 @@ class Block:
         merkle_tree = create_merkle_tree(self.tx_id_list)
         self.merkle_root = merkle_tree.get(0)
 
-        # Nonce
-        self.nonce = nonce
+        # Nonce - little endian
+        self.nonce = EncodedNum(nonce, self.NONCE_BYTES, encoding="little").display
 
-        # Time as unix timestamp
+        # Time as unix timestamp - little endian
         self.time = time if time else datetime.now().timestamp()
+        self.time = EncodedNum(self.time, self.TIME_BYTES, encoding="little").display
 
         # Bits and version
         self.bits = bits if bits else self.DEFAULT_BITS
         self.version = version if version else self.DEFAULT_VERSION
+        self.version = EncodedNum(self.version, self.VERSION_BYTES, encoding="little").display
 
         # -- Formatting -- #
 
         # Block hash and merkle root has 64 chars
         self.prev_block.zfill(self.HASH_CHARS)
         self.merkle_root.zfill(self.HASH_CHARS)
-
-        # Nonce, time, and version are 8 char little endian
-        self.nonce = format(self.nonce, "08x")[::-1]
-        self.time = format(self.time, "08x")[::-1]
-        self.version = format(self.version, "08x")[::-1]
 
         # Bits formatting
         exp = self.bits[:2]  # Big-Endian
