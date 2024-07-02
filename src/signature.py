@@ -162,7 +162,6 @@ def decode_signature(der_encoded: str):
     i += byte_chars
     r = int(der_encoded[i: i + 2 * r_length], 16)
     i += 2 * r_length
-    print(f"R: {r}")
 
     # Get S values
     s_int_type = der_encoded[i:i + 2]
@@ -171,7 +170,6 @@ def decode_signature(der_encoded: str):
     i += byte_chars
     s = int(der_encoded[i: i + 2 * s_length], 16)
     i += 2 * s_length
-    print(f"S: {s}")
 
     # Get hashtype byte
     hash_type = der_encoded[i:]
