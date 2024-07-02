@@ -23,8 +23,10 @@ def parse_num(s: str, index: int, length: int, internal=False):
     """
     string_length = index + length
     temp_string = s[index:string_length]
-    num = temp_string[::-1] if internal else temp_string
-    return int(num, 16), string_length
+    byteorder = "little" if internal else "big"
+    # num = temp_string[::-1] if internal else temp_string
+    num = int.from_bytes(bytes.fromhex(temp_string), byteorder)
+    return num, string_length
 
 
 def parse_vout(s: str, index: int, length: int):
@@ -38,18 +40,21 @@ def parse_vout(s: str, index: int, length: int):
 
 
 def decode_compact_size(s: str) -> int | tuple:
-    chunk = s[:2]
-    chunk_int = int(chunk, 16)
-    match chunk_int:
-        case 253:
-            n = s[2:6]
-        case 254:
-            n = s[2:10]
-        case 255:
-            n = s[2:18]
+    first_byte = int.from_bytes(bytes.fromhex(s[:2]), byteorder="big")
+    match first_byte:
+        case 0xfd:
+            num = int.from_bytes(bytes.fromhex(s[2:6]), byteorder="little")
+            len = 6
+        case 0xfe:
+            num = int.from_bytes(bytes.fromhex(s[2:10]), byteorder="little")
+            len = 10
+        case 0xff:
+            num = int.from_bytes(bytes.fromhex(s[2:18]), byteorder="little")
+            len = 18
         case _:
-            n = chunk
-    return int(n, 16), len(n)
+            num = int.from_bytes(bytes.fromhex(s[:2]), byteorder="little")
+            len = 2
+    return num, len
 
 
 def decode_outpoint(s: str) -> Outpoint:
@@ -158,13 +163,13 @@ def decode_output(s: str) -> Output:
 
 def decode_witness_item(s: str) -> WitnessItem:
     # Item
-    item_size, i = decode_compact_size(s)
-    item = s[i:i + item_size]
+    item_size, i = decode_compact_size(s)  # item size given in BYTES
+    item = bytes.fromhex(s[i:i + item_size * 2])  # Multiply by 2 for hex chars
 
     # Verify
-    string_encoding = s[:i + item_size]
+    string_encoding = s[:i + item_size * 2]
     constructed_witness_item = WitnessItem(item)
-    if constructed_witness_item.encoded != string_encoding:
+    if constructed_witness_item.display != string_encoding:
         raise TypeError("Input string did not generate same WitnessItem object")
     return constructed_witness_item
 
@@ -178,7 +183,7 @@ def decode_witness(s: str) -> Witness:
     for _ in range(stack_items):
         temp_wi = decode_witness_item(s[i:])
         items.append(temp_wi)
-        i += len(temp_wi.encoded)
+        i += len(temp_wi.display)
 
     # Verify
     string_encoding = s[:i]

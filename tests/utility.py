@@ -82,7 +82,8 @@ def random_output():
 
 
 def random_witness_item():
-    item = random_tx_id() + random_tx_id()
+    data = random_tx_id()
+    item = sha256(data.encode()).digest()  # Bytes object
     return WitnessItem(item)
 
 

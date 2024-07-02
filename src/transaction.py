@@ -74,19 +74,22 @@ class WitnessItem:
     =========================================
     """
 
-    def __init__(self, item: str):
-        # self.size = encode_compact_size(len(item))
-        self.size = EncodedNum(len(item), encoding="compact").display
+    def __init__(self, item: bytes):
+        self.size = EncodedNum(len(item), encoding="compact")
         self.item = item
 
-    @property
+    @property  # Bytes encoded
     def encoded(self):
-        return self.size + self.item
+        return self.size.value + self.item
+
+    @property  # Hex string
+    def display(self):
+        return self.size.display + self.item.hex()
 
     def to_json(self):
         wi_dict = {
-            "size": self.size,
-            "item": self.item
+            "size": self.size.display,
+            "item": self.item.hex()
         }
         return json.dumps(wi_dict, indent=2)
 
@@ -112,8 +115,8 @@ class Witness:
         Input is a list of WitnessItems. We create a witness_dict for each such item.
         """
         # Get count
-        # self.stack_items = encode_compact_size(len(items))
         self.stack_items = EncodedNum(len(items), encoding="compact").display
+
         # Get items
         self.witness_items = items
 
@@ -121,7 +124,7 @@ class Witness:
     def encoded(self):
         witness_string = self.stack_items
         for item in self.witness_items:
-            witness_string += item.encoded
+            witness_string += item.display
         return witness_string
 
     def to_json(self):

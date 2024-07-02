@@ -3,7 +3,7 @@ Transaction Engine - A way to generate different types of transactions for Bitco
 """
 
 
-class TxEngine:
-
-    def __init__(self):
-        pass
+class SigEngine:
+    """
+    A class for creating signatures for transactions
+    """
