@@ -3,7 +3,7 @@ A class for BitClone UTXOs
 """
 import json
 
-from src.encoder_lib import encode_byte_format, EncodedNum
+from src.encoder_lib import EncodedNum
 
 
 class Outpoint:
@@ -31,17 +31,21 @@ class Outpoint:
 
 
 class UTXO:
+    HEIGHT_BYTES = 8
+    AMOUNT_BYTES = 8
 
     def __init__(self, outpoint: Outpoint, height: int, amount: int, locking_code: str, coinbase=False):
         # outpoint
         self.outpoint = outpoint
 
         # height
-        self.height = encode_byte_format(height, "height")
+        # self.height = encode_byte_format(height, "height")
+        self.height = EncodedNum(height, byte_size=self.HEIGHT_BYTES).display
 
         # amount - little endian
-        self.amount = encode_byte_format(amount, "amount", internal=True)
-
+        # self.amount = encode_byte_format(amount, "amount", internal=True)
+        self.amount = EncodedNum(amount, byte_size=self.AMOUNT_BYTES, encoding="little").display
+        
         # coinbase
         self.coinbase = "01" if coinbase else "00"
 

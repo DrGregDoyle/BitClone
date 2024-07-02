@@ -61,7 +61,6 @@ def decode_outpoint(s: str) -> Outpoint:
     tx_id, i = parse_string(s, index=0, length=tx_chars)
 
     # v_out - little-endian
-    # v_out, i = parse_num(s, index=i, length=v_out_chars, internal=True)
     v_out, i = parse_vout(s, index=i, length=v_out_chars)
 
     # verify and return
@@ -91,7 +90,8 @@ def decode_utxo(s: str) -> UTXO:
     coinbase = True if int(val, 16) > 0 else False
 
     # Amount - little endian
-    amount, i = parse_num(s, i, amount_chars, internal=True)
+    # amount, i = parse_num(s, i, amount_chars, internal=True)
+    amount, i = parse_vout(s, i, amount_chars)
 
     # Locking Code
     size, increment = decode_compact_size(s[i:])
@@ -115,19 +115,23 @@ def decode_input(s: str) -> Input:
     tx_id, i = parse_string(s, 0, tx_chars)
 
     # v_out - little endian
-    v_out, i = parse_num(s, i, v_out_chars, internal=True)
+    # v_out, i = parse_num(s, i, v_out_chars, internal=True)
+    v_out, i = parse_vout(s, i, v_out_chars)
 
     # script_sig
     script_sig_size, increment = decode_compact_size(s[i:])
     script_sig, i = parse_string(s, i + increment, script_sig_size)
 
     # sequence - little endian
-    sequence, i = parse_num(s, i, sequence_chars, internal=True)
+    # sequence, i = parse_num(s, i, sequence_chars, internal=True)
+    sequence, i, = parse_vout(s, i, sequence_chars)
 
     # Verify
     string_encoding = s[:i]
     constructed_input = Input(tx_id, v_out, script_sig, sequence)
     if constructed_input.encoded != string_encoding:
+        print(f"STRING ENCODING: {string_encoding}")
+        print(f"CONSTRUCTED ENCODING: {constructed_input.encoded}")
         raise TypeError("Input string did not generate same Input object")
     return constructed_input
 
@@ -137,7 +141,8 @@ def decode_output(s: str) -> Output:
     amount_chars = 2 * BYTE_DICT.get("amount")
 
     # Amount - little endian
-    amount, i = parse_num(s, 0, amount_chars, internal=True)
+    # amount, i = parse_num(s, 0, amount_chars, internal=True)
+    amount, i = parse_vout(s, 0, amount_chars)
 
     # Output script
     script_size, increment = decode_compact_size(s[i:])
@@ -189,7 +194,8 @@ def decode_tx(s: str) -> Transaction:
     locktime_chars = 2 * BYTE_DICT.get("locktime")
 
     # Version - little endian
-    version, i = parse_num(s, 0, version_chars, internal=True)
+    # version, i = parse_num(s, 0, version_chars, internal=True)
+    version, i = parse_vout(s, 0, version_chars)
 
     # Handle Marker/Flag
     segwit = (s[i:i + 4] == "0001")
@@ -224,8 +230,9 @@ def decode_tx(s: str) -> Transaction:
             i += len(temp_witness.encoded)
 
     # Locktime
-    locktime = int(s[i:i + locktime_chars][::-1], 16)  # Little Endian
-    i += locktime_chars
+    locktime, i = parse_vout(s, i, locktime_chars)
+    # locktime = int(s[i:i + locktime_chars][::-1], 16)  # Little Endian
+    # i += locktime_chars
 
     # Verify
     string_encoding = s[:i]

@@ -53,7 +53,7 @@ import json
 import logging
 import sys
 
-from src.encoder_lib import EncodedNum, encode_byte_format, WEIGHT_UNIT_DICT, hash256
+from src.encoder_lib import EncodedNum, WEIGHT_UNIT_DICT, hash256
 
 # --- LOGGING --- #
 log_level = logging.DEBUG
@@ -147,13 +147,16 @@ class Input:
     =========================================================
     """
     HASH_CHARS = 64
+    VOUT_BYTES = 4
+    SEQUENCE_BYTES = 4
 
     def __init__(self, tx_id: str, v_out: int, script_sig: str, sequence: int, witness=None):
         # tx_id
         self.tx_id = tx_id.zfill(self.HASH_CHARS)
 
         # v_out - little endian
-        self.v_out = encode_byte_format(v_out, "v_out", internal=True)
+        # self.v_out = encode_byte_format(v_out, "v_out", internal=True)
+        self.v_out = EncodedNum(v_out, self.VOUT_BYTES, encoding="little").display
 
         # script_sig and script_sig_size
         self.script_sig = script_sig
@@ -161,8 +164,8 @@ class Input:
         self.script_sig_size = EncodedNum(len(self.script_sig), encoding="compact").display
 
         # sequence
-        self.sequence = encode_byte_format(sequence, "sequence", internal=True)
-
+        # self.sequence = encode_byte_format(sequence, "sequence", internal=True)
+        self.sequence = EncodedNum(sequence, self.SEQUENCE_BYTES, encoding="little").display
         # witness
         self.witness = witness
 
@@ -217,7 +220,8 @@ class Output:
 
     def __init__(self, amount: int, output_script: str):
         # amount - little endian
-        self.amount = encode_byte_format(amount, "amount", internal=True)
+        # self.amount = encode_byte_format(amount, "amount", internal=True)
+        self.amount = EncodedNum(amount, self.AMOUNT_BYTES, encoding="little").display
 
         # script and script size
         self.script_pub_key = output_script
@@ -257,14 +261,16 @@ class Transaction:
     """
     MARKER = "00"
     FLAG = "01"
+    VERSION_BYTES = 4
+    LOCKTIME_BYTES = 4
 
     def __init__(self, inputs: list, outputs: list, locktime=None, version=16):
         """
         We assume the inputs list is not empty.
         """
         # version - little endian
-        self.version = encode_byte_format(version, "version", internal=True)
-
+        # self.version = encode_byte_format(version, "version", internal=True)
+        self.version = EncodedNum(version, self.VERSION_BYTES, encoding="little").display
         # Get lists
         self.inputs = inputs
         self.outputs = outputs
@@ -289,7 +295,8 @@ class Transaction:
         # locktime - little endian
         if locktime is None:
             locktime = 0
-        self.locktime = encode_byte_format(locktime, "locktime", internal=True)
+        # self.locktime = encode_byte_format(locktime, "locktime", internal=True)
+        self.locktime = EncodedNum(locktime, self.LOCKTIME_BYTES, encoding="little").display
 
     @property
     def encoded(self):
