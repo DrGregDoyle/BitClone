@@ -161,43 +161,17 @@ WEIGHT_UNIT_DICT = {
 }
 
 
-class EncodedNum:
+class CompactSize:
     """
-    A class for encoding integers as bytes. Can be either of big or little endianness or in variable length CompactSize.
+    Given a non-negative integer values < 2^64, we return its compactSize encoding. The class maintains both a byte and hex encoding.
     """
 
-    def __init__(self, num: int, byte_size=None, encoding=None):
-        # Get byte_size
-        if byte_size is None:
-            byte_size = ceil(num.bit_length() // 8)
+    def __init__(self, num: int):
+        self.bytes = self._get_bytes(num)  # Bytes
+        self.hex = self.bytes.hex()  # Hex string
+        self._num = num  # Actual integer value
 
-        # Get num
-        self.num = num
-
-        # Get endianness, determine if CompactSize num
-        self.little_endian, self.compact = self._get_encoding(encoding)
-
-        # Handle Compact size
-        if self.compact:
-            self.value = self._encode_compact_size(num)
-        else:
-            # Not compact means endian specific encoding
-            encoding = "little" if self.little_endian else "big"
-            self.value = num.to_bytes(length=byte_size, byteorder=encoding, signed=False)
-
-        # Hex display
-        self.display = self.value.hex()
-
-    def _get_encoding(self, encoding: str):
-        match encoding:
-            case "little":
-                return True, False
-            case "compact":
-                return False, True
-            case _:
-                return False, False
-
-    def _encode_compact_size(self, num: int):
+    def _get_bytes(self, num: int):
         if 0 <= num <= 0xfc:
             return num.to_bytes(length=1, byteorder="little")
         elif 0xfd <= num <= 0xffff:
@@ -212,6 +186,18 @@ class EncodedNum:
             b1 = 0xff.to_bytes(length=1, byteorder="big")
             b2 = num.to_bytes(length=8, byteorder="little")
             return b1 + b2
+
+
+class EncodedNum:
+    """
+    Given a non-negative integer we return its byte encoding. Use little=True flag to specify little-endian, otherwise big-endian by default.
+    """
+
+    def __init__(self, num: int, little=False, byte_size=None):
+        byte_size = byte_size if byte_size else ceil(num.bit_length() // 8)
+        self.bytes = num.to_bytes(length=byte_size, byteorder="little" if little else "big")
+        self.hex = self.bytes.hex()
+        self._num = num
 
 
 # -- TESTING

@@ -170,6 +170,8 @@ def decode_witness_item(s: str) -> WitnessItem:
     string_encoding = s[:i + item_size * 2]
     constructed_witness_item = WitnessItem(item)
     if constructed_witness_item.display != string_encoding:
+        print(f"WITNESS ITEM: STRING ENCODING: {string_encoding}")
+        print(f"WITNESS ITEM: CONSTRUCTED DISPLAY: {constructed_witness_item.display}")
         raise TypeError("Input string did not generate same WitnessItem object")
     return constructed_witness_item
 
@@ -188,7 +190,9 @@ def decode_witness(s: str) -> Witness:
     # Verify
     string_encoding = s[:i]
     constructed_witness = Witness(items)
-    if constructed_witness.encoded != string_encoding:
+    if constructed_witness.display != string_encoding:
+        print(f"STRING ENCODING: {string_encoding}")
+        print(f"CONSTRUCTED WITNESS DISPLAY: {constructed_witness.display}")
         raise TypeError("Input string did not generate same Witness object")
     return constructed_witness
 

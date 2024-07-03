@@ -115,21 +115,28 @@ class Witness:
         Input is a list of WitnessItems. We create a witness_dict for each such item.
         """
         # Get count
-        self.stack_items = EncodedNum(len(items), encoding="compact").display
+        self.stack_items = EncodedNum(len(items), encoding="compact")
 
         # Get items
         self.witness_items = items
 
     @property
     def encoded(self):
-        witness_string = self.stack_items
-        for item in self.witness_items:
-            witness_string += item.display
-        return witness_string
+        encoded_items = bytes()
+        for witness_item in self.witness_items:
+            encoded_items += witness_item.encoded
+        return self.stack_items.value + encoded_items
+
+    @property
+    def display(self):
+        display_string = ""
+        for witness_item in self.witness_items:
+            display_string += witness_item.display
+        return self.stack_items.display + display_string
 
     def to_json(self):
-        witness_dict = {"stack_items": self.stack_items}
-        for x in range(len(self.witness_items)):
+        witness_dict = {"stack_items": self.stack_items.num}
+        for x in range(self.stack_items.num):
             temp_wi = self.witness_items[x]
             witness_dict.update({x: json.loads(temp_wi.to_json())})
         return json.dumps(witness_dict, indent=2)
@@ -185,7 +192,7 @@ class Input:
     def witness_encoded(self):
         encoded_string = ""
         if self.segwit:
-            encoded_string = self.witness.encoded
+            encoded_string = self.witness.display
         return encoded_string
 
     def to_json(self):
@@ -269,6 +276,7 @@ class Transaction:
         """
         # version - little endian
         self.version = EncodedNum(version, self.VERSION_BYTES, encoding="little").display
+
         # Get lists
         self.inputs = inputs
         self.outputs = outputs
@@ -313,7 +321,8 @@ class Transaction:
 
         # Handle witness
         if self.segwit:
-            encoded_string += self._encoded_list(self.witness_list)
+            # encoded_string += self._encoded_list(self.witness_list)
+            encoded_string += "".join([w.display for w in self.witness_list])
 
         # Locktime
         encoded_string += self.locktime
