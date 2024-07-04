@@ -2,6 +2,7 @@
 Transactions
 """
 import json
+from hashlib import sha256
 
 
 def hash256(data: str | bytes) -> bytes:
@@ -298,6 +299,10 @@ def decode_input(data: str | bytes) -> TxInput:
     input_data = data[:index]
     temp_input = TxInput(tx_id, v_out, scriptsig, sequence)
     if temp_input.hex != input_data:
+        print(f"INPUT JSON: {temp_input.to_json()}")
+        print(f"TEMP INPUT: {temp_input.hex}")
+        print(f"ORIGINAL DATA: {input_data}")
+        print(f"DATA STRING: {data}")
         raise ValueError("Constructed TxInput does not agree with original data.")
     return temp_input
 
@@ -591,6 +596,7 @@ def decode_transaction(data: str | bytes) -> Transaction:
     index += increment
     inputs = []
     for _ in range(input_count):
+        print(f"DATA SENT TO DECODE: {data[index:]}")
         temp_input = decode_input(data[index:])
         inputs.append(temp_input)
         index += len(temp_input.hex)
@@ -623,66 +629,5 @@ def decode_transaction(data: str | bytes) -> Transaction:
 
 
 # --- TESTING
-from hashlib import sha256
-
-# def random_item(byte_size=64):
-#     data = random_string(byte_size)
-#     return sha256(data.encode()).digest()
-#
-#
-# def random_witness_item():
-#     item = random_item()
-#     return WitnessItem(item)
-
-
-# def random_witness():
-#     stack_items = randint(1, 10)
-#     items = [random_witness_item() for _ in range(stack_items)]
-#     return Witness(items)
-
-
-# def random_vout():
-#     return randint(0, pow(2, 16) - 1)
-#
-#
-# def random_amount():
-#     return randint(1, pow(2, 64) - 1)
-#
-#
-# def random_input():
-#     tx_id = random_item()
-#     vout = random_vout()
-#     sequence = random_vout()
-#     scriptsig = random_item(byte_size=128).hex()
-#     return TxInput(tx_id, vout, scriptsig, sequence)
-
-
-# def random_output():
-#     amount = random_amount()
-#     scriptpubkey = random_item(byte_size=128).hex()
-#     return TxOutput(amount, scriptpubkey)
-
-#
-# if __name__ == "__main__":
-#     input1 = random_input()
-#     input2 = random_input()
-#     output1 = random_output()
-#     witness1 = random_witness()
-#     witness2 = random_witness()
-#     segwit = choice([True, False])
-#     print(f"SEGWIT: {segwit}")
-#     if segwit:
-#         tx1 = Transaction(inputs=[input1, input2], outputs=[output1], witness=[witness1, witness2])
-#     else:
-#         tx1 = Transaction(inputs=[input1, input2], outputs=[output1])
-#
-#     tx2 = decode_transaction(tx1.bytes)
-#     tx3 = decode_transaction(tx1.hex)
-#     assert tx2.hex == tx3.hex
-#     print(f"SIZE: {tx1.size}")
-#     print(f"HEX: {tx1.hex}")
-#     print(f"HEX LENGTH: {len(tx1.hex)}")
-#     print(f"WEIGHT: {tx1.weight}")
-#     print(f"VBYTES: {tx1.vbytes}")
-#     print(f"TXID: {tx1.txid.hex()}")
-#     # print(tx1.to_json())
+if __name__ == "__main__":
+    pass

@@ -13,9 +13,9 @@ import sys
 from collections import deque
 from typing import Any
 
-from src.cryptography import SECP256K1
 from src.encoder_lib import ripemd160, op_sha1, secure_hash_256, hash160
-from src.op_codes import OPCODES
+from src.library.cryptography import SECP256K1
+from src.library.op_codes import OPCODES
 
 # --- LOGGING --- #
 log_level = logging.DEBUG

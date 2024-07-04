@@ -1,113 +1,148 @@
 """
-A module for the Block classes
+A module for the Block and related classes
 """
-# --- IMPORTS --- #
 
-import json
-from datetime import datetime
-
-from src.encoder_lib import EncodedNum, hash256
 from src.merkle import create_merkle_tree
+from src.transaction import hash256, CompactSize, decode_transaction
 
 
-# --- CLASSES --- #
+def reverse_bytes(data: bytes):
+    hex_data = data.hex()
+    reverse_hex_data = "".join([hex_data[x:x + 2] for x in reversed(range(0, len(hex_data), 2))])
+    return bytes.fromhex(reverse_hex_data)
 
 
-class Block:
-    """
-    Block fields
-    =====================================================================
-    |   field               |   size (bytes)    |   format              |
-    =====================================================================
-    |   version             |   4               |   little-endian       |
-    |   previous block hash |   32              |   natural byte order  |
-    |   merkle root         |   32              |   natural byte order  |
-    |   timestamp           |   4               |   little-endian       |
-    |   bits                |   4               |   little-endian*      |
-    |   nonce               |   4               |   little-endian       |
-    |   tx_count            |   var             |   compactSize         |
-    |   tx_list             |   var             |   tx.encoded          |
-    =====================================================================
-    *bits encoding: the first byte is kept in big-endian order but appended to end of remaining 3 bytes placed in
-                    little-endian order
-    """
-    DEFAULT_VERSION = 1
-    DEFAULT_BITS = 0x1d00ffff
-    HASH_CHARS = 64
-    SMALL_CHARS = 8
-    NONCE_BYTES = 4
-    TIME_BYTES = 4
+class Header:
+    VERSION = 0x20000000
     VERSION_BYTES = 4
+    PREVIOUS_BLOCK_BYTES = 32
+    MERKLE_ROOT_BYTES = 32
+    TIME_BYTES = 4
+    BITS_BYTES = 4
+    NONCE_BYTES = 4
 
-    def __init__(self, prev_block: str, tx_list: list, nonce: int, time=None, bits=None, version=None):
-        # Previous block_id
-        self.prev_block = prev_block
+    def __init__(self, prev_block: str | bytes, merkle_root: str | bytes, time: int | bytes, nonce: int | bytes,
+                 bits: str | bytes, version=VERSION):
+        # previous block | assume hex/bytes in natural byte order
+        self.prev_block = bytes.fromhex(prev_block) if isinstance(prev_block, str) else prev_block
 
-        # Transactions
-        self.tx_count = EncodedNum(len(tx_list), encoding="compact").display
-        self.tx_list = tx_list
-        self.tx_data = "".join([tx.encoded for tx in self.tx_list])
-        self.tx_id_list = [tx.id for tx in self.tx_list]
+        # merkle root | assume hex/bytes in natural byte order
+        self.merkle_root = bytes.fromhex(merkle_root) if isinstance(merkle_root, str) else merkle_root
 
-        # Get merkle root from tx_id_list
-        merkle_tree = create_merkle_tree(self.tx_id_list)
-        self.merkle_root = merkle_tree.get(0)
-
-        # Nonce - little endian
-        self.nonce = EncodedNum(nonce, self.NONCE_BYTES, encoding="little").display
-
-        # Time as unix timestamp - little endian
-        self.time = time if time else datetime.now().timestamp()
-        self.time = EncodedNum(self.time, self.TIME_BYTES, encoding="little").display
-
-        # Bits and version
-        self.bits = bits if bits else self.DEFAULT_BITS
-        self.version = version if version else self.DEFAULT_VERSION
-        self.version = EncodedNum(self.version, self.VERSION_BYTES, encoding="little").display
-
-        # -- Formatting -- #
-
-        # Block hash and merkle root has 64 chars
-        self.prev_block.zfill(self.HASH_CHARS)
-        self.merkle_root.zfill(self.HASH_CHARS)
-
-        # Bits formatting
-        exp = self.bits[:2]  # Big-Endian
-        coeff = self.bits[2:][::-1]  # Little-Endian
-        self.bits = coeff + exp
+        # time/nonce/bits/version | convert int to 4-byte little endian value
+        self.time = time.to_bytes(length=self.TIME_BYTES, byteorder="little") if isinstance(time, int) else time
+        self.bits = reverse_bytes(bytes.fromhex(bits)) if isinstance(bits, str) else bits
+        self.nonce = nonce.to_bytes(length=self.NONCE_BYTES, byteorder="little") if isinstance(nonce, int) else nonce
+        self.version = version.to_bytes(length=self.VERSION_BYTES, byteorder="little") if isinstance(version,
+                                                                                                     int) else version
 
     @property
-    def header(self):
+    def bytes(self):
         return self.version + self.prev_block + self.merkle_root + self.time + self.bits + self.nonce
 
     @property
-    def encoded(self):
-        return self.header + self.tx_count + self.tx_data
+    def hex(self):
+        return self.bytes.hex()
 
     @property
     def id(self):
-        return hash256(self.header)
+        return hash256(self.bytes).hex()
 
-    def to_json(self):
-        header_dict = {
-            "version": self.version,
-            "previous_block": self.prev_block,
-            "merkle_root": self.merkle_root,
-            "time": self.time,
-            "bits": self.bits,
-            "nonce": self.nonce
-        }
-        tx_dict = {}
-        for x in range(len(self.tx_list)):
-            tx_dict.update({x: json.loads(self.tx_list[x].to_json())})
-        block_dict = {
-            "header": header_dict,
-            "txs": tx_dict
-        }
-        return json.dumps(block_dict, indent=2)
 
-    def get_tx_weight(self):
-        total = 0
-        for tx in self.tx_list:
-            total += tx.weight
-        return total
+def decode_header(data: str | bytes):
+    data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
+
+    # header chars
+    version_chars = 2 * Header.VERSION_BYTES
+    prev_block_chars = 2 * Header.PREVIOUS_BLOCK_BYTES
+    merkle_root_chars = 2 * Header.MERKLE_ROOT_BYTES
+    time_chars = 2 * Header.TIME_BYTES
+    bits_chars = 2 * Header.BITS_BYTES
+    nonce_chars = 2 * Header.NONCE_BYTES
+
+    # version
+    version = int.from_bytes(bytes.fromhex(data[:version_chars]), byteorder="little")  # little-endian
+    index = version_chars
+
+    # prev_block
+    prev_block = bytes.fromhex(data[index:index + prev_block_chars])  # Natural byte order
+    index += prev_block_chars
+
+    # merkle root
+    merkle_root = bytes.fromhex(data[index:index + merkle_root_chars])  # Natural byte order
+    index += merkle_root_chars
+
+    # time
+    time = int.from_bytes(bytes.fromhex(data[index:index + time_chars]), byteorder="little")  # little-endian
+    index += time_chars
+
+    # bits
+    bits = bytes.fromhex(data[index:index + bits_chars])  # little-endian
+    index += bits_chars
+
+    # nonce
+    nonce = int.from_bytes(bytes.fromhex(data[index:index + nonce_chars]), byteorder="little")  # little-endian
+    index += nonce_chars
+
+    # Verify
+    original = data[:index]
+    temp_header = Header(prev_block=prev_block, merkle_root=merkle_root, time=time, bits=bits, nonce=nonce,
+                         version=version)
+    if temp_header.hex != original:
+        raise ValueError("Constructed Header does not agree with original data.")
+    return temp_header
+
+
+class Block:
+    VERSION = 4
+
+    def __init__(self, prev_block: str | bytes, transactions: list, time: int | bytes, bits: str | bytes,
+                 nonce: int | bytes, version=VERSION):
+        # Transactions
+        tx_count = len(transactions)
+        self.tx_count = CompactSize(tx_count)
+        self.txs = bytes()
+        for t in transactions:
+            self.txs += t.bytes
+
+        # Calc merkle root
+        tx_id_list = [t.txid.hex() for t in self.tx_list()]
+        merkle_tree = create_merkle_tree(tx_id_list)
+        self.merkle_root = bytes.fromhex(merkle_tree.get(0))
+
+        # Header
+        self.header = Header(prev_block, self.merkle_root, time, nonce, bits, version)
+
+    def tx_list(self):
+        _tx_list = []
+        data = self.txs
+        index = 0
+        for _ in range(self.tx_count.num):
+            temp_tx = decode_transaction(data[index:])
+            print(f"TEMP TX HEX: {temp_tx.hex}")
+            _tx_list.append(temp_tx)
+            index += len(temp_tx.hex)
+        return _tx_list
+
+
+# --- TESTING
+from tests.utility import *
+
+if __name__ == "__main__":
+    segwit = choice([True, False])
+    print(f"SEGWIT: {segwit}")
+    # tx1 = fixed_tx(1, segwit=True)
+    # tx2 = fixed_tx(2, segwit=True)
+    tx1 = random_tx(segwit=segwit, input_num=2, output_num=1)
+    tx2 = random_tx(segwit=segwit, input_num=2, output_num=1)
+    tx_list = [tx1, tx2]
+    print(f"TX1 HEX: {tx1.hex}")
+    print(f"TX2 HEX: {tx2.hex}")
+
+    version = 1
+    prev_block = hash256("Hello World".encode()).hex()
+    time = 1720120296
+    bits = "17035d25"
+    nonce = pow(2, 16) - 1
+
+    test_block = Block(prev_block, tx_list, time, bits, nonce, version)

@@ -1,7 +1,9 @@
 """
 A module for Merkle trees
 """
-from src.encoder_lib import hash256
+import json
+
+from src.transaction import hash256
 
 
 def create_merkle_tree(tx_list: list) -> dict:
@@ -29,7 +31,7 @@ def create_merkle_tree(tx_list: list) -> dict:
 
         # Update leaf list
         leaves = [leaf_list[2 * x] + leaf_list[2 * x + 1] for x in range(len(leaf_list) // 2)]
-        leaf_list = [hash256(leaf) for leaf in leaves]
+        leaf_list = [hash256(leaf).hex() for leaf in leaves]
 
         # Move up in height
         height -= 1
@@ -123,3 +125,24 @@ def verify_element(tx_id: str, proof: dict) -> bool:
     # Return True/False
     merkle_root = proof.get(0)
     return current_id == merkle_root
+
+
+def reverse_hex_bytes(data: str):
+    return "".join([data[i:i + 2] for i in reversed(range(0, len(data), 2))])
+
+
+if __name__ == "__main__":
+    tx_list = [
+        "d48ef9f3ce57699fd10ef3920d77f65ac64fbd78bac60c77402e82e918f866cd",
+        "09d05a91a2bef32b04443037ef795cc75fd29779542586cc08d4da04819cd877",
+        "84db18e030cd6ef7a665456ef43754d328b6eda99f2f9c00b238406aa41c2893",
+        "88b2564448ee67085abd4065507ec6d37f5b174b22d5a018bf177d5e6c2a9505",
+        "b50dcb1220bf36f84b7416b295063e905ea26337278cd1233d388932589f9866",
+        "16c434c0c1087886da6d23e1b73c177b3827f76122e6d016280e312fb783552a",
+        "f3e4416953007959070b2740d5f7766e0b65f544f24bb057b25f01f115a78edb",
+        "73608b71894154a399a0143c9e253899cdfb05af6bbaae28c699e00d2bfbd3b5"
+    ]
+    tx_list = [reverse_hex_bytes(t) for t in tx_list]
+
+    merkle_tree = create_merkle_tree(tx_list)
+    print(json.dumps(merkle_tree, indent=2))

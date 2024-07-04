@@ -3,7 +3,7 @@ We test signature DER encoding and decoding
 """
 from secrets import randbits
 
-from src.cryptography import SECP256K1
+from src.library.cryptography import SECP256K1
 from src.signature import sign_transaction, verify_signature, encode_signature, decode_signature
 from tests.utility import random_tx_id
 

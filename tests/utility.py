@@ -2,6 +2,7 @@
 Helper functions for tests
 """
 
+from hashlib import sha256
 # --- IMPORTS --- #
 from random import randint, choice
 from secrets import randbits
@@ -53,17 +54,17 @@ def random_output():
     return TxOutput(amount, scriptpubkey)
 
 
-def random_tx(byte_length=64, segwit=None):
+def random_tx(byte_length=64, segwit=None, input_num=None, output_num=None):
     # Version/Locktime
     version = int.from_bytes(random_bytes(byte_length=Transaction.VERSION_BYTES), byteorder="big")
     locktime = int.from_bytes(random_bytes(byte_length=Transaction.LOCKTIME_BYTES), byteorder="big")
 
     # Inputs
-    input_num = randint(1, 5)
+    input_num = randint(1, 5) if input_num is None else input_num
     inputs = [random_input() for _ in range(input_num)]
 
     # Outputs
-    output_num = randint(1, 5)
+    output_num = randint(1, 5) if output_num is None else output_num
     outputs = [random_output() for _ in range(output_num)]
 
     # Witness
@@ -72,6 +73,34 @@ def random_tx(byte_length=64, segwit=None):
         witness = [random_witness(byte_length=byte_length) for _ in range(input_num)]
         return Transaction(inputs=inputs, outputs=outputs, witness=witness, locktime=locktime, version=version)
     return Transaction(inputs=inputs, outputs=outputs, locktime=locktime, version=version)
+
+
+def fixed_tx(fix_num: int, segwit=False):
+    version = fix_num
+    locktime = fix_num
+
+    # 1 input
+    # -- TxInput
+    tx_id = sha256(str(fix_num).encode()).hexdigest()
+    v_out = fix_num
+    scriptsig = sha256(str(fix_num).encode()).hexdigest()
+    sequence = fix_num
+    temp_input = TxInput(tx_id, v_out, scriptsig, sequence)
+
+    # 1 output
+    amount = fix_num
+    scriptpubkey = sha256(str(fix_num).encode()).hexdigest()
+    temp_output = TxOutput(amount, scriptpubkey)
+
+    # segwit
+    if segwit:
+        # 1 item
+        item = sha256(str(fix_num).encode()).digest()
+        witness_item = WitnessItem(item)
+        witness = Witness([witness_item])
+        return Transaction(inputs=[temp_input], outputs=[temp_output], witness=[witness], locktime=locktime,
+                           version=version)
+    return Transaction(inputs=[temp_input], outputs=[temp_output], locktime=locktime, version=version)
 
 # ---- DEADLINE ---- #
 

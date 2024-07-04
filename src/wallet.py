@@ -7,9 +7,9 @@ import logging
 import sys
 from secrets import randbits, randbelow
 
-from src.cryptography import SECP256K1
 from src.encoder_lib import *
-from src.word_list import WORDLIST
+from src.library.cryptography import SECP256K1
+from src.library.word_list import WORDLIST
 
 # --- LOGGING --- #
 log_level = logging.INFO
