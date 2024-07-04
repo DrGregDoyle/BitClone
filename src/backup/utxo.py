@@ -3,7 +3,7 @@ A class for BitClone UTXOs
 """
 import json
 
-from src.encoder_lib import EncodedNum
+from src.backup.encoder_lib import EncodedNum
 
 
 class Outpoint:

@@ -1,64 +1,85 @@
 """
 A file for testing Transaction and its related classes. Both decoding and encoding
 """
-# --- IMPORTS --- #
+from random import randint
 
-from src.transaction import decode_input, decode_output, decode_witness_item, decode_witness, decode_transaction
-from tests.utility import random_input, random_witness, random_witness_item, random_output, random_tx
+# --- IMPORTS --- #
+from src.cipher import decode_witness_item, decode_witness, decode_input, decode_output, decode_transaction
+from src.compact_size import CompactSize
+from tests.utility import random_witness_item, random_witness, random_txinput, random_txoutput, random_tx
 
 
 # --- TESTS --- #
+def test_compact_size():
+    num1 = CompactSize(0xfc)
+    num2 = CompactSize(0xfd)
+    num3 = CompactSize(0xffff)
+    num4 = CompactSize(0xffffffff)
+    num5 = CompactSize(0xffffffffffffffff)
 
-
-def test_tx_input():
-    i = random_input()
-    bytes_i = decode_input(i.bytes)
-    hex_i = decode_input(i.hex)
-
-    assert bytes_i.bytes == i.bytes
-    assert hex_i.bytes == i.bytes
-
-
-def test_tx_output():
-    t = random_output()
-    bytes_t = decode_output(t.bytes)
-    hex_t = decode_output(t.hex)
-
-    assert bytes_t.bytes == t.bytes
-    assert hex_t.bytes == t.bytes
+    assert num1.hex == "fc"
+    assert num2.hex == "fdfd00"
+    assert num3.hex == "fdffff"
+    assert num4.hex == "feffffffff"
+    assert num5.hex == "ffffffffffffffffff"
 
 
 def test_witness_item():
-    wi = random_witness_item()
-    bytes_wi = decode_witness_item(wi.bytes)
-    hex_wi = decode_witness_item(wi.hex)
+    _wi = random_witness_item()
+    wi1 = decode_witness_item(_wi.bytes)
+    wi2 = decode_witness_item(_wi.hex)
 
-    assert bytes_wi.bytes == wi.bytes
-    assert hex_wi.bytes == wi.bytes
+    assert wi1.bytes == _wi.bytes
+    assert wi2.bytes == _wi.bytes
 
 
 def test_witness():
-    w = random_witness()
-    bytes_w = decode_witness(w.bytes)
-    hex_w = decode_witness(w.hex)
+    item_num = randint(1, 10)
+    _w = random_witness(item_num)
+    w1 = decode_witness(_w.bytes)
+    w2 = decode_witness(_w.hex)
 
-    assert bytes_w.bytes == w.bytes
-    assert hex_w.bytes == w.bytes
+    assert w1.bytes == _w.bytes
+    assert w2.bytes == _w.bytes
 
 
-def test_transaction():
+def test_txinput():
+    _ti = random_txinput()
+    tx1 = decode_input(_ti.bytes)
+    tx2 = decode_input(_ti.hex)
+
+    assert tx1.bytes == _ti.bytes
+    assert tx2.bytes == _ti.bytes
+
+
+def test_txoutput():
+    _to = random_txoutput()
+    tx1 = decode_output(_to.bytes)
+    tx2 = decode_output(_to.hex)
+
+    assert tx1.bytes == _to.bytes
+    assert tx2.bytes == _to.bytes
+
+
+def test_tx():
+    # Random nums
+    input_num1 = randint(1, 10)
+    input_num2 = randint(1, 10)
+    output_num1 = randint(1, 10)
+    output_num2 = randint(1, 10)
+
     # Legacy
-    t1 = random_tx(segwit=False)
-    bytes_t1 = decode_transaction(t1.bytes)
-    hex_t1 = decode_transaction(t1.hex)
+    _tx = random_tx(input_num=input_num1, output_num=output_num1, segwit=False)
+    tx1 = decode_transaction(_tx.bytes)
+    tx2 = decode_transaction(_tx.hex)
 
-    assert bytes_t1.bytes == t1.bytes
-    assert hex_t1.bytes == t1.bytes
+    assert tx1.bytes == _tx.bytes
+    assert tx2.bytes == _tx.bytes
 
     # Segwit
-    t2 = random_tx(segwit=True)
-    bytes_t2 = decode_transaction(t2.bytes)
-    hex_t2 = decode_transaction(t2.hex)
+    _txs = random_tx(input_num=input_num2, output_num=output_num2, segwit=True)
+    tx3 = decode_transaction(_txs.bytes)
+    tx4 = decode_transaction(_txs.hex)
 
-    assert bytes_t2.bytes == t2.bytes
-    assert hex_t2.bytes == t2.bytes
+    assert tx3.bytes == _txs.bytes
+    assert tx4.bytes == _txs.bytes

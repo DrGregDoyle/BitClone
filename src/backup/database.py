@@ -8,8 +8,8 @@ import sys
 import time
 from pathlib import Path
 
-from src.decoder_lib import decode_outpoint, decode_utxo
-from src.utxo import UTXO, Outpoint
+from src.backup.decoder_lib import decode_outpoint, decode_utxo
+from src.backup.utxo import UTXO, Outpoint
 
 # --- LOGGING --- #
 log_level = logging.DEBUG

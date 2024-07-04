@@ -3,7 +3,7 @@ A file for testing the Wallet and WalletFactory classes
 """
 
 # --- IMPORTS --- #
-from src.wallet import HDWallet, ExtendedPrivateKey
+from src.backup.wallet import HDWallet, ExtendedPrivateKey
 from tests.utility import random_tx_id
 
 

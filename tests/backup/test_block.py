@@ -2,7 +2,7 @@
 Testing Block and related classes
 """
 
-from src.decoder_lib import decode_block
+from src.backup.decoder_lib import decode_block
 from tests.utility import random_block
 
 

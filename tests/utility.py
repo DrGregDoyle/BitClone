@@ -1,140 +1,67 @@
 """
-Helper functions for tests
+Test utilities
 """
 
-from hashlib import sha256
-# --- IMPORTS --- #
-from random import randint, choice
+from random import choice
 from secrets import randbits
-from string import ascii_letters
 
-# from src.decoder_lib import BYTE_DICT
-from src.transaction import TxInput, TxOutput, WitnessItem, Witness, Transaction
-
-
-# --- RANDOM TYPES --- #
-
-def random_string(string_length=64):
-    _string = ""
-    for _ in range(string_length):
-        _string += choice(ascii_letters)
-    return _string
+from src.cryptography import hash256
+from src.transaction import WitnessItem, Witness, TxInput, TxOutput, Transaction
 
 
-def random_bytes(byte_length=64):
-    bits = byte_length * 8
-    random_num = randbits(bits)
-    return random_num.to_bytes(length=byte_length, byteorder="big")
+# --- RANDOM --- #
+def random_bytes(byte_length=4):
+    bit_length = byte_length * 8
+    random_integer = randbits(bit_length)
+    return random_integer.to_bytes(length=byte_length, byteorder="big")
 
 
-# --- TRANSACTION --- #
-
-def random_witness_item(byte_length=64):
-    item = random_bytes(byte_length)
+def random_witness_item(byte_length=32):
+    item = random_bytes(byte_length=byte_length)
     return WitnessItem(item)
 
 
-def random_witness(item_num=None, byte_length=64):
-    stack_items = item_num if item_num else randint(1, 10)
-    items = [random_witness_item(byte_length) for _ in range(stack_items)]
+def random_witness(item_num=1, byte_length=32):
+    items = [random_witness_item(byte_length) for _ in range(item_num)]
     return Witness(items)
 
 
-def random_input():
+def random_txinput():
     tx_id = random_bytes(byte_length=TxInput.TX_ID_BYTES)
-    vout = int.from_bytes(random_bytes(byte_length=TxInput.V_OUT_BYTES), byteorder="big")
-    sequence = int.from_bytes(random_bytes(byte_length=TxInput.SEQUENCE_BYTES), byteorder="big")
-    scriptsig = random_bytes().hex()
-    return TxInput(tx_id, vout, scriptsig, sequence)
+    v_out = random_bytes(byte_length=TxInput.V_OUT_BYTES)
+    scriptsig = random_bytes(byte_length=20)
+    sequence = random_bytes(byte_length=TxInput.SEQUENCE_BYTES)
+    return TxInput(tx_id, v_out, scriptsig, sequence)
 
 
-def random_output():
-    amount = int.from_bytes(random_bytes(byte_length=TxOutput.AMOUNT_BYTES), byteorder="big")
-    scriptpubkey = random_bytes().hex()
+def random_txoutput():
+    amount = random_bytes(byte_length=TxOutput.AMOUNT_BYTES)
+    scriptpubkey = random_bytes(byte_length=20)
     return TxOutput(amount, scriptpubkey)
 
 
-def random_tx(byte_length=64, segwit=None, input_num=None, output_num=None):
-    # Version/Locktime
-    version = int.from_bytes(random_bytes(byte_length=Transaction.VERSION_BYTES), byteorder="big")
-    locktime = int.from_bytes(random_bytes(byte_length=Transaction.LOCKTIME_BYTES), byteorder="big")
-
-    # Inputs
-    input_num = randint(1, 5) if input_num is None else input_num
-    inputs = [random_input() for _ in range(input_num)]
-
-    # Outputs
-    output_num = randint(1, 5) if output_num is None else output_num
-    outputs = [random_output() for _ in range(output_num)]
-
-    # Witness
+def random_tx(input_num=1, output_num=1, segwit=None):
+    version = random_bytes(byte_length=Transaction.VERSION_BYTES)
+    locktime = random_bytes(byte_length=Transaction.LOCKTIME_BYTES)
+    inputs = [random_txinput() for _ in range(input_num)]
+    outputs = [random_txoutput() for _ in range(output_num)]
     segwit = choice([True, False]) if segwit is None else segwit
-    if segwit:
-        witness = [random_witness(byte_length=byte_length) for _ in range(input_num)]
-        return Transaction(inputs=inputs, outputs=outputs, witness=witness, locktime=locktime, version=version)
-    return Transaction(inputs=inputs, outputs=outputs, locktime=locktime, version=version)
+    witness = [random_witness() for _ in range(input_num)] if segwit else None
+    return Transaction(inputs, outputs, witness, locktime, version)
 
 
-def fixed_tx(fix_num: int, segwit=False):
-    version = fix_num
-    locktime = fix_num
-
-    # 1 input
-    # -- TxInput
-    tx_id = sha256(str(fix_num).encode()).hexdigest()
-    v_out = fix_num
-    scriptsig = sha256(str(fix_num).encode()).hexdigest()
-    sequence = fix_num
-    temp_input = TxInput(tx_id, v_out, scriptsig, sequence)
-
-    # 1 output
-    amount = fix_num
-    scriptpubkey = sha256(str(fix_num).encode()).hexdigest()
-    temp_output = TxOutput(amount, scriptpubkey)
-
-    # segwit
-    if segwit:
-        # 1 item
-        item = sha256(str(fix_num).encode()).digest()
-        witness_item = WitnessItem(item)
-        witness = Witness([witness_item])
-        return Transaction(inputs=[temp_input], outputs=[temp_output], witness=[witness], locktime=locktime,
-                           version=version)
-    return Transaction(inputs=[temp_input], outputs=[temp_output], locktime=locktime, version=version)
-
-# ---- DEADLINE ---- #
+# --- FIXED --- #
+def fixed_witness_item(fix_num=1):
+    item = bytes.fromhex(hash256(str(fix_num)))
+    return WitnessItem(item)
 
 
-# def random_outpoint():
-#     tx_id = random_tx_id()
-#     v_out = random_byte_element("v_out")
-#     return Outpoint(tx_id, v_out)
-#
-#
-# def random_utxo():
-#     outpoint = random_outpoint()
-#     height = random_byte_element("height")
-#     amount = random_byte_element("amount")
-#     locking_code = random_tx_id()
-#     coinbase = random_bool()
-#     return UTXO(outpoint, height, amount, locking_code, coinbase)
-#
-#
-# def random_block():
-#     prev_block = random_tx_id()
-#     # bits = random_byte_element("bits")
-#     bits = get_random_bits()
-#     time = random_byte_element("time")
-#     nonce = random_byte_element("nonce")
-#     version = random_byte_element("version")
-#     tx_count = 2  # randint(3, 5)
-#     segwit = random_bool()
-#     tx_list = [random_tx(segwit) for _ in range(tx_count)]
-#     return Block(
-#         prev_block=prev_block,
-#         tx_list=tx_list,
-#         nonce=nonce,
-#         time=time,
-#         bits=bits,
-#         version=version
-#     )
+def fixed_witness(fix_num=1):
+    # Only 1 item
+    wi = fixed_witness_item(fix_num)
+    return Witness([wi])
+
+
+if __name__ == "__main__":
+    val1 = random_bytes()
+    print(val1.hex())

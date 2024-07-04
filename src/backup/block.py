@@ -2,7 +2,7 @@
 A module for the Block and related classes
 """
 
-from src.merkle import create_merkle_tree
+from src.backup.merkle import create_merkle_tree
 from src.transaction import hash256, CompactSize, decode_transaction
 
 
@@ -126,7 +126,6 @@ class Block:
 
 
 # --- TESTING
-from tests.utility import *
 
 if __name__ == "__main__":
     segwit = choice([True, False])
