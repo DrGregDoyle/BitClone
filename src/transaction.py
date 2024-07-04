@@ -1,220 +1,309 @@
 """
-A page for the Transaction class
-
-Notes:
-    -If using segwit, the marker must be zero (0x00) and the flag must be nonzero (0x01).
-    -If not using segwit, the marker and flag must not be included in the transaction
-    -The unit of measurement for Bitcoin is called "weight". We say that 4 weight = 1 vbyte.
-    -To calculate the weight of a field in a transaction, multiply the byte size of the field by the associated factor
-        =====               =====
-        Field               Factor
-        -----               -----
-        Version             4
-        Marker/Flag         1
-        Inputs Count        4
-        Outpoint            4
-        Input Script        4
-        Sequence            4
-        Outputs Count       4
-        Amount              4
-        Output Script       4
-        Witness Count       1
-        Witness Items       1
-        Lock Time           4
-        -----               -----
-
- === Structure of a transaction ===
-    Version: 4 bytes
-    Marker: segwit optional 1 byte
-    Flag: segwit optional 1 byte
-    Inputs:
-        --
-        count: compactSize unsigned integer (variable integer)
-        outpoint:
-            --
-            txid: 32 byte
-            output_index: 4 byte (index starting at 0)
-        input script:
-        sequence:
-    Outputs:
-        --
-        count: compactSize integer (greater than 0)
-        amount/value: 8-byte *signed* integer (min = 0, max = 21 000 000 000 000 000)
-        script_length: compactSize integer
-    Witness:
-        --
-        count: compactSize integer
-    Lock Time:
-
+Transactions
 """
-
-# --- IMPORTS --- #
 import json
-import logging
-import sys
-
-from src.encoder_lib import EncodedNum, WEIGHT_UNIT_DICT, hash256
-
-# --- LOGGING --- #
-log_level = logging.DEBUG
-logger = logging.getLogger(__name__)
-logger.setLevel(log_level)
-logger.addHandler(logging.StreamHandler(stream=sys.stdout))
 
 
-# --- CLASSES --- #
+def hash256(data: str | bytes) -> bytes:
+    """
+    We return the bytes digest of the double SHA256 operation
+    """
+    # Turn hex string to bytes
+    if isinstance(data, str):
+        data = bytes.fromhex(data)
+
+    # Return bytes
+    return sha256(sha256(data).digest()).digest()
+
+
+def little_to_big(data: bytes) -> bytes:
+    """
+    Convert a bytes object from little endian to big endian
+    """
+    hex_little = data.hex()
+    hex_big = "".join(list(reversed([hex_little[2 * s: 2 * (s + 1)] for s in range(len(hex_little) // 2)])))
+    return bytes.fromhex(hex_big)
+
+
+class CompactSize:
+    """
+    Given a non-negative integer values < 2^64, we return its compactSize encoding. The class maintains both a byte
+    and hex encoding.
+    """
+
+    def __init__(self, num: int):
+        self.bytes = self._get_bytes(num)  # Bytes
+        self.hex = self.bytes.hex()  # Hex string
+        self.num = num  # Actual integer value
+
+    def _get_bytes(self, num: int):
+        if 0 <= num <= 0xfc:
+            return num.to_bytes(length=1, byteorder="little")
+        elif 0xfd <= num <= 0xffff:
+            b1 = 0xfd.to_bytes(length=1, byteorder="big")
+            b2 = num.to_bytes(length=2, byteorder="little")
+            return b1 + b2
+        elif 0x10000 <= num <= 0xffffffff:
+            b1 = 0xfe.to_bytes(length=1, byteorder="big")
+            b2 = num.to_bytes(length=4, byteorder="little")
+            return b1 + b2
+        elif 0x100000000 <= num <= 0xffffffffffffffff:
+            b1 = 0xff.to_bytes(length=1, byteorder="big")
+            b2 = num.to_bytes(length=8, byteorder="little")
+            return b1 + b2
+
+
+def decode_compact_size(data: str | bytes):
+    """
+    Decode accepts either hex string or bytes object
+    """
+    data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
+
+    first_byte = int.from_bytes(bytes.fromhex(data[:2]), byteorder="big")
+    match first_byte:
+        case 0xfd | 0xfe | 0xff:
+            l_index = 2
+            diff = first_byte - 0xfb
+            r_index = 2 + pow(2, diff)
+        case _:
+            l_index = 0
+            r_index = 2
+    num = int.from_bytes(bytes.fromhex(data[l_index: r_index]), byteorder="little")
+    return num, r_index
+
+
 class WitnessItem:
     """
-    Item Fields
     =========================================
-    |   field   |   size    |   format
+    |   field   |   size    |   format      |
     =========================================
     |   size    |   var     |   CompactSize |
-    |   item    |   var     |   Bytes       |
+    |   item    |   var     |   bytes       |
     =========================================
     """
 
     def __init__(self, item: bytes):
-        self.size = EncodedNum(len(item), encoding="compact")
+        # Item
         self.item = item
 
-    @property  # Bytes encoded
-    def encoded(self):
-        return self.size.value + self.item
+        # Size
+        item_length = len(self.item)
+        self.size = CompactSize(item_length)
 
-    @property  # Hex string
-    def display(self):
-        return self.size.display + self.item.hex()
+    @property
+    def bytes(self):
+        """
+        Returns the byte encoding of the WitnessItem
+        """
+        return self.size.bytes + self.item
+
+    @property
+    def hex(self):
+        """
+        Returns the hex string corresponding to the byte encoding of the WitnessItem
+        """
+        return self.bytes.hex()
 
     def to_json(self):
-        wi_dict = {
-            "size": self.size.display,
+        witness_item_dict = {
+            "size": self.size.hex,
             "item": self.item.hex()
         }
-        return json.dumps(wi_dict, indent=2)
+        return json.dumps(witness_item_dict, indent=2)
+
+
+def decode_witness_item(data: str | bytes) -> WitnessItem:
+    """
+    Decode accepts either hex string or bytes object
+    """
+    data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
+
+    # Get byte size
+    wi_byte_size, index = decode_compact_size(data)
+
+    # Item length is 2 * byte size
+    item = bytes.fromhex(data[index:index + 2 * wi_byte_size])
+    index += 2 * wi_byte_size
+
+    # Verify
+    initial_string = data[:index]
+    temp_wi = WitnessItem(item)
+    if temp_wi.hex != initial_string:
+        raise ValueError("Constructed witness item does not agree with initial string")
+
+    return temp_wi
 
 
 class Witness:
     """
-    Witness Fields
-    =================================================
-    |   field           |   size    |   format      |
-    =================================================
-    |   stack_items     |   var     |   CompactSize |
-    =================================================
-    |   item1           |   var     |   WitnessItem |
-    |   item2           |   var     |   WitnessItem |
-    |   ...             |   ...     |   ...         |
-    |   itemN           |   var     |   WitnessItem |
-    =================================================
-
+    =============================================
+    |   field       |   size    |   format      |
+    =============================================
+    |   stack_items |   var     |   CompactSize |
+    |   items       |   var     |   WitnessItem |
+    =============================================
+    The stack_items is the number of WitnessItem items.
     """
 
     def __init__(self, items: list):
-        """
-        Input is a list of WitnessItems. We create a witness_dict for each such item.
-        """
-        # Get count
-        self.stack_items = EncodedNum(len(items), encoding="compact")
+        # WitnessItems
+        self.items = items
 
-        # Get items
-        self.witness_items = items
+        # Get stack_items
+        item_length = len(self.items)
+        self.stack_items = CompactSize(item_length)
 
     @property
-    def encoded(self):
-        encoded_items = bytes()
-        for witness_item in self.witness_items:
-            encoded_items += witness_item.encoded
-        return self.stack_items.value + encoded_items
+    def bytes(self):
+        """
+        Get the byte encoding of all elements of the witness.
+        """
+        witness_bytes = bytes()
+        for witness_item in self.items:
+            witness_bytes += witness_item.bytes
+        return self.stack_items.bytes + witness_bytes
 
     @property
-    def display(self):
-        display_string = ""
-        for witness_item in self.witness_items:
-            display_string += witness_item.display
-        return self.stack_items.display + display_string
+    def hex(self):
+        """
+        Get the hex encoding of all elements of the witness.
+        """
+        return self.bytes.hex()
 
     def to_json(self):
-        witness_dict = {"stack_items": self.stack_items.num}
-        for x in range(self.stack_items.num):
-            temp_wi = self.witness_items[x]
-            witness_dict.update({x: json.loads(temp_wi.to_json())})
+        witness_dict = {
+            "stack_items": self.stack_items.hex
+        }
+        item_dict = {}
+        for item in self.items:
+            item_dict.update({
+                self.items.index(item): json.loads(item.to_json())
+            })
+        witness_dict.update({
+            "items": item_dict
+        })
         return json.dumps(witness_dict, indent=2)
 
 
-class Input:
+def decode_witness(data: str | bytes) -> Witness:
     """
-    Input Fields
-    =========================================================
-    |   field           |   byte size   |   format          |
-    =========================================================
-    |   tx_id           |   32          |   big-endian      |
-    |   v_out           |   4           |   little-endian   |
-    |   script_sig_size |   var         |   CompactSize     |
-    |   script_sig      |   var         |   Script          |
-    |   sequence        |   4           |   little-endian   |
-    |   witness         |   var         |   Witness.encoded |
-    =========================================================
+    Decode accepts either hex string or bytes object
     """
-    HASH_CHARS = 64
-    VOUT_BYTES = 4
+    data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
+
+    # First byte is CompactSize number of items | i = index for string
+    stack_items, i = decode_compact_size(data)
+
+    # Get items
+    items = []
+    for _ in range(stack_items):
+        temp_wi = decode_witness_item(data[i:])
+        items.append(temp_wi)
+        i += len(temp_wi.hex)
+
+    # Verify
+    original = data[:i]
+    temp_witness = Witness(items)
+    if temp_witness.hex != original:
+        raise ValueError("Constructed Witness does not agree with original data.")
+    return temp_witness
+
+
+class TxInput:
+    """
+    =========================================================
+    |   field           |   size        |   format          |
+    =========================================================
+    |   tx_id           |   32 bytes    |   little endian   |
+    |   v_out           |   4 bytes     |   little endian   |
+    |   scriptsig_size  |   var         |   CompactSize     |
+    |   scriptsig       |   var         |   Script          |
+    |   sequence        |   4 bytes     |   little endian   |
+    =========================================================
+
+    """
+    TX_ID_BYTES = 32
+    V_OUT_BYTES = 4
     SEQUENCE_BYTES = 4
 
-    def __init__(self, tx_id: str, v_out: int, script_sig: str, sequence: int, witness=None):
-        # tx_id
-        self.tx_id = tx_id.zfill(self.HASH_CHARS)
+    def __init__(self, tx_id: str | bytes, v_out: int | bytes, scriptsig: str | bytes, sequence: int | None = None):
+        """
+        The TxInput can be constructed as follows:
+            tx_id: hex string given in network byte order
+        """
+        # tx_id : 32 bytes
+        tx_id_num = int(tx_id, 16) if isinstance(tx_id, str) else int(tx_id.hex(), 16)
+        self.tx_id = tx_id_num.to_bytes(length=self.TX_ID_BYTES, byteorder="little")
 
-        # v_out - little endian
-        self.v_out = EncodedNum(v_out, self.VOUT_BYTES, encoding="little").display
+        # v_out : 4 bytes
+        v_out_num = v_out if isinstance(v_out, int) else int(v_out.hex(), 16)
+        self.v_out = v_out_num.to_bytes(length=self.V_OUT_BYTES, byteorder="little")
 
-        # script_sig and script_sig_size
-        self.script_sig = script_sig
-        self.script_sig_size = EncodedNum(len(self.script_sig), encoding="compact").display
+        # scriptsig : CompactSize
+        self.scriptsig = bytes.fromhex(scriptsig) if isinstance(scriptsig, str) else scriptsig
+        script_length = len(self.scriptsig)
+        self.scriptsig_size = CompactSize(script_length)
 
-        # sequence
-        self.sequence = EncodedNum(sequence, self.SEQUENCE_BYTES, encoding="little").display
-
-        # witness
-        self.witness = witness
-
-    def __eq__(self, other):
-        return self.encoded == other.encoded
-
-    @property
-    def segwit(self):
-        return True if self.witness else False
+        # sequence : 4 bytes
+        seq_num = sequence if isinstance(sequence, int) else 0
+        self.sequence = seq_num.to_bytes(length=self.SEQUENCE_BYTES, byteorder="little")
 
     @property
-    def encoded(self):
-        return self.tx_id + self.v_out + self.script_sig_size + self.script_sig + self.sequence
+    def bytes(self):
+        return self.tx_id + self.v_out + self.scriptsig_size.bytes + self.scriptsig + self.sequence
 
     @property
-    def witness_encoded(self):
-        encoded_string = ""
-        if self.segwit:
-            encoded_string = self.witness.display
-        return encoded_string
+    def hex(self):
+        return self.bytes.hex()
 
     def to_json(self):
         input_dict = {
-            "tx_id": self.tx_id,
-            "v_out": self.v_out,
-            "script_sig_size": self.script_sig_size,
-            "script_sig": self.script_sig,
-            "sequence": self.sequence,
+            "tx_id": self.tx_id.hex(),
+            "v_out": self.v_out.hex(),
+            "scriptsig_size": self.scriptsig_size.hex,
+            "scriptsig": self.scriptsig.hex(),
+            "sequence": self.sequence.hex()
         }
-        if self.segwit:
-            input_dict.update({"witness": json.loads(self.witness.to_json())})
         return json.dumps(input_dict, indent=2)
 
-    def add_witness(self, witness: Witness):
-        if self.witness is None:
-            self.witness = witness
 
-
-class Output:
+def decode_input(data: str | bytes) -> TxInput:
     """
-    Output Fields
+    Decode accepts either hex string or bytes object
+    """
+    # Input Chars
+    txid_chars = 2 * TxInput.TX_ID_BYTES
+    vout_chars = 2 * TxInput.V_OUT_BYTES
+    sequence_chars = 2 * TxInput.SEQUENCE_BYTES
+
+    data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
+
+    # -- Parse hex string
+    index = txid_chars
+    # tx_id
+    tx_id = format(int.from_bytes(bytes.fromhex(data[:index]), byteorder="little"), f"0{txid_chars}x")
+    # v_out
+    v_out = int.from_bytes(bytes.fromhex(data[index:index + vout_chars]), byteorder="little")
+    index += vout_chars
+    # scriptsig
+    scripsig_size, increment = decode_compact_size(data[index:])  # scriptsig_size denotes byte size
+    index += increment
+    scriptsig = bytes.fromhex(data[index:index + 2 * scripsig_size]).hex()
+    index += len(scriptsig)
+    # sequence
+    sequence = int.from_bytes(bytes.fromhex(data[index:index + sequence_chars]), byteorder="little")
+    index += sequence_chars
+
+    # verify
+    input_data = data[:index]
+    temp_input = TxInput(tx_id, v_out, scriptsig, sequence)
+    if temp_input.hex != input_data:
+        raise ValueError("Constructed TxInput does not agree with original data.")
+    return temp_input
+
+
+class TxOutput:
+    """
     =============================================================
     |   field               |   byte size   |   format          |
     =============================================================
@@ -222,34 +311,63 @@ class Output:
     |   script_pub_key_size |   var         |   CompactSize     |
     |   script_pub_key      |   var         |   Script          |
     =============================================================
-    NOTE: Created outputs will get added to UTXO DB
     """
     AMOUNT_BYTES = 8
 
-    def __init__(self, amount: int, output_script: str):
-        # amount - little endian
-        self.amount = EncodedNum(amount, self.AMOUNT_BYTES, encoding="little").display
+    def __init__(self, amount: int | bytes, scriptpubkey: str | bytes):
+        # amount : 8 bytes
+        amount_int = int.from_bytes(amount) if isinstance(amount, bytes) else amount
+        self.amount = amount_int.to_bytes(length=self.AMOUNT_BYTES, byteorder="little")
 
-        # script and script size
-        self.script_pub_key = output_script
-        self.script_pub_key_size = EncodedNum(len(self.script_pub_key), encoding="compact").display
+        # scriptpubkey
+        self.scriptpubkey = bytes.fromhex(scriptpubkey) if isinstance(scriptpubkey, str) else scriptpubkey
+        script_length = len(self.scriptpubkey)
+        self.scriptpubkey_size = CompactSize(script_length)
 
     @property
-    def encoded(self):
-        return self.amount + self.script_pub_key_size + self.script_pub_key
+    def bytes(self):
+        return self.amount + self.scriptpubkey_size.bytes + self.scriptpubkey
+
+    @property
+    def hex(self):
+        return self.bytes.hex()
 
     def to_json(self):
         output_dict = {
-            "amount": self.amount,
-            "script_pub_key_size": self.script_pub_key_size,
-            "script_pub_key": self.script_pub_key
+            "amount": self.amount.hex(),
+            "scriptpubkey_size": self.scriptpubkey_size.hex,
+            "scriptpubkey": self.scriptpubkey.hex()
         }
         return json.dumps(output_dict, indent=2)
 
 
+def decode_output(data: str | bytes) -> TxOutput:
+    # Chars
+    amount_chars = TxOutput.AMOUNT_BYTES * 2
+
+    # Get data as hex string
+    data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
+
+    # Amount
+    amount = int.from_bytes(bytes.fromhex(data[:amount_chars]), byteorder="little")
+    index = amount_chars
+
+    # Script pub key
+    scriptpubkey_size, increment = decode_compact_size(data[index:])
+    index += increment
+    scriptpubkey = bytes.fromhex(data[index:index + 2 * scriptpubkey_size]).hex()
+    index += len(scriptpubkey)
+
+    # Verify
+    original_data = data[:index]
+    constructed_output = TxOutput(amount, scriptpubkey)
+    if constructed_output.hex != original_data:
+        raise ValueError("Constructed TxOutput does not agree with original data.")
+    return constructed_output
+
+
 class Transaction:
     """
-    Transaction Fields
     =========================================================
     |   field       |   size            |   format          |
     =========================================================
@@ -263,165 +381,308 @@ class Transaction:
     |   witness     |   optional        |   Witness.encoded |
     |   locktime    |   4               |   little-endian   |
     =========================================================
-
     """
-    MARKER = "00"
-    FLAG = "01"
+    VERSION = 2
     VERSION_BYTES = 4
+    MARKER = bytes.fromhex("00")
+    FLAG = bytes.fromhex("01")
     LOCKTIME_BYTES = 4
 
-    def __init__(self, inputs: list, outputs: list, locktime=None, version=16):
+    def __init__(self, inputs: list, outputs: list, witness=None, locktime=None, version=VERSION):
         """
-        We assume the inputs list is not empty.
+        inputs: list of TxInput objects
+        outputs: list of TxOutput objects
+        witness: list of Witness objects
         """
-        # version - little endian
-        self.version = EncodedNum(version, self.VERSION_BYTES, encoding="little").display
-
-        # Get lists
-        self.inputs = inputs
-        self.outputs = outputs
-
-        # Get size of lists as compactSize elements
-        self.input_count = EncodedNum(len(self.inputs), encoding="compact").display
-        self.output_count = EncodedNum(len(self.outputs), encoding="compact").display
-
-        # Check segwit - handle malformed transaction
-        segwit_list = [i.segwit for i in self.inputs]
-        self.segwit = all(segwit_list)
-        if not self.segwit and True in segwit_list:
-            raise TypeError("All inputs must have a witness.")
-
-        # Witness
-        self.witness_list = [i.witness for i in self.inputs] if self.segwit else []
-        self.marker = self.MARKER if self.segwit else None
-        self.flag = self.FLAG if self.segwit else None
-
-        # locktime - little endian
-        if locktime is None:
-            locktime = 0
-        self.locktime = EncodedNum(locktime, self.LOCKTIME_BYTES, encoding="little").display
-
-    @property
-    def encoded(self):
-        """
-        Return the raw transaction data as hex string
-        """
-        # Encoded transaction begins with version
-        encoded_string = self.version
-
-        # Handle segwit
-        if self.segwit:
-            encoded_string += self.marker + self.flag
-
-        # Encode inputs
-        encoded_string += self.input_count + self._encoded_list(self.inputs)
-
-        # Encode outputs
-        encoded_string += self.output_count + self._encoded_list(self.outputs)
-
-        # Handle witness
-        if self.segwit:
-            # encoded_string += self._encoded_list(self.witness_list)
-            encoded_string += "".join([w.display for w in self.witness_list])
+        # Version
+        self.version = version.to_bytes(length=self.VERSION_BYTES, byteorder="little")
 
         # Locktime
-        encoded_string += self.locktime
+        locktime = locktime if locktime else 0
+        self.locktime = locktime.to_bytes(length=self.LOCKTIME_BYTES, byteorder="little")
 
-        return encoded_string
+        # Inputs
+        input_num = len(inputs)
+        self.input_count = CompactSize(input_num)
+        self.inputs = bytes()
+        for i in inputs:
+            self.inputs += i.bytes
+
+        # Outputs
+        self.outputs = bytes()
+        output_num = len(outputs)
+        self.output_count = CompactSize(output_num)
+        for t in outputs:
+            self.outputs += t.bytes
+
+        # Witness/Segwit
+        self.segwit = False
+        self.witness = bytes()
+        if witness:
+            self.segwit = True
+            for w in witness:
+                self.witness += w.bytes
 
     @property
-    def byte_size(self):
-        return len(self.encoded) // 2
+    def bytes(self):
+        # Version
+        tx_bytes = self.version
+
+        # Marker/Flag
+        if self.segwit:
+            tx_bytes += self.MARKER + self.FLAG
+
+        # Inputs
+        tx_bytes += self.input_count.bytes + self.inputs
+
+        # Outputs
+        tx_bytes += self.output_count.bytes + self.outputs
+
+        # Witness
+        if self.segwit:
+            tx_bytes += self.witness
+
+        # Locktime
+        tx_bytes += self.locktime
+        return tx_bytes
+
+    @property
+    def hex(self):
+        return self.bytes.hex()
+
+    @property
+    def size(self):
+        return len(self.bytes)
 
     @property
     def weight(self):
-        # Legacy
-        if not self.segwit:
-            return self.byte_size * 4
-
-        # Divide number of hex chars by 2 and multiply by WEIGHT_UNIT_DICT factor, for each field
         total = 0
-        total += (len(self.version) // 2) * WEIGHT_UNIT_DICT.get("version")
-        total += (len(self.marker) // 2) * WEIGHT_UNIT_DICT.get("marker")
-        total += (len(self.flag) // 2) * WEIGHT_UNIT_DICT.get("flag")
-        total += (len(self.input_count) + len(self._encoded_list(self.inputs)) // 2) * WEIGHT_UNIT_DICT.get("input")
-        total += (len(self.output_count) + len(self._encoded_list(self.outputs)) // 2) * WEIGHT_UNIT_DICT.get("output")
-        total += (len(self._encoded_list(self.witness_list)) // 2) * WEIGHT_UNIT_DICT.get("witness")
-        total += (len(self.locktime) // 2) * WEIGHT_UNIT_DICT.get("locktime")
-
+        if self.segwit:
+            # Multiply marker, flag and witness by 1
+            total += len(self.witness) + len(self.MARKER) + len(self.FLAG)
+            # Multiply everything else by 4
+            total += 4 * (len(self.input_count.bytes) + len(self.inputs) + len(self.output_count.bytes) + len(
+                self.outputs) + len(self.version) + len(self.locktime))
+        else:
+            total = self.size * 4
         return total
 
     @property
     def vbytes(self):
-        if not self.segwit:
-            return self.byte_size
-        else:
-            return self.weight / 4
+        return self.weight / 4
 
     @property
-    def id(self):
+    def txid(self):
         if self.segwit:
-            unhashed_data = self.version + self.input_count + self._encoded_list(
-                self.inputs) + self.output_count + self._encoded_list(self.outputs) + self.locktime
+            data = (self.version + self.input_count.bytes + self.inputs + self.output_count.bytes + self.outputs +
+                    self.locktime)
         else:
-            unhashed_data = self.encoded
-        return hash256(unhashed_data)
+            data = self.bytes
+        return hash256(data)
 
     def to_json(self):
-        # Version
+        # ID
         tx_dict = {
-            "version": self.version
+            # "txid": self.txid.hex()
+            "txid": little_to_big(self.txid).hex()
         }
+
+        # Version
+        tx_dict.update({
+            "version": self.version.hex()
+        })
 
         # Marker/Flag
         if self.segwit:
             tx_dict.update({
-                "marker": "00",
-                "flag": "01"
+                "marker": self.MARKER.hex(),
+                "flag": self.FLAG.hex()
             })
 
         # Inputs
-        input_list = []
-        input_count = len(self.inputs)
-        for x in range(input_count):
-            temp_input = self.inputs[x]
-            input_list.append(json.loads(temp_input.to_json()))
+        input_list = self.input_list()
         tx_dict.update({
-            "input_count": self.input_count,
-            "inputs": input_list
+            "input_count": self.input_count.hex,
+            "inputs": [json.loads(i.to_json()) for i in input_list]
         })
 
         # Outputs
-        output_list = []
-        output_count = len(self.outputs)
-        for y in range(output_count):
-            temp_output = self.outputs[y]
-            output_list.append(json.loads(temp_output.to_json()))
+        output_list = self.output_list()
         tx_dict.update({
-            "output_count": self.output_count,
-            "outputs": output_list
+            "output_count": self.output_count.hex,
+            "outputs": [json.loads(t.to_json()) for t in output_list]
         })
 
         # Witness
         if self.segwit:
-            witness_list = []
-            witness_count = len(self.witness_list)
-            for z in range(witness_count):
-                temp_witness = self.witness_list[z]
-                witness_list.append(json.loads(temp_witness.to_json()))
+            witness_list = self.witness_list()
             tx_dict.update({
-                "witness": witness_list
+                "witness": [json.loads(w.to_json()) for w in witness_list]
             })
 
         # Locktime
         tx_dict.update({
-            "locktime": self.locktime
+            "locktime": self.locktime.hex()
         })
-
         return json.dumps(tx_dict, indent=2)
 
-    def _encoded_list(self, item_list: list):
-        encoded_string = ""
-        for item in item_list:
-            encoded_string += item.encoded
-        return encoded_string
+    def input_list(self):
+        """
+        We return a list of TxInputs from the original inputs bytes object.
+        """
+        input_list = []
+        index = 0
+        data = self.inputs.hex()
+        for _ in range(self.input_count.num):
+            temp_input = decode_input(data[index:])
+            input_list.append(temp_input)
+            index += len(temp_input.hex)
+        return input_list
+
+    def output_list(self):
+        """
+        We return a list of TxOutputs from the original outputs bytes object.
+        """
+        output_list = []
+        index = 0
+        data = self.outputs.hex()
+        for _ in range(self.output_count.num):
+            temp_output = decode_output(data[index:])
+            output_list.append(temp_output)
+            index += len(temp_output.hex)
+        return output_list
+
+    def witness_list(self):
+        """
+        We return a list of TxOutputs from the original outputs bytes object.
+        """
+        witness_list = []
+        if self.segwit:
+            index = 0
+            data = self.witness.hex()
+            for _ in range(self.input_count.num):
+                temp_witness = decode_witness(data[index:])
+                witness_list.append(temp_witness)
+                index += len(temp_witness.hex)
+        return witness_list
+
+
+def decode_transaction(data: str | bytes) -> Transaction:
+    # Get data as hex string
+    data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
+
+    # Fixed chars
+    version_chars = Transaction.VERSION_BYTES * 2
+    locktime_chars = Transaction.LOCKTIME_BYTES * 2
+
+    # Version
+    version = int.from_bytes(bytes.fromhex(data[:version_chars]), byteorder="little")  # Version
+    index = version_chars
+
+    # Check for segwit
+    segwit_check = data[index:index + 4]
+    segwit = False
+    if segwit_check == "0001":
+        segwit = True
+        index += 4
+
+    # Inputs
+    input_count, increment = decode_compact_size(data[index:])
+    index += increment
+    inputs = []
+    for _ in range(input_count):
+        temp_input = decode_input(data[index:])
+        inputs.append(temp_input)
+        index += len(temp_input.hex)
+
+    # Outputs
+    output_count, increment = decode_compact_size(data[index:])
+    index += increment
+    outputs = []
+    for _ in range(output_count):
+        temp_output = decode_output(data[index:])
+        outputs.append(temp_output)
+        index += len(temp_output.hex)
+
+    # Witness
+    witness = []
+    if segwit:
+        for _ in range(input_count):
+            temp_witness = decode_witness(data[index:])
+            witness.append(temp_witness)
+            index += len(temp_witness.hex)
+
+    # Locktime
+    locktime = int.from_bytes(bytes.fromhex(data[index:index + locktime_chars]), byteorder="little")
+
+    # Return TX
+    if segwit:
+        return Transaction(inputs=inputs, outputs=outputs, witness=witness, locktime=locktime, version=version)
+    else:
+        return Transaction(inputs=inputs, outputs=outputs, locktime=locktime, version=version)
+
+
+# --- TESTING
+from hashlib import sha256
+
+# def random_item(byte_size=64):
+#     data = random_string(byte_size)
+#     return sha256(data.encode()).digest()
+#
+#
+# def random_witness_item():
+#     item = random_item()
+#     return WitnessItem(item)
+
+
+# def random_witness():
+#     stack_items = randint(1, 10)
+#     items = [random_witness_item() for _ in range(stack_items)]
+#     return Witness(items)
+
+
+# def random_vout():
+#     return randint(0, pow(2, 16) - 1)
+#
+#
+# def random_amount():
+#     return randint(1, pow(2, 64) - 1)
+#
+#
+# def random_input():
+#     tx_id = random_item()
+#     vout = random_vout()
+#     sequence = random_vout()
+#     scriptsig = random_item(byte_size=128).hex()
+#     return TxInput(tx_id, vout, scriptsig, sequence)
+
+
+# def random_output():
+#     amount = random_amount()
+#     scriptpubkey = random_item(byte_size=128).hex()
+#     return TxOutput(amount, scriptpubkey)
+
+#
+# if __name__ == "__main__":
+#     input1 = random_input()
+#     input2 = random_input()
+#     output1 = random_output()
+#     witness1 = random_witness()
+#     witness2 = random_witness()
+#     segwit = choice([True, False])
+#     print(f"SEGWIT: {segwit}")
+#     if segwit:
+#         tx1 = Transaction(inputs=[input1, input2], outputs=[output1], witness=[witness1, witness2])
+#     else:
+#         tx1 = Transaction(inputs=[input1, input2], outputs=[output1])
+#
+#     tx2 = decode_transaction(tx1.bytes)
+#     tx3 = decode_transaction(tx1.hex)
+#     assert tx2.hex == tx3.hex
+#     print(f"SIZE: {tx1.size}")
+#     print(f"HEX: {tx1.hex}")
+#     print(f"HEX LENGTH: {len(tx1.hex)}")
+#     print(f"WEIGHT: {tx1.weight}")
+#     print(f"VBYTES: {tx1.vbytes}")
+#     print(f"TXID: {tx1.txid.hex()}")
+#     # print(tx1.to_json())

@@ -150,42 +150,43 @@ BYTE_DICT = {
     "nonce": 4
 }
 
-WEIGHT_UNIT_DICT = {
-    "version": 4,
-    "marker": 1,
-    "flag": 1,
-    "input": 4,
-    "output": 4,
-    "witness": 1,
-    "locktime": 4
-}
+
+# WEIGHT_UNIT_DICT = {
+#     "version": 4,
+#     "marker": 1,
+#     "flag": 1,
+#     "input": 4,
+#     "output": 4,
+#     "witness": 1,
+#     "locktime": 4
+# }
 
 
-class CompactSize:
-    """
-    Given a non-negative integer values < 2^64, we return its compactSize encoding. The class maintains both a byte and hex encoding.
-    """
-
-    def __init__(self, num: int):
-        self.bytes = self._get_bytes(num)  # Bytes
-        self.hex = self.bytes.hex()  # Hex string
-        self._num = num  # Actual integer value
-
-    def _get_bytes(self, num: int):
-        if 0 <= num <= 0xfc:
-            return num.to_bytes(length=1, byteorder="little")
-        elif 0xfd <= num <= 0xffff:
-            b1 = 0xfd.to_bytes(length=1, byteorder="big")
-            b2 = num.to_bytes(length=2, byteorder="little")
-            return b1 + b2
-        elif 0x10000 <= num <= 0xffffffff:
-            b1 = 0xfe.to_bytes(length=1, byteorder="big")
-            b2 = num.to_bytes(length=4, byteorder="little")
-            return b1 + b2
-        elif 0x100000000 <= num <= 0xffffffffffffffff:
-            b1 = 0xff.to_bytes(length=1, byteorder="big")
-            b2 = num.to_bytes(length=8, byteorder="little")
-            return b1 + b2
+# class CompactSize:
+#     """
+#     Given a non-negative integer values < 2^64, we return its compactSize encoding. The class maintains both a byte and hex encoding.
+#     """
+#
+#     def __init__(self, num: int):
+#         self.bytes = self._get_bytes(num)  # Bytes
+#         self.hex = self.bytes.hex()  # Hex string
+#         self._num = num  # Actual integer value
+#
+#     def _get_bytes(self, num: int):
+#         if 0 <= num <= 0xfc:
+#             return num.to_bytes(length=1, byteorder="little")
+#         elif 0xfd <= num <= 0xffff:
+#             b1 = 0xfd.to_bytes(length=1, byteorder="big")
+#             b2 = num.to_bytes(length=2, byteorder="little")
+#             return b1 + b2
+#         elif 0x10000 <= num <= 0xffffffff:
+#             b1 = 0xfe.to_bytes(length=1, byteorder="big")
+#             b2 = num.to_bytes(length=4, byteorder="little")
+#             return b1 + b2
+#         elif 0x100000000 <= num <= 0xffffffffffffffff:
+#             b1 = 0xff.to_bytes(length=1, byteorder="big")
+#             b2 = num.to_bytes(length=8, byteorder="little")
+#             return b1 + b2
 
 
 class EncodedNum:

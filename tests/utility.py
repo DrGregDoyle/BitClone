@@ -3,130 +3,109 @@ Helper functions for tests
 """
 
 # --- IMPORTS --- #
-from hashlib import sha256
 from random import randint, choice
+from secrets import randbits
 from string import ascii_letters
 
-from src.block import Block
-from src.decoder_lib import BYTE_DICT
-from src.transaction import Input, Output, WitnessItem, Witness, Transaction
-from src.utxo import Outpoint, UTXO
+# from src.decoder_lib import BYTE_DICT
+from src.transaction import TxInput, TxOutput, WitnessItem, Witness, Transaction
 
 
-# --- RANDOM --- #
+# --- RANDOM TYPES --- #
 
-def get_random_string(max_chars=64):
-    random_string = ""
-    for _ in range(max_chars):
-        random_string += choice(ascii_letters)
-    return random_string
-
-
-def random_tx_id():
-    random_string = get_random_string()
-    return sha256(random_string.encode()).hexdigest()
+def random_string(string_length=64):
+    _string = ""
+    for _ in range(string_length):
+        _string += choice(ascii_letters)
+    return _string
 
 
-def random_bool():
-    return choice([True, False])
+def random_bytes(byte_length=64):
+    bits = byte_length * 8
+    random_num = randbits(bits)
+    return random_num.to_bytes(length=byte_length, byteorder="big")
 
 
-def random_integer_range(lower=1, upper=10):
-    return randint(lower, upper)
+# --- TRANSACTION --- #
 
-
-def get_random_integer(int_bytes=4):
-    upper = pow(2, int_bytes)
-    return randint(1, upper)
-
-
-def get_random_bits():
-    random_exp = randint(16, 32)
-    random_coeff = randint(pow(2, 16), pow(2, 24) - 1)
-    return format(random_exp, "02x") + format(random_coeff, "06x")
-
-
-def random_byte_element(element: str):
-    return get_random_integer(BYTE_DICT.get(element))
-
-
-def random_outpoint():
-    tx_id = random_tx_id()
-    v_out = random_byte_element("v_out")
-    return Outpoint(tx_id, v_out)
-
-
-def random_utxo():
-    outpoint = random_outpoint()
-    height = random_byte_element("height")
-    amount = random_byte_element("amount")
-    locking_code = random_tx_id()
-    coinbase = random_bool()
-    return UTXO(outpoint, height, amount, locking_code, coinbase)
-
-
-def random_input(segwit=None):
-    segwit = random_bool() if segwit is None else segwit
-    tx_id = random_tx_id()
-    v_out = random_byte_element("v_out")
-    script_sig = random_tx_id() if not segwit else ""
-    sequence = random_byte_element("sequence")
-    witness = random_witness() if segwit else None
-    return Input(tx_id, v_out, script_sig, sequence, witness)
-
-
-def random_output():
-    amount = random_byte_element("amount")
-    output_script = random_tx_id()
-    return Output(amount, output_script)
-
-
-def random_witness_item():
-    data = random_tx_id()
-    item = sha256(data.encode()).digest()  # Bytes object
+def random_witness_item(byte_length=64):
+    item = random_bytes(byte_length)
     return WitnessItem(item)
 
 
-def random_witness():
-    random_num_of_wi = randint(2, 4)
-    items = []
-    for _ in range(random_num_of_wi):
-        items.append(random_witness_item())
+def random_witness(item_num=None, byte_length=64):
+    stack_items = item_num if item_num else randint(1, 10)
+    items = [random_witness_item(byte_length) for _ in range(stack_items)]
     return Witness(items)
 
 
-def random_tx(segwit=None):
-    input_count = randint(2, 5)
-    inputs = []
-    segwit = random_bool() if segwit is None else segwit
-    for _ in range(input_count):
-        inputs.append(random_input(segwit))
-
-    output_count = 1  # randint(1, 3)
-    outputs = []
-    for _ in range(output_count):
-        outputs.append(random_output())
-
-    version = random_byte_element("version")
-    locktime = random_byte_element("locktime")
-    return Transaction(inputs, outputs, version=version, locktime=locktime)
+def random_input():
+    tx_id = random_bytes(byte_length=TxInput.TX_ID_BYTES)
+    vout = int.from_bytes(random_bytes(byte_length=TxInput.V_OUT_BYTES), byteorder="big")
+    sequence = int.from_bytes(random_bytes(byte_length=TxInput.SEQUENCE_BYTES), byteorder="big")
+    scriptsig = random_bytes().hex()
+    return TxInput(tx_id, vout, scriptsig, sequence)
 
 
-def random_block():
-    prev_block = random_tx_id()
-    # bits = random_byte_element("bits")
-    bits = get_random_bits()
-    time = random_byte_element("time")
-    nonce = random_byte_element("nonce")
-    version = random_byte_element("version")
-    tx_count = 2  # randint(3, 5)
-    segwit = random_bool()
-    tx_list = [random_tx(segwit) for _ in range(tx_count)]
-    return Block(
-        prev_block=prev_block,
-        tx_list=tx_list,
-        nonce=nonce,
-        time=time,
-        bits=bits,
-        version=version
-    )
+def random_output():
+    amount = int.from_bytes(random_bytes(byte_length=TxOutput.AMOUNT_BYTES), byteorder="big")
+    scriptpubkey = random_bytes().hex()
+    return TxOutput(amount, scriptpubkey)
+
+
+def random_tx(byte_length=64, segwit=None):
+    # Version/Locktime
+    version = int.from_bytes(random_bytes(byte_length=Transaction.VERSION_BYTES), byteorder="big")
+    locktime = int.from_bytes(random_bytes(byte_length=Transaction.LOCKTIME_BYTES), byteorder="big")
+
+    # Inputs
+    input_num = randint(1, 5)
+    inputs = [random_input() for _ in range(input_num)]
+
+    # Outputs
+    output_num = randint(1, 5)
+    outputs = [random_output() for _ in range(output_num)]
+
+    # Witness
+    segwit = choice([True, False]) if segwit is None else segwit
+    if segwit:
+        witness = [random_witness(byte_length=byte_length) for _ in range(input_num)]
+        return Transaction(inputs=inputs, outputs=outputs, witness=witness, locktime=locktime, version=version)
+    return Transaction(inputs=inputs, outputs=outputs, locktime=locktime, version=version)
+
+# ---- DEADLINE ---- #
+
+
+# def random_outpoint():
+#     tx_id = random_tx_id()
+#     v_out = random_byte_element("v_out")
+#     return Outpoint(tx_id, v_out)
+#
+#
+# def random_utxo():
+#     outpoint = random_outpoint()
+#     height = random_byte_element("height")
+#     amount = random_byte_element("amount")
+#     locking_code = random_tx_id()
+#     coinbase = random_bool()
+#     return UTXO(outpoint, height, amount, locking_code, coinbase)
+#
+#
+# def random_block():
+#     prev_block = random_tx_id()
+#     # bits = random_byte_element("bits")
+#     bits = get_random_bits()
+#     time = random_byte_element("time")
+#     nonce = random_byte_element("nonce")
+#     version = random_byte_element("version")
+#     tx_count = 2  # randint(3, 5)
+#     segwit = random_bool()
+#     tx_list = [random_tx(segwit) for _ in range(tx_count)]
+#     return Block(
+#         prev_block=prev_block,
+#         tx_list=tx_list,
+#         nonce=nonce,
+#         time=time,
+#         bits=bits,
+#         version=version
+#     )
