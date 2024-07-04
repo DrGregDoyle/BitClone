@@ -10,7 +10,8 @@ class CompactSize:
         self.hex = self.bytes.hex()  # Hex string
         self.num = num  # Actual integer value
 
-    def _get_bytes(self, num: int):
+    @staticmethod
+    def _get_bytes(num: int):
         if 0 <= num <= 0xfc:
             return num.to_bytes(length=1, byteorder="little")
         elif 0xfd <= num <= 0xffff:

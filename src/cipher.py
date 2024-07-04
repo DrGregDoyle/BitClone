@@ -176,18 +176,20 @@ def decode_transaction(data: str | bytes) -> Transaction:
         return Transaction(inputs=inputs, outputs=outputs, locktime=locktime, version=version)
 
 
-def data_list(data: str, count: int, type: str):
+def data_list(data: str, count: int, decode_type: str):
     """
     Given a string of hex data and a count, we return a list of tx elements based on given type.
     """
     # Get decode type
-    match type:
+    match decode_type:
         case "input":
             func = decode_input
         case "output":
             func = decode_output
         case "witness":
             func = decode_witness
+        case _:
+            func = decode_transaction
 
     # Get list and return
     _data_list = []
@@ -197,3 +199,8 @@ def data_list(data: str, count: int, type: str):
         _data_list.append(temp_obj)
         index += len(temp_obj.hex)
     return _data_list, index
+
+
+# -- TESTING
+if __name__ == "__main__":
+    pass

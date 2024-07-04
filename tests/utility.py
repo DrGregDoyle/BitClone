@@ -5,7 +5,6 @@ Test utilities
 from random import choice
 from secrets import randbits
 
-from src.cryptography import hash256
 from src.transaction import WitnessItem, Witness, TxInput, TxOutput, Transaction
 
 
@@ -48,18 +47,6 @@ def random_tx(input_num=1, output_num=1, segwit=None):
     segwit = choice([True, False]) if segwit is None else segwit
     witness = [random_witness() for _ in range(input_num)] if segwit else None
     return Transaction(inputs, outputs, witness, locktime, version)
-
-
-# --- FIXED --- #
-def fixed_witness_item(fix_num=1):
-    item = bytes.fromhex(hash256(str(fix_num)))
-    return WitnessItem(item)
-
-
-def fixed_witness(fix_num=1):
-    # Only 1 item
-    wi = fixed_witness_item(fix_num)
-    return Witness([wi])
 
 
 if __name__ == "__main__":
