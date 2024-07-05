@@ -4,9 +4,9 @@ A library for common decoder functions
 
 # --- IMPORTS --- #
 
-from src.backup.block import Block
 from src.backup.encoder_lib import BYTE_DICT
 from src.backup.utxo import Outpoint, UTXO
+from src.block import Block
 from src.transaction import Input, Output, WitnessItem, Witness, Transaction
 
 

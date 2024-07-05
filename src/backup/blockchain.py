@@ -6,9 +6,9 @@ import logging
 # --- IMPORTS --- #
 import sys
 
-from src.backup.block import Block
 from src.backup.database import Database
 from src.backup.encoder_lib import bits_to_target
+from src.block import Block
 
 MAX_TARGET = 0x00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 

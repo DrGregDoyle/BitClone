@@ -5,6 +5,8 @@ Test utilities
 from random import choice
 from secrets import randbits
 
+from src.block import Header
+from src.merkle import create_merkle_tree
 from src.transaction import WitnessItem, Witness, TxInput, TxOutput, Transaction
 
 
@@ -47,6 +49,26 @@ def random_tx(input_num=1, output_num=1, segwit=None):
     segwit = choice([True, False]) if segwit is None else segwit
     witness = [random_witness() for _ in range(input_num)] if segwit else None
     return Transaction(inputs, outputs, witness, locktime, version)
+
+
+def random_txid(input_num=1, output_num=1, segwit=None):
+    tx = random_tx(input_num, output_num, segwit)
+    return tx.txid
+
+
+def random_header(tx_num=1):
+    tx_list = [random_tx().txid for _ in range(tx_num)]
+    merkle_tree = create_merkle_tree(tx_list)
+    merkle_root = merkle_tree.get(0)
+
+    prev_block = random_bytes(byte_length=32).hex()
+
+    time = int(random_bytes().hex(), 16)
+    bits = random_bytes().hex()
+    nonce = int(random_bytes().hex(), 16)
+    version = int(random_bytes().hex(), 16)
+
+    return Header(prev_block, merkle_root, time, bits, nonce, version)
 
 
 if __name__ == "__main__":

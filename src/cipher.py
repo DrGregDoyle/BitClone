@@ -1,7 +1,9 @@
 """
 A module for encoding/decoding
 """
+from src.block import Header
 from src.compact_size import decode_compact_size
+from src.cryptography import reverse_bytes
 from src.transaction import WitnessItem, Witness, TxInput, TxOutput, Transaction
 
 
@@ -199,6 +201,50 @@ def data_list(data: str, count: int, decode_type: str):
         _data_list.append(temp_obj)
         index += len(temp_obj.hex)
     return _data_list, index
+
+
+def decode_header(data: str | bytes):
+    data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
+
+    # header chars
+    version_chars = 2 * Header.VERSION_BYTES
+    prev_block_chars = 2 * Header.PREVBLOCK_BYTES
+    merkle_root_chars = 2 * Header.MERKLE_BYTES
+    time_chars = 2 * Header.TIME_BYTES
+    bits_chars = 2 * Header.BITS_BYTES
+    nonce_chars = 2 * Header.NONCE_BYTES
+
+    # version
+    version = int.from_bytes(bytes.fromhex(data[:version_chars]), byteorder="little")  # little-endian
+    index = version_chars
+
+    # prev_block
+    prev_block = reverse_bytes(bytes.fromhex(data[index:index + prev_block_chars]))  # reverse byte order
+    index += prev_block_chars
+
+    # merkle root
+    merkle_root = reverse_bytes(bytes.fromhex(data[index:index + merkle_root_chars]))  # reverse byte order
+    index += merkle_root_chars
+
+    # time
+    time = int.from_bytes(bytes.fromhex(data[index:index + time_chars]), byteorder="little")  # little-endian
+    index += time_chars
+
+    # bits
+    bits = reverse_bytes(bytes.fromhex(data[index:index + bits_chars]))  # little-endian
+    index += bits_chars
+
+    # nonce
+    nonce = int.from_bytes(bytes.fromhex(data[index:index + nonce_chars]), byteorder="little")  # little-endian
+    index += nonce_chars
+
+    # Verify
+    original = data[:index]
+    temp_header = Header(prev_block=prev_block, merkle_root=merkle_root, time=time, bits=bits, nonce=nonce,
+                         version=version)
+    if temp_header.hex != original:
+        raise ValueError("Constructed Header does not agree with original data.")
+    return temp_header
 
 
 # -- TESTING
