@@ -8,8 +8,8 @@ import sys
 import time
 from pathlib import Path
 
-from src.backup.decoder_lib import decode_outpoint, decode_utxo
-from src.backup.utxo import UTXO, Outpoint
+from src.cipher import decode_utxo, decode_outpoint
+from src.utxo import UTXO, Outpoint
 
 # --- LOGGING --- #
 log_level = logging.DEBUG
@@ -104,8 +104,8 @@ class Database:
                     query_over = True
                 # DB Locked
                 except sqlite3.OperationalError as e2:
-                    # logger.debug(f"Operational error: {e2}")
-                    # logger.debug(f"Current query: {query}")
+                    logger.debug(f"Operational error: {e2}")
+                    logger.debug(f"Current query: {query}")
                     time.sleep(0.01)
         return result
 
@@ -129,7 +129,7 @@ class Database:
         _outpoint = decode_outpoint(outpoint) if isinstance(outpoint, str) else outpoint
 
         # Query
-        value = self.query_db(GET_UTXO_QUERY, (_outpoint.encoded,))
+        value = self.query_db(GET_UTXO_QUERY, (_outpoint.hex,))
         if value and isinstance(value, list):
             v = value[0][0]
             return v

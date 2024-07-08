@@ -3,8 +3,8 @@ A file for testing db
 """
 from pathlib import Path
 
-from src.backup.database import Database
-from tests.utility import random_utxo, random_integer_range
+from src.database import Database
+from tests.utility import random_utxo
 
 DB_DIR = Path(__file__).parent / "db"
 
@@ -15,13 +15,12 @@ def test_db():
     _db._wipe_db()
 
     # Post UTXOS
-    random_range = random_integer_range(5, 15)
     utxo_list = [random_utxo()]  # [random_utxo() for _ in range(random_range)]
     for utxo in utxo_list:
         _db.post_utxo(utxo)
-        print(f"RANDOM UTXO")
-        print(f"TXID: {utxo.outpoint.tx_id}")
-        print(f"VOUT: {utxo.outpoint.v_out}")
+        # print(f"RANDOM UTXO")
+        # print(f"TXID: {utxo.outpoint.txid}")
+        # print(f"VOUT: {utxo.outpoint.v_out}")
 
     count_query = """SELECT COUNT(*) FROM utxo"""
     query_result = _db.query_db(count_query)[0][0]

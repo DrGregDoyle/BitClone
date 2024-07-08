@@ -8,6 +8,7 @@ from secrets import randbits
 from src.block import Header, Block
 from src.merkle import create_merkle_tree
 from src.transaction import WitnessItem, Witness, TxInput, TxOutput, Transaction
+from src.utxo import Outpoint, UTXO
 
 
 # --- RANDOM --- #
@@ -90,6 +91,22 @@ def random_block(tx_num=3, segwit=None):
     nonce = random_int(byte_size=Header.NONCE_BYTES)
     version = random_int(byte_size=Header.VERSION_BYTES)
     return Block(prev_block, tx_list, time, bits, nonce, version)
+
+
+def random_outpoint():
+    tx = random_tx()
+    tx_id = tx.reverse_byte_order
+    v_out = randint(0, tx.output_count.num)
+    return Outpoint(tx_id, v_out)
+
+
+def random_utxo():
+    outpoint = random_outpoint()
+    height = random_int(byte_size=UTXO.HEIGHT_BYTES)
+    amount = random_int(byte_size=UTXO.AMOUNT_BYTES)
+    locking_code = random_bytes(byte_size=20).hex()
+    coinbase = choice([True, False])
+    return UTXO(outpoint, height, amount, locking_code, coinbase)
 
 
 if __name__ == "__main__":

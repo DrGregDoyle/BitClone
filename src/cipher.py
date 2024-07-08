@@ -6,6 +6,7 @@ from src.library.base58 import BASE58_LIST
 from src.library.hash_func import sha_256
 from src.parse import decode_compact_size, decode_endian, reverse_bytes
 from src.transaction import WitnessItem, Witness, TxInput, TxOutput, Transaction
+from src.utxo import Outpoint, UTXO
 
 
 # --- TRANSACTION ELEMENTS --- #
@@ -244,6 +245,65 @@ def decode_block(data: str | bytes) -> Block:
     return temp_block
 
 
+# --- UTXO ELEMENTS --- #
+def decode_outpoint(data: str | bytes):
+    data = get_hex(data)  # Hex string
+
+    # CHARS
+    txid_chars = 2 * Outpoint.TXID_BYTES
+    vout_chars = 2 * Outpoint.VOUT_BYTES
+
+    # tx_id is in natural byte order, we use reverse byte order as input
+    txid = reverse_bytes(data[:txid_chars])
+    index = txid_chars
+
+    # v_out
+    v_out = decode_endian(data[index:index + vout_chars])
+    index += vout_chars
+
+    # Verify
+    original_data = data[:index]
+    temp_outpoint = Outpoint(txid, v_out)
+    if temp_outpoint.hex != original_data:
+        raise ValueError("Original data not equal to given Outpoint")
+    return temp_outpoint
+
+
+def decode_utxo(data: str | bytes):
+    data = get_hex(data)  # Get data as hex  string
+
+    # Chars
+    height_chars = 2 * UTXO.HEIGHT_BYTES
+    amount_chars = 2 * UTXO.AMOUNT_BYTES
+
+    # Outpoint
+    outpoint = decode_outpoint(data)
+    index = len(outpoint.hex)
+
+    # Height, coinbase, amount
+    _height = data[index:index + height_chars]
+    height = decode_endian(_height)
+    index += height_chars
+    coinbase = True if data[index:index + 2] == "01" else False
+    index += 2
+    _amount = data[index:index + amount_chars]
+    amount = decode_endian(_amount)
+    index += amount_chars
+
+    # Locking code
+    locking_code_size, increment = decode_compact_size(data[index:])
+    index += increment
+    locking_code = data[index:index + locking_code_size]
+    index += locking_code_size
+
+    # Verify
+    original_data = data[:index]
+    temp_utxo = UTXO(outpoint, height, amount, locking_code, coinbase)
+    if temp_utxo.hex != original_data:
+        raise ValueError("Original data not equal to constructed UTXO")
+    return temp_utxo
+
+
 # --- DATA LIST --- #
 def data_list(data: str, count: int, decode_type: str):
     """
@@ -270,3 +330,8 @@ def data_list(data: str, count: int, decode_type: str):
         _data_list.append(temp_obj)
         index += len(temp_obj.hex)
     return _data_list, index
+
+
+def get_hex(data: str | bytes):
+    # Returns hex string
+    return data.hex() if isinstance(data, bytes) else data
