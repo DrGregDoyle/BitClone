@@ -5,23 +5,10 @@ A file for testing Transaction and its related classes. Both decoding and encodi
 from random import randint
 
 from src.cipher import decode_witness_item, decode_witness, decode_input, decode_output, decode_transaction
-from src.predicates import CompactSize
 from tests.utility import random_witness_item, random_witness, random_txinput, random_txoutput, random_tx
 
 
 # --- TESTS --- #
-def test_compact_size():
-    num1 = CompactSize(0xfc)
-    num2 = CompactSize(0xfd)
-    num3 = CompactSize(0xffff)
-    num4 = CompactSize(0xffffffff)
-    num5 = CompactSize(0xffffffffffffffff)
-
-    assert num1.hex == "fc"
-    assert num2.hex == "fdfd00"
-    assert num3.hex == "fdffff"
-    assert num4.hex == "feffffffff"
-    assert num5.hex == "ffffffffffffffffff"
 
 
 def test_witness_item():

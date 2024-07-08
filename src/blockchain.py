@@ -2,14 +2,13 @@
 The Blockchain class
 """
 
-import logging
 # --- IMPORTS --- #
+import logging
 import sys
-
-from src.backup.encoder_lib import bits_to_target
 
 from src.block import Block
 from src.database import Database
+from src.parse import bits_to_target
 
 MAX_TARGET = 0x00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 

@@ -13,8 +13,8 @@ import sys
 from collections import deque
 from typing import Any
 
-from src.backup.encoder_lib import ripemd160, op_sha1, secure_hash_256, hash160
 from src.library.ecc import SECP256K1
+from src.library.hash_func import hash160, op_sha1, sha_256, ripemd160, hash256
 from src.library.op_codes import OPCODES
 
 # --- LOGGING --- #
@@ -416,7 +416,7 @@ class ScriptEngine:
             val = op_sha1(v0)
         elif op_code == 0xa8:
             # OP_SHA256
-            val = secure_hash_256(v0)
+            val = sha_256(v0)
         elif op_code == 0xa9:
             # OP_HASH160
             val = hash160(v0)
@@ -477,8 +477,6 @@ class ScriptEngine:
 
         return current_index
 
-
-from src.backup.encoder_lib import hash256
 
 # -- TESTING
 if __name__ == "__main__":
