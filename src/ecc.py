@@ -293,15 +293,15 @@ class EllipticCurve:
         NOTE: This should only be used for small primes.
         """
 
-        sum = 1  # Start with point of infinity
+        _sum = 1  # Start with point of infinity
         for x in range(0, self.p):
             if self.is_x_on_curve(x):  # If x is on the curve
                 y = self.get_y_from_x(x)  # Find corresponding y
                 if y == 0:
-                    sum += 1  # Only 1 pt if x is on the y-axis
+                    _sum += 1  # Only 1 pt if x is on the y-axis
                 else:
-                    sum += 2  # Symmetric points if y is non-zero
-        return sum
+                    _sum += 2  # Symmetric points if y is non-zero
+        return _sum
 
     def get_list_of_points(self):
         """
@@ -338,21 +338,28 @@ class SECP256K1(EllipticCurve):
 
 # --- TESTING --- #
 if __name__ == "__main__":
-    test_curve = EllipticCurve(
-        a=7,
-        b=13,
-        p=17
-    )
-    list_of_points = test_curve.get_list_of_points()
-    print(f"Calculated order: {test_curve.order}")
-    print(f"List of point: {list_of_points}")
-    print(f"Number of points + 1: {len(list_of_points)}")
+    pass
+    # p = 7
+    # s1 = legendre_symbol(2, p)
+    # s2 = legendre_symbol(3, p)
+    # print(f"WE EXPECT 1: {s1}")
+    # print(f"WE EXPECT -1: {s2}")
 
-    for known_pt in list_of_points:
-        print(f"Initial point: {known_pt}")
-        temp_pt = None
-        for y in range(test_curve.order):
-            temp_pt = test_curve.add_points(temp_pt, known_pt)
-            scalar_multiple = test_curve.scalar_multiplication(y + 1, known_pt)
-            print(f"Temp point after {y} iterations: {temp_pt}")
-            print(f"Scalar multiplication using {y + 1} multiplier: {scalar_multiple}")
+    # test_curve = EllipticCurve(
+    #     a=7,
+    #     b=13,
+    #     p=17
+    # )
+    # list_of_points = test_curve.get_list_of_points()
+    # print(f"Calculated order: {test_curve.order}")
+    # print(f"List of point: {list_of_points}")
+    # print(f"Number of points + 1: {len(list_of_points)}")
+    #
+    # for known_pt in list_of_points:
+    #     print(f"Initial point: {known_pt}")
+    #     temp_pt = None
+    #     for y in range(test_curve.order):
+    #         temp_pt = test_curve.add_points(temp_pt, known_pt)
+    #         scalar_multiple = test_curve.scalar_multiplication(y + 1, known_pt)
+    #         print(f"Temp point after {y} iterations: {temp_pt}")
+    #         print(f"Scalar multiplication using {y + 1} multiplier: {scalar_multiple}")

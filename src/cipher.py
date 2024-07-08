@@ -1,12 +1,9 @@
 """
 A module for encoding/decoding
 """
-from src.block import Header
-from src.compact_size import decode_compact_size, ByteOrder
+from src.block import Header, Block
+from src.parse import decode_compact_size, decode_endian, reverse_bytes
 from src.transaction import WitnessItem, Witness, TxInput, TxOutput, Transaction
-
-
-# --- STRING PARSING --- #
 
 
 # --- TRANSACTION ELEMENTS --- #
@@ -30,7 +27,6 @@ def decode_witness_item(data: str | bytes) -> WitnessItem:
     temp_wi = WitnessItem(item)
     if temp_wi.hex != initial_string:
         raise ValueError("Constructed witness item does not agree with initial string")
-
     return temp_wi
 
 
@@ -44,11 +40,8 @@ def decode_witness(data: str | bytes) -> Witness:
     stack_items, i = decode_compact_size(data)
 
     # Get items
-    items = []
-    for _ in range(stack_items):
-        temp_wi = decode_witness_item(data[i:])
-        items.append(temp_wi)
-        i += len(temp_wi.hex)
+    items, increment = data_list(data[i:], stack_items, "witness_item")
+    i += increment
 
     # Verify
     original = data[:i]
@@ -70,29 +63,25 @@ def decode_input(data: str | bytes) -> TxInput:
     data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
 
     # -- Parse hex string
+    # tx_id | 32 bytes - raw_tx has tx_id in natural byte order, we use reverse byte order of raw_tx as input
+    tx_id = reverse_bytes(data[:txid_chars])
     index = txid_chars
-    # tx_id | 32 bytes
-    tx_id = ByteOrder(data[:txid_chars], length=txid_chars // 2)
     # v_out
-    v_out = ByteOrder(data[index:index + vout_chars], length=vout_chars // 2)
+    v_out = decode_endian(data[index:index + vout_chars])
     index += vout_chars
     # scriptsig
-    scripsig_size, increment = decode_compact_size(data[index:])  # scriptsig_size denotes byte size
+    scriptsig_size, increment = decode_compact_size(data[index:])  # scriptsig_size denotes byte size
     index += increment
-    scriptsig = ByteOrder(data[index:index + 2 * scripsig_size], length=scripsig_size)
+    scriptsig = data[index:index + 2 * scriptsig_size]
     index += len(scriptsig)
     # sequence
-    sequence = ByteOrder(data[index:index + sequence_chars], length=sequence_chars // 2)
+    sequence = decode_endian(data[index:index + sequence_chars])
     index += sequence_chars
 
     # verify
     input_data = data[:index]
-    temp_input = TxInput(tx_id.little, v_out.little, scriptsig.big, sequence.little)
+    temp_input = TxInput(tx_id, v_out, scriptsig, sequence)
     if temp_input.hex != input_data:
-        print(f"INPUT JSON: {temp_input.to_json()}")
-        print(f"TEMP INPUT: {temp_input.hex}")
-        print(f"ORIGINAL DATA: {input_data}")
-        print(f"DATA STRING: {data}")
         raise ValueError("Constructed TxInput does not agree with original data.")
     return temp_input
 
@@ -105,18 +94,18 @@ def decode_output(data: str | bytes) -> TxOutput:
     data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
 
     # Amount | 8 bytes, little-endian
-    amount = ByteOrder(data[:amount_chars], length=amount_chars // 2)
+    amount = decode_endian(data[:amount_chars])
     index = amount_chars
 
     # Script pub key
     scriptpubkey_size, increment = decode_compact_size(data[index:])
     index += increment
-    scriptpubkey = ByteOrder(data[index:index + 2 * scriptpubkey_size], length=scriptpubkey_size).big.hex()
+    scriptpubkey = data[index:index + 2 * scriptpubkey_size]
     index += len(scriptpubkey)
 
     # Verify
     original_data = data[:index]
-    constructed_output = TxOutput(amount.little_int, scriptpubkey)
+    constructed_output = TxOutput(amount, scriptpubkey)
     if constructed_output.hex != original_data:
         raise ValueError("Constructed TxOutput does not agree with original data.")
     return constructed_output
@@ -131,8 +120,7 @@ def decode_transaction(data: str | bytes) -> Transaction:
     locktime_chars = Transaction.LOCKTIME_BYTES * 2
 
     # Version | 4 bytes, little-endian
-    # version = int.from_bytes(bytes.fromhex(data[:version_chars]), byteorder="little")  # Version
-    version = ByteOrder(data[:version_chars], length=version_chars // 2)
+    version = decode_endian(data[:version_chars])
     index = version_chars
 
     # Check for segwit
@@ -145,64 +133,33 @@ def decode_transaction(data: str | bytes) -> Transaction:
     # Inputs
     input_count, increment = decode_compact_size(data[index:])
     index += increment
-    inputs = []
-    for _ in range(input_count):
-        temp_input = decode_input(data[index:])
-        inputs.append(temp_input)
-        index += len(temp_input.hex)
+    inputs, increment = data_list(data[index:], input_count, "input")
+    index += increment
 
     # Outputs
     output_count, increment = decode_compact_size(data[index:])
     index += increment
-    outputs = []
-    for _ in range(output_count):
-        temp_output = decode_output(data[index:])
-        outputs.append(temp_output)
-        index += len(temp_output.hex)
+    outputs, increment = data_list(data[index:], output_count, "output")
+    index += increment
 
     # Witness
     witness = []
     if segwit:
-        for _ in range(input_count):
-            temp_witness = decode_witness(data[index:])
-            witness.append(temp_witness)
-            index += len(temp_witness.hex)
+        witness, increment = data_list(data[index:], input_count, "witness")
+        index += increment
 
     # Locktime | 4 bytes, little-endian
-    locktime = ByteOrder(data[index:index + locktime_chars], length=locktime_chars // 2)
+    locktime = decode_endian(data[index:index + locktime_chars])
 
     # Return TX
     if segwit:
-        return Transaction(inputs=inputs, outputs=outputs, witness=witness, locktime=locktime.little_int,
-                           version=version.little_int)
+        return Transaction(inputs=inputs, outputs=outputs, witness=witness, locktime=locktime,
+                           version=version)
     else:
-        return Transaction(inputs=inputs, outputs=outputs, locktime=locktime.little_int, version=version.little_int)
+        return Transaction(inputs=inputs, outputs=outputs, locktime=locktime, version=version)
 
 
-def data_list(data: str, count: int, decode_type: str):
-    """
-    Given a string of hex data and a count, we return a list of tx elements based on given type.
-    """
-    # Get decode type
-    match decode_type:
-        case "input":
-            func = decode_input
-        case "output":
-            func = decode_output
-        case "witness":
-            func = decode_witness
-        case _:
-            func = decode_transaction
-
-    # Get list and return
-    _data_list = []
-    index = 0
-    for _ in range(count):
-        temp_obj = func(data[index:])
-        _data_list.append(temp_obj)
-        index += len(temp_obj.hex)
-    return _data_list, index
-
+# --- BLOCK ELEMENTS --- #
 
 def decode_header(data: str | bytes):
     data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
@@ -216,38 +173,83 @@ def decode_header(data: str | bytes):
     nonce_chars = 2 * Header.NONCE_BYTES
 
     # version | 4 bytes, little-endian
-    version = ByteOrder(data[:version_chars], length=version_chars // 2).little_int
+    version = decode_endian(data[:version_chars])
     index = version_chars
 
-    # prev_block | 32 bytes, natural byte order (little-endian)
-    prev_block = ByteOrder(data[index:index + prev_block_chars], length=prev_block_chars // 2).little.hex()
+    # prev_block | 32 bytes, natural byte order
+    prev_block = data[index:index + prev_block_chars]
     index += prev_block_chars
 
-    # merkle root | 32 bytes, natural byte order (little-endian)
-    merkle_root = ByteOrder(data[index:index + merkle_root_chars], length=merkle_root_chars // 2).little.hex()
+    # merkle root | 32 bytes, natural byte order
+    merkle_root = data[index:index + merkle_root_chars]
     index += merkle_root_chars
 
     # time | 4 bytes, little-endian
-    time = ByteOrder(data[index:index + time_chars], length=time_chars // 2).little_int
+    time = decode_endian(data[index:index + time_chars])
     index += time_chars
 
-    # bits | 4 bytes, little-endian
-    bits = ByteOrder(data[index:index + bits_chars], length=bits_chars // 2).little.hex()
+    # bits | 4 bytes
+    bits = data[index:index + bits_chars]
     index += bits_chars
 
     # nonce | 4 bytes, little-endian
-    nonce = ByteOrder(data[index:index + nonce_chars], length=nonce_chars // 2).little_int
+    nonce = decode_endian(data[index:index + nonce_chars])
     index += nonce_chars
 
     # Verify
     original = data[:index]
-    temp_header = Header(prev_block=prev_block, merkle_root=merkle_root, time=time, bits=bits, nonce=nonce,
+    temp_header = Header(previous_block=prev_block, merkle_root=merkle_root, time=time, bits=bits, nonce=nonce,
                          version=version)
     if temp_header.hex != original:
         raise ValueError("Constructed Header does not agree with original data.")
     return temp_header
 
 
-# -- TESTING
-if __name__ == "__main__":
-    pass
+def decode_block(data: str | bytes) -> Block:
+    data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
+
+    # Header
+    header = decode_header(data)
+    index = len(header.hex)
+
+    # Txs
+    tx_count, increment = decode_compact_size(data[index:])
+    index += increment
+    txs, increment = data_list(data[index:], tx_count, "")
+    index += increment
+
+    # Verify
+    original_data = data[:index]
+    temp_block = Block(header.previous_block.hex, txs, header.time.num, header.bits, header.nonce.num,
+                       header.version.num)
+    if temp_block.hex != original_data:
+        raise ValueError("Constructed Block does not agree with original data.")
+    return temp_block
+
+
+# --- DATA LIST --- #
+def data_list(data: str, count: int, decode_type: str):
+    """
+    Given a string of hex data and a count, we return a list of tx elements based on given type.
+    """
+    # Get decode type
+    match decode_type:
+        case "input":
+            func = decode_input
+        case "output":
+            func = decode_output
+        case "witness":
+            func = decode_witness
+        case "witness_item":
+            func = decode_witness_item
+        case _:
+            func = decode_transaction
+
+    # Get list and return
+    _data_list = []
+    index = 0
+    for _ in range(count):
+        temp_obj = func(data[index:])
+        _data_list.append(temp_obj)
+        index += len(temp_obj.hex)
+    return _data_list, index

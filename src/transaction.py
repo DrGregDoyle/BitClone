@@ -3,8 +3,8 @@ Transactions
 """
 import json
 
-from src.compact_size import CompactSize, ByteOrder
-from src.cryptography import hash256
+from src.library.hash_func import hash256
+from src.predicates import CompactSize, ByteOrder, Endian
 
 
 class WitnessItem:
@@ -18,14 +18,14 @@ class WitnessItem:
     """
 
     def __init__(self, item: str | bytes):
-        # Length | byte size
-        item_size = len(item) if isinstance(item, bytes) else len(item) // 2
+        # Get bytes
+        data = bytes.fromhex(item) if isinstance(item, str) else item
 
-        # Item | big-endian
-        self.item = ByteOrder(item, length=item_size).big
+        # Get byte size
+        self.size = CompactSize(len(data))
 
-        # Size
-        self.size = CompactSize(item_size)
+        # Get item
+        self.item = data
 
     @property
     def bytes(self):
@@ -103,31 +103,28 @@ class TxInput:
     V_OUT_BYTES = 4
     SEQUENCE_BYTES = 4
 
-    def __init__(self, tx_id: str | bytes, v_out: int | bytes, scriptsig: str | bytes,
-                 sequence: int | bytes = SEQUENCE):
+    def __init__(self, tx_id: str | bytes, v_out: int, scriptsig: str | bytes,
+                 sequence: int = SEQUENCE):
         """
         We assume that the input variables will always be in either "big-endian" or "reverse byte order",
         depending on the variable.
         """
-        # tx_id : 32 bytes
-        _tx_id = tx_id.hex() if isinstance(tx_id, bytes) else tx_id
-        self.tx_id = int(_tx_id, 16).to_bytes(length=self.TX_ID_BYTES, byteorder="little")
+        # tx_id | 32 bytes
+        self.tx_id = ByteOrder(tx_id)
 
-        # v_out : 4 bytes
-        _v_out = int(v_out.hex(), 16) if isinstance(v_out, bytes) else v_out
-        self.v_out = _v_out.to_bytes(length=self.V_OUT_BYTES, byteorder="little")
+        # v_out | 4 bytes
+        self.v_out = Endian(v_out, self.V_OUT_BYTES)
 
-        # scriptsig : CompactSize
+        # scriptsigsize | CompactSize || scriptsig | n bytes
         self.scriptsig = bytes.fromhex(scriptsig) if isinstance(scriptsig, str) else scriptsig
         self.scriptsig_size = CompactSize(len(self.scriptsig))
 
-        # sequence : 4 bytes
-        _sequence = int(sequence.hex(), 16) if isinstance(sequence, bytes) else sequence
-        self.sequence = _sequence.to_bytes(length=self.SEQUENCE_BYTES, byteorder="little")
+        # sequence | 4 bytes
+        self.sequence = Endian(sequence, self.SEQUENCE_BYTES)
 
     @property
     def bytes(self):
-        return self.tx_id + self.v_out + self.scriptsig_size.bytes + self.scriptsig + self.sequence
+        return self.tx_id.bytes + self.v_out.bytes + self.scriptsig_size.bytes + self.scriptsig + self.sequence.bytes
 
     @property
     def hex(self):
@@ -135,11 +132,11 @@ class TxInput:
 
     def to_json(self):
         input_dict = {
-            "tx_id": self.tx_id.hex(),
-            "v_out": self.v_out.hex(),
+            "tx_id": self.tx_id.hex,
+            "v_out": self.v_out.hex,
             "scriptsig_size": self.scriptsig_size.hex,
             "scriptsig": self.scriptsig.hex(),
-            "sequence": self.sequence.hex()
+            "sequence": self.sequence.hex
         }
         return json.dumps(input_dict, indent=2)
 
@@ -156,9 +153,9 @@ class TxOutput:
     """
     AMOUNT_BYTES = 8
 
-    def __init__(self, amount: int | bytes, scriptpubkey: str | bytes):
-        # amount : 8 bytes, little-endian
-        self.amount = ByteOrder(amount, length=self.AMOUNT_BYTES).little
+    def __init__(self, amount: int, scriptpubkey: str | bytes):
+        # amount | 8 bytes
+        self.amount = Endian(amount, byte_size=self.AMOUNT_BYTES)
 
         # scriptpubkey
         self.scriptpubkey = bytes.fromhex(scriptpubkey) if isinstance(scriptpubkey, str) else scriptpubkey
@@ -166,7 +163,7 @@ class TxOutput:
 
     @property
     def bytes(self):
-        return self.amount + self.scriptpubkey_size.bytes + self.scriptpubkey
+        return self.amount.bytes + self.scriptpubkey_size.bytes + self.scriptpubkey
 
     @property
     def hex(self):
@@ -174,7 +171,7 @@ class TxOutput:
 
     def to_json(self):
         output_dict = {
-            "amount": self.amount.hex(),
+            "amount": self.amount.hex,
             "scriptpubkey_size": self.scriptpubkey_size.hex,
             "scriptpubkey": self.scriptpubkey.hex()
         }
@@ -206,18 +203,16 @@ class Transaction:
     LOCKTIME_BYTES = 4
     TXID_BYTES = 32
 
-    def __init__(self, inputs: list, outputs: list, witness: list | None = None, locktime: int | bytes = LOCKTIME,
-                 version: int | bytes = VERSION):
+    def __init__(self, inputs: list, outputs: list, witness: list | None = None, locktime: int = LOCKTIME,
+                 version: int = VERSION):
         """
         inputs: list of TxInput objects
         outputs: list of TxOutput objects
         witness: list of Witness objects
         """
-        # Version | 4 bytes, little-endian
-        self.version = ByteOrder(version, length=self.VERSION_BYTES).little
-
-        # Locktime | 4 bytes, little-endian
-        self.locktime = ByteOrder(locktime, length=self.LOCKTIME_BYTES).little
+        # Version, locktime | 4 bytes
+        self.version = Endian(version, self.VERSION_BYTES)
+        self.locktime = Endian(locktime, self.LOCKTIME_BYTES)
 
         # Inputs
         self.input_count = CompactSize(len(inputs))
@@ -234,18 +229,24 @@ class Transaction:
             self.segwit = True
             self.witness = [w for w in witness]
 
-        # TxID | 32 bytes | little-endian = natural byte order, big-endian = reverse byte order
+        # TxID
         if self.segwit:
-            data = (self.version + self.input_count.bytes + self.input_bytes + self.output_count.bytes +
-                    self.output_bytes + self.locktime)
+            data = (self.version.bytes + self.input_count.bytes + self.input_bytes + self.output_count.bytes +
+                    self.output_bytes + self.locktime.bytes)
         else:
             data = self.bytes
-        self.txid = ByteOrder(hash256(data), length=self.TXID_BYTES)
+
+        # data is given in natural byte order
+        self.txid = hash256(data)
+
+    @property
+    def reverse_byte_order(self):
+        return ByteOrder(self.txid).hex
 
     @property
     def bytes(self):
         # Version
-        tx_bytes = self.version
+        tx_bytes = self.version.bytes
 
         # Marker/Flag
         if self.segwit:
@@ -262,7 +263,7 @@ class Transaction:
             tx_bytes += self.witness_bytes
 
         # Locktime
-        tx_bytes += self.locktime
+        tx_bytes += self.locktime.bytes
         return tx_bytes
 
     @property
@@ -281,7 +282,7 @@ class Transaction:
             total += len(self.witness_bytes) + len(self.MARKER) + len(self.FLAG)
             # Multiply everything else by 4
             total += 4 * (len(self.input_count.bytes) + len(self.input_bytes) + len(self.output_count.bytes) + len(
-                self.output_bytes) + len(self.version) + len(self.locktime))
+                self.output_bytes) + len(self.version.bytes) + len(self.locktime.bytes))
         else:
             total = self.size * 4
         return total
@@ -292,10 +293,10 @@ class Transaction:
 
     def to_json(self):
         # ID
-        tx_dict = {"txid": self.txid.big}
+        tx_dict = {"txid": self.txid}
 
         # Version
-        tx_dict.update({"version": self.version.hex()})
+        tx_dict.update({"version": self.version.hex})
 
         # Marker/Flag
         if self.segwit:
@@ -313,7 +314,7 @@ class Transaction:
             tx_dict.update({"witness": [json.loads(w.to_json()) for w in self.witness]})
 
         # Locktime
-        tx_dict.update({"locktime": self.locktime.hex()})
+        tx_dict.update({"locktime": self.locktime.hex})
         return json.dumps(tx_dict, indent=2)
 
     @property
@@ -336,8 +337,3 @@ class Transaction:
         for i in self.witness:
             _witness_bytes += i.bytes
         return _witness_bytes
-
-
-# --- TESTING
-if __name__ == "__main__":
-    pass

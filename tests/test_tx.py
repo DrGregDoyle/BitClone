@@ -1,11 +1,11 @@
 """
 A file for testing Transaction and its related classes. Both decoding and encoding
 """
+
 from random import randint
 
-# --- IMPORTS --- #
 from src.cipher import decode_witness_item, decode_witness, decode_input, decode_output, decode_transaction
-from src.compact_size import CompactSize
+from src.predicates import CompactSize
 from tests.utility import random_witness_item, random_witness, random_txinput, random_txoutput, random_tx
 
 

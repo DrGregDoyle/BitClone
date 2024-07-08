@@ -8,7 +8,7 @@ import sys
 from secrets import randbits, randbelow
 
 from src.backup.encoder_lib import *
-from src.library.cryptography import SECP256K1
+from src.ecc import SECP256K1
 from src.library.word_list import WORDLIST
 
 # --- LOGGING --- #

@@ -1,9 +1,8 @@
 """
 A module for Merkle trees
 """
-import json
 
-from src.transaction import hash256
+from src.library.hash_func import hash256
 
 
 def create_merkle_tree(tx_list: list) -> dict:
@@ -125,30 +124,3 @@ def verify_element(tx_id: str, proof: dict) -> bool:
     # Return True/False
     merkle_root = proof.get(0)
     return current_id == merkle_root
-
-
-# --- TESTING
-from random import choice
-
-
-def reverse_hex_bytes(data: str):
-    return "".join([data[i:i + 2] for i in reversed(range(0, len(data), 2))])
-
-
-if __name__ == "__main__":
-    tx_list = [
-        "361ebe7ed3b42170d905aef194c6758f5427ba6d934ca6e689fecd5120bb9fee",
-        "489ce18c27d40d2f3e0bc79256848dd1c259bbd040c18ff18e2f94ffd1610cbc",
-        "2054dc4eff92f55224f8192fd2ea55788bb0ed5e19ad09e04c3c200d09993c73"
-    ]
-    tx_list = [reverse_hex_bytes(t) for t in tx_list]
-
-    merkle_tree = create_merkle_tree(tx_list)
-    print(json.dumps(merkle_tree, indent=2))
-
-    random_index = choice([0, 1, 2])
-    tx_id = tx_list[random_index]
-    proof = get_merkle_proof(tx_id, merkle_tree)
-    print(f"RANDOM INDEX: {random_index}")
-    print(f"TXID: {tx_id}")
-    print(f"PROOF: {json.dumps(proof, indent=2)}")
