@@ -3,8 +3,8 @@ A file for testing the Wallet and WalletFactory classes
 """
 
 # --- IMPORTS --- #
-from src.backup.wallet import HDWallet, ExtendedPrivateKey
-from tests.utility import random_tx_id
+from src.wallet import HDWallet, ExtendedPrivateKey
+from tests.utility import random_txid
 
 
 # --- TESTS --- #
@@ -17,11 +17,9 @@ def test_seed_phrase():
 
 
 def test_signature():
-    tx_id = random_tx_id()
+    tx_id = random_txid()
     test_wallet = HDWallet()
     test_xpriv = ExtendedPrivateKey(test_wallet.keys["master"])
-    print(f"XPRIV: {test_xpriv.xpriv}")
-    print(f"XPUB: {test_xpriv.xpub}")
     xpriv_int = int(test_xpriv.priv, 16)
     xpub_pt = test_xpriv.get_pt(test_xpriv.pub)
 

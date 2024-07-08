@@ -3,20 +3,11 @@ A class for BitClone wallets
 """
 
 # --- IMPORTS --- #
-import logging
-import sys
 from secrets import randbits, randbelow
 
-from src.backup.encoder_lib import *
-from src.ecc import SECP256K1
+from src.library.ecc import SECP256K1
+from src.library.hash_func import hmac512, pbkdf2, sha_256
 from src.library.word_list import WORDLIST
-
-# --- LOGGING --- #
-log_level = logging.INFO
-logger = logging.getLogger(__name__)
-logger.setLevel(log_level)
-handler = logging.StreamHandler(stream=sys.stdout)
-logger.addHandler(handler)
 
 
 # --- CLASSES --- #
@@ -72,7 +63,7 @@ class ExtendedPrivateKey:
         if not curve.is_point_on_curve((x, y)):
             raise ValueError(f"Calculated point is not on curve: {(x, y)}")
 
-        return (x, y)
+        return x, y
 
     def _extended_private_key(self, index: int):
         # Get hmac
@@ -157,13 +148,12 @@ class HDWallet:
         if not self.check_seed_phrase(seed_phrase):
             raise TypeError(f"Seed phrase {seed_phrase} did not pass checksum.")
 
-        print(f"SEED PHRASE: {seed_phrase}")
         self.seed_phrase = seed_phrase
 
         # Master Extended private key
         _mxpriv = self.master_extended_private_key(seed_phrase)
 
-        ##-- Wallet structure
+        # -- Wallet structure
         # Purpose
         _mxpriv.new_private_child()
         _xpriv_purpose = ExtendedPrivateKey(_mxpriv.get_private_child(index=self.HARDENED_INDEX))
@@ -198,7 +188,7 @@ class HDWallet:
     def get_seed_phrase(self, bit_size=BIT_SIZE) -> list:
         # Checksum
         entropy = format(randbits(bit_size), f"0{bit_size}b")
-        binary_hash = format(int(secure_hash_256(entropy), 16), f"0{bit_size}b")
+        binary_hash = format(int(sha_256(entropy), 16), f"0{bit_size}b")
         entropy += binary_hash[:len(entropy) // 32]
 
         # 11-bit word list
@@ -219,7 +209,7 @@ class HDWallet:
 
         # Hash entropy
         entropy = binary_string[:-bit_length]
-        binary_hash = format(int(secure_hash_256(entropy), 16), f"0{bit_size}b")
+        binary_hash = format(int(sha_256(entropy), 16), f"0{bit_size}b")
 
         # Return True/False
         return checksum == binary_hash[:len(entropy) // 32]
@@ -280,8 +270,6 @@ class HDWallet:
         # 5 - Return formatted signature
         hex_r = format(r, f"0{self.CHAR_SIZE}x")
         hex_s = format(s, f"0{self.CHAR_SIZE}x")
-        print(f"HEX_R: {hex_r}")
-        print(f"HEX_S: {hex_s}")
         return hex_r + hex_s
 
     def verify_signature(self, signature: str, tx_id: str, public_key: tuple) -> bool:
@@ -314,7 +302,6 @@ class HDWallet:
             assert 1 <= r <= n - 1
             assert 1 <= s <= n - 1
         except AssertionError:
-            logger.error("Signature does not meet group order requirements.")
             return False
 
         # 2 - Let Z be the first n bits of tx_id
@@ -335,14 +322,3 @@ class HDWallet:
             return False
         x, _ = curve_point
         return r == x % n
-
-
-# --- TESTING --- #
-import json
-
-if __name__ == "__main__":
-    seed_phrase = ['clean', 'alarm', 'require', 'rigid', 'bullet', 'innocent', 'defense', 'lecture', 'number', 'razor',
-                   'license', 'someone', 'sock', 'range', 'history', 'year', 'about', 'kidney', 'twenty', 'drama',
-                   'order', 'run', 'tissue', 'hamster']
-    w = HDWallet(seed_phrase)
-    print(json.dumps(w.keys, indent=2))

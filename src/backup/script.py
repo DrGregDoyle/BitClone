@@ -14,7 +14,7 @@ from collections import deque
 from typing import Any
 
 from src.backup.encoder_lib import ripemd160, op_sha1, secure_hash_256, hash160
-from src.ecc import SECP256K1
+from src.library.ecc import SECP256K1
 from src.library.op_codes import OPCODES
 
 # --- LOGGING --- #

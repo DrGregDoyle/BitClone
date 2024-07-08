@@ -3,7 +3,7 @@ Testing the Point and EllipticCurve classes and methods
 """
 import secrets
 
-from src.ecc import EllipticCurve, SECP256K1
+from src.library.ecc import EllipticCurve, SECP256K1
 
 
 def test_elliptic_curve_functions():

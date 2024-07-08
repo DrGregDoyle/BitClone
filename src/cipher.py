@@ -2,6 +2,8 @@
 A module for encoding/decoding
 """
 from src.block import Header, Block
+from src.library.base58 import BASE58_LIST
+from src.library.hash_func import sha_256
 from src.parse import decode_compact_size, decode_endian, reverse_bytes
 from src.transaction import WitnessItem, Witness, TxInput, TxOutput, Transaction
 
@@ -157,6 +159,21 @@ def decode_transaction(data: str | bytes) -> Transaction:
                            version=version)
     else:
         return Transaction(inputs=inputs, outputs=outputs, locktime=locktime, version=version)
+
+
+def decode_base58_check(encoded_data: str, checksum=True):
+    total = 0
+    data_range = len(encoded_data)
+    for x in range(data_range):
+        total += BASE58_LIST.index(encoded_data[x:x + 1]) * pow(58, data_range - x - 1)
+    if checksum:
+        datacheck = format(total, "0x")
+        data = datacheck[:-8]
+        check = datacheck[-8:]
+        assert sha_256(data) == check
+    else:
+        data = format(total, "0x")
+    return data
 
 
 # --- BLOCK ELEMENTS --- #
