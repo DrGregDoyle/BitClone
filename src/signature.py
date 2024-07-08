@@ -29,7 +29,7 @@ def sign_transaction(tx_id: str, private_key: int, nonce=None):
     s = 0
 
     # 1 - Let Z denote the first n bits of the tx_id
-    Z = int(format(int(tx_id, 16), "b")[:n], 2)
+    _Z = int(bin(int(tx_id, 16))[2:n + 2], 2)
 
     while r == 0 or s == 0:
         # 2 - Select a cryptographically secure random integer k in [1,n-1]
@@ -37,12 +37,11 @@ def sign_transaction(tx_id: str, private_key: int, nonce=None):
 
         # 3 - Calculate k * generator
         point = curve.generator(k)
-        # point = self.CURVE.scalar_multiplication(k, self.CURVE.g)
         (x, y) = point
 
         # 4 - Compute r and s. If either r or s = 0 repeat from step 3
         r = x % n
-        s = (pow(k, -1, n) * (Z + r * private_key)) % n
+        s = (pow(k, -1, n) * (_Z + r * private_key)) % n
 
     # Check for "low s"
     s_neg = (n - s) % n
@@ -50,7 +49,7 @@ def sign_transaction(tx_id: str, private_key: int, nonce=None):
     s = min(s, s_neg)
 
     # 5- Return (r,s) tuple
-    return (r, s)
+    return r, s
 
 
 def verify_signature(signature: tuple, tx_id: str, public_key: tuple) -> bool:
@@ -82,11 +81,11 @@ def verify_signature(signature: tuple, tx_id: str, public_key: tuple) -> bool:
         raise ValueError("Signature does not meet group order requirements")
 
     # 2 - Let Z be the first n bits of tx_id
-    Z = int(format(int(tx_id, 16), "b")[:n], 2)
+    _Z = int(bin(int(tx_id, 16))[2:n + 2], 2)
 
     # 3 - Calculate u1 and u2
     s_inv = pow(s, -1, n)
-    u1 = (Z * s_inv) % n
+    u1 = (_Z * s_inv) % n
     u2 = (r * s_inv) % n
 
     # 4 - Calculate the curve point
@@ -101,7 +100,7 @@ def verify_signature(signature: tuple, tx_id: str, public_key: tuple) -> bool:
     return r == x % n
 
 
-def encode_signature(sig: tuple, sighash_type=None):
+def encode_signature(sig: tuple, sighash_type=None) -> bytes:
     """
     via Pieter Wuille:
         A correct DER-encoded signature has the following form:
@@ -116,35 +115,40 @@ def encode_signature(sig: tuple, sighash_type=None):
         The S coordinate, as a big-endian integer.
     """
     # Headers
-    cs_header = 0x30
-    int_header = 0x02
+    cs_header = bytes.fromhex("30")
+    int_header = bytes.fromhex("02")
 
     # Get integer values of signature
     r, s = sig
 
     # Format r
-    hex_r = format(r, "064x")  # 32 bytes
+    hex_r = r.to_bytes(length=32, byteorder="big").hex()
     binary_r = format(r, "0256b")  # 256 bits
     if binary_r[0] == "1":
         # Signed int - prepend byte
         hex_r = "00" + hex_r
-    length_r = len(hex_r) // 2  # Byte length of 32 or 33
-    encoded_r = format(int_header, "02x") + format(length_r, "02x") + hex_r
+    byte_r = bytes.fromhex(hex_r)
+    byte_encoded_r = int_header + len(byte_r).to_bytes(length=1, byteorder="big") + byte_r
 
     # Format s
-    hex_s = format(s, "064x")
+    hex_s = s.to_bytes(length=32, byteorder="big").hex()
     binary_s = format(s, "0256b")
     if binary_s[0] == "1":
         hex_s = "00" + hex_s
-    length_s = len(hex_s) // 2
-    encoded_s = format(int_header, "02x") + format(length_s, "02x") + hex_s
+    byte_s = bytes.fromhex(hex_s)
+    byte_encoded_s = int_header + len(byte_s).to_bytes(length=1, byteorder="big") + byte_s
 
     # Format DER
-    der_length = len(encoded_r + encoded_s) // 2  # Byte length
-    return format(cs_header, "02x") + format(der_length, "02x") + encoded_r + encoded_s
+    der_length = len(byte_encoded_r + byte_encoded_s)  # Byte length
+
+    # Return bytes
+    return cs_header + der_length.to_bytes(length=1, byteorder="big") + byte_encoded_r + byte_encoded_s
 
 
-def decode_signature(der_encoded: str):
+def decode_signature(der_encoded: str | bytes):
+    # get data as hex string
+    der_encoded = der_encoded.hex() if isinstance(der_encoded, bytes) else der_encoded
+
     # Config
     i = 0
     byte_chars = 2

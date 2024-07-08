@@ -3,7 +3,7 @@ A class for BitClone wallets
 """
 
 # --- IMPORTS --- #
-from secrets import randbits, randbelow
+from secrets import randbits
 
 from src.library.ecc import SECP256K1
 from src.library.hash_func import hmac512, pbkdf2, sha_256
@@ -231,94 +231,94 @@ class HDWallet:
         mxpriv = ExtendedPrivateKey(hmac512(key=key_hex, data=_seed))
         return mxpriv
 
-    def sign_transaction(self, tx_id: str, private_key: int):
-        """
-        Using the private key associated with the wallet, we follow the ECDSA to sign the transaction id.
-
-        Algorithm:
-        =========
-        Let E denote the elliptic curve of the wallet and let n denote the group order. As we
-        are using the SECP256K1 curve, we know that n is prime. (This is a necessary condition for the ECDSA.) We
-        emphasize that n IS NOT necessarily equal to the characteristic p of F_p. Let t denote the private_key.
-
-        1) Let Z denote the integer value of the first n BITS of the transaction hash.
-        2) Select a cryptographically secure random integer k in [1, n-1]. As n is prime, k will be invertible.
-        3) Calculate the curve point (x,y) =  k * generator
-        4) Compute r = x (mod n) and s = k^(-1)(Z + r * t) (mod n). If either r or s = 0, repeat from step 2.
-        5) The signature is the pair (r, s), formatted to hex_r + hex_s.
-        """
-        # Assign known variables
-        n = self.CURVE.order
-        r = 0
-        s = 0
-
-        # 1 - Let Z denote the first n bits of the tx_id
-        Z = int(format(int(tx_id, 16), "b")[:n], 2)
-
-        while r == 0 or s == 0:
-            # 2 - Select a cryptographically secure random integer k in [1,n-1]
-            k = randbelow(n - 1)
-
-            # 3 - Calculate k * generator
-            point = self.CURVE.scalar_multiplication(k, self.CURVE.g)
-            (x, y) = point
-
-            # 4 - Compute r and s. If either r or s = 0 repeat from step 3
-            r = x % n
-            s = (pow(k, -1, n) * (Z + r * private_key)) % n
-
-        # 5 - Return formatted signature
-        hex_r = format(r, f"0{self.CHAR_SIZE}x")
-        hex_s = format(s, f"0{self.CHAR_SIZE}x")
-        return hex_r + hex_s
-
-    def verify_signature(self, signature: str, tx_id: str, public_key: tuple) -> bool:
-        """
-        Given a signature pair (r,s), an encoded message tx_id and a public key point (x,y), we verify the
-        signature.
-
-        Algorithm
-        --------
-        Let n denote the group order of the elliptic curve wrt the Wallet.
-
-        1) Verify (r,s) are integers in the interval [1,n-1]
-        2) Let Z be the integer value of the first n BITS of the transaction hash
-        3) Let u1 = Z * s^(-1) (mod n) and u2 = r * s^(-1) (mod n)
-        4) Calculate the curve point (x,y) = (u1 * generator) + (u2 * public_key)
-            (where * is scalar multiplication, and + is rational point addition mod p)
-        5) If r = x (mod n), the signature is valid.
-        """
-        # Decode signature
-        hex_r = signature[:self.CHAR_SIZE]
-        hex_s = signature[self.CHAR_SIZE:]
-        r = int(hex_r, 16)
-        s = int(hex_s, 16)
-
-        # Assign known variables
-        n = self.CURVE.order
-
-        # 1 - Verify (r,s)
-        try:
-            assert 1 <= r <= n - 1
-            assert 1 <= s <= n - 1
-        except AssertionError:
-            return False
-
-        # 2 - Let Z be the first n bits of tx_id
-        Z = int(format(int(tx_id, 16), "b")[:n], 2)
-
-        # 3 - Calculate u1 and u2
-        s_inv = pow(s, -1, n)
-        u1 = (Z * s_inv) % n
-        u2 = (r * s_inv) % n
-
-        # 4 - Calculate the curve point
-        point1 = self.CURVE.generator(u1)
-        point2 = self.CURVE.scalar_multiplication(u2, public_key)
-        curve_point = self.CURVE.add_points(point1, point2)
-
-        # 5 - Return True/False based on r = x (mod n)
-        if curve_point is None:
-            return False
-        x, _ = curve_point
-        return r == x % n
+    # def sign_transaction(self, tx_id: str, private_key: int):
+    #     """
+    #     Using the private key associated with the wallet, we follow the ECDSA to sign the transaction id.
+    #
+    #     Algorithm:
+    #     =========
+    #     Let E denote the elliptic curve of the wallet and let n denote the group order. As we
+    #     are using the SECP256K1 curve, we know that n is prime. (This is a necessary condition for the ECDSA.) We
+    #     emphasize that n IS NOT necessarily equal to the characteristic p of F_p. Let t denote the private_key.
+    #
+    #     1) Let Z denote the integer value of the first n BITS of the transaction hash.
+    #     2) Select a cryptographically secure random integer k in [1, n-1]. As n is prime, k will be invertible.
+    #     3) Calculate the curve point (x,y) =  k * generator
+    #     4) Compute r = x (mod n) and s = k^(-1)(Z + r * t) (mod n). If either r or s = 0, repeat from step 2.
+    #     5) The signature is the pair (r, s), formatted to hex_r + hex_s.
+    #     """
+    #     # Assign known variables
+    #     n = self.CURVE.order
+    #     r = 0
+    #     s = 0
+    #
+    #     # 1 - Let Z denote the first n bits of the tx_id
+    #     Z = int(format(int(tx_id, 16), "b")[:n], 2)
+    #
+    #     while r == 0 or s == 0:
+    #         # 2 - Select a cryptographically secure random integer k in [1,n-1]
+    #         k = randbelow(n - 1)
+    #
+    #         # 3 - Calculate k * generator
+    #         point = self.CURVE.scalar_multiplication(k, self.CURVE.g)
+    #         (x, y) = point
+    #
+    #         # 4 - Compute r and s. If either r or s = 0 repeat from step 3
+    #         r = x % n
+    #         s = (pow(k, -1, n) * (Z + r * private_key)) % n
+    #
+    #     # 5 - Return formatted signature
+    #     hex_r = format(r, f"0{self.CHAR_SIZE}x")
+    #     hex_s = format(s, f"0{self.CHAR_SIZE}x")
+    #     return hex_r + hex_s
+    #
+    # def verify_signature(self, signature: str, tx_id: str, public_key: tuple) -> bool:
+    #     """
+    #     Given a signature pair (r,s), an encoded message tx_id and a public key point (x,y), we verify the
+    #     signature.
+    #
+    #     Algorithm
+    #     --------
+    #     Let n denote the group order of the elliptic curve wrt the Wallet.
+    #
+    #     1) Verify (r,s) are integers in the interval [1,n-1]
+    #     2) Let Z be the integer value of the first n BITS of the transaction hash
+    #     3) Let u1 = Z * s^(-1) (mod n) and u2 = r * s^(-1) (mod n)
+    #     4) Calculate the curve point (x,y) = (u1 * generator) + (u2 * public_key)
+    #         (where * is scalar multiplication, and + is rational point addition mod p)
+    #     5) If r = x (mod n), the signature is valid.
+    #     """
+    #     # Decode signature
+    #     hex_r = signature[:self.CHAR_SIZE]
+    #     hex_s = signature[self.CHAR_SIZE:]
+    #     r = int(hex_r, 16)
+    #     s = int(hex_s, 16)
+    #
+    #     # Assign known variables
+    #     n = self.CURVE.order
+    #
+    #     # 1 - Verify (r,s)
+    #     try:
+    #         assert 1 <= r <= n - 1
+    #         assert 1 <= s <= n - 1
+    #     except AssertionError:
+    #         return False
+    #
+    #     # 2 - Let Z be the first n bits of tx_id
+    #     Z = int(format(int(tx_id, 16), "b")[:n], 2)
+    #
+    #     # 3 - Calculate u1 and u2
+    #     s_inv = pow(s, -1, n)
+    #     u1 = (Z * s_inv) % n
+    #     u2 = (r * s_inv) % n
+    #
+    #     # 4 - Calculate the curve point
+    #     point1 = self.CURVE.generator(u1)
+    #     point2 = self.CURVE.scalar_multiplication(u2, public_key)
+    #     curve_point = self.CURVE.add_points(point1, point2)
+    #
+    #     # 5 - Return True/False based on r = x (mod n)
+    #     if curve_point is None:
+    #         return False
+    #     x, _ = curve_point
+    #     return r == x % n
