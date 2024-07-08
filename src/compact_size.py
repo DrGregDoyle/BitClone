@@ -47,3 +47,37 @@ def decode_compact_size(data: str | bytes):
             r_index = 2
     num = int.from_bytes(bytes.fromhex(data[l_index: r_index]), byteorder="little")
     return num, r_index
+
+
+class ByteOrder:
+    BIG = "big-endian"
+    LITTLE = "little-endian"
+
+    def __init__(self, data: int | str | bytes, length: int):
+        """
+        A ByteOrder object stores data in little and big-endian format, along with little-endian-hex and big-endian-hex
+        """
+        # Get data as integer
+        if isinstance(data, int):
+            num = data
+        elif isinstance(data, str):
+            num = int(data, 16)
+        else:
+            num = int(data.hex(), 16)
+
+        # Get related values
+        self.num = num
+        self.big = num.to_bytes(length=length, byteorder="big")
+        self.little = num.to_bytes(length=length, byteorder="little")
+        self.big_int = int(self.big.hex(), 16)
+        self.little_int = int(self.little.hex(), 16)
+
+    def __len__(self):
+        return len(self.little.hex())
+
+
+if __name__ == "__main__":
+    bo = ByteOrder("02000000", 4)
+    print(bo.little.hex())
+    print(bo.big.hex())
+    print(bo.endian)

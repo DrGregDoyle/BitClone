@@ -2,8 +2,7 @@
 A module for encoding/decoding
 """
 from src.block import Header
-from src.compact_size import decode_compact_size
-from src.cryptography import reverse_bytes
+from src.compact_size import decode_compact_size, ByteOrder
 from src.transaction import WitnessItem, Witness, TxInput, TxOutput, Transaction
 
 
@@ -72,23 +71,23 @@ def decode_input(data: str | bytes) -> TxInput:
 
     # -- Parse hex string
     index = txid_chars
-    # tx_id
-    tx_id = format(int.from_bytes(bytes.fromhex(data[:index]), byteorder="little"), f"0{txid_chars}x")
+    # tx_id | 32 bytes
+    tx_id = ByteOrder(data[:txid_chars], length=txid_chars // 2)
     # v_out
-    v_out = int.from_bytes(bytes.fromhex(data[index:index + vout_chars]), byteorder="little")
+    v_out = ByteOrder(data[index:index + vout_chars], length=vout_chars // 2)
     index += vout_chars
     # scriptsig
     scripsig_size, increment = decode_compact_size(data[index:])  # scriptsig_size denotes byte size
     index += increment
-    scriptsig = bytes.fromhex(data[index:index + 2 * scripsig_size]).hex()
+    scriptsig = ByteOrder(data[index:index + 2 * scripsig_size], length=scripsig_size)
     index += len(scriptsig)
     # sequence
-    sequence = int.from_bytes(bytes.fromhex(data[index:index + sequence_chars]), byteorder="little")
+    sequence = ByteOrder(data[index:index + sequence_chars], length=sequence_chars // 2)
     index += sequence_chars
 
     # verify
     input_data = data[:index]
-    temp_input = TxInput(tx_id, v_out, scriptsig, sequence)
+    temp_input = TxInput(tx_id.little, v_out.little, scriptsig.big, sequence.little)
     if temp_input.hex != input_data:
         print(f"INPUT JSON: {temp_input.to_json()}")
         print(f"TEMP INPUT: {temp_input.hex}")
@@ -105,19 +104,19 @@ def decode_output(data: str | bytes) -> TxOutput:
     # Get data as hex string
     data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
 
-    # Amount
-    amount = int.from_bytes(bytes.fromhex(data[:amount_chars]), byteorder="little")
+    # Amount | 8 bytes, little-endian
+    amount = ByteOrder(data[:amount_chars], length=amount_chars // 2)
     index = amount_chars
 
     # Script pub key
     scriptpubkey_size, increment = decode_compact_size(data[index:])
     index += increment
-    scriptpubkey = bytes.fromhex(data[index:index + 2 * scriptpubkey_size]).hex()
+    scriptpubkey = ByteOrder(data[index:index + 2 * scriptpubkey_size], length=scriptpubkey_size).big.hex()
     index += len(scriptpubkey)
 
     # Verify
     original_data = data[:index]
-    constructed_output = TxOutput(amount, scriptpubkey)
+    constructed_output = TxOutput(amount.little_int, scriptpubkey)
     if constructed_output.hex != original_data:
         raise ValueError("Constructed TxOutput does not agree with original data.")
     return constructed_output
@@ -131,8 +130,9 @@ def decode_transaction(data: str | bytes) -> Transaction:
     version_chars = Transaction.VERSION_BYTES * 2
     locktime_chars = Transaction.LOCKTIME_BYTES * 2
 
-    # Version
-    version = int.from_bytes(bytes.fromhex(data[:version_chars]), byteorder="little")  # Version
+    # Version | 4 bytes, little-endian
+    # version = int.from_bytes(bytes.fromhex(data[:version_chars]), byteorder="little")  # Version
+    version = ByteOrder(data[:version_chars], length=version_chars // 2)
     index = version_chars
 
     # Check for segwit
@@ -168,14 +168,15 @@ def decode_transaction(data: str | bytes) -> Transaction:
             witness.append(temp_witness)
             index += len(temp_witness.hex)
 
-    # Locktime
-    locktime = int.from_bytes(bytes.fromhex(data[index:index + locktime_chars]), byteorder="little")
+    # Locktime | 4 bytes, little-endian
+    locktime = ByteOrder(data[index:index + locktime_chars], length=locktime_chars // 2)
 
     # Return TX
     if segwit:
-        return Transaction(inputs=inputs, outputs=outputs, witness=witness, locktime=locktime, version=version)
+        return Transaction(inputs=inputs, outputs=outputs, witness=witness, locktime=locktime.little_int,
+                           version=version.little_int)
     else:
-        return Transaction(inputs=inputs, outputs=outputs, locktime=locktime, version=version)
+        return Transaction(inputs=inputs, outputs=outputs, locktime=locktime.little_int, version=version.little_int)
 
 
 def data_list(data: str, count: int, decode_type: str):
@@ -214,28 +215,28 @@ def decode_header(data: str | bytes):
     bits_chars = 2 * Header.BITS_BYTES
     nonce_chars = 2 * Header.NONCE_BYTES
 
-    # version
-    version = int.from_bytes(bytes.fromhex(data[:version_chars]), byteorder="little")  # little-endian
+    # version | 4 bytes, little-endian
+    version = ByteOrder(data[:version_chars], length=version_chars // 2).little_int
     index = version_chars
 
-    # prev_block
-    prev_block = reverse_bytes(bytes.fromhex(data[index:index + prev_block_chars]))  # reverse byte order
+    # prev_block | 32 bytes, natural byte order (little-endian)
+    prev_block = ByteOrder(data[index:index + prev_block_chars], length=prev_block_chars // 2).little.hex()
     index += prev_block_chars
 
-    # merkle root
-    merkle_root = reverse_bytes(bytes.fromhex(data[index:index + merkle_root_chars]))  # reverse byte order
+    # merkle root | 32 bytes, natural byte order (little-endian)
+    merkle_root = ByteOrder(data[index:index + merkle_root_chars], length=merkle_root_chars // 2).little.hex()
     index += merkle_root_chars
 
-    # time
-    time = int.from_bytes(bytes.fromhex(data[index:index + time_chars]), byteorder="little")  # little-endian
+    # time | 4 bytes, little-endian
+    time = ByteOrder(data[index:index + time_chars], length=time_chars // 2).little_int
     index += time_chars
 
-    # bits
-    bits = reverse_bytes(bytes.fromhex(data[index:index + bits_chars]))  # little-endian
+    # bits | 4 bytes, little-endian
+    bits = ByteOrder(data[index:index + bits_chars], length=bits_chars // 2).little.hex()
     index += bits_chars
 
-    # nonce
-    nonce = int.from_bytes(bytes.fromhex(data[index:index + nonce_chars]), byteorder="little")  # little-endian
+    # nonce | 4 bytes, little-endian
+    nonce = ByteOrder(data[index:index + nonce_chars], length=nonce_chars // 2).little_int
     index += nonce_chars
 
     # Verify

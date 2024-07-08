@@ -37,6 +37,7 @@ def random_txinput():
 
 def random_txoutput():
     amount = random_bytes(byte_length=TxOutput.AMOUNT_BYTES)
+    # print(f"RANDOM AMOUNT: {amount.hex()}")
     scriptpubkey = random_bytes(byte_length=20)
     return TxOutput(amount, scriptpubkey)
 
@@ -53,11 +54,11 @@ def random_tx(input_num=1, output_num=1, segwit=None):
 
 def random_txid(input_num=1, output_num=1, segwit=None):
     tx = random_tx(input_num, output_num, segwit)
-    return tx.txid
+    return tx.txid.big.hex()
 
 
 def random_header(tx_num=1):
-    tx_list = [random_tx().txid for _ in range(tx_num)]
+    tx_list = [random_tx().txid.big.hex() for _ in range(tx_num)]
     merkle_tree = create_merkle_tree(tx_list)
     merkle_root = merkle_tree.get(0)
 
