@@ -1,5 +1,7 @@
 """
 A module for the Block and related classes
+
+#TODO: Create coinbase tx for Block
 """
 import json
 

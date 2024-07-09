@@ -4,6 +4,7 @@ Transactions
 import json
 
 from src.library.hash_func import hash256
+from src.parse import reverse_bytes
 from src.predicates import CompactSize, ByteOrder, Endian
 
 
@@ -236,8 +237,11 @@ class Transaction:
         else:
             data = self.bytes
 
-        # data is given in natural byte order
+        # txid | data is given in natural byte order
         self.txid = hash256(data)
+
+        # wtxid
+        self.wtxid = hash256(self.bytes)  # will be equal to txid if no segwit
 
     @property
     def reverse_byte_order(self):
@@ -291,9 +295,30 @@ class Transaction:
     def vbytes(self):
         return self.weight / 4
 
+    @property
+    def input_bytes(self):
+        _input_bytes = bytes()
+        for i in self.inputs:
+            _input_bytes += i.bytes
+        return _input_bytes
+
+    @property
+    def output_bytes(self):
+        _output_bytes = bytes()
+        for i in self.outputs:
+            _output_bytes += i.bytes
+        return _output_bytes
+
+    @property
+    def witness_bytes(self):
+        _witness_bytes = bytes()
+        for i in self.witness:
+            _witness_bytes += i.bytes
+        return _witness_bytes
+
     def to_json(self):
-        # ID
-        tx_dict = {"txid": self.txid}
+        # ID | IDs are displayed in reverse byte order
+        tx_dict = {"txid": reverse_bytes(self.txid), "wtxid": reverse_bytes(self.wtxid)}
 
         # Version
         tx_dict.update({"version": self.version.hex})
@@ -316,27 +341,6 @@ class Transaction:
         # Locktime
         tx_dict.update({"locktime": self.locktime.hex})
         return json.dumps(tx_dict, indent=2)
-
-    @property
-    def input_bytes(self):
-        _input_bytes = bytes()
-        for i in self.inputs:
-            _input_bytes += i.bytes
-        return _input_bytes
-
-    @property
-    def output_bytes(self):
-        _output_bytes = bytes()
-        for i in self.outputs:
-            _output_bytes += i.bytes
-        return _output_bytes
-
-    @property
-    def witness_bytes(self):
-        _witness_bytes = bytes()
-        for i in self.witness:
-            _witness_bytes += i.bytes
-        return _witness_bytes
 
 
 # -- TESTING

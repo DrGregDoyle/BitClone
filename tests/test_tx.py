@@ -62,6 +62,7 @@ def test_tx():
 
     assert tx1.bytes == _tx.bytes
     assert tx2.bytes == _tx.bytes
+    assert _tx.txid == _tx.wtxid
 
     # Segwit
     _txs = random_tx(input_num=input_num2, output_num=output_num2, segwit=True)
@@ -70,3 +71,4 @@ def test_tx():
 
     assert tx3.bytes == _txs.bytes
     assert tx4.bytes == _txs.bytes
+    assert _txs.txid != _txs.wtxid
