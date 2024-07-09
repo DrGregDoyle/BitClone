@@ -80,7 +80,7 @@ def random_header(tx_num=1, tx_list=None):
     return Header(prev_block, merkle_root, time, bits, nonce, version)
 
 
-def random_block(tx_num=3, segwit=None):
+def random_block(tx_num=3, segwit=None, nonce=None):
     segwit = choice([True, False]) if segwit is None else segwit
     tx_list = [random_tx(segwit=segwit) for _ in range(tx_num)]
 
@@ -88,7 +88,7 @@ def random_block(tx_num=3, segwit=None):
 
     time = random_int(byte_size=Header.TIME_BYTES)
     bits = random_bits()
-    nonce = random_int(byte_size=Header.NONCE_BYTES)
+    nonce = random_int(byte_size=Header.NONCE_BYTES) if nonce is None else nonce
     version = random_int(byte_size=Header.VERSION_BYTES)
     return Block(prev_block, tx_list, time, bits, nonce, version)
 

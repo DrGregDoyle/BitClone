@@ -61,8 +61,23 @@ class Endian:
     """
 
     def __init__(self, num: int, byte_size=None):
-        length = num.bit_length() * 8 if byte_size is None else byte_size
-
+        self.length = num.bit_length() if byte_size is None else byte_size
         self.num = num
-        self.bytes = num.to_bytes(length=length, byteorder="little")
-        self.hex = self.bytes.hex()
+
+    @property
+    def bytes(self):
+        return self.num.to_bytes(length=self.length, byteorder="little")
+
+    @property
+    def hex(self):
+        return self.bytes.hex()
+
+    def increment(self):
+        self.num += 1
+
+
+# --- TESTING
+if __name__ == "__main__":
+    e1 = Endian(0, byte_size=4)
+    print(e1.hex)
+    print(e1.num)

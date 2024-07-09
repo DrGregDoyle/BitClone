@@ -5,6 +5,7 @@ Testing Block and related classes
 from random import randint
 
 from src.cipher import decode_header, decode_block
+from src.miner import Miner
 from tests.utility import random_header, random_block
 
 
@@ -25,3 +26,15 @@ def test_block():
 
     assert b1.bytes == _b.bytes
     assert b2.bytes == _b.bytes
+
+
+def test_mining():
+    fixed_bits = "2000ffff"
+    fixed_target_int = int("00ffff0000000000000000000000000000000000000000000000000000000000", 16)
+
+    _b = random_block(nonce=0)
+    _b.header.bits = fixed_bits
+    m = Miner()
+    mined_block = m.mine_block(_b)
+
+    assert int(mined_block.header.id, 16) <= fixed_target_int

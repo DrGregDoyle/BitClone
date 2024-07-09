@@ -5,7 +5,7 @@ import json
 
 from src.library.hash_func import hash256
 from src.merkle import create_merkle_tree
-from src.parse import reverse_bytes
+from src.parse import reverse_bytes, bits_to_target
 from src.predicates import ByteOrder, Endian, CompactSize
 
 
@@ -107,6 +107,10 @@ class Block:
     def hex(self):
         return self.bytes.hex()
 
+    @property
+    def target(self):
+        return bits_to_target(self.header.bits)
+
     def to_json(self):
         tx_dict = {"tx_count": self.tx_count.hex}
         for x in range(self.tx_count.num):
@@ -114,3 +118,8 @@ class Block:
             tx_dict.update({x: json.loads(temp_tx.to_json())})
         block_dict = {"header": json.loads(self.header.to_json()), "transactions": tx_dict}
         return json.dumps(block_dict, indent=2)
+
+
+# --- TESTING
+if __name__ == "__main__":
+    pass

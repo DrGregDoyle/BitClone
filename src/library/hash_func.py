@@ -10,7 +10,10 @@ from src.library.base58 import BASE58_LIST
 
 
 def get_bytes(data: str | bytes) -> bytes:
-    return bytes.fromhex(data) if isinstance(data, str) else data
+    try:
+        return bytes.fromhex(data) if isinstance(data, str) else data
+    except ValueError:
+        return data.encode()
 
 
 def op_sha1(data: str | bytes):
