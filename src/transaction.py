@@ -337,3 +337,8 @@ class Transaction:
         for i in self.witness:
             _witness_bytes += i.bytes
         return _witness_bytes
+
+
+# -- TESTING
+if __name__ == "__main__":
+    pass
