@@ -322,3 +322,8 @@ class HDWallet:
     #         return False
     #     x, _ = curve_point
     #     return r == x % n
+
+
+# --- TESTING
+if __name__ == "__main__":
+    w = HDWallet()
