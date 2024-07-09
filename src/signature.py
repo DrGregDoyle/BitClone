@@ -3,8 +3,6 @@ Signature
 """
 from secrets import randbelow
 
-from src.library.ecc import SECP256K1
-
 
 def sign_transaction(tx_id: str, private_key: int, nonce=None):
     """
@@ -182,28 +180,47 @@ def decode_signature(der_encoded: str | bytes):
     return (r, s)
 
 
-# --- TESTING
-if __name__ == "__main__":
-    # m = "1e3dede7449fce6a41662aa77ac9472997bffbeaf14ea59fac7150d60f7672cc"
-    # k = 0x208203c62de50295437e58741bfee209870d0b0cb9baee969c344983e6e127c7
-    # pk = 0x4abfeb77b628e1882a9e9af73746839a207f81763c846e42cf10bd00bf4e1694
-    # pubkey = SECP256K1().generator(pk)
-    # sig = sign_transaction(m, pk, k)
-    # verify_signature(sig, m, pubkey)
-    # der_encoded = encode_signature(sig)
-    # r, s = sig
-    # hex_r, hex_s = format(r, "064x"), format(s, "064x")
-    # print(f'HEX RS: {hex_r, hex_s}')
-    # print(f"DER ENCODING: {der_encoded}")
+def scriptpubkey_p2pk(public_key: str):
+    # OP_CHECKSIG: 0xac
+    # OP_PUSHDATA_n: hex(n), n<=74
+    op_checksig = "ac"
+    push_data_code = format(len(public_key) // 2, "02x")
+    return push_data_code + public_key + op_checksig
 
-    test_r = 65691285541932536009248411738265789963354503151730896788560460410523233552620
-    test_s = 19098175386364295391902250148711978865337848634153088378528036920821166148819
-    known_encoding = "3045022100913bf333c978ba2580d993f4c1a6f4aca0ece9b0d670fa4e2cff11d0b77008ec02202a392f28199fde4e81eafbdeb1c29de29805d9b802f176cb95b983e704ec8cd3"
-    constructed_encoding = encode_signature((test_r, test_s))
-    constructed_tuple = decode_signature(constructed_encoding)
-    print(f"DECODING GIVES BACK CORRECT (R,S) VALUES: {constructed_tuple == (test_r, test_s)}")
-    # print(f"ORIGINAL R: {test_r}")
-    # print(f"ORIGINAL S: {test_s}")
-    # # print(f"ENCODING WORKED: {known_encoding == constructed_encoding}")
-    # # print(f"KNOWN ENCODING: {known_encoding}")
-    # # print(f"CONSTRUCTED ENCODING: {constructed_encoding}")
+
+def scriptsig_p2pk(signature: str):
+    push_data_code = format(len(signature) // 2, "02x")
+    return push_data_code + signature
+
+
+# --- TESTING
+from src.wallet import HDWallet, ExtendedPrivateKey
+from src.library.ecc import SECP256K1
+
+if __name__ == "__main__":
+    w = HDWallet()
+    xpriv = ExtendedPrivateKey(w.keys.get("receiving"))
+    xpriv.new_private_child()
+    xpriv.new_public_child()
+    public_key = xpriv.get_public_child(0)
+    private_key = xpriv.get_private_child(ExtendedPrivateKey.HARDENED_INDEX)
+    print(xpriv.child_priv)
+    print(xpriv.child_pub)
+
+    # print(f"PUBLIC KEY: {public_key}")
+    # print(f"ACTUAL PUBLIC KEY: {public_key[:66]}")
+    # print(f"PRIVATE KEY: {private_key}")
+    # print(f"ACTUAL PRIVATE KEY: {private_key[:64]}")
+    # pk_int = int(private_key[:64], 16)
+    # pk_pt = decompress_point(public_key[:66])
+    # print(f"PUBLIC KEY POINT: {pk_pt}")
+    #
+    # tx = random_tx()
+    # print(f"TXID: {tx.txid}")
+    # sig = sign_transaction(tx.txid, pk_int)
+    # encoded_sig = encode_signature(sig)
+    # scriptsig = scriptsig_p2pk(encoded_sig.hex())
+    #
+    # curve = SECP256K1()
+    # recovered_pt = curve.generator(pk_int)
+    # print(f"PUBLIC KEY POINT FROM PK_INT: {recovered_pt}")

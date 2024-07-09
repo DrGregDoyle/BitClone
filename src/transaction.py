@@ -4,7 +4,6 @@ Transactions
 import json
 
 from src.library.hash_func import hash256
-from src.parse import reverse_bytes
 from src.predicates import CompactSize, ByteOrder, Endian
 
 
@@ -318,7 +317,8 @@ class Transaction:
 
     def to_json(self):
         # ID | IDs are displayed in reverse byte order
-        tx_dict = {"txid": reverse_bytes(self.txid), "wtxid": reverse_bytes(self.wtxid)}
+        # tx_dict = {"txid": reverse_bytes(self.txid), "wtxid": reverse_bytes(self.wtxid)}
+        tx_dict = {"txid": self.txid, "wtxid": self.wtxid}
 
         # Version
         tx_dict.update({"version": self.version.hex})

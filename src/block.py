@@ -7,7 +7,7 @@ import json
 
 from src.library.hash_func import hash256
 from src.merkle import create_merkle_tree
-from src.parse import reverse_bytes, bits_to_target
+from src.parse import bits_to_target
 from src.predicates import ByteOrder, Endian, CompactSize
 
 
@@ -62,7 +62,7 @@ class Header:
 
     def to_json(self):
         header_dict = {
-            "block_hash": reverse_bytes(self.id),  # reverse byte order
+            "block_hash": self.id,  # natural byte order
             "version": self.version.hex,
             "prev_block": self.previous_block.hex,
             "merkle_root": self.merkle_root.hex,
@@ -112,6 +112,10 @@ class Block:
     @property
     def target(self):
         return bits_to_target(self.header.bits)
+
+    @property
+    def id(self):
+        return self.header.id
 
     def to_json(self):
         tx_dict = {"tx_count": self.tx_count.hex}

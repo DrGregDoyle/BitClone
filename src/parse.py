@@ -72,3 +72,26 @@ def target_to_bits(data: str | bytes) -> str:
 
     # Return hex string
     return _exp + _coeff
+
+
+def compress_point(pt: tuple) -> str:
+    """
+    Given a public key point, we return a 33-byte compressed public key.
+    """
+    x, y = pt
+    parity = "02" if y % 2 == 0 else "03"
+    return parity + format(x, "064x")
+
+
+def decompress_point(data: str) -> tuple | bool:
+    parity = 0 if data[:2] == "02" else 1
+    _x = int(data[2:66], 16)  # 32 bytes
+    from src.library.ecc import SECP256K1
+    curve = SECP256K1()
+    valid_x = curve.is_x_on_curve(_x)
+    if not valid_x:
+        return False
+    y1 = curve.get_y_from_x(_x)
+    y2 = (curve.ORDER - y1) % curve.ORDER
+    _y = y1 if y1 % 2 == parity else y2
+    return _x, _y
