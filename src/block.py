@@ -1,7 +1,5 @@
 """
 A module for the Block and related classes
-
-#TODO: Create coinbase tx for Block
 """
 import json
 
@@ -39,8 +37,8 @@ class Header:
                  nonce: int,  # 4 bytes | little-endian,
                  version: int  # 4 bytes | little-endian
                  ):
-        self.previous_block = ByteOrder(previous_block, reverse=False)
-        self.merkle_root = ByteOrder(merkle_root, reverse=False)
+        self.previous_block = ByteOrder(previous_block)
+        self.merkle_root = ByteOrder(merkle_root)
         self.time = Endian(time, self.TIME_BYTES)
         self.bits = bits
         self.nonce = Endian(nonce, self.NONCE_BYTES)

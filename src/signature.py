@@ -4,6 +4,7 @@ Signature
 from secrets import randbelow
 
 from src.library.ecc import SECP256K1
+from src.predicates import Endian
 
 
 def sign_transaction(tx_id: str, private_key: int, nonce=None):
@@ -100,7 +101,7 @@ def verify_signature(signature: tuple, tx_id: str, public_key: tuple) -> bool:
     return r == x % n
 
 
-def encode_signature(sig: tuple, sighash_type=None) -> bytes:
+def encode_signature(sig: tuple, sighash=None) -> bytes:
     """
     via Pieter Wuille:
         A correct DER-encoded signature has the following form:
@@ -141,8 +142,12 @@ def encode_signature(sig: tuple, sighash_type=None) -> bytes:
     # Format DER
     der_length = len(byte_encoded_r + byte_encoded_s)  # Byte length
 
+    # Add sighash
+    _sighash = 1 if sighash is None else sighash
+    sighash_bytes = Endian(_sighash, byte_size=1).bytes
+
     # Return bytes
-    return cs_header + der_length.to_bytes(length=1, byteorder="big") + byte_encoded_r + byte_encoded_s
+    return cs_header + der_length.to_bytes(length=1, byteorder="big") + byte_encoded_r + byte_encoded_s + sighash_bytes
 
 
 def decode_signature(der_encoded: str | bytes):

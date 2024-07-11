@@ -36,23 +36,18 @@ class CompactSize:
 
 class ByteOrder:
     """
-    Input hex string or bytes object is assumed to be in REVERSE BYTE ORDER. We transform into a natural byte order object.
+    Data is assumed to be given in natural byte order. The instance variable "reverse" will display the data in
+    reverse byte order.
     """
 
-    def __init__(self, data: str | bytes, reverse=True):
-        # Get integer from data
-        num = int(data, 16) if isinstance(data, str) else int(data.hex(), 16)
+    def __init__(self, data: str | bytes):
+        # Get data
+        data = bytes.fromhex(data) if isinstance(data, str) else data
 
-        # Get byte size
-        length = len(data) // 2 if isinstance(data, str) else len(data)
-
-        # Natural byte order | little-endian
-        self.bytes = num.to_bytes(length=length, byteorder="little") if reverse else num.to_bytes(length=length,
-                                                                                                  byteorder="big")
+        # Get properties
+        self.bytes = data
         self.hex = self.bytes.hex()
-
-        # Reverse byte order
-        self.display = "".join([self.hex[x:x + 2] for x in reversed(range(0, len(self.hex), 2))])
+        self.reverse = "".join([self.hex[x:x + 2] for x in reversed(range(0, len(self.hex), 2))])
 
 
 class Endian:
@@ -77,7 +72,11 @@ class Endian:
 
 
 # --- TESTING
+from src.library.hash_func import hash256
+
 if __name__ == "__main__":
-    e1 = Endian(0, byte_size=4)
-    print(e1.hex)
-    print(e1.num)
+    txid = hash256("Hello world!")
+    bo = ByteOrder(txid)
+    print(f"TX ID: Natural byte order: {txid}")
+    print(f"BYTE ORDER HEX: {bo.hex}")
+    print(f"BYTE ORDER REVERSE: {bo.reverse}")

@@ -106,7 +106,7 @@ class TxInput:
     def __init__(self, tx_id: str | bytes, v_out: int, scriptsig: str | bytes,
                  sequence: int = SEQUENCE):
         # tx_id | 32 bytes, natural byte order
-        self.tx_id = ByteOrder(tx_id, reverse=False)
+        self.tx_id = ByteOrder(tx_id)
 
         # v_out | 4 bytes
         self.v_out = Endian(v_out, self.V_OUT_BYTES)
@@ -194,13 +194,15 @@ class Transaction:
     MARKER = bytes.fromhex("00")
     FLAG = bytes.fromhex("01")
     LOCKTIME = 0
+    SIGHASH = 1
 
     VERSION_BYTES = 4
     LOCKTIME_BYTES = 4
     TXID_BYTES = 32
+    SIGHASH_BYTES = 4
 
     def __init__(self, inputs: list, outputs: list, witness: list | None = None, locktime: int = LOCKTIME,
-                 version: int = VERSION):
+                 version: int = VERSION, sighash: int = SIGHASH):
         """
         inputs: list of TxInput objects
         outputs: list of TxOutput objects
@@ -225,6 +227,9 @@ class Transaction:
             self.segwit = True
             self.witness = [w for w in witness]
 
+        # Sighash
+        self.sighash = Endian(sighash, self.SIGHASH_BYTES)
+
     def _get_data(self):
         if self.segwit:
             data = (self.version.bytes + self.input_count.bytes + self.input_bytes + self.output_count.bytes +
@@ -234,7 +239,7 @@ class Transaction:
         return data
 
     @property
-    def txid(self):
+    def txid(self):  # Natural byte order
         return hash256(self._get_data())
 
     @property
@@ -242,12 +247,12 @@ class Transaction:
         return hash256(self.bytes)
 
     @property
-    def hash(self):
-        return ByteOrder(self.txid).hex
+    def hash(self):  # Reverse byte order
+        return ByteOrder(self.txid).reverse
 
     @property
     def whash(self):
-        return ByteOrder(self.wtxid).hex
+        return ByteOrder(self.wtxid).reverse
 
     @property
     def bytes(self):
@@ -270,6 +275,10 @@ class Transaction:
 
         # Locktime
         tx_bytes += self.locktime.bytes
+
+        # Sighash
+        tx_bytes += self.sighash.bytes
+
         return tx_bytes
 
     @property
@@ -319,8 +328,8 @@ class Transaction:
         return _witness_bytes
 
     def to_json(self):
-        # ID | IDs are displayed in reverse byte order
-        tx_dict = {"txid": self.hash, "wtxid": self.whash}
+        # ID | IDs are displayed in natural byte order
+        tx_dict = {"txid": self.txid, "wtxid": self.wtxid}
 
         # Version
         tx_dict.update({"version": self.version.hex})
@@ -342,6 +351,10 @@ class Transaction:
 
         # Locktime
         tx_dict.update({"locktime": self.locktime.hex})
+
+        # Sighash
+        tx_dict.update({"sighash": self.sighash.hex})
+
         return json.dumps(tx_dict, indent=2)
 
 

@@ -144,7 +144,7 @@ class Blockchain:
         for t in txs:
             vout = 0
             for p in t.outputs:
-                temp_outpoint = Outpoint(t.hash, vout)
+                temp_outpoint = Outpoint(t.txid, vout)
                 temp_utxo = UTXO(temp_outpoint, self.height, p.amount.num, p.scriptpubkey.hex())
                 utxo_list.append(temp_utxo)
                 vout += 1

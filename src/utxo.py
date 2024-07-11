@@ -12,7 +12,7 @@ class Outpoint:
 
     def __init__(self, tx_id: str, v_out: int):
         # Assume tx_id given in natural byte order
-        self.txid = ByteOrder(tx_id, reverse=False)
+        self.txid = ByteOrder(tx_id)
 
         # v_out | 4 bytes, little-endian
         self.v_out = Endian(v_out, byte_size=self.VOUT_BYTES)

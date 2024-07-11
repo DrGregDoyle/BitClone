@@ -2,27 +2,37 @@
 Classes and functions for constructing data types
 """
 from src.predicates import CompactSize
+from src.signature import sign_transaction, encode_signature
 from src.transaction import TxInput, Transaction
 
 
 def tx_engine_legacy(
-        outpoint_list: list,  # List of Outpoints
+        private_key: int,
+        utxo_list: list,  # List of Outpoints
         output_list: list,  # List of Outputs
         sequence: int = 0,
-        locktime: int = 0):
+        locktime: int = 0,
+        sighash: int = 1
+):
     """
     Creates a legacy raw transaction.
     """
-    # TxInputs
+    # TxInputs - no scriptsig
     input_list = []
-    for pt in outpoint_list:
-        # Input txid will be in natural byte order, TxInput takes reverse byte order
-        temp_input = TxInput(pt.txid.display, pt.v_out.num, scriptsig="", sequence=sequence)
+    for utxo in utxo_list:
+        pt = utxo.outpoint
+        scriptsig = utxo.scriptpubkey
+        temp_input = TxInput(pt.txid.hex, pt.v_out.num, scriptsig=scriptsig, sequence=sequence)
         input_list.append(temp_input)
 
     # Raw Tx
-    raw_tx = Transaction(inputs=input_list, outputs=output_list, locktime=locktime)
-    return raw_tx
+    raw_tx = Transaction(inputs=input_list, outputs=output_list, locktime=locktime, sighash=sighash)
+    tx_hash = raw_tx.txid
+
+    # Sign tx hash | signature algorithm uses "low s" value
+    sig = sign_transaction(tx_hash, private_key)
+    encoded_sig = encode_signature(sig, sighash)
+    return encoded_sig.hex()
 
 
 def remove_scriptsig_legacy(tx: Transaction):
@@ -37,11 +47,12 @@ def remove_scriptsig_legacy(tx: Transaction):
 
 
 # -- TESTING
-from tests.utility import random_tx
+from tests.utility import random_utxo, random_txoutput
+from secrets import randbits
 
 if __name__ == "__main__":
-    tx1 = random_tx(input_num=3, output_num=1, segwit=False)
-    print(tx1.to_json())
-    tx2 = remove_scriptsig_legacy(tx1)
-
-    print(tx2.to_json())
+    utxo_list = [random_utxo()]
+    private_key = randbits(256)
+    output_list = [random_txoutput()]
+    sig = tx_engine_legacy(private_key, utxo_list, output_list)
+    print(f"SIG: {sig}")

@@ -121,6 +121,7 @@ def decode_transaction(data: str | bytes) -> Transaction:
     # Fixed chars
     version_chars = Transaction.VERSION_BYTES * 2
     locktime_chars = Transaction.LOCKTIME_BYTES * 2
+    sighash_chars = Transaction.SIGHASH_BYTES * 2
 
     # Version | 4 bytes, little-endian
     version = decode_endian(data[:version_chars])
@@ -153,13 +154,20 @@ def decode_transaction(data: str | bytes) -> Transaction:
 
     # Locktime | 4 bytes, little-endian
     locktime = decode_endian(data[index:index + locktime_chars])
+    index += locktime_chars
+
+    # Check for sighash
+    try:
+        sighash = decode_endian(data[index:index + sighash_chars])
+    except ValueError:
+        sighash = 1
 
     # Return TX
     if segwit:
         return Transaction(inputs=inputs, outputs=outputs, witness=witness, locktime=locktime,
-                           version=version)
+                           version=version, sighash=sighash)
     else:
-        return Transaction(inputs=inputs, outputs=outputs, locktime=locktime, version=version)
+        return Transaction(inputs=inputs, outputs=outputs, locktime=locktime, version=version, sighash=sighash)
 
 
 def decode_base58_check(encoded_data: str, checksum=True):
@@ -339,6 +347,17 @@ def get_hex(data: str | bytes):
 
 # -- TESTING
 if __name__ == "__main__":
-    tx_data = "0100000001c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd3704000000004847304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd410220181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d0901ffffffff0200ca9a3b00000000434104ae1a62fe09c5f51b13905f07f06b99a2f7159b2225f374cd378d71302fa28414e7aab37397f554a7df5f142c21c1b7303b8a0626f1baded5c72a704f7e6cd84cac00286bee0000000043410411db93e1dcdb8a016b49840f8c53bc1eb68a382e97b1482ecad7b148a6909a5cb2e0eaddfb84ccf9744464f82e160bfa9b8b64f9d4c03f999b8643f656b412a3ac00000000"
+    tx_data = "0100000001b7994a0db2f373a29227e1d90da883c6ce1cb0dd2d6812e4558041ebbbcfa54b000000006a473044022008f4f37e2d8f74e18c1b8fde2374d5f28402fb8ab7fd1cc5b786aa40851a70cb02201f40afd1627798ee8529095ca4b205498032315240ac322c9d8ff0f205a93a580121024aeaf55040fa16de37303d13ca1dde85f4ca9baa36e2963a27a1c0c1165fe2b1ffffffff01983a0000000000001976a914b3e2819b6262e0b1f19fc7229d75677f347c91ac88ac00000000"
     tx = decode_transaction(tx_data)
     print(tx.to_json())
+    print(tx.hex)
+    print(tx.hex == tx_data)
+    print(f"TXID: {tx.txid}")
+
+    for x in range(0, len(tx_data), 2):
+        tx_data_byte = tx_data[x:x + 2]
+        tx_hex_byte = tx.hex[x:x + 2]
+        if tx_data_byte != tx_hex_byte:
+            print(f"BYTE INDEX: {x}")
+            print(f"TXDATA: {tx_data_byte}")
+            print(f"HEXBYTE: {tx_hex_byte}")
