@@ -37,7 +37,7 @@ class Database:
     The Database will consist of a key/value pair for each UTXO.
     """
 
-    def __init__(self, db_dir: str | Path = DB_DIR, db_file: str = DB_FILE):
+    def __init__(self, db_dir: str | Path = DB_DIR, db_file: str = DB_FILE, new_db=False):
         # Setup file location
         self.db_dir = db_dir  # string
         temp_path = Path(self.db_dir)
@@ -50,6 +50,10 @@ class Database:
 
         # Create db
         self._create_db()
+
+        # New db
+        if new_db:
+            self._wipe_db()
 
         # TODO: Setup memory option
 

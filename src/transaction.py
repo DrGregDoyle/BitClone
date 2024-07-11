@@ -109,7 +109,7 @@ class TxInput:
         We assume that the input variables will always be in either "big-endian" or "reverse byte order",
         depending on the variable.
         """
-        # tx_id | 32 bytes
+        # tx_id | 32 bytes, natural byte order
         self.tx_id = ByteOrder(tx_id)
 
         # v_out | 4 bytes
@@ -229,22 +229,29 @@ class Transaction:
             self.segwit = True
             self.witness = [w for w in witness]
 
-        # TxID
+    def _get_data(self):
         if self.segwit:
             data = (self.version.bytes + self.input_count.bytes + self.input_bytes + self.output_count.bytes +
                     self.output_bytes + self.locktime.bytes)
         else:
             data = self.bytes
-
-        # txid | data is given in natural byte order
-        self.txid = hash256(data)
-
-        # wtxid
-        self.wtxid = hash256(self.bytes)  # will be equal to txid if no segwit
+        return data
 
     @property
-    def reverse_byte_order(self):
+    def txid(self):
+        return hash256(self._get_data())
+
+    @property
+    def wtxid(self):
+        return hash256(self.bytes)
+
+    @property
+    def hash(self):
         return ByteOrder(self.txid).hex
+
+    @property
+    def whash(self):
+        return ByteOrder(self.wtxid).hex
 
     @property
     def bytes(self):
@@ -317,8 +324,7 @@ class Transaction:
 
     def to_json(self):
         # ID | IDs are displayed in reverse byte order
-        # tx_dict = {"txid": reverse_bytes(self.txid), "wtxid": reverse_bytes(self.wtxid)}
-        tx_dict = {"txid": self.txid, "wtxid": self.wtxid}
+        tx_dict = {"txid": self.hash, "wtxid": self.whash}
 
         # Version
         tx_dict.update({"version": self.version.hex})

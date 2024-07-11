@@ -12,7 +12,7 @@ class Outpoint:
 
     def __init__(self, tx_id: str, v_out: int):
         # Assume tx_id given in reverse byte order
-        self.txid = ByteOrder(tx_id)
+        self.txid = ByteOrder(tx_id)  # self.txid in natural byte order
 
         # v_out | 4 bytes, little-endian
         self.v_out = Endian(v_out, byte_size=self.VOUT_BYTES)
@@ -37,7 +37,7 @@ class UTXO:
     HEIGHT_BYTES = 8
     AMOUNT_BYTES = 8
 
-    def __init__(self, outpoint: Outpoint, height: int, amount: int, locking_code: str, coinbase=False):
+    def __init__(self, outpoint: Outpoint, height: int, amount: int, scriptpubkey: str, coinbase=False):
         # outpoint
         self.outpoint = outpoint
 
@@ -51,8 +51,8 @@ class UTXO:
         self.coinbase = "01" if coinbase else "00"
 
         # locking_code and locking_code_size
-        self.locking_code = locking_code
-        self.locking_code_size = CompactSize(len(self.locking_code))
+        self.scriptpubkey = scriptpubkey
+        self.scriptpubkey_size = CompactSize(len(self.scriptpubkey))
 
     @property
     def key(self):
@@ -60,7 +60,7 @@ class UTXO:
 
     @property
     def value(self):
-        return self.height.hex + self.coinbase + self.amount.hex + self.locking_code_size.hex + self.locking_code
+        return self.height.hex + self.coinbase + self.amount.hex + self.scriptpubkey_size.hex + self.scriptpubkey
 
     @property
     def bytes(self):
@@ -76,8 +76,8 @@ class UTXO:
             "height": self.height.hex,
             "coinbase": self.coinbase,
             "amount": self.amount.hex,
-            "locking_code_size": self.locking_code_size.hex,
-            "locking_code": self.locking_code
+            "locking_code_size": self.scriptpubkey_size.hex,
+            "locking_code": self.scriptpubkey
         }
         utxo_dict = {
             "key": key_dict,

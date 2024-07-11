@@ -60,12 +60,16 @@ class Header:
     def id(self):  # natural byte order
         return hash256(self.bytes)
 
+    @property
+    def hash(self):
+        return ByteOrder(self.id).hex
+
     def to_json(self):
         header_dict = {
-            "block_hash": reverse_bytes(self.id),  # reverse byte order
+            "block_hash": reverse_bytes(self.id),  # reverse byte order for display
             "version": self.version.hex,
             "prev_block": self.previous_block.hex,
-            "merkle_root": reverse_bytes(self.merkle_root.hex),  # reverse byte order
+            "merkle_root": reverse_bytes(self.merkle_root.hex),  # reverse byte order for display
             "time": self.time.hex,
             "bits": self.bits,
             "nonce": self.nonce.hex
@@ -85,14 +89,12 @@ class Block:
                  version=VERSION
                  ):
         # Transactions
-        tx_count = len(transactions)
-        self.tx_count = CompactSize(tx_count)
+        self.tx_count = CompactSize(len(transactions))
         self.txs = transactions
 
         # Merkle Root
         tx_ids = [t.txid for t in self.txs]
-        merkle_tree = create_merkle_tree(tx_ids)
-        merkle_root = merkle_tree.get(0)
+        merkle_root = create_merkle_tree(tx_ids).get(0)
 
         # Header
         self.header = Header(previous_block=previous_block, merkle_root=merkle_root, time=time, bits=bits, nonce=nonce,

@@ -95,7 +95,7 @@ def random_block(tx_num=3, segwit=None, nonce=None):
 
 def random_outpoint():
     tx = random_tx()
-    tx_id = tx.reverse_byte_order
+    tx_id = tx.hash
     v_out = randint(0, tx.output_count.num)
     return Outpoint(tx_id, v_out)
 

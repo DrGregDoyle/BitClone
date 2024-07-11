@@ -5,12 +5,14 @@ The Blockchain class
 # --- IMPORTS --- #
 
 from src.block import Block
+from src.cipher import decode_utxo
 from src.database import Database
 from src.miner import Miner
 from src.parse import bits_to_target, target_to_bits
 from src.predicates import Endian
 from src.signature import *
 from src.transaction import TxInput, TxOutput, Transaction
+from src.utxo import Outpoint, UTXO
 from src.wallet import HDWallet, ExtendedPrivateKey
 
 # MAX_TARGET = 0x00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
@@ -25,7 +27,7 @@ class Blockchain:
     def __init__(self):
         self.chain = []
         self.height = -1
-        self.utxos = Database()
+        self.utxos = Database(new_db=True)
 
         # Load blocks
 
@@ -47,6 +49,9 @@ class Blockchain:
         # -- Update UTXOs / Process Transactions
         # - Consume UTXOs from inputs in each tx
         # - Create new UTXOs from outputs in each tx
+        new_utxos = self.create_utxos(candidate_block.txs)
+        for utxo in new_utxos:
+            self.utxos.post_utxo(utxo)
 
         # Return True/False
         return True
@@ -134,6 +139,17 @@ class Blockchain:
 
         return True
 
+    def create_utxos(self, txs: list):
+        utxo_list = []
+        for t in txs:
+            vout = 0
+            for p in t.outputs:
+                temp_outpoint = Outpoint(t.hash, vout)
+                temp_utxo = UTXO(temp_outpoint, self.height, p.amount.num, p.scriptpubkey.hex())
+                utxo_list.append(temp_utxo)
+                vout += 1
+        return utxo_list
+
 
 # --- TESTING
 from datetime import datetime
@@ -164,11 +180,17 @@ if __name__ == "__main__":
     print(f"BLOCK MINED. NONCE: {mined_genesis_block.header.nonce.num}")
     mined_block_added = bc.add_block(mined_genesis_block)
     print(f"MINED BLOCK ADDED: {mined_block_added}")
-    c_tx1 = bc.create_coinbase_tx(scriptpubkey)
-    next_block = Block(previous_block=genesis_block.id, transactions=[c_tx1], time=time, bits=bits, nonce=0)
-    mined_next_block = m.mine_block(next_block)
-    next_block_added = bc.add_block(next_block)
-    print(f"NEXT BLOCK ADDED: {next_block_added}")
-
-    for b in bc.chain:
-        print(f"BLOCK {bc.chain.index(b)}: {b.to_json()}")
+    # c_tx1 = bc.create_coinbase_tx(scriptpubkey)
+    # next_block = Block(previous_block=genesis_block.id, transactions=[c_tx1], time=time, bits=bits, nonce=0)
+    # mined_next_block = m.mine_block(next_block)
+    # next_block_added = bc.add_block(next_block)
+    # print(f"NEXT BLOCK ADDED: {next_block_added}")
+    #
+    # for b in bc.chain:
+    #     print(f"BLOCK {bc.chain.index(b)}: {b.to_json()}")
+    outpoint1 = Outpoint(c_tx.hash, v_out=0)
+    outpoint2 = bc.utxos.get_utxo(outpoint1)
+    print(f"OUTPOINT1: {outpoint1.to_json()}")
+    print(f"OUTPOINT2: {outpoint2}")
+    recovered_utxo = decode_utxo(outpoint1.hex + outpoint2)
+    print(f"RECOVERED UTXO: {recovered_utxo.to_json()}")
