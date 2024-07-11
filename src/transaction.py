@@ -105,12 +105,8 @@ class TxInput:
 
     def __init__(self, tx_id: str | bytes, v_out: int, scriptsig: str | bytes,
                  sequence: int = SEQUENCE):
-        """
-        We assume that the input variables will always be in either "big-endian" or "reverse byte order",
-        depending on the variable.
-        """
         # tx_id | 32 bytes, natural byte order
-        self.tx_id = ByteOrder(tx_id)
+        self.tx_id = ByteOrder(tx_id, reverse=False)
 
         # v_out | 4 bytes
         self.v_out = Endian(v_out, self.V_OUT_BYTES)

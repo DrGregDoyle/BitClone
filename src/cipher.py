@@ -4,7 +4,7 @@ A module for encoding/decoding
 from src.block import Header, Block
 from src.library.base58 import BASE58_LIST
 from src.library.hash_func import sha_256
-from src.parse import decode_compact_size, decode_endian, reverse_bytes
+from src.parse import decode_compact_size, decode_endian
 from src.transaction import WitnessItem, Witness, TxInput, TxOutput, Transaction
 from src.utxo import Outpoint, UTXO
 
@@ -66,8 +66,8 @@ def decode_input(data: str | bytes) -> TxInput:
     data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
 
     # -- Parse hex string
-    # tx_id | 32 bytes - raw_tx has tx_id in natural byte order, we use reverse byte order of raw_tx as input
-    tx_id = reverse_bytes(data[:txid_chars])
+    # tx_id | 32 bytes - raw_tx has tx_id in natural byte order
+    tx_id = data[:txid_chars]
     index = txid_chars
     # v_out
     v_out = decode_endian(data[index:index + vout_chars])
@@ -253,8 +253,8 @@ def decode_outpoint(data: str | bytes):
     txid_chars = 2 * Outpoint.TXID_BYTES
     vout_chars = 2 * Outpoint.VOUT_BYTES
 
-    # tx_id is in natural byte order, we use reverse byte order as input
-    txid = reverse_bytes(data[:txid_chars])
+    # tx_id is in natural byte order
+    txid = data[:txid_chars]
     index = txid_chars
 
     # v_out
