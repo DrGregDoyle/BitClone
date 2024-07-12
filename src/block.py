@@ -60,11 +60,11 @@ class Header:
 
     @property
     def hash(self):
-        return ByteOrder(self.id).hex
+        return ByteOrder(self.id).reverse
 
     def to_json(self):
         header_dict = {
-            "block_hash": reverse_bytes(self.id),  # reverse byte order for display
+            "block_hash": self.hash,  # reverse byte order for display
             "version": self.version.hex,
             "prev_block": self.previous_block.hex,
             "merkle_root": reverse_bytes(self.merkle_root.hex),  # reverse byte order for display

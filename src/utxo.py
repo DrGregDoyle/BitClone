@@ -37,7 +37,7 @@ class UTXO:
     HEIGHT_BYTES = 8
     AMOUNT_BYTES = 8
 
-    def __init__(self, outpoint: Outpoint, height: int, amount: int, scriptpubkey: str, coinbase=False):
+    def __init__(self, outpoint: Outpoint, height: int, amount: int, scriptpubkey: str | bytes, coinbase=False):
         # outpoint
         self.outpoint = outpoint
 
@@ -51,7 +51,7 @@ class UTXO:
         self.coinbase = "01" if coinbase else "00"
 
         # locking_code and locking_code_size
-        self.scriptpubkey = scriptpubkey
+        self.scriptpubkey = bytes.fromhex(scriptpubkey) if isinstance(scriptpubkey, str) else scriptpubkey
         self.scriptpubkey_size = CompactSize(len(self.scriptpubkey))
 
     @property
@@ -60,7 +60,7 @@ class UTXO:
 
     @property
     def value(self):
-        return self.height.hex + self.coinbase + self.amount.hex + self.scriptpubkey_size.hex + self.scriptpubkey
+        return self.height.hex + self.coinbase + self.amount.hex + self.scriptpubkey_size.hex + self.scriptpubkey.hex()
 
     @property
     def bytes(self):
@@ -77,7 +77,7 @@ class UTXO:
             "coinbase": self.coinbase,
             "amount": self.amount.hex,
             "locking_code_size": self.scriptpubkey_size.hex,
-            "locking_code": self.scriptpubkey
+            "locking_code": self.scriptpubkey.hex()
         }
         utxo_dict = {
             "key": key_dict,

@@ -301,8 +301,8 @@ def decode_utxo(data: str | bytes):
     # Locking code
     locking_code_size, increment = decode_compact_size(data[index:])
     index += increment
-    locking_code = data[index:index + locking_code_size]
-    index += locking_code_size
+    locking_code = data[index:index + 2 * locking_code_size]
+    index += 2 * locking_code_size
 
     # Verify
     original_data = data[:index]

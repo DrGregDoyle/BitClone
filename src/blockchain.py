@@ -9,7 +9,6 @@ from src.cipher import decode_utxo
 from src.database import Database
 from src.miner import Miner
 from src.parse import bits_to_target, target_to_bits
-from src.predicates import Endian
 from src.signature import *
 from src.transaction import TxInput, TxOutput, Transaction
 from src.utxo import Outpoint, UTXO
@@ -45,6 +44,8 @@ class Blockchain:
         # Add block
         self.chain.append(candidate_block)
         self.height += 1
+
+        # Save block to file
 
         # -- Update UTXOs / Process Transactions
         # - Consume UTXOs from inputs in each tx
@@ -173,13 +174,14 @@ if __name__ == "__main__":
     time = int(datetime.utcnow().timestamp())
     bits = target_to_bits(format(TEST_TARGET, "064x"))
     genesis_block = Block(previous_block=null_tx, transactions=[c_tx], time=time, bits=bits, nonce=0)
-    print(genesis_block.to_json())
+    # print(genesis_block.to_json())
     block_added = bc.add_block(genesis_block)
     print(f"BLOCK ADDED?: {block_added}")
     mined_genesis_block = m.mine_block(genesis_block)
     print(f"BLOCK MINED. NONCE: {mined_genesis_block.header.nonce.num}")
     mined_block_added = bc.add_block(mined_genesis_block)
     print(f"MINED BLOCK ADDED: {mined_block_added}")
+    print(f"MINED BLOCK: {mined_genesis_block.to_json()}")
     # c_tx1 = bc.create_coinbase_tx(scriptpubkey)
     # next_block = Block(previous_block=genesis_block.id, transactions=[c_tx1], time=time, bits=bits, nonce=0)
     # mined_next_block = m.mine_block(next_block)
@@ -188,9 +190,13 @@ if __name__ == "__main__":
     #
     # for b in bc.chain:
     #     print(f"BLOCK {bc.chain.index(b)}: {b.to_json()}")
-    outpoint1 = Outpoint(c_tx.hash, v_out=0)
-    outpoint2 = bc.utxos.get_utxo(outpoint1)
+    outpoint1 = Outpoint(c_tx.txid, v_out=0)
+
     print(f"OUTPOINT1: {outpoint1.to_json()}")
-    print(f"OUTPOINT2: {outpoint2}")
-    recovered_utxo = decode_utxo(outpoint1.hex + outpoint2)
-    print(f"RECOVERED UTXO: {recovered_utxo.to_json()}")
+    print(f"OUTPOINT1 HEX: {outpoint1.hex}")
+
+    utxo = bc.utxos.get_utxo(outpoint1.hex)
+    print(f"UTXO: {utxo}")
+    print(f"UTXO: {decode_utxo(outpoint1.hex + utxo).to_json()}")
+    # recovered_utxo = decode_utxo(outpoint1.hex + outpoint2)
+    # print(f"RECOVERED UTXO: {recovered_utxo.to_json()}")

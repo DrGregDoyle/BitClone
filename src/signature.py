@@ -7,6 +7,7 @@ from src.library.ecc import SECP256K1
 from src.predicates import Endian
 
 
+# --- ECDSA --- #
 def sign_transaction(tx_id: str, private_key: int, nonce=None):
     """
     Using the private key associated with the wallet, we follow the ECDSA to sign the transaction id.
@@ -101,6 +102,7 @@ def verify_signature(signature: tuple, tx_id: str, public_key: tuple) -> bool:
     return r == x % n
 
 
+# --- DER ENCODING --- #
 def encode_signature(sig: tuple, sighash=None) -> bytes:
     """
     via Pieter Wuille:
@@ -187,6 +189,8 @@ def decode_signature(der_encoded: str | bytes):
     return (r, s)
 
 
+# --- P2PK --- #
+
 def scriptpubkey_p2pk(public_key: str):
     # OP_CHECKSIG: 0xac
     # OP_PUSHDATA_n: hex(n), n<=74
@@ -198,35 +202,3 @@ def scriptpubkey_p2pk(public_key: str):
 def scriptsig_p2pk(signature: str):
     push_data_code = format(len(signature) // 2, "02x")
     return push_data_code + signature
-
-# --- TESTING
-# from src.wallet import HDWallet, ExtendedPrivateKey
-# from src.library.ecc import SECP256K1
-#
-# if __name__ == "__main__":
-#     w = HDWallet()
-#     xpriv = ExtendedPrivateKey(w.keys.get("receiving"))
-#     xpriv.new_private_child()
-#     xpriv.new_public_child()
-#     public_key = xpriv.get_public_child(0)
-#     private_key = xpriv.get_private_child(ExtendedPrivateKey.HARDENED_INDEX)
-#     print(xpriv.child_priv)
-#     print(xpriv.child_pub)
-#
-#     # print(f"PUBLIC KEY: {public_key}")
-#     # print(f"ACTUAL PUBLIC KEY: {public_key[:66]}")
-#     # print(f"PRIVATE KEY: {private_key}")
-#     # print(f"ACTUAL PRIVATE KEY: {private_key[:64]}")
-#     # pk_int = int(private_key[:64], 16)
-#     # pk_pt = decompress_point(public_key[:66])
-#     # print(f"PUBLIC KEY POINT: {pk_pt}")
-#     #
-#     # tx = random_tx()
-#     # print(f"TXID: {tx.txid}")
-#     # sig = sign_transaction(tx.txid, pk_int)
-#     # encoded_sig = encode_signature(sig)
-#     # scriptsig = scriptsig_p2pk(encoded_sig.hex())
-#     #
-#     # curve = SECP256K1()
-#     # recovered_pt = curve.generator(pk_int)
-#     # print(f"PUBLIC KEY POINT FROM PK_INT: {recovered_pt}")
