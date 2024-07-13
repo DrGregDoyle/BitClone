@@ -1,6 +1,37 @@
 """
-Classes for proper encoding
+Basic formatting for strings and numbers
 """
+
+
+class Endian:
+    """
+    For storing integers as little-endian byte strings.
+    """
+
+    def __init__(self, num: int, length=None):
+        """
+        :param num: integer to be stored as little-endian string
+        :param length: optional byte length of string
+        """
+        self._length = int((num.bit_length() + 7) // 8) if length is None else length
+
+        # Integer value
+        self.num = num
+
+    @property
+    def bytes(self):
+        return self.num.to_bytes(length=self._length, byteorder="little")
+
+    @property
+    def hex(self):
+        return self.bytes.hex()
+
+    @property
+    def big(self):
+        return self.num.to_bytes(length=self._length, byteorder="big").hex()
+
+    def increment(self):
+        self.num += 1
 
 
 class CompactSize:
@@ -48,35 +79,3 @@ class ByteOrder:
         self.bytes = data
         self.hex = self.bytes.hex()
         self.reverse = "".join([self.hex[x:x + 2] for x in reversed(range(0, len(self.hex), 2))])
-
-
-class Endian:
-    """
-    Given an integer and optional byte length, we return it's little-endian format as either bytes or hex
-    """
-
-    def __init__(self, num: int, byte_size=None):
-        self.length = num.bit_length() if byte_size is None else byte_size
-        self.num = num
-
-    @property
-    def bytes(self):
-        return self.num.to_bytes(length=self.length, byteorder="little")
-
-    @property
-    def hex(self):
-        return self.bytes.hex()
-
-    def increment(self):
-        self.num += 1
-
-
-# --- TESTING
-from src.library.hash_func import hash256
-
-if __name__ == "__main__":
-    txid = hash256("Hello world!")
-    bo = ByteOrder(txid)
-    print(f"TX ID: Natural byte order: {txid}")
-    print(f"BYTE ORDER HEX: {bo.hex}")
-    print(f"BYTE ORDER REVERSE: {bo.reverse}")

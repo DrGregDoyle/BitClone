@@ -6,7 +6,7 @@ import json
 from src.library.hash_func import hash256
 from src.merkle import create_merkle_tree
 from src.parse import bits_to_target, reverse_bytes
-from src.predicates import ByteOrder, Endian, CompactSize
+from src.primitive import ByteOrder, Endian, CompactSize
 
 
 class Header:

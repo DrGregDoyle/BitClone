@@ -3,7 +3,7 @@ A class for BitClone UTXOs
 """
 import json
 
-from src.predicates import ByteOrder, Endian, CompactSize
+from src.primitive import ByteOrder, Endian, CompactSize
 
 
 class Outpoint:
@@ -15,7 +15,7 @@ class Outpoint:
         self.txid = ByteOrder(tx_id)
 
         # v_out | 4 bytes, little-endian
-        self.v_out = Endian(v_out, byte_size=self.VOUT_BYTES)
+        self.v_out = Endian(v_out, length=self.VOUT_BYTES)
 
     @property
     def bytes(self):
@@ -42,10 +42,10 @@ class UTXO:
         self.outpoint = outpoint
 
         # height | 8 bytes, little-endian
-        self.height = Endian(height, byte_size=self.HEIGHT_BYTES)
+        self.height = Endian(height, length=self.HEIGHT_BYTES)
 
         # amount | 8 bytes, little-endian
-        self.amount = Endian(amount, byte_size=self.AMOUNT_BYTES)
+        self.amount = Endian(amount, length=self.AMOUNT_BYTES)
 
         # coinbase
         self.coinbase = "01" if coinbase else "00"

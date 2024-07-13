@@ -4,7 +4,7 @@ Signature
 from secrets import randbelow
 
 from src.library.ecc import SECP256K1
-from src.predicates import Endian
+from src.primitive import Endian
 
 
 # --- ECDSA --- #
@@ -146,7 +146,7 @@ def encode_signature(sig: tuple, sighash=None) -> bytes:
 
     # Add sighash
     _sighash = 1 if sighash is None else sighash
-    sighash_bytes = Endian(_sighash, byte_size=1).bytes
+    sighash_bytes = Endian(_sighash, length=1).bytes
 
     # Return bytes
     return cs_header + der_length.to_bytes(length=1, byteorder="big") + byte_encoded_r + byte_encoded_s + sighash_bytes

@@ -4,7 +4,7 @@ Transactions
 import json
 
 from src.library.hash_func import hash256
-from src.predicates import CompactSize, ByteOrder, Endian
+from src.primitive import CompactSize, ByteOrder, Endian
 
 
 class WitnessItem:
@@ -151,7 +151,7 @@ class TxOutput:
 
     def __init__(self, amount: int, scriptpubkey: str | bytes):
         # amount | 8 bytes
-        self.amount = Endian(amount, byte_size=self.AMOUNT_BYTES)
+        self.amount = Endian(amount, length=self.AMOUNT_BYTES)
 
         # scriptpubkey
         self.scriptpubkey = bytes.fromhex(scriptpubkey) if isinstance(scriptpubkey, str) else scriptpubkey
