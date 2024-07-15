@@ -22,7 +22,7 @@ def sign_transaction(tx_id: str, private_key: int, nonce=None):
     2) Select a cryptographically secure random integer k in [1, n-1]. As n is prime, k will be invertible.
     3) Calculate the curve point (x,y) =  k * generator
     4) Compute r = x (mod n) and s = k^(-1)(Z + r * t) (mod n). If either r or s = 0, repeat from step 2.
-    5) The signature is the pair (r, s), formatted to hex_r + hex_s.
+    5) The signature is the pair (r, s). We choose the so-called "low s" value in the signature tuple.
     """
     # Assign known variables
     curve = SECP256K1()

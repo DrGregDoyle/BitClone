@@ -27,7 +27,10 @@ DELETE_EXEC = """DELETE FROM utxo"""
 VACUUM_EXEC = """VACUUM"""
 GET_UTXO_QUERY = """SELECT utxo_value FROM utxo where outpoint = (?)"""
 POST_UTXO_QUERY = """INSERT INTO utxo VALUES(?,?)"""
-DELETE_UTXO_QUERY = """DELETE FROM utxo WHERE outpoint = (?) RETURNING utxo_value"""  #
+DELETE_UTXO_QUERY = """DELETE FROM utxo WHERE outpoint = (?) RETURNING utxo_value"""
+HEIGHT_QUERY = """SELECT COUNT(1) FROM utxo"""
+KEY_QUERY = """SELECT outpoint FROM utxo """
+VALUE_QUERY = """SELECT utxo_value from utxo"""
 
 
 # --- CLASSES --- #
@@ -153,3 +156,18 @@ class Database:
         self.query_db(DELETE_UTXO_QUERY, (_utxo.key,))
         # logger.debug(f"UTXO DELETED: {_utxo.to_json()}")
         return True
+
+    def get_height(self):
+        # Query
+        height = self.query_db(HEIGHT_QUERY)[0][0]
+        return height
+
+    def get_outpoints(self):
+        # Query
+        _outpoint_list = self.query_db(KEY_QUERY)
+        return [t[0] for t in _outpoint_list]
+
+    def get_values(self):
+        # Query
+        _value_list = self.query_db(VALUE_QUERY)
+        return [v[0] for v in _value_list]

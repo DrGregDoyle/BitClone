@@ -26,7 +26,7 @@ class Blockchain:
     def __init__(self):
         self.chain = []
         self.height = -1
-        self.utxos = Database(new_db=True)
+        self.utxos = Database(new_db=False)
 
         # Load blocks
 
@@ -92,7 +92,7 @@ class Blockchain:
         tx_id = "0" * 64
         v_out = 0xffffffff
         height = self.height + 1
-        height_txt = Endian(height, byte_size=(height.bit_length() + 7) // 8).hex if height != 0 else "00"
+        height_txt = Endian(height, length=(height.bit_length() + 7) // 8).hex if height != 0 else "00"
         scriptsig = height_txt + scriptsig if scriptsig else height_txt
         sequence = 0
         coinbase_input = TxInput(tx_id, v_out, scriptsig, sequence)

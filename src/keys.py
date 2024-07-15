@@ -16,6 +16,9 @@ class PrivateKey:
         self.private_key = private_key.to_bytes(length=self.KEY_SIZE, byteorder="big").hex()
         self.public_key = PublicKey(SECP256K1().generator(self.pk_int))
 
+    def __repr__(self):
+        return format(self.pk_int, f"0{2 * self.KEY_SIZE}x")
+
     @property
     def public_key_point(self):
         return self.public_key.x, self.public_key.y
@@ -61,7 +64,8 @@ class SimpleWallet:
             self.seed_phrase = self.get_phrase_from_seed(self.seed)
 
         # Get Keys
-        self.private_key = PrivateKey(int(hash256(self.seed), 16))
+        _seed_hex = format(self.seed, "x")
+        self.private_key = PrivateKey(int(hash256(_seed_hex), 16))
         self.public_key = self.private_key.public_key  # PublicKey
 
     def new_seed_phrase(self, bit_size=256):
@@ -98,7 +102,8 @@ class SimpleWallet:
 if __name__ == "__main__":
     w = SimpleWallet()
     print(f"SEED: {w.seed}")
-    # print(w.seed_phrase)
-    # print(w.get_phrase_from_seed(w.seed))
+    print(w.seed_phrase)
+    print(w.get_phrase_from_seed(w.seed))
     s1 = w.get_seed_from_phrase(w.seed_phrase)
     print(f"RECOVERED SEED: {s1}")
+    print(f"PRIVATE KEY: {w.private_key}")
