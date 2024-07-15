@@ -20,8 +20,13 @@ class Engine:
         From a tx and a private key we generate an encoded signature suitable for use in construction of sigscript
         for legacy scripts (e.g: P2PK, P2PKH, P2MS, and P2SH)
         """
-        # - 1: For each input in the tx, get the associated UTXO and replace the scriptsig in the input with the
-        #      scriptpubkey in the utxo
+        # Verify tx is not segwit first
+        if tx.segwit:
+            return self.segwit_signature(tx, private_key)
+
+        # For each input in the tx
+        #       - Get the associated UTXO
+        #       - Replace input scriptsig with scriptpubkey from UTXO
         for i in tx.inputs:
             _outpoint = Outpoint(i.tx_id.hex, i.v_out.num)
             _value = db.get_utxo(_outpoint)
@@ -41,6 +46,52 @@ class Engine:
         )
 
         return encoded_sig
+
+    def segwit_signature(self, tx: Transaction, private_key: int):
+        """
+        Used in P2WPKH and P2WSH only.
+        """
+        # Verify that tx is segwith first
+        if not tx.segwit:
+            return self.legacy_signature(tx, private_key)
+
+        # Remove witness if it exists
+        if tx.witness:
+            tx.witness = []
+
+    # def _preimage(self, tx: Transaction, unsigned_input: TxInput):
+    #     """
+    #     preimage = version + hash256(inputs) + hash256(sequences) + input + scriptcode + amount + sequence +
+    #                 hash256(outputs) + locktime
+    #     """
+    #     # config
+    #     _outpoint_hex = "".join([i.tx_id.hex + i.v_out.hex for i in tx.inputs])
+    #     _sequence_hex = "".join([i.sequence.hex for i in tx.inputs])
+    #
+    #     # version
+    #     _v = tx.version.hex
+    #
+    #     # inputs
+    #     _i_hash = hash256(_outpoint_hex)
+    #
+    #     # sequences
+    #     _s_hash = hash256(_sequence_hex)
+    #
+    #     # input
+    #     _i = _outpoint_hex
+    #
+    #     # scriptcode
+    #
+    #     # # Get utxos
+    #     for i in tx.inputs:
+    #         _utxo = self._get_utxo(i)
+    #         pubkeyhash = _utxo.scriptpubkey.hex()[4:]  # scriptpubkey has 0014<20-byte hash160(public key)>
+    #         scriptcode = f"1976a914{pubkeyhash}88ac"
+
+    def _get_utxo(self, i: TxInput):
+        _outpoint = Outpoint(i.tx_id.hex, i.v_out.num)
+        _value = db.get_utxo(_outpoint)
+        return decode_utxo(_outpoint.hex + _value)
 
 
 # --- TESTING

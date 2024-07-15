@@ -347,17 +347,21 @@ def get_hex(data: str | bytes):
 
 # -- TESTING
 if __name__ == "__main__":
-    tx_data = "0100000001b7994a0db2f373a29227e1d90da883c6ce1cb0dd2d6812e4558041ebbbcfa54b000000006a473044022008f4f37e2d8f74e18c1b8fde2374d5f28402fb8ab7fd1cc5b786aa40851a70cb02201f40afd1627798ee8529095ca4b205498032315240ac322c9d8ff0f205a93a580121024aeaf55040fa16de37303d13ca1dde85f4ca9baa36e2963a27a1c0c1165fe2b1ffffffff01983a0000000000001976a914b3e2819b6262e0b1f19fc7229d75677f347c91ac88ac00000000"
+    tx_data = "0100000002fff7f7881a8099afa6940d42d1e7f6362bec38171ea3edf433541db4e4ad969f0000000000eeffffffef51e1b804cc89d182d279655c3aa89e815b1b309fe287d9b2b55d57b90ec68a0100000000ffffffff02202cb206000000001976a9148280b37df378db99f66f85c95a783a76ac7a6d5988ac9093510d000000001976a9143bde42dbee7e4dbe6a21b2d50ce2f0167faa815988ac11000000"
     tx = decode_transaction(tx_data)
+    signed_tx_data = "01000000000102fff7f7881a8099afa6940d42d1e7f6362bec38171ea3edf433541db4e4ad969f00000000494830450221008b9d1dc26ba6a9cb62127b02742fa9d754cd3bebf337f7a55d114c8e5cdd30be022040529b194ba3f9281a99f2b1c0a19c0489bc22ede944ccf4ecbab4cc618ef3ed01eeffffffef51e1b804cc89d182d279655c3aa89e815b1b309fe287d9b2b55d57b90ec68a0100000000ffffffff02202cb206000000001976a9148280b37df378db99f66f85c95a783a76ac7a6d5988ac9093510d000000001976a9143bde42dbee7e4dbe6a21b2d50ce2f0167faa815988ac000247304402203609e17b84f6a7d30c80bfa610b5b4542f32a8a0d5447a12fb1366d7f01cc44a0220573a954c4518331561406f90300e8f3358f51928d43c212a8caed02de67eebee0121025476c2e83188368da1ff3e292e7acafcdb3566bb0ad253f62fc70f07aeee635711000000"
+    signed_tx = decode_transaction(signed_tx_data)
     print(tx.to_json())
-    print(tx.hex)
-    print(tx.hex == tx_data)
-    print(f"TXID: {tx.txid}")
-
-    for x in range(0, len(tx_data), 2):
-        tx_data_byte = tx_data[x:x + 2]
-        tx_hex_byte = tx.hex[x:x + 2]
-        if tx_data_byte != tx_hex_byte:
-            print(f"BYTE INDEX: {x}")
-            print(f"TXDATA: {tx_data_byte}")
-            print(f"HEXBYTE: {tx_hex_byte}")
+    print(f"====================")
+    print(signed_tx.to_json())
+    # print(tx.hex)
+    # print(tx.hex == tx_data)
+    # print(f"TXID: {tx.txid}")
+    #
+    # for x in range(0, len(tx_data), 2):
+    #     tx_data_byte = tx_data[x:x + 2]
+    #     tx_hex_byte = tx.hex[x:x + 2]
+    #     if tx_data_byte != tx_hex_byte:
+    #         print(f"BYTE INDEX: {x}")
+    #         print(f"TXDATA: {tx_data_byte}")
+    #         print(f"HEXBYTE: {tx_hex_byte}")
