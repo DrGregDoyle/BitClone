@@ -3,7 +3,7 @@ A file for testing leaves and merkle trees
 """
 from random import randint
 
-from src.merkle import create_merkle_tree, get_merkle_proof, verify_element
+from src.backup.merkle import create_merkle_tree, get_merkle_proof, verify_element
 from tests.utility import random_txid
 
 UPPER = 16

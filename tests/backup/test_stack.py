@@ -3,7 +3,7 @@ A file for testing the Stack class
 """
 from random import randint
 
-from src.script import Stack
+from src.backup.script import Stack
 
 
 def test_stack():

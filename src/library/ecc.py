@@ -170,7 +170,7 @@ class EllipticCurve:
             assert self.add_points(pt, neg_pt) is None
         except AssertionError:
             return None
-
+        print(f"GET Y FROM X: Y{y}, NEG_Y {neg_y}")
         # Return y
         return y
 
@@ -279,7 +279,7 @@ class EllipticCurve:
 
     def generator(self, n: int):
         """
-        We calculate g^n, where g is the generator point of the curve
+        We calculate g^n (mod order), where g is the generator point of the curve
         """
         return self.scalar_multiplication(n, self.g)
 

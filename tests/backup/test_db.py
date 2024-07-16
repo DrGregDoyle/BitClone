@@ -3,7 +3,7 @@ A file for testing db
 """
 from pathlib import Path
 
-from src.database import Database
+from src.backup.database import Database
 from tests.utility import random_utxo
 
 DB_DIR = Path(__file__).parent / "db"

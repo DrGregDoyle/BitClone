@@ -1,21 +1,115 @@
 """
-A module for encoding/decoding
+Methods for encoding and decoding
 """
-from src.block import Header, Block
-from src.library.base58 import BASE58_LIST
-from src.library.hash_func import sha_256
-from src.parse import decode_compact_size, decode_endian
-from src.transaction import WitnessItem, Witness, TxInput, TxOutput, Transaction
-from src.utxo import Outpoint, UTXO
+from src.library.ecc import SECP256K1
+from src.library.op_codes import OPCODES
+from src.tx import Outpoint, UTXO, WitnessItem, Witness, TxInput, TxOutput, Transaction
 
 
-# --- TRANSACTION ELEMENTS --- #
+def decode_compressed_public_key(cpk: str):
+    curve = SECP256K1()
+    parity = 0 if cpk[:2] == "02" else 1
+    x = int(cpk[2:], 16)
+    y1 = curve.get_y_from_x(x)
+    y2 = curve.p - y1
+    y = y1 if y1 % 2 == parity else y2
+    return x, y
+
+
+def decode_compact_size(data: str | bytes):
+    """
+    Decode accepts either hex string or bytes object
+    """
+    # Get hex
+    data = get_hex(data)
+
+    first_byte = int.from_bytes(bytes.fromhex(data[:2]), byteorder="big")
+    match first_byte:
+        case 0xfd | 0xfe | 0xff:
+            l_index = 2
+            diff = first_byte - 0xfb
+            r_index = 2 + pow(2, diff)
+        case _:
+            l_index = 0
+            r_index = 2
+    num = int.from_bytes(bytes.fromhex(data[l_index: r_index]), byteorder="little")
+    return num, r_index
+
+
+def decode_endian(data: str | bytes) -> int:
+    # Get hex string
+    data = get_hex(data)
+
+    # reverse data order
+    _atad = "".join([data[x:x + 2] for x in reversed(range(0, len(data), 2))])
+
+    # return integer
+    return int(_atad, 16)
+
+
+def decode_outpoint(data: str | bytes) -> Outpoint:
+    data = get_hex(data)  # Hex string
+
+    # CHARS
+    txid_chars = 2 * Outpoint.TXID_BYTES
+    vout_chars = 2 * Outpoint.VOUT_BYTES
+
+    # tx_id is in natural byte order
+    txid = data[:txid_chars]
+    index = txid_chars
+
+    # v_out
+    v_out = decode_endian(data[index:index + vout_chars])
+    index += vout_chars
+
+    # Verify
+    original_data = data[:index]
+    temp_outpoint = Outpoint(txid, v_out)
+    if temp_outpoint.hex != original_data:
+        raise ValueError("Original data not equal to given Outpoint")
+    return temp_outpoint
+
+
+def decode_utxo(data: str | bytes) -> UTXO:
+    data = get_hex(data)  # Get data as hex  string
+
+    # Chars
+    height_chars = 2 * UTXO.HEIGHT_BYTES
+    amount_chars = 2 * UTXO.AMOUNT_BYTES
+
+    # Outpoint
+    outpoint = decode_outpoint(data)
+    index = len(outpoint.hex)
+
+    # Height, coinbase, amount
+    _height = data[index:index + height_chars]
+    height = decode_endian(_height)
+    index += height_chars
+    coinbase = True if data[index:index + 2] == "01" else False
+    index += 2
+    _amount = data[index:index + amount_chars]
+    amount = decode_endian(_amount)
+    index += amount_chars
+
+    # Locking code
+    locking_code_size, increment = decode_compact_size(data[index:])
+    index += increment
+    locking_code = data[index:index + 2 * locking_code_size]
+    index += 2 * locking_code_size
+
+    # Verify
+    original_data = data[:index]
+    temp_utxo = UTXO(outpoint, height, amount, locking_code, coinbase)
+    if temp_utxo.hex != original_data:
+        raise ValueError("Original data not equal to constructed UTXO")
+    return temp_utxo
+
 
 def decode_witness_item(data: str | bytes) -> WitnessItem:
     """
     Decode accepts either hex string or bytes object
     """
-    data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
+    data = get_hex(data)
 
     # Get byte size
     wi_byte_size, index = decode_compact_size(data)
@@ -34,16 +128,14 @@ def decode_witness_item(data: str | bytes) -> WitnessItem:
 
 
 def decode_witness(data: str | bytes) -> Witness:
-    """
-    Decode accepts either hex string or bytes object
-    """
+    # Hex string
     data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
 
     # First byte is CompactSize number of items | i = index for string
     stack_items, i = decode_compact_size(data)
 
     # Get items
-    items, increment = data_list(data[i:], stack_items, "witness_item")
+    items, increment = _data_list(data[i:], stack_items, "witness_item")
     i += increment
 
     # Verify
@@ -59,11 +151,12 @@ def decode_input(data: str | bytes) -> TxInput:
     Decode accepts either hex string or bytes object
     """
     # Input Chars
-    txid_chars = 2 * TxInput.TX_ID_BYTES
-    vout_chars = 2 * TxInput.V_OUT_BYTES
+    txid_chars = 2 * Outpoint.TXID_BYTES
+    vout_chars = 2 * Outpoint.VOUT_BYTES
     sequence_chars = 2 * TxInput.SEQUENCE_BYTES
 
-    data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
+    # Hex string
+    data = get_hex(data)
 
     # -- Parse hex string
     # tx_id | 32 bytes - raw_tx has tx_id in natural byte order
@@ -83,7 +176,7 @@ def decode_input(data: str | bytes) -> TxInput:
 
     # verify
     input_data = data[:index]
-    temp_input = TxInput(tx_id, v_out, scriptsig, sequence)
+    temp_input = TxInput(Outpoint(tx_id, v_out), scriptsig, sequence)
     if temp_input.hex != input_data:
         raise ValueError("Constructed TxInput does not agree with original data.")
     return temp_input
@@ -94,7 +187,7 @@ def decode_output(data: str | bytes) -> TxOutput:
     amount_chars = TxOutput.AMOUNT_BYTES * 2
 
     # Get data as hex string
-    data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
+    data = get_hex(data)
 
     # Amount | 8 bytes, little-endian
     amount = decode_endian(data[:amount_chars])
@@ -137,19 +230,19 @@ def decode_transaction(data: str | bytes) -> Transaction:
     # Inputs
     input_count, increment = decode_compact_size(data[index:])
     index += increment
-    inputs, increment = data_list(data[index:], input_count, "input")
+    inputs, increment = _data_list(data[index:], input_count, "input")
     index += increment
 
     # Outputs
     output_count, increment = decode_compact_size(data[index:])
     index += increment
-    outputs, increment = data_list(data[index:], output_count, "output")
+    outputs, increment = _data_list(data[index:], output_count, "output")
     index += increment
 
     # Witness
     witness = []
     if segwit:
-        witness, increment = data_list(data[index:], input_count, "witness")
+        witness, increment = _data_list(data[index:], input_count, "witness")
         index += increment
 
     # Locktime | 4 bytes, little-endian
@@ -170,150 +263,39 @@ def decode_transaction(data: str | bytes) -> Transaction:
         return Transaction(inputs=inputs, outputs=outputs, locktime=locktime, version=version, sighash=sighash)
 
 
-def decode_base58_check(encoded_data: str, checksum=True):
-    total = 0
-    data_range = len(encoded_data)
-    for x in range(data_range):
-        total += BASE58_LIST.index(encoded_data[x:x + 1]) * pow(58, data_range - x - 1)
-    if checksum:
-        datacheck = format(total, "0x")
-        data = datacheck[:-8]
-        check = datacheck[-8:]
-        assert sha_256(data) == check
-    else:
-        data = format(total, "0x")
-    return data
+def decode_scriptpubkey(scriptpubkey: str | bytes) -> list:
+    """
+    We decode the scriptPubKey hex string to a list of ASM values
+    """
+    _script = scriptpubkey.hex() if isinstance(scriptpubkey, bytes) else scriptpubkey
 
+    def find_opcode(value_int: int):
+        result = [k for k, v in OPCODES.items() if v == value_int]
+        if result:
+            return result[0]
+        return None
 
-# --- BLOCK ELEMENTS --- #
+    _asm = []
+    index = 0
+    # Gather OP CODES
+    while index < len(scriptpubkey):
+        temp_byte = _script[index:index + 2]
+        temp_int = int(temp_byte, 16)
+        index += 2
+        if 1 <= temp_int <= 75:  # PUSH DATA
+            _op_code = f"OP_PUSHBYTES_{str(temp_int)}"
 
-def decode_header(data: str | bytes):
-    data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
+            hex_data_length = 2 * temp_int
+            _asm.extend([_op_code, _script[index:index + hex_data_length]])
+            index += hex_data_length
+        else:
+            _asm.append(find_opcode(temp_int))
 
-    # header chars
-    version_chars = 2 * Header.VERSION_BYTES
-    prev_block_chars = 2 * Header.PREVBLOCK_BYTES
-    merkle_root_chars = 2 * Header.MERKLE_BYTES
-    time_chars = 2 * Header.TIME_BYTES
-    bits_chars = 2 * Header.BITS_BYTES
-    nonce_chars = 2 * Header.NONCE_BYTES
-
-    # version | 4 bytes, little-endian
-    version = decode_endian(data[:version_chars])
-    index = version_chars
-
-    # prev_block | 32 bytes, natural byte order
-    prev_block = data[index:index + prev_block_chars]
-    index += prev_block_chars
-
-    # merkle root | 32 bytes, natural byte order
-    merkle_root = data[index:index + merkle_root_chars]
-    index += merkle_root_chars
-
-    # time | 4 bytes, little-endian
-    time = decode_endian(data[index:index + time_chars])
-    index += time_chars
-
-    # bits | 4 bytes
-    bits = data[index:index + bits_chars]
-    index += bits_chars
-
-    # nonce | 4 bytes, little-endian
-    nonce = decode_endian(data[index:index + nonce_chars])
-    index += nonce_chars
-
-    # Verify
-    original = data[:index]
-    temp_header = Header(previous_block=prev_block, merkle_root=merkle_root, time=time, bits=bits, nonce=nonce,
-                         version=version)
-    if temp_header.hex != original:
-        raise ValueError("Constructed Header does not agree with original data.")
-    return temp_header
-
-
-def decode_block(data: str | bytes) -> Block:
-    data = data.hex() if isinstance(data, bytes) else data  # Data is now a hex string
-
-    # Header
-    header = decode_header(data)
-    index = len(header.hex)
-
-    # Txs
-    tx_count, increment = decode_compact_size(data[index:])
-    index += increment
-    txs, increment = data_list(data[index:], tx_count, "")
-    index += increment
-
-    # Verify
-    original_data = data[:index]
-    temp_block = Block(header.previous_block.hex, txs, header.time.num, header.bits, header.nonce.num,
-                       header.version.num)
-    if temp_block.hex != original_data:
-        raise ValueError("Constructed Block does not agree with original data.")
-    return temp_block
-
-
-# --- UTXO ELEMENTS --- #
-def decode_outpoint(data: str | bytes):
-    data = get_hex(data)  # Hex string
-
-    # CHARS
-    txid_chars = 2 * Outpoint.TXID_BYTES
-    vout_chars = 2 * Outpoint.VOUT_BYTES
-
-    # tx_id is in natural byte order
-    txid = data[:txid_chars]
-    index = txid_chars
-
-    # v_out
-    v_out = decode_endian(data[index:index + vout_chars])
-    index += vout_chars
-
-    # Verify
-    original_data = data[:index]
-    temp_outpoint = Outpoint(txid, v_out)
-    if temp_outpoint.hex != original_data:
-        raise ValueError("Original data not equal to given Outpoint")
-    return temp_outpoint
-
-
-def decode_utxo(data: str | bytes):
-    data = get_hex(data)  # Get data as hex  string
-
-    # Chars
-    height_chars = 2 * UTXO.HEIGHT_BYTES
-    amount_chars = 2 * UTXO.AMOUNT_BYTES
-
-    # Outpoint
-    outpoint = decode_outpoint(data)
-    index = len(outpoint.hex)
-
-    # Height, coinbase, amount
-    _height = data[index:index + height_chars]
-    height = decode_endian(_height)
-    index += height_chars
-    coinbase = True if data[index:index + 2] == "01" else False
-    index += 2
-    _amount = data[index:index + amount_chars]
-    amount = decode_endian(_amount)
-    index += amount_chars
-
-    # Locking code
-    locking_code_size, increment = decode_compact_size(data[index:])
-    index += increment
-    locking_code = data[index:index + 2 * locking_code_size]
-    index += 2 * locking_code_size
-
-    # Verify
-    original_data = data[:index]
-    temp_utxo = UTXO(outpoint, height, amount, locking_code, coinbase)
-    if temp_utxo.hex != original_data:
-        raise ValueError("Original data not equal to constructed UTXO")
-    return temp_utxo
+    return _asm
 
 
 # --- DATA LIST --- #
-def data_list(data: str, count: int, decode_type: str):
+def _data_list(data: str, count: int, decode_type: str):
     """
     Given a string of hex data and a count, we return a list of tx elements based on given type.
     """
@@ -340,28 +322,20 @@ def data_list(data: str, count: int, decode_type: str):
     return _data_list, index
 
 
+# --- GET FORMAT --- #
 def get_hex(data: str | bytes):
     # Returns hex string
     return data.hex() if isinstance(data, bytes) else data
 
 
-# -- TESTING
+def get_bytes(data: str | bytes):
+    # Returns byte string
+    return bytes.fromhex(data) if isinstance(data, str) else data
+
+
+# --- TESTING
+
 if __name__ == "__main__":
-    tx_data = "0100000002fff7f7881a8099afa6940d42d1e7f6362bec38171ea3edf433541db4e4ad969f0000000000eeffffffef51e1b804cc89d182d279655c3aa89e815b1b309fe287d9b2b55d57b90ec68a0100000000ffffffff02202cb206000000001976a9148280b37df378db99f66f85c95a783a76ac7a6d5988ac9093510d000000001976a9143bde42dbee7e4dbe6a21b2d50ce2f0167faa815988ac11000000"
-    tx = decode_transaction(tx_data)
-    signed_tx_data = "01000000000102fff7f7881a8099afa6940d42d1e7f6362bec38171ea3edf433541db4e4ad969f00000000494830450221008b9d1dc26ba6a9cb62127b02742fa9d754cd3bebf337f7a55d114c8e5cdd30be022040529b194ba3f9281a99f2b1c0a19c0489bc22ede944ccf4ecbab4cc618ef3ed01eeffffffef51e1b804cc89d182d279655c3aa89e815b1b309fe287d9b2b55d57b90ec68a0100000000ffffffff02202cb206000000001976a9148280b37df378db99f66f85c95a783a76ac7a6d5988ac9093510d000000001976a9143bde42dbee7e4dbe6a21b2d50ce2f0167faa815988ac000247304402203609e17b84f6a7d30c80bfa610b5b4542f32a8a0d5447a12fb1366d7f01cc44a0220573a954c4518331561406f90300e8f3358f51928d43c212a8caed02de67eebee0121025476c2e83188368da1ff3e292e7acafcdb3566bb0ad253f62fc70f07aeee635711000000"
-    signed_tx = decode_transaction(signed_tx_data)
+    txdata = "010000000532748a0af868b473b81cbdf4cc8f7e9cb29636f8782d82c927effcee5468745b2d0300006a473044022042f368d76f5d938c9e4a36e9b029f5b0e115f7acc23c0f31540b6d9ab84b5fa402200f263a17161b53928a88ba2a7992416673edbcbdbf0c8f9a94eb9c26a21acfec012102dcd8b4cf56a5e928647bec8cc9bd62d7650360644674f0751f1cedf8c4f5ebc2ffffffff4c0345dd9643a19ebc76426901fdadd5488b226751b5341776d1d20d3f890b1f2a0300006b483045022100fe21eeac788e52a61f94414e200789ab37622487ffc745304491736f72329e1e02207b972928c38e9450029a60de2e6c9e900d1ed9d3cfe5f75a81bbee59835648d7012102dcd8b4cf56a5e928647bec8cc9bd62d7650360644674f0751f1cedf8c4f5ebc2ffffffffa05ff1514c6267f06443c11a3720a987a76292545faf326090524cb66a3b28e2250300006a4730440220075c0b745acf349820e545df782d6fde36350d219e669a588165b40b494c792b02201096faa13539d1855cd9b578f623f516b6a8b880ec5c803d6f444097ddcbcae6012102dcd8b4cf56a5e928647bec8cc9bd62d7650360644674f0751f1cedf8c4f5ebc2ffffffff7036640251866bf65cad59f6bfbe9d80a9c76238f3042dfbef0cd079b06b6e372a0300006a47304402200278632c774b4f4e5c66922d1b6a6a70664c584ff50892ba89791c5d864c751d02202620cb1d26aefe3f6210023bbf692025955f1670ac08b2b4652d300ea1dbd07e012102dcd8b4cf56a5e928647bec8cc9bd62d7650360644674f0751f1cedf8c4f5ebc2ffffffff9429229bde034b119d28ed0d92f65e5f1c3ec9e4ef11ec9323ba7f48bc2e2b912a0300006a47304402207e80c8c7a094f7117cccb54b1d1ce7330098995eb6d30a279b66117d7a36be5002206b12110baab13a6e58e5a0d8256b309760f552139b13b6636facc3e4bea21eeb012102dcd8b4cf56a5e928647bec8cc9bd62d7650360644674f0751f1cedf8c4f5ebc2ffffffff01e0c86307000000001976a91418395131f8853df5fafc2d4b6374d1c065e2d8a688ac00000000"
+    tx = decode_transaction(txdata)
     print(tx.to_json())
-    print(f"====================")
-    print(signed_tx.to_json())
-    # print(tx.hex)
-    # print(tx.hex == tx_data)
-    # print(f"TXID: {tx.txid}")
-    #
-    # for x in range(0, len(tx_data), 2):
-    #     tx_data_byte = tx_data[x:x + 2]
-    #     tx_hex_byte = tx.hex[x:x + 2]
-    #     if tx_data_byte != tx_hex_byte:
-    #         print(f"BYTE INDEX: {x}")
-    #         print(f"TXDATA: {tx_data_byte}")
-    #         print(f"HEXBYTE: {tx_hex_byte}")

@@ -2,7 +2,7 @@
 A file for testing the UTXO class and similar methods
 """
 
-from src.cipher import decode_outpoint, decode_utxo
+from src.backup.cipher import decode_outpoint, decode_utxo
 from tests.utility import random_outpoint, random_utxo
 
 

@@ -1,7 +1,7 @@
 """
 Tests for predicates and parser
 """
-from src.parse import target_to_bits, bits_to_target
+from src.backup.parse import target_to_bits, bits_to_target
 from tests.utility import random_bits
 
 

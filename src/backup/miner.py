@@ -1,8 +1,8 @@
 """
 A class for mining blocks
 """
-from src.block import Block
-from src.parse import bits_to_target
+from src.backup.block import Block
+from src.backup.parse import bits_to_target
 
 
 class Miner:

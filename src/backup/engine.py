@@ -1,13 +1,12 @@
 """
 A module for the tx Engine
 """
-from src.cipher import decode_utxo
-from src.database import Database
+from src.backup.cipher import decode_utxo
+from src.backup.database import Database
+from src.backup.signature import encode_signature, sign_transaction
 from src.library.hash_func import hash256
 from src.primitive import CompactSize
-from src.signature import encode_signature, sign_transaction
-from src.transaction import Transaction, TxInput, TxOutput
-from src.utxo import Outpoint
+from src.tx import Transaction, TxInput, Outpoint, UTXO, TxOutput
 
 
 class Engine:
@@ -89,23 +88,26 @@ class Engine:
     #         scriptcode = f"1976a914{pubkeyhash}88ac"
 
     def _get_utxo(self, i: TxInput):
-        _outpoint = Outpoint(i.tx_id.hex, i.v_out.num)
-        _value = db.get_utxo(_outpoint)
-        return decode_utxo(_outpoint.hex + _value)
+        _value = db.get_utxo(i.outpoint)
+        return decode_utxo(i.outpoint.hex + _value)
 
 
 # --- TESTING
-from src.cipher import decode_outpoint
 
 if __name__ == "__main__":
-    db = Database()
-    outpoints = db.get_outpoints()
-    values = db.get_values()
-    _outpoint = decode_outpoint(outpoints[0])
-    _input = TxInput(tx_id=_outpoint.txid.hex, v_out=_outpoint.v_out.num, scriptsig="")
-    _output = TxOutput(1, scriptpubkey="deadbeef")
-    tx = Transaction([_input], [_output])
-    # print(f"TX BEFORE ENGINE: {tx.to_json()}")
-    e = Engine(db)
-    _sig = e.legacy_signature(tx, private_key=1)
-    print(f"SIGNATURE: {_sig.hex()}")
+    db = Database(new_db=True)
+    _outpt1 = Outpoint(tx_id="fff7f7881a8099afa6940d42d1e7f6362bec38171ea3edf433541db4e4ad969f", v_out=0)
+    _outpt2 = Outpoint(tx_id="ef51e1b804cc89d182d279655c3aa89e815b1b309fe287d9b2b55d57b90ec68a", v_out=1)
+    _utxo1 = UTXO(outpoint=_outpt1, height=0, amount=0xffff,
+                  scriptpubkey="76a91455ae51684c43435da751ac8d2173b2652eb6410588ac")
+    _utxo2 = UTXO(outpoint=_outpt2, height=0, amount=0xffff,
+                  scriptpubkey="76a91455ae51684c43435da751ac8d2173b2652eb6410588ac")
+    db.post_utxo(_utxo1)
+    db.post_utxo(_utxo2)
+
+    _amount1 = int("202cb20600000000", 16)
+    _amount2 = int("9093510d00000000", 16)
+    scriptpubkey1 = "76a9148280b37df378db99f66f85c95a783a76ac7a6d5988ac"
+    scriptpubkey2 = "76a9143bde42dbee7e4dbe6a21b2d50ce2f0167faa815988ac"
+    output1 = TxOutput(amount=_amount1, scriptpubkey=scriptpubkey1)
+    output2 = TxOutput(amount=_amount2, scriptpubkey=scriptpubkey2)

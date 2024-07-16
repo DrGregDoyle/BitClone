@@ -7,17 +7,19 @@ from src.library.ecc import SECP256K1
 from src.library.hash_func import sha_256, hash256
 from src.library.word_list import WORDLIST
 
+KEY_SIZE = 32
+
 
 class PrivateKey:
-    KEY_SIZE = 32  # 32 byte keys
+    # 32 byte keys
 
     def __init__(self, private_key: int | str):
         self.pk_int = private_key if isinstance(private_key, int) else int(private_key, 16)
-        self.private_key = private_key.to_bytes(length=self.KEY_SIZE, byteorder="big").hex()
+        self.private_key = private_key.to_bytes(length=KEY_SIZE, byteorder="big").hex()
         self.public_key = PublicKey(SECP256K1().generator(self.pk_int))
 
     def __repr__(self):
-        return format(self.pk_int, f"0{2 * self.KEY_SIZE}x")
+        return format(self.pk_int, f"0{2 * KEY_SIZE}x")
 
     @property
     def public_key_point(self):
@@ -29,12 +31,11 @@ class PrivateKey:
 
 
 class PublicKey:
-    KEY_SIZE = 32
 
     def __init__(self, pubkey_point: tuple):
         self.x, self.y = pubkey_point
-        self.hex_x = self.x.to_bytes(length=self.KEY_SIZE, byteorder="big").hex()
-        self.hex_y = self.y.to_bytes(length=self.KEY_SIZE, byteorder="big").hex()
+        self.hex_x = self.x.to_bytes(length=KEY_SIZE, byteorder="big").hex()
+        self.hex_y = self.y.to_bytes(length=KEY_SIZE, byteorder="big").hex()
 
     @property
     def compressed(self):

@@ -1,5 +1,7 @@
 """
 Hash library for BitClone
+
+All hash functions can accept hex strings, byte strings or arbitrary strings.
 """
 import hmac
 from hashlib import sha256, sha512, sha1
@@ -22,47 +24,35 @@ def op_sha1(data: str | bytes):
 
 
 def hash256(data: str | bytes):
-    # Convert hex to byte sequence
-    binary = get_bytes(data)
-
-    # Hash twice
-    hash1 = sha256(binary).digest()
-    hash2 = sha256(hash1).digest()
-
-    # Return hex digest
-    return hash2.hex()
+    data = get_bytes(data)
+    return sha256(sha256(data).digest()).hexdigest()
 
 
 def sha_256(data: str | bytes):
-    encoded_data = get_bytes(data)
-    return sha256(encoded_data).hexdigest()
+    data = get_bytes(data)
+    return sha256(data).hexdigest()
 
 
 def hash160(data: str) -> str:
-    """
-    Returns the hex digest of RIPEMD160(SHA256(data)) - 20-bytes
-    """
-    return ripemd160(sha256(data.encode()).hexdigest()).hexdigest()
+    data = get_bytes(data)
+    return ripemd160(sha256(data).digest()).hex()
 
 
 def hmac512(key: str, data: str) -> str:
-    """
-    Returns the hex digest of the HMAC-SHA512(key, data) hash function - 64-bytes (we force 128-char length)
-    """
     byte_key = get_bytes(key)
     byte_data = get_bytes(data)
     return hmac.new(key=byte_key, msg=byte_data, digestmod=sha512).hexdigest()
 
 
-def pbkdf2(key: str, data: str, iterations=2048):
+def pbkdf2(data: str, salt: str, iterations=2048):
     """
     For the PBKDF2, we assume the key and data are arbitrary strings. Hence we can byte-encode them using .encode().
     """
-    byte_key = key.encode()
-    message = data.encode()
+    byte_key = get_bytes(salt)
+    message = get_bytes(data)
     for _ in range(iterations):
-        message = hmac.new(byte_key, message, sha512).hexdigest().encode()
-    return message.decode()
+        message = hmac.new(byte_key, message, sha512).digest()
+    return message.hex()
 
 
 def base58_check(data: int | str, checksum=True):
@@ -83,3 +73,10 @@ def base58_check(data: int | str, checksum=True):
         data_int = data_int // 58
 
     return buffer
+
+
+# --- TESTING
+if __name__ == "__main__":
+    data = "02e3af28965693b9ce1228f9d468149b831d6a0540b25e8a9900f71372c11fb277"
+    hash_result = hash160(data)
+    print(f"HASH RESULT: {hash_result}")
