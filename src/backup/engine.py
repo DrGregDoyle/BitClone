@@ -1,9 +1,9 @@
 """
 A module for the tx Engine
 """
-from src.backup.cipher import decode_utxo
-from src.backup.database import Database
+
 from src.backup.signature import encode_signature, sign_transaction
+from src.database import Database
 from src.library.hash_func import hash256
 from src.primitive import CompactSize
 from src.tx import Transaction, TxInput, Outpoint, UTXO, TxOutput

@@ -275,18 +275,16 @@ class Transaction:
         |   outputs     |   var             |   [TxOutput]      |
         |   witness     |   optional        |   [Witness}       |
         |   locktime    |   4               |   little-endian   |
-        |   sighash     |   4               |   little-endian
         =========================================================
     """
     VERSION_BYTES = 4
     LOCKTIME_BYTES = 4
     SIGHASH_BYTES = 4
 
-    def __init__(self, inputs: list, outputs: list, version=1, locktime=0, sighash=1, witness=None):
+    def __init__(self, inputs: list, outputs: list, version=1, locktime=0, witness=None):
         # Version, locktime, sighash | 4 bytes, little-endian
         self.version = Endian(version, length=self.VERSION_BYTES)
         self.locktime = Endian(locktime, length=self.LOCKTIME_BYTES)
-        self.sighash = Endian(sighash, length=self.SIGHASH_BYTES)
 
         # Inputs
         self.input_count = CompactSize(len(inputs))
@@ -321,9 +319,6 @@ class Transaction:
 
         # Locktime
         tx_bytes += self.locktime.bytes
-
-        # Sighash
-        tx_bytes += self.sighash.bytes
 
         return tx_bytes
 
@@ -399,9 +394,6 @@ class Transaction:
         # Locktime
         tx_dict.update({"locktime": self.locktime.hex})
 
-        # Sighash
-        tx_dict.update({"sighash": self.sighash.hex})
-
         return json.dumps(tx_dict, indent=2)
 
 
@@ -461,4 +453,4 @@ if __name__ == "__main__":
 
     _locktime = 0x11
     _sighash = 1
-    tx = Transaction(inputs=[input1, input2], outputs=[output1, output2], locktime=_locktime, sighash=_sighash)
+    tx = Transaction(inputs=[input1, input2], outputs=[output1, output2], locktime=_locktime)

@@ -44,7 +44,6 @@ class Wallet:
         """
         self.seed_phrase = seed_phrase if seed_phrase else self.new_seed_phrase()
         _seed_string = " ".join(self.seed_phrase)
-        print(_seed_string)
         self._seed = pbkdf2(_seed_string, self.INITIAL_SALT)
         _priv_hex = hmac512(self.INITIAL_KEY, self._seed)
         self.keypair = KeyPair(int(_priv_hex, 16))

@@ -3,10 +3,11 @@ Methods for encoding and decoding
 """
 from src.library.ecc import SECP256K1
 from src.library.op_codes import OPCODES
+from src.primitive import Endian
 from src.tx import Outpoint, UTXO, WitnessItem, Witness, TxInput, TxOutput, Transaction
 
 
-def decode_compressed_public_key(cpk: str):
+def decompress_public_key(cpk: str):
     curve = SECP256K1()
     parity = 0 if cpk[:2] == "02" else 1
     x = int(cpk[2:], 16)
@@ -249,25 +250,18 @@ def decode_transaction(data: str | bytes) -> Transaction:
     locktime = decode_endian(data[index:index + locktime_chars])
     index += locktime_chars
 
-    # Check for sighash
-    try:
-        sighash = decode_endian(data[index:index + sighash_chars])
-    except ValueError:
-        sighash = 1
-
     # Return TX
     if segwit:
-        return Transaction(inputs=inputs, outputs=outputs, witness=witness, locktime=locktime,
-                           version=version, sighash=sighash)
+        return Transaction(inputs=inputs, outputs=outputs, witness=witness, locktime=locktime, version=version)
     else:
-        return Transaction(inputs=inputs, outputs=outputs, locktime=locktime, version=version, sighash=sighash)
+        return Transaction(inputs=inputs, outputs=outputs, locktime=locktime, version=version)
 
 
-def decode_scriptpubkey(scriptpubkey: str | bytes) -> list:
+def decode_script(scriptpubkey: str | bytes) -> list:
     """
     We decode the scriptPubKey hex string to a list of ASM values
     """
-    _script = scriptpubkey.hex() if isinstance(scriptpubkey, bytes) else scriptpubkey
+    _script = get_hex(scriptpubkey)
 
     def find_opcode(value_int: int):
         result = [k for k, v in OPCODES.items() if v == value_int]
@@ -278,13 +272,12 @@ def decode_scriptpubkey(scriptpubkey: str | bytes) -> list:
     _asm = []
     index = 0
     # Gather OP CODES
-    while index < len(scriptpubkey):
+    while index < len(_script):
         temp_byte = _script[index:index + 2]
         temp_int = int(temp_byte, 16)
         index += 2
         if 1 <= temp_int <= 75:  # PUSH DATA
             _op_code = f"OP_PUSHBYTES_{str(temp_int)}"
-
             hex_data_length = 2 * temp_int
             _asm.extend([_op_code, _script[index:index + hex_data_length]])
             index += hex_data_length
@@ -292,6 +285,108 @@ def decode_scriptpubkey(scriptpubkey: str | bytes) -> list:
             _asm.append(find_opcode(temp_int))
 
     return _asm
+
+
+def encode_script(asm: list):
+    """
+    Given a list of op-codes and data we return the corresponding hex value.
+    """
+    _script = ""
+    for s in asm:
+        if s[:3] == "OP_":
+            if s[3:12] == "PUSHBYTES":
+                _script += format(int(s[-2:]), "02x")
+            else:
+                _script += format(OPCODES.get(s), "02x")
+        else:
+            _script += s
+    return _script
+
+
+def encode_signature(sig: tuple, sighash=None) -> bytes:
+    """
+    via Pieter Wuille:
+        A correct DER-encoded signature has the following form:
+
+        0x30: a header byte indicating a compound structure.
+        A 1-byte length descriptor for all what follows.
+        0x02: a header byte indicating an integer.
+        A 1-byte length descriptor for the R value
+        The R coordinate, as a big-endian integer.
+        0x02: a header byte indicating an integer.
+        A 1-byte length descriptor for the S value.
+        The S coordinate, as a big-endian integer.
+    """
+    # Headers
+    cs_header = bytes.fromhex("30")
+    int_header = bytes.fromhex("02")
+
+    # Get integer values of signature
+    r, s = sig
+
+    # Format r
+    hex_r = r.to_bytes(length=32, byteorder="big").hex()
+    binary_r = format(r, "0256b")  # 256 bits
+    if binary_r[0] == "1":
+        # Signed int - prepend byte
+        hex_r = "00" + hex_r
+    byte_r = bytes.fromhex(hex_r)
+    byte_encoded_r = int_header + len(byte_r).to_bytes(length=1, byteorder="big") + byte_r
+
+    # Format s
+    hex_s = s.to_bytes(length=32, byteorder="big").hex()
+    binary_s = format(s, "0256b")
+    if binary_s[0] == "1":
+        hex_s = "00" + hex_s
+    byte_s = bytes.fromhex(hex_s)
+    byte_encoded_s = int_header + len(byte_s).to_bytes(length=1, byteorder="big") + byte_s
+
+    # Format DER
+    der_length = len(byte_encoded_r + byte_encoded_s)  # Byte length
+
+    # Add sighash
+    _sighash = 1 if sighash is None else sighash
+    sighash_bytes = Endian(_sighash, length=1).bytes
+
+    # Return bytes
+    return cs_header + der_length.to_bytes(length=1, byteorder="big") + byte_encoded_r + byte_encoded_s + sighash_bytes
+
+
+def decode_signature(der_encoded: str | bytes):
+    # get data as hex string
+    der_encoded = der_encoded.hex() if isinstance(der_encoded, bytes) else der_encoded
+
+    # Config
+    i = 0
+    byte_chars = 2
+
+    # Get DER values
+    header = der_encoded[:i]
+    i += byte_chars
+    sig_length = int(der_encoded[i:i + byte_chars], 16)
+    i += byte_chars
+
+    # Get R values
+    r_int_type = der_encoded[i:i + 2]
+    i += byte_chars
+    r_length = int(der_encoded[i:i + 2], 16)
+    i += byte_chars
+    r = int(der_encoded[i: i + 2 * r_length], 16)
+    i += 2 * r_length
+
+    # Get S values
+    s_int_type = der_encoded[i:i + 2]
+    i += byte_chars
+    s_length = int(der_encoded[i:i + 2], 16)
+    i += byte_chars
+    s = int(der_encoded[i: i + 2 * s_length], 16)
+    i += 2 * s_length
+
+    # Get hashtype byte
+    hash_type = der_encoded[i:]
+    # TODO: Implement hash type
+
+    return (r, s)
 
 
 # --- DATA LIST --- #
@@ -331,11 +426,3 @@ def get_hex(data: str | bytes):
 def get_bytes(data: str | bytes):
     # Returns byte string
     return bytes.fromhex(data) if isinstance(data, str) else data
-
-
-# --- TESTING
-
-if __name__ == "__main__":
-    txdata = "010000000532748a0af868b473b81cbdf4cc8f7e9cb29636f8782d82c927effcee5468745b2d0300006a473044022042f368d76f5d938c9e4a36e9b029f5b0e115f7acc23c0f31540b6d9ab84b5fa402200f263a17161b53928a88ba2a7992416673edbcbdbf0c8f9a94eb9c26a21acfec012102dcd8b4cf56a5e928647bec8cc9bd62d7650360644674f0751f1cedf8c4f5ebc2ffffffff4c0345dd9643a19ebc76426901fdadd5488b226751b5341776d1d20d3f890b1f2a0300006b483045022100fe21eeac788e52a61f94414e200789ab37622487ffc745304491736f72329e1e02207b972928c38e9450029a60de2e6c9e900d1ed9d3cfe5f75a81bbee59835648d7012102dcd8b4cf56a5e928647bec8cc9bd62d7650360644674f0751f1cedf8c4f5ebc2ffffffffa05ff1514c6267f06443c11a3720a987a76292545faf326090524cb66a3b28e2250300006a4730440220075c0b745acf349820e545df782d6fde36350d219e669a588165b40b494c792b02201096faa13539d1855cd9b578f623f516b6a8b880ec5c803d6f444097ddcbcae6012102dcd8b4cf56a5e928647bec8cc9bd62d7650360644674f0751f1cedf8c4f5ebc2ffffffff7036640251866bf65cad59f6bfbe9d80a9c76238f3042dfbef0cd079b06b6e372a0300006a47304402200278632c774b4f4e5c66922d1b6a6a70664c584ff50892ba89791c5d864c751d02202620cb1d26aefe3f6210023bbf692025955f1670ac08b2b4652d300ea1dbd07e012102dcd8b4cf56a5e928647bec8cc9bd62d7650360644674f0751f1cedf8c4f5ebc2ffffffff9429229bde034b119d28ed0d92f65e5f1c3ec9e4ef11ec9323ba7f48bc2e2b912a0300006a47304402207e80c8c7a094f7117cccb54b1d1ce7330098995eb6d30a279b66117d7a36be5002206b12110baab13a6e58e5a0d8256b309760f552139b13b6636facc3e4bea21eeb012102dcd8b4cf56a5e928647bec8cc9bd62d7650360644674f0751f1cedf8c4f5ebc2ffffffff01e0c86307000000001976a91418395131f8853df5fafc2d4b6374d1c065e2d8a688ac00000000"
-    tx = decode_transaction(txdata)
-    print(tx.to_json())

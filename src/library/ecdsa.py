@@ -1,13 +1,11 @@
 """
-Signature
+Signature algorithms for ECDSA
 """
 from secrets import randbelow
 
 from src.library.ecc import SECP256K1
-from src.primitive import Endian
 
 
-# --- ECDSA --- #
 def sign_transaction(tx_id: str, private_key: int, nonce=None):
     """
     Using the private key associated with the wallet, we follow the ECDSA to sign the transaction id.
@@ -47,7 +45,6 @@ def sign_transaction(tx_id: str, private_key: int, nonce=None):
 
     # Check for "low s"
     s_neg = (n - s) % n
-
     s = min(s, s_neg)
 
     # 5- Return (r,s) tuple
@@ -100,105 +97,3 @@ def verify_signature(signature: tuple, tx_id: str, public_key: tuple) -> bool:
         return False
     x, _ = curve_point
     return r == x % n
-
-
-# --- DER ENCODING --- #
-def encode_signature(sig: tuple, sighash=None) -> bytes:
-    """
-    via Pieter Wuille:
-        A correct DER-encoded signature has the following form:
-
-        0x30: a header byte indicating a compound structure.
-        A 1-byte length descriptor for all what follows.
-        0x02: a header byte indicating an integer.
-        A 1-byte length descriptor for the R value
-        The R coordinate, as a big-endian integer.
-        0x02: a header byte indicating an integer.
-        A 1-byte length descriptor for the S value.
-        The S coordinate, as a big-endian integer.
-    """
-    # Headers
-    cs_header = bytes.fromhex("30")
-    int_header = bytes.fromhex("02")
-
-    # Get integer values of signature
-    r, s = sig
-
-    # Format r
-    hex_r = r.to_bytes(length=32, byteorder="big").hex()
-    binary_r = format(r, "0256b")  # 256 bits
-    if binary_r[0] == "1":
-        # Signed int - prepend byte
-        hex_r = "00" + hex_r
-    byte_r = bytes.fromhex(hex_r)
-    byte_encoded_r = int_header + len(byte_r).to_bytes(length=1, byteorder="big") + byte_r
-
-    # Format s
-    hex_s = s.to_bytes(length=32, byteorder="big").hex()
-    binary_s = format(s, "0256b")
-    if binary_s[0] == "1":
-        hex_s = "00" + hex_s
-    byte_s = bytes.fromhex(hex_s)
-    byte_encoded_s = int_header + len(byte_s).to_bytes(length=1, byteorder="big") + byte_s
-
-    # Format DER
-    der_length = len(byte_encoded_r + byte_encoded_s)  # Byte length
-
-    # Add sighash
-    _sighash = 1 if sighash is None else sighash
-    sighash_bytes = Endian(_sighash, length=1).bytes
-
-    # Return bytes
-    return cs_header + der_length.to_bytes(length=1, byteorder="big") + byte_encoded_r + byte_encoded_s + sighash_bytes
-
-
-def decode_signature(der_encoded: str | bytes):
-    # get data as hex string
-    der_encoded = der_encoded.hex() if isinstance(der_encoded, bytes) else der_encoded
-
-    # Config
-    i = 0
-    byte_chars = 2
-
-    # Get DER values
-    header = der_encoded[:i]
-    i += byte_chars
-    sig_length = int(der_encoded[i:i + byte_chars], 16)
-    i += byte_chars
-
-    # Get R values
-    r_int_type = der_encoded[i:i + 2]
-    i += byte_chars
-    r_length = int(der_encoded[i:i + 2], 16)
-    i += byte_chars
-    r = int(der_encoded[i: i + 2 * r_length], 16)
-    i += 2 * r_length
-
-    # Get S values
-    s_int_type = der_encoded[i:i + 2]
-    i += byte_chars
-    s_length = int(der_encoded[i:i + 2], 16)
-    i += byte_chars
-    s = int(der_encoded[i: i + 2 * s_length], 16)
-    i += 2 * s_length
-
-    # Get hashtype byte
-    hash_type = der_encoded[i:]
-    # TODO: Implement hash type
-
-    return (r, s)
-
-
-# --- P2PK --- #
-
-def scriptpubkey_p2pk(public_key: str):
-    # OP_CHECKSIG: 0xac
-    # OP_PUSHDATA_n: hex(n), n<=74
-    op_checksig = "ac"
-    push_data_code = format(len(public_key) // 2, "02x")
-    return push_data_code + public_key + op_checksig
-
-
-def scriptsig_p2pk(signature: str):
-    push_data_code = format(len(signature) // 2, "02x")
-    return push_data_code + signature

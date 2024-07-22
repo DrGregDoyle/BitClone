@@ -8,7 +8,7 @@ import sys
 import time
 from pathlib import Path
 
-from src.backup.cipher import decode_utxo, decode_outpoint
+from src.cipher import decode_utxo, decode_outpoint
 from src.tx import UTXO, Outpoint
 
 # --- LOGGING --- #
@@ -131,7 +131,7 @@ class Database:
         else:
             return True
 
-    def get_utxo(self, outpoint: str | Outpoint):
+    def get_utxo(self, outpoint: str | Outpoint) -> UTXO | list:
         # Get outpoint key
         _outpoint = decode_outpoint(outpoint) if isinstance(outpoint, str) else outpoint
 
@@ -139,8 +139,8 @@ class Database:
         value = self.query_db(GET_UTXO_QUERY, (_outpoint.hex,))
         if value and isinstance(value, list):
             v = value[0][0]
-            return v
-        return value  # Will return empty list
+            return decode_utxo(_outpoint.hex + v)
+        return []
 
     def delete_utxo(self, utxo: str | UTXO) -> bool:
         # Get utxo

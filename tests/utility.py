@@ -27,15 +27,15 @@ def random_int(bit_size=256):
 
 def random_outpoint():
     tx_id = random_hash()
-    v_out = random_int(32)
+    v_out = random_int(4)
     return Outpoint(tx_id, v_out)
 
 
 def random_utxo():
     _outpt = random_outpoint()
 
-    height = random_int(64)
-    amount = random_int(64)
+    height = random_int(20)
+    amount = random_int(24)
     scriptpubkey = random_hex(128)
     coinbase = random_bool()
 

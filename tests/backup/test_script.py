@@ -4,7 +4,7 @@ A file for testing the ScriptEngine
 
 from random import randint
 
-from src.backup.script import ScriptEngine, Stack
+from src.script import ScriptEngine, Stack
 
 
 def random_hex_byte():

@@ -2,27 +2,19 @@
 A module for the Stack and Script classes
 
 The Script class contains a method to read and process a stack based on the op-codes in the stack.
-
-# TODO:
-    - Implement the IF/ELSE control flow logic
 """
 
 # --- IMPORTS --- #
-import logging
-import sys
 from collections import deque
 from typing import Any
 
+from src.cipher import decompress_public_key, decode_transaction, decode_signature
 from src.library.ecc import SECP256K1
+from src.library.ecdsa import verify_signature
 from src.library.hash_func import hash160, op_sha1, sha_256, ripemd160, hash256
 from src.library.op_codes import OPCODES
-
-# --- LOGGING --- #
-log_level = logging.DEBUG
-logger = logging.getLogger(__name__)
-logger.setLevel(log_level)
-handler = logging.StreamHandler(stream=sys.stdout)
-logger.addHandler(handler)
+from src.primitive import CompactSize, Endian
+from src.tx import Transaction
 
 
 # --- CLASSES --- #
@@ -67,9 +59,8 @@ class Stack:
 
 class ScriptEngine:
     """
-    There are two steps to script:
-        1) Decoding string into hex
-        2) Evaluating hex string as a whole
+    Each TxInput will have a scriptsig that will be used to unlock a scriptpubkey contained in a UTXO.
+    We use the ScriptEngine inside the TxEngine for this purpose.
     """
 
     def __init__(self):
@@ -78,13 +69,30 @@ class ScriptEngine:
         self.alt_stack = Stack()
         self.curve = SECP256K1()
 
-    def parse_script(self, script: str) -> bool:
+    def clear_stacks(self):
+        """
+        Will remove all elements from main and alt stack
+        """
+        while self.main_stack.height > 0:
+            self.main_stack.pop()
+        while self.alt_stack.height > 0:
+            self.alt_stack.pop()
+
+    def parse_script(self, script: str, tx=None, input_index=None, utxo=None) -> bool:
         """
         We parse the script from left to right 1-byte at a time and act based on the corresponding op code
         """
         # Config
         i = 0
         length = len(script)
+
+        def get_opcode(num_val: int):
+            if 0 <= num_val <= 0x4b:
+                return f"OP_PUSHBYTES_{num_val}"
+            _op = [k for k, v in OPCODES.items() if v == num_val]
+            if _op:
+                return _op[0]
+            return _op  # Empty list
 
         # Parse
         while i < length:
@@ -105,8 +113,7 @@ class ScriptEngine:
             elif 0x8b <= byte <= 0xa5:
                 increment = self.numeric(script[i:])
             elif 0xa6 <= byte <= 0xaf:
-                print("Cryptography")
-                increment = self.crypto(script[i:])
+                increment = self.crypto(script[i:], tx, input_index, utxo)
             else:
                 print("Other")
                 increment = 2
@@ -403,7 +410,7 @@ class ScriptEngine:
                 self.main_stack.pop()
             return current_index
 
-    def crypto(self, script: str):
+    def crypto(self, script: str, tx=None, input_index=None, utxo=None):
         op_code = int(script[:2], 16)
         current_index = 2
 
@@ -428,10 +435,32 @@ class ScriptEngine:
             print("OP_CODESEPARATOR")
         elif op_code in [0xac, 0xad]:
             # OP_CHECKSIG
-            # v0 = pubkey
-            v1 = self.main_stack.pop()  # sig
-            # TODO: signature checking function here
-            val = True
+            _cpk = v0  # Public key
+            _sig = self.main_stack.pop()  # Signature
+
+            # get public key point
+            _pk = decompress_public_key(_cpk)
+
+            # extract hashtype from signature
+            _hashtype = _sig[-1:]
+
+            # get sig tuple
+            r, s = decode_signature(_sig)
+
+            # create tx for verification
+            txcopy = decode_transaction(tx.hex)
+            for i in txcopy.inputs:
+                i.scriptsig = bytes()
+                i.scriptsig_size = CompactSize(0)
+            signed_input = txcopy.inputs[input_index]
+            signed_input.scriptsig = utxo.scriptpubkey
+            signed_input.scriptsig_size = CompactSize(len(utxo.scriptpubkey))
+            txcopy.inputs[input_index] = signed_input
+
+            hash_string = hash256(txcopy.hex + Endian(int(_hashtype, 16), length=Transaction.SIGHASH_BYTES).hex)
+
+            val = verify_signature((r, s), hash_string, _pk)
+
             # OP_CHECKSIGVERIFY
             if not val:
                 raise ValueError("Script failed OP_CHECKSIGVERIFY")

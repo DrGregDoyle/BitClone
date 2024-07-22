@@ -170,7 +170,7 @@ class EllipticCurve:
             assert self.add_points(pt, neg_pt) is None
         except AssertionError:
             return None
-        print(f"GET Y FROM X: Y{y}, NEG_Y {neg_y}")
+        
         # Return y
         return y
 
