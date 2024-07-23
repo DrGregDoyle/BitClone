@@ -1,35 +1,24 @@
 """
-Testing all components
+Tests for ScriptEngine
 """
 from random import randint
 
 from src.cipher import encode_script
 from src.database import Database
 from src.engine import TxEngine
-from src.library.hash_func import hash160, hash256
+from src.library.hash_func import hash256, hash160
 from src.script import ScriptEngine
-from src.tx import UTXO, TxInput, TxOutput, Transaction, Outpoint
+from src.tx import Outpoint, UTXO, TxInput, TxOutput, Transaction
 from src.wallet import Wallet
-from tests.utility import random_outpoint, random_int, random_hex
+from tests.utility import random_hex
 
 DEFAULT_SEED_PHRASE = ['donate', 'dentist', 'negative', 'hub', 'pact', 'drama', 'wild', 'grocery', 'nerve', 'cycle',
                        'screen', 'hundred', 'bomb', 'law', 'walk', 'stamp', 'small', 'coast', 'arrest', 'element',
                        'echo', 'frame', 'vehicle', 'gain']
+PUBKEYHASH = ""
 
 
-def generate_utxo(db: Database, wallet: Wallet):
-    _outpoint = random_outpoint()
-
-    height = randint(400000, 500000)
-    amount = random_int(16)
-    _pubkeyhash = hash160(wallet.compressed_public_key)
-    _asm = ["OP_DUP", "OP_HASH160", "OP_PUSHBYTES_20", _pubkeyhash, "OP_EQUALVERIFY", "OP_CHECKSIG"]
-    scriptpubkey = encode_script(_asm)
-    utxo = UTXO(_outpoint, height, amount, scriptpubkey)
-    db.post_utxo(utxo)
-
-
-if __name__ == "__main__":
+def test_legacy_p2pkh():
     db = Database(new_db=True)
     w = Wallet(DEFAULT_SEED_PHRASE)
     e = TxEngine(db, w.keypair)
@@ -61,7 +50,7 @@ if __name__ == "__main__":
 
     # Sign Tx
     for n in range(2):
-        tx = e.sign_tx_p2pkh(tx, n)
+        tx = e.sign_tx_p2pkh(tx, n)  # Sign each input
 
     # Create scripts
     _scriptpubkey0 = _utxo0.scriptpubkey.hex()
@@ -80,4 +69,3 @@ if __name__ == "__main__":
         tx_verified = s.main_stack.pop()
         assert tx_verified
         assert s.main_stack.height == 0
-        print(s.main_stack.stack)

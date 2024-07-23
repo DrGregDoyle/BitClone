@@ -5,3 +5,4 @@
 * Write function to unlock a UTXO from an input in a tx
 * Refactor Script class for clarity and simplicity
 * Add IF/THEN capability to Script class
+* Add test for legacy scriptsig verification

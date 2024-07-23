@@ -99,6 +99,10 @@ class ScriptEngine:
             # Integer value
             byte = int(script[i: i + 2], 16)
 
+            # Op Code | DEBUGGING
+            # op_code = get_opcode(byte)
+            # print(f"OP CODE: {op_code}")
+
             # Push data
             if 0 <= byte <= 96:
                 increment = self.push_data(script[i:])

@@ -26,9 +26,7 @@ class TxEngine:
         # print(f"TX COPY BEFORE REMOVING SCRIPTSIG: {tx_copy.to_json()}")
 
         # Remove all scriptsigs from the inputs
-        for i in tx_copy.inputs:
-            i.scriptsig = bytes()
-            i.scriptsig_size = CompactSize(0)
+        tx_copy = self._remove_scriptsig(tx_copy)
 
         # print(f"TX COPY AFTER REMOVING SCRIPTSIG: {tx_copy.to_json()}")
 
@@ -58,6 +56,25 @@ class TxEngine:
 
         return encoded_sig
 
+    def get_segwit_signature(self, tx: Transaction, input_index=0, sighash=1):
+        """
+        Used to create a signature for use in sigwit Script signatures.
+
+        NOTE: tx must have tx.segwit = True
+        """
+        # Check segwit
+        if not tx.segwit:
+            raise ValueError(f"Transaction with current tx id {tx.txid} is not segwit.")
+
+        # Copy tx
+        txcopy = decode_transaction(tx.hex)
+
+        # Remove existing script sigs
+        txcopy = self._remove_scriptsig(txcopy)
+
+        # CHECK WITNESS
+        print(txcopy.to_json())
+
     def sign_tx_p2pkh(self, tx: Transaction, input_index=0, sighash=1):
         """
         We create the scriptsig for the input in the tx referenced by input_index.
@@ -73,6 +90,13 @@ class TxEngine:
         _input = tx.inputs[input_index]
         _input.scriptsig = scriptsig
         _input.scriptsig_size = CompactSize(len(scriptsig))
+        return tx
+
+    def _remove_scriptsig(self, tx: Transaction):
+        # Remove all scriptsigs from the inputs
+        for i in tx.inputs:
+            i.scriptsig = bytes()
+            i.scriptsig_size = CompactSize(0)
         return tx
 
 
