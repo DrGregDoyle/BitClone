@@ -8,13 +8,13 @@ The Script class contains a method to read and process a stack based on the op-c
 from collections import deque
 from typing import Any
 
-from src.cipher import decompress_public_key, decode_transaction, decode_signature
+from src.cipher import decompress_public_key, decode_transaction, decode_signature, decode_script, encode_script
 from src.library.ecc import SECP256K1
 from src.library.ecdsa import verify_signature
 from src.library.hash_func import hash160, op_sha1, sha_256, ripemd160, hash256
 from src.library.op_codes import OPCODES
 from src.primitive import CompactSize, Endian
-from src.tx import Transaction
+from src.tx import Transaction, UTXO
 
 
 # --- CLASSES --- #
@@ -87,7 +87,7 @@ class ScriptEngine:
         length = len(script)
 
         def get_opcode(num_val: int):
-            if 0 <= num_val <= 0x4b:
+            if 0 < num_val <= 0x4b:
                 return f"OP_PUSHBYTES_{num_val}"
             _op = [k for k, v in OPCODES.items() if v == num_val]
             if _op:
@@ -105,7 +105,7 @@ class ScriptEngine:
 
             # Push data
             if 0 <= byte <= 96:
-                increment = self.push_data(script[i:])
+                increment = self.push_data(script[i:], tx, input_index, utxo)
             elif 0x61 <= byte <= 0x6a:
                 increment = self.control_flow(script[i:])
             elif 0x6b <= byte <= 0x7d:
@@ -124,10 +124,14 @@ class ScriptEngine:
             i += increment
         return True
 
-    def push_data(self, script: str):
+    def push_data(self, script: str, tx=None, input_index=None, utxo=None):
         op_code = int(script[:2], 16)
         current_index = 2
         if op_code == 0:
+            # Check for P2WPKH structure
+            next_byte = int(script[2:4], 16)
+            if next_byte == 20:
+                return self.witness_validation(tx, input_index, utxo)
             # Push empty byte string to stack
             op_bytes = None
         elif 0 < op_code <= 0x4b:
@@ -155,6 +159,9 @@ class ScriptEngine:
         else:
             # Otherwise push one of 1 -- 16 onto the stack
             op_bytes = op_code - 0x50
+
+        # TESTING
+        # print(f"PUSHING DATA: {op_bytes}")
 
         self.main_stack.push(op_bytes)
         return current_index
@@ -456,14 +463,46 @@ class ScriptEngine:
             for i in txcopy.inputs:
                 i.scriptsig = bytes()
                 i.scriptsig_size = CompactSize(0)
-            signed_input = txcopy.inputs[input_index]
-            signed_input.scriptsig = utxo.scriptpubkey
-            signed_input.scriptsig_size = CompactSize(len(utxo.scriptpubkey))
-            txcopy.inputs[input_index] = signed_input
 
-            hash_string = hash256(txcopy.hex + Endian(int(_hashtype, 16), length=Transaction.SIGHASH_BYTES).hex)
+            # Verify according to segwit
+            if txcopy.segwit:
+                txcopy.witness = []
 
-            val = verify_signature((r, s), hash_string, _pk)
+                # Get referenced input
+                _txinput = txcopy.inputs[input_index]
+
+                # Create scriptcode
+                _scriptpubkey = utxo.scriptpubkey.hex()
+                _asm = decode_script(_scriptpubkey)
+                _nminus1 = _asm.index("OP_PUSHBYTES_20")
+                _pubkeyhash = _asm[_nminus1 + 1]
+
+                # Create pre-image hash
+                _version = txcopy.version.hex  # Version
+                _prevouts = hash256("".join([i.outpoint.hex for i in txcopy.inputs]))  # Outpoint hash
+                _seqhash = hash256("".join([i.sequence.hex for i in txcopy.inputs]))  # Sequence hash
+                _outpoint = _txinput.outpoint.hex  # Specific outpoint to be signed
+                _scriptcode = f"1976a914{_pubkeyhash}88ac"  # Scriptcode
+                _input_amount = utxo.amount.hex  # Amount on UTXO
+                _sequence = _txinput.sequence.hex  # Sequence in TxInput
+                _hashoutputs = hash256("".join([i.hex for i in txcopy.outputs]))  # Output hash
+                _locktime = txcopy.locktime.hex  # Locktime
+                preimage = (_version + _prevouts + _seqhash + _outpoint + _scriptcode + _input_amount + _sequence
+                            + _hashoutputs + _locktime)
+
+                hash_string = hash256(preimage + Endian(int(_hashtype, 16), length=Transaction.SIGHASH_BYTES).hex)
+                val = verify_signature((r, s), hash_string, _pk)
+
+            # Legacy
+            else:
+                signed_input = txcopy.inputs[input_index]
+                signed_input.scriptsig = utxo.scriptpubkey
+                signed_input.scriptsig_size = CompactSize(len(utxo.scriptpubkey))
+                txcopy.inputs[input_index] = signed_input
+
+                hash_string = hash256(txcopy.hex + Endian(int(_hashtype, 16), length=Transaction.SIGHASH_BYTES).hex)
+
+                val = verify_signature((r, s), hash_string, _pk)
 
             # OP_CHECKSIGVERIFY
             if not val:
@@ -510,12 +549,24 @@ class ScriptEngine:
 
         return current_index
 
+    def witness_validation(self, tx: Transaction, input_index: int, utxo: UTXO):
+        # New stack
+        self.clear_stacks()
 
-# -- TESTING
-if __name__ == "__main__":
-    engine = ScriptEngine()
-    tx_id = hash256("DATA")
+        # Get sig and public key from witness
+        input_witness = tx.witness[input_index]
+        sig_item = input_witness.items[0]
+        cpk_item = input_witness.items[1]
+        self.main_stack.push(sig_item.item.hex())
+        self.main_stack.push(cpk_item.item.hex())
 
-    script = "515194"
-    engine.parse_script(script)
-    print(engine.main_stack.stack)
+        # Get pubkeyhash
+        _asm = decode_script(utxo.scriptpubkey)
+        nminus1 = _asm.index("OP_PUSHBYTES_20")
+        pubkeyhash = _asm[nminus1 + 1]
+
+        # Convert to P2PKH
+        new_asm = ["OP_DUP", "OP_HASH160", "OP_PUSHBYTES_20", pubkeyhash, "OP_EQUALVERIFY", "OP_CHECKSIG"]
+        _script = encode_script(new_asm)
+        witness_validation = self.parse_script(_script, tx, input_index, utxo)
+        return witness_validation

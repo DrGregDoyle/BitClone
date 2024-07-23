@@ -1,12 +1,14 @@
 """
 TxEngine: A class for signing Transactions. Designed for use in a Wallet.
 """
-from src.cipher import decode_outpoint, encode_signature, decode_transaction
+from src.cipher import encode_script
+from src.cipher import encode_signature, decode_transaction, decode_script
 from src.database import Database
 from src.library.ecdsa import sign_transaction
+from src.library.hash_func import hash256
 from src.primitive import CompactSize, Endian
-from src.tx import Transaction, TxInput, TxOutput
-from src.wallet import KeyPair, Wallet
+from src.tx import Transaction, Witness, WitnessItem
+from src.wallet import KeyPair
 
 
 class TxEngine:
@@ -23,12 +25,9 @@ class TxEngine:
         """
         # Copy Tx
         tx_copy = decode_transaction(tx.hex)
-        # print(f"TX COPY BEFORE REMOVING SCRIPTSIG: {tx_copy.to_json()}")
 
         # Remove all scriptsigs from the inputs
         tx_copy = self._remove_scriptsig(tx_copy)
-
-        # print(f"TX COPY AFTER REMOVING SCRIPTSIG: {tx_copy.to_json()}")
 
         # Get refenced input | modifying input modifies tx
         _txinput = tx_copy.inputs[input_index]
@@ -69,11 +68,48 @@ class TxEngine:
         # Copy tx
         txcopy = decode_transaction(tx.hex)
 
+        # Get refenced input | modifying input modifies tx
+        _txinput = txcopy.inputs[input_index]
+
+        # Get referenced utxo
+        _utxo = self.utxos.get_utxo(_txinput.outpoint)
+
+        # Create scriptcode
+        _scriptpubkey = _utxo.scriptpubkey.hex()
+        _asm = decode_script(_scriptpubkey)
+        _nminus1 = _asm.index("OP_PUSHBYTES_20")
+        _pubkeyhash = _asm[_nminus1 + 1]
+
         # Remove existing script sigs
         txcopy = self._remove_scriptsig(txcopy)
 
-        # CHECK WITNESS
-        print(txcopy.to_json())
+        # Remove witness
+        txcopy.witness = []
+
+        # Create pre-image hash
+        _version = txcopy.version.hex  # Version
+        _prevouts = hash256("".join([i.outpoint.hex for i in txcopy.inputs]))  # Outpoint hash
+        _seqhash = hash256("".join([i.sequence.hex for i in txcopy.inputs]))  # Sequence hash
+        _outpoint = _txinput.outpoint.hex  # Specific outpoint to be signed
+        _scriptcode = f"1976a914{_pubkeyhash}88ac"  # Scriptcode
+        _input_amount = _utxo.amount.hex  # Amount on UTXO
+        _sequence = _txinput.sequence.hex  # Sequence in TxInput
+        _hashoutputs = hash256("".join([i.hex for i in txcopy.outputs]))  # Output hash
+        _locktime = txcopy.locktime.hex  # Locktime
+        preimage = (_version + _prevouts + _seqhash + _outpoint + _scriptcode + _input_amount + _sequence + _hashoutputs
+                    + _locktime)
+
+        # Add sighash
+        sighash = Endian(sighash, length=Transaction.SIGHASH_BYTES)
+        preimage += sighash.hex
+
+        # Hash preimage
+        primage_hash = hash256(preimage)
+
+        # Sign preimage hash
+        sig = sign_transaction(primage_hash, self.kp.private_key)
+        encoded_sig = encode_signature(sig, sighash.num)  # bytes format
+        return encoded_sig
 
     def sign_tx_p2pkh(self, tx: Transaction, input_index=0, sighash=1):
         """
@@ -92,6 +128,25 @@ class TxEngine:
         _input.scriptsig_size = CompactSize(len(scriptsig))
         return tx
 
+    def sign_tx_p2wpkh(self, tx: Transaction, input_index=0, sighash=1):
+        # Prep tx
+        tx.segwit = True
+
+        if not tx.witness:
+            tx.witness = [Witness([]) for _ in range(tx.input_count.num)]
+
+        # signature bytes
+        _sig = self.get_segwit_signature(tx, input_index, sighash)
+
+        # Witness
+        item0 = WitnessItem(_sig.hex())
+        item1 = WitnessItem(self.kp.compressed_public_key)
+        _witness = Witness([item0, item1])
+
+        # Update and return tx
+        tx.witness[input_index] = _witness
+        return tx
+
     def _remove_scriptsig(self, tx: Transaction):
         # Remove all scriptsigs from the inputs
         for i in tx.inputs:
@@ -101,32 +156,12 @@ class TxEngine:
 
 
 # --- TESTING
-from src.library.hash_func import hash256
-from src.cipher import encode_script
+
 
 if __name__ == "__main__":
-    db = Database()
-    w = Wallet()
-    pt1data = "fff7f7881a8099afa6940d42d1e7f6362bec38171ea3edf433541db4e4ad969f00000000"
-    pt2data = "ef51e1b804cc89d182d279655c3aa89e815b1b309fe287d9b2b55d57b90ec68a01000000"
-    pt1 = decode_outpoint(pt1data)
-    pt2 = decode_outpoint(pt2data)
-    utxo1 = db.get_utxo(pt1)
-    utxo2 = db.get_utxo(pt2)
-    # print(utxo1.to_json())
-    # print(utxo2.to_json())
-    input1 = TxInput(pt1, "", 0xFFFFFFFF)
-    input2 = TxInput(pt2, "", 0xFFFFFFFF)
-    pubkeyhash = hash256(w.compressed_public_key)
-    _asm = ["OP_DUP", "OP_HASH160", pubkeyhash, "OP_EQUALVERIFY", "OP_CHECKSIG"]
-    scriptpubkey = encode_script(_asm)
-
-    output1 = TxOutput(120000, scriptpubkey)
-    tx = Transaction([input1, input2], [output1])
-    e = TxEngine(db, w.keypair)
-    print(f"TX: {tx.to_json()}")
-    for n in range(tx.input_count.num):
-        sig = e.get_legacy_signature(tx, n)
-        _scriptsig = [""]
-
-    print(f"TXSIGNED: {tx.to_json()}")
+    empty_item = WitnessItem("")
+    empty_witness = Witness([empty_item])
+    ew2 = Witness([])
+    print(f"EMPTY ITEM: {empty_item.to_json()}")
+    print(f"EMPTY WITNESS: {empty_witness.to_json()}")
+    print(f"SECOND EMPTY WITNESS: {ew2.to_json()}")

@@ -44,7 +44,7 @@ if __name__ == "__main__":
     _height = randint(400000, 500000)
     _amount = 0x10
     _pubkeyhash = hash160(w.compressed_public_key)
-    _asm = ["OP_DUP", "OP_HASH160", "OP_PUSHBYTES_20", _pubkeyhash, "OP_EQUALVERIFY", "OP_CHECKSIG"]
+    _asm = ["OP_0", "OP_PUSHBYTES_20", _pubkeyhash]  # P2WPKH
     _scriptpubkey = encode_script(_asm)
     _utxo0 = UTXO(_pt0, _height, _amount, _scriptpubkey)
     _utxo1 = UTXO(_pt1, _height, _amount, _scriptpubkey)
@@ -60,24 +60,19 @@ if __name__ == "__main__":
     tx = Transaction([_input0, _input1], [_output0])
 
     # Sign Tx
+
     for n in range(2):
-        tx = e.sign_tx_p2pkh(tx, n)
+        tx = e.sign_tx_p2wpkh(tx, n)
 
-    # Create scripts
-    _scriptpubkey0 = _utxo0.scriptpubkey.hex()
-    _scriptsig0 = tx.inputs[0].scriptsig.hex()
-    _script0 = _scriptsig0 + _scriptpubkey0
+    # print(tx.to_json())
 
-    _scriptpubkey1 = _utxo1.scriptpubkey.hex()
-    _scriptsig1 = tx.inputs[1].scriptsig.hex()
-    _script1 = _scriptsig1 + _scriptpubkey1
-    script_list = [_script0, _script1]
+    # Decode tx
+    engine = ScriptEngine()
+    witness0_verified = engine.witness_validation(tx, 0, _utxo0)
+    print(witness0_verified)
+    witness1_verified = engine.witness_validation(tx, 1, _utxo1)
+    print(witness1_verified)
 
-    s = ScriptEngine()
-    for script in script_list:
-        i = script_list.index(script)
-        s.parse_script(script, tx, i, utxos[i])
-        tx_verified = s.main_stack.pop()
-        assert tx_verified
-        assert s.main_stack.height == 0
-        print(s.main_stack.stack)
+    # tx_data = "01000000000101db6b1b20aa0fd7b23880be2ecbd4a98130974cf4748fb66092ac4d3ceb1a5477010000001716001479091972186c449eb1ded22b78e40d009bdf0089feffffff02b8b4eb0b000000001976a914a457b684d7f0d539a46a45bbc043f35b59d0d96388ac0008af2f000000001976a914fd270b1ee6abcaea97fea7ad0402e8bd8ad6d77c88ac02473044022047ac8e878352d3ebbde1c94ce3a10d057c24175747116f8288e5d794d12d482f0220217f36a485cae903c713331d877c1f64677e3622ad4010726870540656fe9dcb012103ad1d8e89212f0b92c74d23bb710c00662ad1470198ac48c43f7d6f93a2a2687392040000"
+    # _decoded = decode_transaction(tx_data)
+    # print(_decoded.to_json())

@@ -305,7 +305,7 @@ class Transaction:
 
         # Marker/Flag
         if self.segwit:
-            tx_bytes += bytes(b"0001")  # Marker/Flag hardcoded
+            tx_bytes += bytes.fromhex("0001")  # Marker/Flag hardcoded
 
         # Inputs
         tx_bytes += self.input_count.bytes + self._byte_list(self.inputs)
