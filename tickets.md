@@ -7,4 +7,4 @@
 * Add IF/THEN capability to Script class
 * ~~Add test for legacy scriptsig verification~~
 * ~~Add segwit signature algorithm~~
-* Add test to verify segwit P2WPKH script sig
+* ~~Add test to verify segwit P2WPKH script sig~~
