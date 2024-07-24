@@ -4,6 +4,7 @@ Utility functions for tests
 from random import choice
 from secrets import randbits
 
+from src.cipher import encode_base58check
 from src.library.hash_func import hash256
 from src.tx import Outpoint, UTXO, WitnessItem, Witness, TxInput, TxOutput
 
@@ -63,3 +64,8 @@ def random_txoutput():
     amount = random_int(64)
     scriptpubkey = random_hex()
     return TxOutput(amount, scriptpubkey)
+
+
+def random_base58check(bit_size=256):
+    data = random_hex(bit_size)
+    return encode_base58check(data)
