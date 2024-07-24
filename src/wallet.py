@@ -4,7 +4,7 @@ Wallet and Addresses
 from secrets import randbits
 
 from src.library.ecc import SECP256K1
-from src.library.hash_func import pbkdf2, hmac512, sha_256
+from src.library.hash_func import pbkdf2, hmac512, sha_256, hash160
 from src.library.word_list import WORDLIST
 
 
@@ -31,6 +31,10 @@ class KeyPair:
         h_x = format(x, f"0{2 * self.KEY_BYTES}x")
         h_y = format(y, f"0{2 * self.KEY_BYTES}x")
         return "04" + h_x + h_y
+
+    @property
+    def pubkeyhash(self):
+        return hash160(self.compressed_public_key)
 
 
 class Wallet:
@@ -84,6 +88,10 @@ class Wallet:
     def compressed_public_key(self):
         return self.keypair.compressed_public_key
 
+    @property
+    def pubkeyhash(self):
+        return self.keypair.pubkeyhash
+
 
 # -- TESTING -- #
 
@@ -93,3 +101,4 @@ if __name__ == "__main__":
     print(format(_w.private_key, f"64x"))
     print(_w.public_key_point)
     print(_w.compressed_public_key)
+    print(_w.pubkeyhash)

@@ -8,3 +8,10 @@
 * ~~Add test for legacy scriptsig verification~~
 * ~~Add segwit signature algorithm~~
 * ~~Add test to verify segwit P2WPKH script sig~~
+* Sort through backup folder for src
+* Sort through backup folder for tests
+* Add extended keys and enable an HD Wallet
+* ~~Add base58 encoding/decoding~~
+* Add bech32 encoding/decoding
+* Add tests for base58
+* Add tests for bech32

@@ -1,7 +1,11 @@
 """
 Methods for encoding and decoding
 """
+import re
+
+from src.library.base58 import BASE58_LIST
 from src.library.ecc import SECP256K1
+from src.library.hash_func import hash256
 from src.library.op_codes import OPCODES
 from src.primitive import Endian
 from src.tx import Outpoint, UTXO, WitnessItem, Witness, TxInput, TxOutput, Transaction
@@ -389,6 +393,53 @@ def decode_signature(der_encoded: str | bytes):
     return (r, s)
 
 
+def encode_base58check(payload: str, version_byte=0):
+    # Get prefix byte
+    version_hex = format(version_byte, "02x")
+
+    # Get checksum
+    checksum = bytes.fromhex(hash256(version_hex + payload))[:4]  # Checksum is first 4 bytes
+
+    # Convert address
+    hex_address = payload + checksum.hex()
+    address = ""
+    num = int(hex_address, 16)
+    while num > 0:
+        r = num % 58
+        address = BASE58_LIST[r] + address
+        num = num // 58
+    # Add version byte
+    version = "3" if version_byte == 5 else "1"
+    address = version + address
+    return address
+
+
+def decode_base58check(payload: str):
+    total = 0
+
+    # Decode string
+    r_payload = "".join([payload[x:x + 1] for x in reversed(range(0, len(payload)))])
+    for n in range(len(r_payload)):
+        c = r_payload[n]
+        c_i = BASE58_LIST.index(c)
+        val = pow(58, n) * c_i
+        total += val
+
+    # Break up hex into version_byte + payload and checksum
+    hex_val = format(total, "0x")
+    checksum = hex_val[-8:]
+    l1_num = re.match(r"^([1]+)", payload).group()
+    leading_zeros = "00" * int(l1_num)
+    hex_addr = leading_zeros + hex_val[:-8]
+
+    # Verify checksum
+    check = hash256(hex_addr)[:8]
+    if check != checksum:
+        raise ValueError("Checksum of recovered data not equal to given checksum.")
+
+    return hex_addr[2:]  # Remove version byte from address
+
+
 # --- DATA LIST --- #
 def _data_list(data: str, count: int, decode_type: str):
     """
@@ -426,3 +477,13 @@ def get_hex(data: str | bytes):
 def get_bytes(data: str | bytes):
     # Returns byte string
     return bytes.fromhex(data) if isinstance(data, str) else data
+
+
+# -- TESTING
+if __name__ == "__main__":
+    _hex_string = "1E65C9FAF24C6A851584AC3FBE5AD815F574F655"
+    print(f"PUBKEYHASH: {_hex_string}")
+    address = encode_base58check(_hex_string)
+    print(f"ADDRESS: {address}")
+    decoded_hex = decode_base58check(address)
+    print(f"DECODED ADDRESS: {decoded_hex.upper()}")
