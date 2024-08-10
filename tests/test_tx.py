@@ -1,10 +1,26 @@
 """
 A file for testing Transaction and its related classes. Both decoding and encoding
 """
+from src.cipher import decode_outpoint, decode_utxo
+from tests.utility import random_outpoint, random_utxo
 
-# --- TESTS --- #
+
+def test_outpoint():
+    _t = random_outpoint()
+    t1 = decode_outpoint(_t.bytes)
+    t2 = decode_outpoint(_t.hex)
+
+    assert t1.bytes == _t.bytes
+    assert t2.bytes == _t.bytes
 
 
+def test_utxo():
+    _u = random_utxo()
+    u1 = decode_utxo(_u.bytes)
+    u2 = decode_utxo(_u.hex)
+
+    assert u1.bytes == _u.bytes
+    assert u2.bytes == _u.bytes
 # def test_witness_item():
 #     _wi = random_witness_item()
 #     wi1 = decode_witness_item(_wi.bytes)

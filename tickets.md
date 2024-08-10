@@ -15,3 +15,4 @@
 * Add bech32 encoding/decoding
 * ~~Add tests for base58~~
 * Add tests for bech32
+* Understand reference bech32 code

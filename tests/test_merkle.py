@@ -4,7 +4,7 @@ A file for testing leaves and merkle trees
 from random import randint
 
 from src.backup.merkle import create_merkle_tree, get_merkle_proof, verify_element
-from tests.utility import random_txid
+from tests.utility import random_hash
 
 UPPER = 16
 LOWER = 8
@@ -15,7 +15,7 @@ def test_tree_methods():
     We create a Merkle tree then use the Leaf class to verify the levels of the tree
     """
     length = randint(LOWER, UPPER)
-    tx_id_list = [random_txid() for _ in range(length)]
+    tx_id_list = [random_hash() for _ in range(length)]
 
     # Get merkle tree
     test_tree = create_merkle_tree(tx_id_list)

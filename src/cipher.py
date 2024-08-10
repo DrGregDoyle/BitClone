@@ -394,11 +394,13 @@ def decode_signature(der_encoded: str | bytes):
 
 
 def encode_base58check(payload: str, version_byte=0):
-    # Get prefix byte
-    version_hex = format(version_byte, "02x")
+    # Handle version
+    version = "3" if version_byte == 5 else "1"
+    prefix = "05" if version_byte == 5 else "00"
 
     # Get checksum
-    checksum = bytes.fromhex(hash256(version_hex + payload))[:4]  # Checksum is first 4 bytes
+    checksum = bytes.fromhex(hash256(prefix + payload))[:4]  # Checksum is first 4 bytes
+    print(f"CHECKSUM: {checksum.hex()}")
 
     # Convert address
     hex_address = payload + checksum.hex()
@@ -408,8 +410,7 @@ def encode_base58check(payload: str, version_byte=0):
         r = num % 58
         address = BASE58_LIST[r] + address
         num = num // 58
-    # Add version byte
-    version = "3" if version_byte == 5 else "1"
+
     address = version + address
     return address
 
@@ -435,9 +436,42 @@ def decode_base58check(payload: str):
     # Verify checksum
     check = hash256(hex_addr)[:8]
     if check != checksum:
+        print(f"INITIAL PAYLOAD: {payload}")
+        print(f"HEX ADDRESS: {hex_addr}")
+        print(f"CHECK: {check}, CHECKSUM: {checksum}")  # TESTING
         raise ValueError("Checksum of recovered data not equal to given checksum.")
 
     return hex_addr[2:]  # Remove version byte from address
+
+
+def encode_bech32(payload: str, hrp="bc", witness_version=0):
+    bech32_alphabet = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+
+    # Convert payload to binary string
+    binary_payload = format(int(payload, 16), f"0{len(payload) * 4}b")
+    print(f"BINARY PAYLOAD: {binary_payload}")
+    print(f"BINARY PAYLOAD LENGTH: {len(binary_payload)}")
+    # Squash data
+    squash_list = [format(int(binary_payload[x:x + 5], 2), "02x") for x in range(0, len(binary_payload), 5)]
+    print(squash_list)
+    print([int(s, 16) for s in squash_list])
+    data_hex = "".join(squash_list)
+
+    # Add witness version byte to data_hex
+    data_hex = format(witness_version, "02x") + data_hex
+    print(f"DATA WITH WITNESS VERSION: {data_hex}")
+
+    # Compute checksum by using data_hex and HRP
+    checksum = polymod_checksum(data_hex, hrp)
+
+
+def polymod_checksum(payload: str, hrp="bc"):
+    # Start with checksum = 1
+    checksum = 1
+
+    # Process HRP
+    for ch in hrp:
+        print(ch)
 
 
 # --- DATA LIST --- #
@@ -481,9 +515,5 @@ def get_bytes(data: str | bytes):
 
 # -- TESTING
 if __name__ == "__main__":
-    _hex_string = "1E65C9FAF24C6A851584AC3FBE5AD815F574F655"
-    print(f"PUBKEYHASH: {_hex_string}")
-    address = encode_base58check(_hex_string)
-    print(f"ADDRESS: {address}")
-    decoded_hex = decode_base58check(address)
-    print(f"DECODED ADDRESS: {decoded_hex.upper()}")
+    _hex_string = "751e76e8199196d454941c45d1b3a323f1433bd6"
+    encode_bech32(_hex_string)
