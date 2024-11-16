@@ -4,7 +4,7 @@ A file for testing leaves and merkle trees
 from random import randint
 
 from src.backup.merkle import create_merkle_tree, get_merkle_proof, verify_element
-from tests.utility import random_hash
+from tests.backup.utility import random_hash
 
 UPPER = 16
 LOWER = 8

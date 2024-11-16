@@ -5,7 +5,7 @@ Testing Block and related classes
 from random import randint
 
 from src.backup.cipher import decode_header
-from tests.utility import random_header  # , random_block
+from tests.backup.utility import random_header  # , random_block
 
 
 def test_header():

@@ -7,11 +7,11 @@ from random import randint
 from src.cipher import encode_script
 from src.database import Database
 from src.engine import TxEngine
-from src.library.hash_func import hash256, hash160
+from src.backup.library.hash_func import hash256, hash160
 from src.script import ScriptEngine
 from src.tx import Outpoint, UTXO, TxInput, TxOutput, Transaction
 from src.wallet import Wallet
-from tests.utility import random_hex
+from tests.backup.utility import random_hex
 
 DEFAULT_SEED_PHRASE = ['donate', 'dentist', 'negative', 'hub', 'pact', 'drama', 'wild', 'grocery', 'nerve', 'cycle',
                        'screen', 'hundred', 'bomb', 'law', 'walk', 'stamp', 'small', 'coast', 'arrest', 'element',

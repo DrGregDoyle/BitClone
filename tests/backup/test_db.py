@@ -4,7 +4,7 @@ A file for testing db
 from pathlib import Path
 
 from src.database import Database
-from tests.utility import random_utxo, random_int
+from tests.backup.utility import random_utxo, random_int
 
 DB_DIR = Path(__file__).parent / "db"
 

@@ -7,7 +7,7 @@ from src.cipher import decompress_public_key, decode_compact_size, decode_endian
     decode_witness_item, decode_witness, decode_input, decode_output
 from src.primitive import CompactSize, Endian
 from src.wallet import Wallet
-from tests.utility import random_outpoint, random_utxo, random_witness_item, random_witness, random_txinput, \
+from tests.backup.utility import random_outpoint, random_utxo, random_witness_item, random_witness, random_txinput, \
     random_txoutput
 
 

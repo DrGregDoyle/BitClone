@@ -4,8 +4,8 @@ TxEngine: A class for signing Transactions. Designed for use in a Wallet.
 from src.cipher import encode_script
 from src.cipher import encode_signature, decode_transaction, decode_script
 from src.database import Database
-from src.library.ecdsa import sign_transaction
-from src.library.hash_func import hash256
+from src.backup.library.ecdsa import sign_transaction
+from src.backup.library.hash_func import hash256
 from src.primitive import CompactSize, Endian
 from src.tx import Transaction, Witness, WitnessItem
 from src.wallet import KeyPair

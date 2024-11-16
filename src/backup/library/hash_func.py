@@ -8,7 +8,7 @@ from hashlib import sha256, sha512, sha1
 
 from ripemd.ripemd160 import ripemd160
 
-from src.library.base58 import BASE58_LIST
+from src.backup.library.base58 import BASE58_LIST
 
 
 def get_bytes(data: str | bytes) -> bytes:

@@ -3,10 +3,10 @@ Methods for encoding and decoding
 """
 import re
 
-from src.library.base58 import BASE58_LIST
-from src.library.ecc import SECP256K1
-from src.library.hash_func import hash256
-from src.library.op_codes import OPCODES
+from src.backup.library.base58 import BASE58_LIST
+from src.backup.library.ecc import SECP256K1
+from src.backup.library.hash_func import hash256
+from src.backup.library import OPCODES
 from src.primitive import Endian
 from src.tx import Outpoint, UTXO, WitnessItem, Witness, TxInput, TxOutput, Transaction
 

@@ -1,197 +1,135 @@
 """
-A module for dealing with elliptic curve cryptography (ecc)
+Elliptic Curve Class
 
+NIST Elliptic Curves - See https://www.secg.org/sec2-v2.pdf for constants.
+All groups of rational points have prime order, hence all curves are suitable for use in ECDSA.
 """
-# --- IMPORTS --- #
-import logging
-import sys
+import json
+import secrets
 
-# --- LOGGING --- #
-log_level = logging.DEBUG
-logger = logging.getLogger(__name__)
-logger.setLevel(log_level)
-handler = logging.StreamHandler(sys.stdout)
-logger.addHandler(handler)
+from src.library.ecc_math import tonelli_shanks, legendre_symbol
 
-
-# --- METHODS --- #
-def legendre_symbol(r: int, p: int):
-    """
-    Returns (r | p) = {
-        0 if r % p == 0
-        1 if r % p != 0 and r is a quadratic residue mod p
-        -1 if r % p != 0 and r is a quadratic non-residue mod p
-    }
-    We use Euler's criterion which states:
-        (r | p) = r^((p-1)/1) (mod p)
-    """
-    if r % p == 0:
-        return 0
-    else:
-        criterion = pow(r, (p - 1) // 2, p)
-        return -1 if criterion == p - 1 else 1
-
-
-def is_quadratic_residue(n: int, p: int) -> bool:
-    """
-    Returns True if (n|p) != -1. (We include 0 as quadratic residues.)
-    """
-    return True if legendre_symbol(n, p) != -1 else False
-
-
-def tonelli_shanks(n: int, p: int):
-    """
-    If n is a quadratic residue mod p, then we return an integer r such that r^2 = n (mod p).
-    """
-
-    # Verify n is a quadratic residue
-    if not is_quadratic_residue(n, p):
-        return None
-
-    # Trivial case
-    if n % p == 0:
-        return 0
-
-    # p = 3 (mod 4) case
-    if p % 4 == 3:
-        return pow(n, (p + 1) // 4, p)
-
-    # --- GENERAL CASE --- #
-    # 1) Divide p-1 into its even and odd components by p-1 = 2^s * q, where q is odd and s >=1
-    q = p - 1
-    s = 0
-    while q % 2 == 0:
-        s += 1
-        q //= 2
-
-    # 2) Find a quadratic non residue
-    z = 2
-    while is_quadratic_residue(z, p):
-        z += 1
-
-    # 3) Configure initial variables
-    m = s
-    c = pow(z, q, p)
-    t = pow(n, q, p)
-    r = pow(n, (q + 1) // 2, p)
-
-    # 4) Repeat until t == 1
-    while t != 1:
-
-        # First find the least integer i such that t^(2^i) = 1 (mod p)
-        i = 0
-        factor = t
-        while factor != 1:
-            i += 1
-            factor = (factor * factor) % p
-
-        # Reassign variables
-        exp = 2 ** (m - i - 1)
-        b = pow(c, exp, p)
-        m = i
-        c = (b * b) % p
-        t = (t * c) % p
-        r = (r * b) % p
-
-    return r
-
-
-# --- CLASSES --- #
+MAX_PRIME = pow(2, 19) - 1  # 7th Mersenne Prime
 
 
 class EllipticCurve:
-    """
-    We let E = E(a,b;p) denote the elliptic curve over F_p given by
-        y^2 = x^3 + ax + b (mod p).
-    """
-    MAX_PRIME = pow(2, 19) - 1  # 7th Mersenne prime
 
-    def __init__(self, a: int, b: int, p: int, generator: tuple | None = None, order: int | None = None):
-        # Curve constants
+    def __init__(self, a: int, b: int, p: int, order: int, generator: tuple):
+        """
+        We instantiate an elliptic curve E of the form
+
+            y^2 = x^3 + ax + b (mod p).
+
+        We let E(F_p) denote the corresponding cyclic abelian group, comprised of the rational points of E and the
+        point at infinity. The order variable refers to the order of this group. As the group is cyclic,
+        it will contain a generator point, which can be specified during instantiation.
+
+        """
+        # Get curve values
         self.a = a
         self.b = b
         self.p = p
-        self.g = generator
+
+        # Get group values
         self.order = order
-        if self.order is None and self.p < self.MAX_PRIME:
-            self.order = self.get_order()
+        self.generator = generator
 
-    def rhs(self, x: int):
-        return (pow(x, 3) + self.a * x + self.b) % self.p
+    def __repr__(self):
+        gx, gy = self.generator
+        hex_dict = {
+            'a': hex(self.a),
+            'b': hex(self.b),
+            'p': hex(self.p),
+            'order': hex(self.order),
+            'generator': (hex(gx), hex(gy))
+        }
+        return json.dumps(hex_dict)
 
-    def is_x_on_curve(self, x: int) -> bool:
+    # --- Right Hand Side --- #
+
+    def x_terms(self, x: int) -> int:
+        """Compute x^3 + ax + b mod p."""
+        return (pow(x, 3, self.p) + self.a * x + self.b) % self.p
+
+    # --- Points on curve --- #
+
+    def random_point(self) -> tuple:
         """
-        A residue x is on the curve E iff x^3 + ax + b is a quadratic residue modulo p.
+        Returns a cryptographically secure random point on the curve.
         """
-        return is_quadratic_residue(self.rhs(x), self.p)
+        # Find a random x-coordinate that is on the curve
+        x = next(
+            x for x in (secrets.randbelow(self.p - 1) for _ in iter(int, 1))
+            if self.is_x_on_curve(x)
+        )
+        # Compute corresponding y-coordinate
+        return x, self.find_y_from_x(x)
 
-    def is_point_on_curve(self, pt: tuple | None) -> bool:
+    def is_point_on_curve(self, point: tuple) -> bool:
         """
         Returns true if the given point is on the curve, false otherwise
         """
         # Point at infinity case first
-        if pt is None:
+        if point is None:
             return True
 
-        # Verify tuple
-        try:
-            assert isinstance(pt, tuple)
-        except AssertionError:
-            logger.error(f"Given point {pt} is not a tuple. Enter a point of the form (x,y).")
-
         # Return True if y^2 = x^3 + ax +b (mod p) and False otherwise
-        x, y = pt
-        return (self.rhs(x) - pow(y, 2)) % self.p == 0
+        x, y = point
+        return (self.x_terms(x) - pow(y, 2)) % self.p == 0
 
-    def get_y_from_x(self, x: int):
+    def is_x_on_curve(self, x: int) -> bool:
         """
-        Using tonelli shanks, we return y such that E(x,y) = 0, if x is on the curve.
-        Note that if (x,y) is a point then (x,p-y) will be a point as well.
+        A residue x is on the curve E iff x^3 + ax + b is a quadratic residue modulo p.
+        This includes the trivial case x^3 + ax + b = 0 (mod p). Hence, by Euler's criterion, if
+            ((x^3+ax+b) | p) != 1 (mod p),
+        then x is a point on the curve.
+        """
+        return legendre_symbol(self.x_terms(x), self.p) != -1
+
+    def find_y_from_x(self, x: int):
+        """
+        Using Tonelli-Shanks, return the smaller y such that E(x, y) = 0 if x is on the curve.
+        Note that if (x, y) is a point, then (x, p-y) is also a point.
         """
 
         # Verify x is on curve
-        try:
-            assert self.is_x_on_curve(x), \
-                f"The value of x^3 + {self.a}x + {self.b} is not a quadratic residue for x = {x}"
-        except AssertionError:
+        if not self.is_x_on_curve(x):
             return None
 
         # Find the two possible y values
-        y = tonelli_shanks(self.rhs(x), self.p)
+        y = tonelli_shanks(self.x_terms(x), self.p)
         neg_y = -y % self.p
-
-        # Create points
-        pt = (x, y)
-        neg_pt = (x, neg_y)
 
         # Check y values
         try:
-            assert self.is_point_on_curve(pt)
-            assert self.add_points(pt, neg_pt) is None
+            assert self.is_point_on_curve((x, y))
+            assert self.is_point_on_curve((x, neg_y))
+            assert self.add_points((x, y), (x, neg_y)) is None
         except AssertionError:
             return None
-        
+
         # Return y
-        return y
+        return min(y, neg_y)
 
     # --- Group operations --- #
 
-    def add_points(self, point1: tuple | None, point2: tuple | None):
+    def add_points(self, point1: tuple, point2: tuple):
         """
         Adding points using the elliptic curve addition rules.
         """
+
+        # Verify points exist
+        try:
+            assert self.is_point_on_curve(point1)
+            assert self.is_point_on_curve(point2)
+        except AssertionError:
+            return None
+
         # Point at infinity cases
         if point1 is None:
             return point2
         if point2 is None:
             return point1
-
-        # Verify points exist
-        try:
-            assert self.is_point_on_curve(point1), f"{point1} is not on the curve."
-            assert self.is_point_on_curve(point2), f"{point2} is not on the curve."
-        except AssertionError:
-            return None
 
         # Get coordinates
         x1, y1 = point1
@@ -211,18 +149,18 @@ class EllipticCurve:
         # Use the addition formulas
         x3 = (m * m - x1 - x2) % self.p
         y3 = (m * (x1 - x3) - y1) % self.p
-        point = x3, y3
+        point = (x3, y3)
 
         # Verify result
         try:
-            assert self.is_point_on_curve(point), f"Calculated point {point} is not on the curve. Serious error."
+            assert self.is_point_on_curve(point)
         except AssertionError:
             return None
 
         # Return sum of points
         return point
 
-    def scalar_multiplication(self, n: int, pt: tuple | None):
+    def scalar_multiplication(self, n: int, point: tuple):
         """
         We use the double-and-add algorithm to add a point P with itself n times.
 
@@ -243,123 +181,145 @@ class EllipticCurve:
             1       | double/add    | 12P + P = 13P
             0       | double        | 26P
         """
-
-        # Retrieve order if it's None - only for small primes
-        if self.order is None:
-            self.order = self.get_order()
-
         # Point at infinity case
-        if pt is None:
-            return None
-
-        # Scalar multiple divides group order
-        if n % self.order == 0:
+        if point is None:
             return None
 
         # Take residue of n modulo the group order
         n = n % self.order
 
-        # Proceed with algorithm
-        bitstring = bin(n)[2:]
-        temp_pt = pt
-        for x in range(1, len(bitstring)):
-            temp_pt = self.add_points(temp_pt, temp_pt)  # Double regardless of bit
-            bit = int(bitstring[x:x + 1], 2)
-            if bit == 1:
-                temp_pt = self.add_points(temp_pt, pt)  # Add to the doubling if bit == 1
-
-        # Verify results
-        try:
-            assert self.is_point_on_curve(temp_pt)
-        except AssertionError:
+        # Handle zero residue case
+        if n == 0:
             return None
 
-        # Return point
-        return temp_pt
+        # Initialize result to point at infinity and temp_point to the given point
+        result = None
+        temp_point = point
+        # Iterate over the bits of n, from least significant to most significant
+        while n > 0:
+            # If the least significant bit is 1, add temp_point to result
+            if n & 1:
+                result = self.add_points(result, temp_point)
 
-    def generator(self, n: int):
-        """
-        We calculate g^n (mod order), where g is the generator point of the curve
-        """
-        return self.scalar_multiplication(n, self.g)
+            # Double temp_point
+            temp_point = self.add_points(temp_point, temp_point)
 
-    def get_order(self):
-        """
-        We naively calculate the order by iterating over all x in F_p. If x is on the curve we
-        obtain y. If y is not zero, then we know (x,y) and (x,p-y) are two points on the curve. Otherwise, (x,
-        0) is a point on the curve (on the x-axis). Hence, we sum up these values and add the point at infinity to
-        return the order.
+            # Right-shift n to process the next bit
+            n >>= 1
 
-        NOTE: This should only be used for small primes.
-        """
+        # Verify results
+        if not self.is_point_on_curve(result):
+            return None
 
-        _sum = 1  # Start with point of infinity
-        for x in range(0, self.p):
-            if self.is_x_on_curve(x):  # If x is on the curve
-                y = self.get_y_from_x(x)  # Find corresponding y
-                if y == 0:
-                    _sum += 1  # Only 1 pt if x is on the y-axis
-                else:
-                    _sum += 2  # Symmetric points if y is non-zero
-        return _sum
+        return result
 
-    def get_list_of_points(self):
-        """
-        Used for debugging
-        :return:
-        """
-        if self.order is None:
-            return []
-        point_list = [None]
-        for x in range(self.p):
-            if self.is_x_on_curve(x):
-                y = self.get_y_from_x(x)  # Find corresponding y
-                if y == 0:
-                    point_list.append((x, y))
-                else:
-                    neg_y = -y % self.p
-                    point_list.extend([(x, y), (x, neg_y)])
-        return point_list
+    def multiply_generator(self, n: int):
+        return self.scalar_multiplication(n, self.generator)
 
 
-class SECP256K1(EllipticCurve):
-    A = 0
-    B = 7
-    P = pow(2, 256) - pow(2, 32) - pow(2, 9) - pow(2, 8) - pow(2, 7) - pow(2, 6) - pow(2, 4) - 1
-    GENERATOR = (
-        55066263022277343669578718895168534326250603453777594175500187360389116729240,  # G_x
-        32670510020758816978083085130507043184471273380659243275938904335757337482424  # G_y
-    )
-    ORDER = 115792089237316195423570985008687907852837564279074904382605163141518161494337
+# --- NIST CURVES --- #
+def secp192k1():
+    # Constants
+    a = 0x0
+    b = 0x3
+    p = pow(2, 192) - pow(2, 32) - pow(2, 12) - pow(2, 8) - pow(2, 7) - pow(2, 6) - pow(2, 3) - 1
+    order = 0xfffffffffffffffffffffffe26f2fc170f69466a74defd8d
+    generator = (0xdb4ff10ec057e9ae26b07d0280b7f4341da5d1b1eae06c7d, 0x9b2f2f6d9c5628a7844163d015be86344082aa88d95e2f9d)
 
-    def __init__(self):
-        super().__init__(self.A, self.B, self.P, self.GENERATOR, self.ORDER)
+    # Return curve object
+    return EllipticCurve(a, b, p, order, generator)
 
 
-# --- TESTING --- #
-if __name__ == "__main__":
-    pass
-    # p = 7
-    # s1 = legendre_symbol(2, p)
-    # s2 = legendre_symbol(3, p)
-    # print(f"WE EXPECT 1: {s1}")
-    # print(f"WE EXPECT -1: {s2}")
+def secp192r1():
+    # Constants
+    a = 0xfffffffffffffffffffffffffffffffefffffffffffffffc
+    b = 0x64210519e59c80e70fa7e9ab72243049feb8deecc146b9b1
+    p = pow(2, 192) - pow(2, 64) - 1
+    order = 0xffffffffffffffffffffffff99def836146bc9b1b4d22831
+    generator = (0x188da80eb03090f67cbf20eb43a18800f4ff0afd82ff1012, 0x07192b95ffc8da78631011ed6b24cdd573f977a11e794811)
 
-    # test_curve = EllipticCurve(
-    #     a=7,
-    #     b=13,
-    #     p=17
-    # )
-    # list_of_points = test_curve.get_list_of_points()
-    # print(f"Calculated order: {test_curve.order}")
-    # print(f"List of point: {list_of_points}")
-    # print(f"Number of points + 1: {len(list_of_points)}")
-    #
-    # for known_pt in list_of_points:
-    #     print(f"Initial point: {known_pt}")
-    #     temp_pt = None
-    #     for y in range(test_curve.order):
-    #         temp_pt = test_curve.add_points(temp_pt, known_pt)
-    #         scalar_multiple = test_curve.scalar_multiplication(y + 1, known_pt)
-    #         print(f"Temp point after {y} iterations: {temp_pt}")
-    #         print(f"Scalar multiplication using {y + 1} multiplier: {scalar_multiple}")
+    # Return curve object
+    return EllipticCurve(a, b, p, order, generator)
+
+
+def secp224k1():
+    # Constants
+    a = 0x0
+    b = 0x5
+    p = pow(2, 224) - pow(2, 32) - pow(2, 12) - pow(2, 11) - pow(2, 9) - pow(2, 7) - pow(2, 4) - pow(2, 1) - 1
+    order = 0x010000000000000000000000000001dce8d2ec6184caf0a971769fb1f7
+    generator = (
+        0xa1455b334df099df30fc28a169a467e9e47075a90f7e650eb6b7a45c,
+        0x7e089fed7fba344282cafbd6f7e319f7c0b0bd59e2ca4bdb556d61a5)
+
+    # Return curve object
+    return EllipticCurve(a, b, p, order, generator)
+
+
+def secp224r1():
+    # Constants
+    a = 0xfffffffffffffffffffffffffffffffefffffffffffffffffffffffe
+    b = 0xb4050a850c04b3abf54132565044b0b7d7bfd8ba270b39432355ffb4
+    p = pow(2, 224) - pow(2, 96) + 1
+    order = 0xffffffffffffffffffffffffffff16a2e0b8f03e13dd29455c5c2a3d
+    generator = (
+        0xb70e0cbd6bb4bf7f321390b94a03c1d356c21122343280d6115c1d21,
+        0xbd376388b5f723fb4c22dfe6cd4375a05a07476444d5819985007e34)
+
+    # Return curve object
+    return EllipticCurve(a, b, p, order, generator)
+
+
+def secp256k1():
+    # Constants
+    a = 0
+    b = 7
+    p = pow(2, 256) - pow(2, 32) - pow(2, 9) - pow(2, 8) - pow(2, 7) - pow(2, 6) - pow(2, 4) - 1
+    order = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
+    generator = (0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798,
+                 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8)
+
+    # Return curve object
+    return EllipticCurve(a, b, p, order, generator)
+
+
+def secp256r1():
+    # Constants
+    a = 0xffffffff00000001000000000000000000000000fffffffffffffffffffffffc
+    b = 0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b
+    p = pow(2, 224) * (pow(2, 32) - 1) + pow(2, 192) + pow(2, 96) - 1
+    order = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551
+    generator = (
+        0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296,
+        0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5)
+
+    # Return curve object
+    return EllipticCurve(a, b, p, order, generator)
+
+
+def secp384r1():
+    # Constants
+    a = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeffffffff0000000000000000fffffffc
+    b = 0xb3312fa7e23ee7e4988e056be3f82d19181d9c6efe8141120314088f5013875ac656398d8a2ed19d2a85c8edd3ec2aef
+    p = pow(2, 384) - pow(2, 128) - pow(2, 96) + pow(2, 32) - 1
+    order = 0xffffffffffffffffffffffffffffffffffffffffffffffffc7634d81f4372ddf581a0db248b0a77aecec196accc52973
+    generator = (
+        0xaa87ca22be8b05378eb1c71ef320ad746e1d3b628ba79b9859f741e082542a385502f25dbf55296c3a545e3872760ab7,
+        0x3617de4a96262c6f5d9e98bf9292dc29f8f41dbd289a147ce9da3113b5f0b8c00a60b1ce1d7e819d7a431d7c90ea0e5f)
+
+    # Return curve object
+    return EllipticCurve(a, b, p, order, generator)
+
+
+def secp521r1():
+    # Constants
+    a = 0x01fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc
+    b = 0x0051953eb9618e1c9a1f929a21a0b68540eea2da725b99b315f3b8b489918ef109e156193951ec7e937b1652c0bd3bb1bf073573df883d2c34f1ef451fd46b503f00
+    p = pow(2, 521) - 1  # 13th Mersenne prime
+    order = 0x01fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffa51868783bf2f966b7fcc0148f709a5d03bb5c9b8899c47aebb6fb71e91386409
+    generator = (
+        0x00c6858e06b70404e9cd9e3ecb662395b4429c648139053fb521f828af606b4d3dbaa14b5e77efe75928fe1dc127a2ffa8de3348b3c1856a429bf97e7e31c2e5bd66,
+        0x011839296a789a3bc0045c8a5fb42c7d1bd998f54449579b446817afbd17273e662c97ee72995ef42640c550b9013fad0761353c7086a272c24088be94769fd16650)
+
+    # Return curve object
+    return EllipticCurve(a, b, p, order, generator)

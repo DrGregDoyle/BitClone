@@ -9,10 +9,10 @@ from collections import deque
 from typing import Any
 
 from src.cipher import decompress_public_key, decode_transaction, decode_signature, decode_script, encode_script
-from src.library.ecc import SECP256K1
-from src.library.ecdsa import verify_signature
-from src.library.hash_func import hash160, op_sha1, sha_256, ripemd160, hash256
-from src.library.op_codes import OPCODES
+from src.backup.library.ecc import SECP256K1
+from src.backup.library.ecdsa import verify_signature
+from src.backup.library.hash_func import hash160, op_sha1, sha_256, ripemd160, hash256
+from src.backup.library import OPCODES
 from src.primitive import CompactSize, Endian
 from src.tx import Transaction, UTXO
 

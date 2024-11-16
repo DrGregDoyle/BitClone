@@ -2,7 +2,7 @@
 A file for testing Transaction and its related classes. Both decoding and encoding
 """
 from src.cipher import decode_outpoint, decode_utxo
-from tests.utility import random_outpoint, random_utxo
+from tests.backup.utility import random_outpoint, random_utxo
 
 
 def test_outpoint():

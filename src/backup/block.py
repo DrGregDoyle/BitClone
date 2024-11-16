@@ -5,7 +5,7 @@ import json
 
 from src.backup.merkle import create_merkle_tree
 from src.backup.parse import bits_to_target, reverse_bytes
-from src.library.hash_func import hash256
+from src.backup.library.hash_func import hash256
 from src.primitive import ByteOrder, Endian, CompactSize
 
 

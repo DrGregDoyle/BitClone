@@ -4,8 +4,8 @@ We test signature DER encoding and decoding
 from secrets import randbits
 
 from src.backup.signature import sign_transaction, verify_signature, encode_signature, decode_signature
-from src.library.ecc import SECP256K1
-from tests.utility import random_txid
+from src.backup.library.ecc import SECP256K1
+from tests.backup.utility import random_txid
 
 
 def test_der_encoding():

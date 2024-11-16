@@ -56,7 +56,7 @@ def compress_point(pt: tuple) -> str:
 def decompress_point(data: str) -> tuple | bool:
     parity = 0 if data[:2] == "02" else 1
     _x = int(data[2:66], 16)  # 32 bytes
-    from src.library.ecc import SECP256K1
+    from src.backup.library.ecc import SECP256K1
     curve = SECP256K1()
     valid_x = curve.is_x_on_curve(_x)
     if not valid_x:

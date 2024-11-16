@@ -5,10 +5,10 @@ from random import randint
 
 from src.cipher import encode_script, encode_base58check
 from src.database import Database
-from src.library.hash_func import hash160
+from src.backup.library.hash_func import hash160
 from src.tx import UTXO
 from src.wallet import Wallet
-from tests.utility import random_outpoint, random_int
+from tests.backup.utility import random_outpoint, random_int
 
 DEFAULT_SEED_PHRASE = ['donate', 'dentist', 'negative', 'hub', 'pact', 'drama', 'wild', 'grocery', 'nerve', 'cycle',
                        'screen', 'hundred', 'bomb', 'law', 'walk', 'stamp', 'small', 'coast', 'arrest', 'element',

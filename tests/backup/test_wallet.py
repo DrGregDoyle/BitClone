@@ -5,7 +5,7 @@ A file for testing the Wallet and WalletFactory classes
 from src.cipher import decode_base58check, encode_base58check
 # --- IMPORTS --- #
 from src.wallet import Wallet
-from tests.utility import random_hex
+from tests.backup.utility import random_hex
 
 
 # --- TESTS --- #

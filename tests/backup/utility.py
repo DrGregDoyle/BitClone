@@ -5,7 +5,7 @@ from random import choice
 from secrets import randbits
 
 from src.cipher import encode_base58check
-from src.library.hash_func import hash256
+from src.backup.library.hash_func import hash256
 from src.tx import Outpoint, UTXO, WitnessItem, Witness, TxInput, TxOutput
 
 

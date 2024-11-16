@@ -5,9 +5,9 @@ A class for BitClone wallets
 # --- IMPORTS --- #
 from secrets import randbits
 
-from src.library.ecc import SECP256K1
-from src.library.hash_func import hmac512, pbkdf2, sha_256
-from src.library.word_list import WORDLIST
+from src.backup.library.ecc import SECP256K1
+from src.backup.library.hash_func import hmac512, pbkdf2, sha_256
+from src.backup.library.word_list import WORDLIST
 
 
 # --- CLASSES --- #
