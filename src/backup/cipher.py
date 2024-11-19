@@ -3,12 +3,13 @@ Methods for encoding and decoding
 """
 import re
 
-from src.backup.library.base58 import BASE58_LIST
 from src.backup.library.ecc import SECP256K1
-from src.backup.library.hash_func import hash256
-from src.backup.library import OPCODES
-from src.primitive import Endian
 from src.tx import Outpoint, UTXO, WitnessItem, Witness, TxInput, TxOutput, Transaction
+
+from src.backup.library import OPCODES
+from src.backup.library.base58 import BASE58_LIST
+from src.backup.library.hash_func import hash256
+from src.library.primitive import Endian
 
 
 def decompress_public_key(cpk: str):

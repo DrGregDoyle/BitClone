@@ -9,7 +9,7 @@ Refactoring Transaction class
 import json
 
 from src.backup.library.hash_func import hash256
-from src.primitive import ByteOrder, Endian, CompactSize
+from src.library.primitive import ByteOrder, Endian, CompactSize
 
 
 class Outpoint:

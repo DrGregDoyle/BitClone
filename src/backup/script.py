@@ -8,13 +8,14 @@ The Script class contains a method to read and process a stack based on the op-c
 from collections import deque
 from typing import Any
 
-from src.cipher import decompress_public_key, decode_transaction, decode_signature, decode_script, encode_script
 from src.backup.library.ecc import SECP256K1
 from src.backup.library.ecdsa import verify_signature
-from src.backup.library.hash_func import hash160, op_sha1, sha_256, ripemd160, hash256
-from src.backup.library import OPCODES
-from src.primitive import CompactSize, Endian
+from src.cipher import decompress_public_key, decode_transaction, decode_signature, decode_script, encode_script
 from src.tx import Transaction, UTXO
+
+from src.backup.library import OPCODES
+from src.backup.library.hash_func import hash160, op_sha1, sha_256, ripemd160, hash256
+from src.library.primitive import CompactSize, Endian
 
 
 # --- CLASSES --- #

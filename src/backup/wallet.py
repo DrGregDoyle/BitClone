@@ -6,8 +6,9 @@ A class for BitClone wallets
 from secrets import randbits
 
 from src.backup.library.ecc import SECP256K1
+
 from src.backup.library.hash_func import hmac512, pbkdf2, sha_256
-from src.backup.library.word_list import WORDLIST
+from src.library.word_list import WORDLIST
 
 
 # --- CLASSES --- #
@@ -322,6 +323,7 @@ class HDWallet:
     #         return False
     #     x, _ = curve_point
     #     return r == x % n
+
 
 class KeyPair:
     """

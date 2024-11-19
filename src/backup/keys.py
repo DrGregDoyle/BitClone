@@ -4,8 +4,9 @@ Classes for public and private keys
 from secrets import randbits
 
 from src.backup.library.ecc import SECP256K1
+
 from src.backup.library.hash_func import sha_256, hash256
-from src.backup.library.word_list import WORDLIST
+from src.library.word_list import WORDLIST
 
 KEY_SIZE = 32
 

@@ -5,8 +5,9 @@ from secrets import randbits
 
 from src.cipher import decompress_public_key, decode_compact_size, decode_endian, decode_outpoint, decode_utxo, \
     decode_witness_item, decode_witness, decode_input, decode_output
-from src.primitive import CompactSize, Endian
 from src.wallet import Wallet
+
+from src.library.primitive import CompactSize, Endian
 from tests.backup.utility import random_outpoint, random_utxo, random_witness_item, random_witness, random_txinput, \
     random_txoutput
 

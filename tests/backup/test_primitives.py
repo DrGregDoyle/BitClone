@@ -5,7 +5,7 @@ Testing primitives
 from hashlib import sha256
 from random import randint
 
-from src.primitive import Endian, CompactSize, ByteOrder
+from src.library.primitive import Endian, CompactSize, ByteOrder
 
 
 def test_endian():
