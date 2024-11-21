@@ -1,7 +1,7 @@
 """
 Methods for Schnorr signatures
 """
-from typing import Any
+from typing import Union
 
 from src.library.data_handling import Data
 from src.library.ecc import secp256k1
@@ -12,74 +12,90 @@ logger = get_logger(__name__)
 
 HASHTYPE = HashType.SHA256
 
+# Type aliases for better readability
+KeyType = Union[int, str, bytes, Data]
+MessageType = Union[str, bytes, Data]
 
-def schnorr_signature(private_key: int | Data | Any, message: Data | Any, auxiliary_bits: Any = 1):
-    # Setup
+
+def schnorr_signature(private_key: KeyType, message: MessageType, auxiliary_bits: KeyType = 1):
+    # Curve setup
     curve = secp256k1()
     n = curve.order
-    priv_key = Data(private_key)
-    public_key_point = curve.multiply_generator(priv_key.num)
+
+    # Data setup
+    private_key = Data(private_key).num  # integer
     message = Data(message)
-    aux_rand = Data(auxiliary_bits)
-    print(aux_rand.hex)
+    auxiliary_bits = Data(auxiliary_bits)
 
     # Check that private key is < n
-    if priv_key.num >= n:
+    if private_key >= n:
         raise ValueError("Given private key must be less than number of rational points on the curve")
 
-    # Negate private_key if necessary
-    if public_key_point[1] % 2 != 0:
-        logger.debug("Negating Private Key")
-        priv_key = Data(n - priv_key.num)
-        public_key_point = curve.multiply_generator(priv_key.num)
+    # Calculate public key - Negate private_key if necessary
+    x, y = curve.multiply_generator(private_key)
+    if y % 2 != 0:
+        private_key = n - private_key
+
+    logger.debug(f"Private key: {hex(private_key)}")
+    logger.debug(f"Public key x: {hex(x)}")
+    logger.debug(f"Public key y: {hex(y)}")
 
     # Create private nonce
-    aux_rand_hash = tagged_hash_function("BIP0340/aux", aux_rand, hash_type=HASHTYPE)
-    logger.debug(f"AUX RAND HASH HEX: {aux_rand_hash.hex}")
+    aux_rand_hash = tagged_hash_function("BIP0340/aux", auxiliary_bits, hash_type=HASHTYPE)
+    logger.debug(f"Aux Rand Hash: 0x{aux_rand_hash.hex}")
 
     # XOR private key with aux_rand_hash
-    t = priv_key.num ^ aux_rand_hash.num
+    t = private_key ^ aux_rand_hash.num
+    logger.debug(f"Private key XOR aux_rand_hash: {hex(t)}")
 
     # Create final private nonce
-    data_to_hash = Data(t + public_key_point[0] + message.num)
-    private_nonce = tagged_hash_function("BIP0340/nonce", data_to_hash, hash_type=HASHTYPE).num % n
+    hex_data = hex(t)[2:] + hex(x)[2:] + message.hex
+    private_nonce = tagged_hash_function("BIP0340/nonce", hex_data, hash_type=HASHTYPE).num % n
+    logger.debug(f"Private Nonce: {hex(private_nonce)}")
 
-    # Calculate public nonce
-    public_nonce_point = curve.multiply_generator(private_nonce)
-
-    # Negate private nonce if necessary
-    if public_nonce_point[1] % 2 != 0:
-        logger.debug("Negating Private Nonce")
+    # Calculate public nonce - Negate private_nonce if necessary
+    px, py = curve.multiply_generator(private_nonce)
+    if py % 2 != 0:
         private_nonce = n - private_nonce
-        public_nonce_point = curve.multiply_generator(private_nonce)
+    logger.debug(f"Public nonce x: {hex(px)}")
+    logger.debug(f"Public nonce y: {hex(py)}")
+    logger.debug(f"Private nonce after negation if necessary: {hex(private_nonce)}")
 
     # Calculate the challenge
-    challenge_data = Data(public_nonce_point[0] + public_key_point[0] + message.num)
+    challenge_data = hex(px)[2:] + hex(x)[2:] + message.hex
     challenge = tagged_hash_function("BIP0340/challenge", challenge_data, HASHTYPE).num % n
 
     # Construct signature
-    r = public_nonce_point[0]
+    r = px
     s = (private_nonce + challenge * private_key) % n
 
     # Return 64 byte hex string composed of two 32 byte hex strings from r and s
     return format(r, "064x") + format(s, "064x")  # 64 hex chars = 32 bytes
 
 
-def verify_schnorr_signature(public_key_x: int | str, message: Data | Any, signature: str):
-    # Setup
-    curve = secp256k1()
-    n = curve.order
-    message = Data(message)
-    pubkey_x = Data(public_key_x)
-
+def verify_schnorr_signature(public_key_x: KeyType, message: MessageType, signature: str) -> bool:
     # Verify signature is 128 characters == 64 bytes
     if len(signature) != 128:
         raise ValueError("Given signature is not 64 bytes.")
 
+    # Curve Setup
+    curve = secp256k1()
+    n = curve.order
+    p = curve.p
+
+    # Data setup
+    x = Data(public_key_x).num  # Integer
+    message = Data(message)
+
+    # Verify x value restrictions
+    if x > p:
+        raise ValueError("Given x coordinate doesn't satisfy value restrictions")
+
     # Calculate even y point
-    temp_y = curve.find_y_from_x(pubkey_x.num)
-    pubkey_y = Data(temp_y) if temp_y % 2 == 0 else Data(n - temp_y)
-    pubkey = (pubkey_x.num, pubkey_y.num)
+    y = curve.find_y_from_x(x)
+    if y % 2 != 0:
+        y = p - y
+    public_key = (x, y)
 
     # Extract signature parts
     r, s = signature[:64], signature[64:]
@@ -87,28 +103,32 @@ def verify_schnorr_signature(public_key_x: int | str, message: Data | Any, signa
     sig_s = Data(s)
 
     # Verify signatures values
-    if sig_r.num >= curve.p or sig_s.num >= n:
-        logger.error(f"Signature error. r < p: {sig_r.num > curve.p}, s < n: {sig_s >= n}")
-        raise ValueError("Given signature does not meet value restrictions.")
+    errors = {
+        "r < p": sig_r.num < p,
+        "s < n": sig_s.num < n
+    }
+
+    if not all(errors.values()):
+        raise ValueError(f"One or more signature values is invalid: {errors}")
 
     # Calculate the challenge
-    challenge_data = Data(sig_r.num + pubkey_x.num + message.num)
+    challenge_data = sig_r.hex + hex(x)[2:] + message.hex
     challenge = tagged_hash_function("BIP0340/challenge", challenge_data, HASHTYPE).num % n
 
     # Verify the signature
     point1 = curve.multiply_generator(sig_s.num)
-    point2 = curve.scalar_multiplication((n - challenge), pubkey)
+    point2 = curve.scalar_multiplication((n - challenge), public_key)
     point3 = curve.add_points(point1, point2)
-    valid_signature = (point3[0] == sig_r.num)
-    print(f'VALID SIGNATURE: {valid_signature}')
+    return point3[0] == sig_r.num
 
 
 if __name__ == "__main__":
-    _priv_key = 49097021556540366728351378259471079529932651371354504836784826377767265482141
-    _message = "243f6a8885a308d313198a2e03707344a4093822299f31d0082efa98ec4e6c89"
+    _priv_key = 0xc9043f04ef0a863b11e4ac69fd6400ac85c9b3e5fe1bd360b18a7dfd8cef5650
+    _message = "ecf966b56f0280388cce9a01af2e18b77b169706d8af4e16bae0af636212ee9c"
     _x, _ = secp256k1().multiply_generator(_priv_key)
-    aux = "deadbeef"
+    aux = "a749377421647fc959f4ffec56d66db7c7b8dc8184b2b65bc047dbc8c040436b"
     sig = schnorr_signature(_priv_key, _message, aux)
     print(f"SCHNORR SIGNATURE: {sig}")
     print(f"BYTES: {len(sig) // 2}")
-    verify_schnorr_signature(_x, _message, sig)
+    verified = verify_schnorr_signature(_x, _message, sig)
+    print(f"SIGNATURE VERIFIED: {verified}")

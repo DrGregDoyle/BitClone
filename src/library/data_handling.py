@@ -60,12 +60,12 @@ class Data:
         elif isinstance(other, int):
             return Data(self.num + other)
         elif isinstance(other, bytes):
-            return Data(self.num + int.from_bytes(other, byteorder="big"))
+            return Data(self.bytes + other)
         elif isinstance(other, str):
             if is_hex(other):
                 return Data(self.num + int(other, 16))
             else:
-                return Data(self.num + int.from_bytes(other.encode(), byteorder="big"))
+                return Data(self.bytes + other.encode())
         else:
             raise ValueError(f"Incorrect type to be added to Data class: {type(other)}")
 

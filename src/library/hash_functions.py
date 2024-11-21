@@ -98,7 +98,7 @@ def pbkdf2(salt: Any, data: Any, iterations: int = 2048):
 
 # --- TESTING
 if __name__ == "__main__":
-    tag = 'BIP0340/aux'
-    data = 'deadbeef'
-    val = tagged_hash_function(tag, data, HashType.SHA256)
-    print(val.hex)
+    _tag = 'BIP0340/aux'
+    _data = 'deadbeef'
+    _val = tagged_hash_function(_tag, _data, HashType.SHA256)
+    print(_val.hex)

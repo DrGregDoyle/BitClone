@@ -9,6 +9,7 @@ from typing import Literal
 def get_logger(name: str, log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "DEBUG"):
     # Setup
     logger = logging.getLogger(name)
+    
     logger.setLevel(log_level)
 
     # Format
