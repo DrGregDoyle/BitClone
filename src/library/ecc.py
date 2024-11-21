@@ -8,6 +8,9 @@ import json
 import secrets
 
 from src.library.ecc_math import tonelli_shanks, legendre_symbol
+from src.logger import get_logger
+
+logger = get_logger(__name__)
 
 MAX_PRIME = pow(2, 19) - 1  # 7th Mersenne Prime
 
@@ -94,19 +97,23 @@ class EllipticCurve:
 
         # Verify x is on curve
         if not self.is_x_on_curve(x):
-            return None
+            raise ValueError(f"Given x coordinate {x} is not on the curve.")
 
         # Find the two possible y values
         y = tonelli_shanks(self.x_terms(x), self.p)
         neg_y = -y % self.p
 
+        # Get two points for convenience
+        p1, p2 = (x, y), (x, neg_y)
+
         # Check y values
-        try:
-            assert self.is_point_on_curve((x, y))
-            assert self.is_point_on_curve((x, neg_y))
-            assert self.add_points((x, y), (x, neg_y)) is None
-        except AssertionError:
-            return None
+        verification_list = [
+            self.is_point_on_curve(p1),
+            self.is_point_on_curve(p2),
+            self.add_points(p1, p2) is None
+        ]
+        if not all(verification_list):
+            raise ValueError(f"SERIOUS ERROR: Calculated y value(s) not on curve: {p1}, {p2}")
 
         # Return y
         return min(y, neg_y)
@@ -119,11 +126,11 @@ class EllipticCurve:
         """
 
         # Verify points exist
-        try:
-            assert self.is_point_on_curve(point1)
-            assert self.is_point_on_curve(point2)
-        except AssertionError:
-            return None
+        points = [point1, point2]
+        errors = {f"point{i + 1}": self.is_point_on_curve(p) for i, p in enumerate(points)}
+
+        if not all(errors.values()):
+            raise ValueError(f"One or more points are not on the curve: {errors}")
 
         # Point at infinity cases
         if point1 is None:
@@ -152,10 +159,8 @@ class EllipticCurve:
         point = (x3, y3)
 
         # Verify result
-        try:
-            assert self.is_point_on_curve(point)
-        except AssertionError:
-            return None
+        if not self.is_point_on_curve(point):
+            raise ValueError("Serious error. Calculated point not on curve.")
 
         # Return sum of points
         return point
@@ -209,7 +214,7 @@ class EllipticCurve:
 
         # Verify results
         if not self.is_point_on_curve(result):
-            return None
+            raise ValueError("Serious error. Calculated point not on curve.")
 
         return result
 

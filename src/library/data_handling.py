@@ -5,7 +5,7 @@ Methods for managing data
 
 import json
 import re
-from typing import Any, Union, Literal
+from typing import Any, Union, Literal, Optional
 
 from src.logger import get_logger
 
@@ -19,15 +19,20 @@ class Data:
     values and accessed as different types as necessary.
     """
 
-    def __init__(self, data: Union[int, bytes, str], byteorder: Literal["big", "little"] = "big"):
+    def __init__(self, data: Union[int, bytes, str, 'Data'], bytesize: int | None = None,
+                 byteorder: Literal["big", "little"] = "big"):
         # Handle data types | int, bytes, str
         if isinstance(data, int):
             self.num = data
         elif isinstance(data, bytes):
             self.num = int.from_bytes(data, byteorder)
         elif isinstance(data, str):
-            # Take int values of bytes encoding if data is not a hexadecimal string
-            self.num = int(data, 16) if is_hex(data) else int.from_bytes(data.encode(), byteorder)
+            if is_hex(data):
+                self.num = int(data[::-2], 16) if byteorder == "little" else int(data, 16)
+            else:
+                self.num = int.from_bytes(data.encode(), byteorder)
+        elif isinstance(data, Data):
+            self.num = data.num  # Redundant case
         else:
             # Raise error for unknown type
             raise ValueError(f"Incorrect type used for data object: {type(data)}")
@@ -36,7 +41,7 @@ class Data:
         self.byteorder = byteorder
 
         # Internal variables
-        self._length = (self.num.bit_length() + 7) // 8
+        self._length = (self.num.bit_length() + 7) // 8 if bytesize is None else bytesize
 
     def __repr__(self):
         var_dict = {
@@ -45,9 +50,24 @@ class Data:
             "byteorder": self.byteorder,
             "bytes": self.bytes.hex(),
             "reverse_byte_order": self.reverse_byte_order.hex(),
-            "compact_size": self.compact_size.hex()
+            "compact_size": self.compact_size.hex() if self.compact_size is not None else ""
         }
         return json.dumps(var_dict, indent=3)
+
+    def __add__(self, other):
+        if isinstance(other, Data):
+            return Data(self.num + other.num)
+        elif isinstance(other, int):
+            return Data(self.num + other)
+        elif isinstance(other, bytes):
+            return Data(self.num + int.from_bytes(other, byteorder="big"))
+        elif isinstance(other, str):
+            if is_hex(other):
+                return Data(self.num + int(other, 16))
+            else:
+                return Data(self.num + int.from_bytes(other.encode(), byteorder="big"))
+        else:
+            raise ValueError(f"Incorrect type to be added to Data class: {type(other)}")
 
     @property
     def bytes(self):
@@ -93,6 +113,18 @@ class Data:
 
 # --- VERIFY FUNCTIONS --- #
 
+def get_data(data: Any) -> Optional[Data]:
+    # Return data if it's Data type
+    if isinstance(data, Data):
+        return data
+    # Try returning Data formatted data
+    try:
+        return Data(data)
+    except ValueError:
+        logger.error(f"Incorrect data type used in function: {type(data)}")
+        return None
+
+
 def is_hex(data: Any) -> bool:
     # Verify if data is a str
     if not isinstance(data, str):
@@ -105,16 +137,10 @@ def is_hex(data: Any) -> bool:
 
 
 if __name__ == "__main__":
-    v1 = 0xffeeccdd
-    # v2 = 41
-    # v3 = "0x41"
-    # v4 = "Hello world"
-    d1 = Data(v1)
-    # d2 = Data(v2)
-    # d3 = Data(v3)
-    # d4 = Data(v4)
-
+    test_hex = "0100"
+    d1 = Data(test_hex, bytesize=2, byteorder="little")
+    d2 = Data(test_hex, bytesize=2)
+    d3 = Data(test_hex, byteorder="little")
     print(d1)
-    # print(d2)
-    # print(d3)
-    # print(d4)
+    print(d2)
+    print(d3)

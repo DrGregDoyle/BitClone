@@ -43,7 +43,7 @@ def decode_bech32(bech32_address: str):
     """
     Given a bech32 address we return the pubkeyhash
     """
-    # Use reference decode function to get hrp, data before encoding, and spec used
+    # Use reference bech32_decode function to get hrp, data before encoding, and spec used
     hrp, decoded_data, spec = bech32_decode(bech32_address)
 
     # Remove prepended version byte
