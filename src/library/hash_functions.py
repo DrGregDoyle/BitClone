@@ -10,6 +10,7 @@ from src.logger import get_logger
 logger = get_logger(__name__)
 
 
+# noinspection PyArgumentList
 class HashType(Enum):
     SHA1 = auto()
     SHA256 = auto()

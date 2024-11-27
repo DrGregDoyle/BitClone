@@ -70,8 +70,6 @@ def bech32_create_checksum(hrp, data, spec):
 
 def bech32_encode(hrp, data, spec):
     """Compute a Bech32 string given HRP and data values."""
-    chk = bech32_create_checksum(hrp, data, spec)
-    # print(f"CHECKSUM: {"".join([CHARSET[c] for c in chk])}")
     combined = data + bech32_create_checksum(hrp, data, spec)
     return hrp + '1' + ''.join([CHARSET[d] for d in combined])
 
@@ -80,19 +78,19 @@ def bech32_decode(bech):
     """Validate a Bech32/Bech32m string, and determine HRP and data."""
     if ((any(ord(x) < 33 or ord(x) > 126 for x in bech)) or
             (bech.lower() != bech and bech.upper() != bech)):
-        return (None, None, None)
+        return None, None, None
     bech = bech.lower()
     pos = bech.rfind('1')
     if pos < 1 or pos + 7 > len(bech) or len(bech) > 90:
-        return (None, None, None)
+        return None, None, None
     if not all(x in CHARSET for x in bech[pos + 1:]):
-        return (None, None, None)
+        return None, None, None
     hrp = bech[:pos]
     data = [CHARSET.find(x) for x in bech[pos + 1:]]
     spec = bech32_verify_checksum(hrp, data)
     if spec is None:
-        return (None, None, None)
-    return (hrp, data[:-6], spec)
+        return None, None, None
+    return hrp, data[:-6], spec
 
 
 def convertbits(data, frombits, tobits, pad=True):
@@ -122,17 +120,17 @@ def decode(hrp, addr):
     """Decode a segwit address."""
     hrpgot, data, spec = bech32_decode(addr)
     if hrpgot != hrp:
-        return (None, None)
+        return None, None
     decoded = convertbits(data[1:], 5, 8, False)
     if decoded is None or len(decoded) < 2 or len(decoded) > 40:
-        return (None, None)
+        return None, None
     if data[0] > 16:
-        return (None, None)
+        return None, None
     if data[0] == 0 and len(decoded) != 20 and len(decoded) != 32:
-        return (None, None)
+        return None, None
     if data[0] == 0 and spec != Encoding.BECH32 or data[0] != 0 and spec != Encoding.BECH32M:
-        return (None, None)
-    return (data[0], decoded)
+        return None, None
+    return data[0], decoded
 
 
 def encode(hrp, witver, witprog):
