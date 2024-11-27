@@ -2,103 +2,110 @@
 Hash functions
 """
 import hashlib
-import hmac
-from enum import Enum
-from typing import Any
+from enum import Enum, auto
+from typing import Callable
 
-from src.library.data_handling import Data, get_data
 from src.logger import get_logger
 
 logger = get_logger(__name__)
 
 
 class HashType(Enum):
-    SHA256 = "sha256"
-    HASH256 = "hash256"
-    HASH160 = "hash160"
-    RIPEMD160 = "ripemd160"
-
-
-def tagged_hash_function(tag: str | Any, data: Data | Any, hash_type: HashType) -> Data:
-    _tag = get_data(tag)
-    _data = get_data(data)
-
-    match hash_type:
-        case HashType.SHA256:
-            _hashed_tag = sha256(_tag)
-            return sha256(_hashed_tag.bytes + _hashed_tag.bytes + _data.bytes)
-        case HashType.HASH256:
-            _hashed_tag = hash256(_tag)
-            return hash256(_hashed_tag.bytes + _hashed_tag.bytes + _data.bytes)
-        case HashType.RIPEMD160:
-            _hashed_tag = ripemd160(_tag)
-            return ripemd160(_hashed_tag.bytes + _hashed_tag.bytes + _data.bytes)
-        case HashType.HASH160:
-            _hashed_tag = hash160(_tag)
-            return hash160(_hashed_tag.bytes + _hashed_tag.bytes + _data.bytes)
-        case _:
-            raise ValueError(f"Incorrect HashType value: {hash_type}")
-
-
-def sha1(data: Any):
-    _data = get_data(data)
-    if _data is not None:
-        return hashlib.sha1(_data.bytes).digest()
-    return None
-
-
-def sha256(data: Any) -> Data | None:
-    _data = get_data(data)
-    if _data is not None:
-        return Data(hashlib.sha256(_data.bytes).digest())
-    logger.error(f"Data type used in sha256 not one of str | int | bytes: {type(data)}")
-    return None
-
-
-def hash256(data: Any):
-    _data = get_data(data)
-    if _data is not None:
-        return sha256(sha256(_data))
-    logger.error(f"Data type used in hash256 not one of str | int | bytes: {type(data)}")
-    return None
-
-
-def ripemd160(data: Any):
-    _data = get_data(data)
-    if _data is not None:
-        h = hashlib.new("ripemd160")
-        h.update(_data.bytes)
-        return Data(h.digest())
-    logger.error(f"Data type used in ripemd160 not one of str | int | bytes: {type(data)}")
-    return None
-
-
-def hash160(data: Any):
-    _data = get_data(data)
-    if _data is not None:
-        return ripemd160(sha256(_data))
-    logger.error(f"Data type used in hash160 not one of str | int | bytes: {type(data)}")
-    return None
+    SHA1 = auto()
+    SHA256 = auto()
+    HASH256 = auto()
+    HASH160 = auto()
+    RIPEMD160 = auto()
 
 
 #
-def hmac512(key: Any, data: Any):
-    _key = get_data(key)
-    _data = get_data(data)
-    return hmac.new(key=_key.bytes, msg=_data.bytes, digestmod=hashlib.sha512).digest()
+#
+# def tagged_hash_function(function_type: HashType, data: bytes, tag: bytes):
+#     # Format tag for downstream functions
+#     try:
+#         tag = get_data(tag)
+#     except ValueError as e:
+#         logger.debug(f"Tagged hash function failed to convert tag to Data: {e}")
+#         raise ValueError(f"Invalid data: {tag}") from e
+#
+#     # Get tagged hash
+#     tagged_hash = hash_function(function_type, data=tag)
+#
+#     # Prep data
+#     data = get_data(data)
+#     hash_block = tagged_hash + tagged_hash + data
+#     return hash_function(function_type, hash_block)
 
 
-def pbkdf2(salt: Any, data: Any, iterations: int = 2048):
-    _salt = get_data(salt)
-    _data = get_data(data)
-    for _ in range(iterations):
-        _data = Data(hmac512(_salt.bytes, _data.bytes))
-    return _data.bytes
+def hash_function(encoded_data: bytes, function_type: HashType):
+    # Mapping of HashType enum members to function objects
+    functions: dict[HashType, Callable] = {
+        HashType.SHA1: sha1,
+        HashType.SHA256: sha256,
+        HashType.HASH160: hash160,
+        HashType.HASH256: hash256,
+        HashType.RIPEMD160: ripemd160
+    }
+
+    # Retrieve the function based on the Enum member
+    func = functions.get(function_type)
+    if not func:
+        raise ValueError(f"Function '{function_type}' not found.")
+
+    return func(encoded_data)
+
+
+def tagged_hash_function(encoded_data: bytes, tag: bytes, function_type: HashType):
+    # Get hash of tag
+    hashed_tag = hash_function(tag, function_type=function_type)
+
+    # Return  HASH(hashed_tag + hashed_tag + encoded_data)
+    return hash_function(hashed_tag + hashed_tag + encoded_data, function_type=function_type)
+
+
+def sha1(encoded_data: bytes) -> bytes:
+    return hashlib.sha1(encoded_data).digest()
+
+
+def sha256(encoded_data: bytes) -> bytes:
+    return hashlib.sha256(encoded_data).digest()
+
+
+def sha512(encoded_data: bytes) -> bytes:
+    return hashlib.sha512(encoded_data).digest()
+
+
+def hash256(encoded_data: bytes) -> bytes:
+    return hashlib.sha256(hashlib.sha256(encoded_data)).digest()
+
+
+def ripemd160(encoded_data: bytes) -> bytes:
+    h = hashlib.new("ripemd160")
+    h.update(encoded_data)
+    return h.digest()
+
+
+def hash160(encoded_data: bytes) -> bytes:
+    return ripemd160(sha256(encoded_data))
+
+
+# def hmac512(data: Data, key: Any):
+#     _key = get_data(key)
+#     _data = get_data(data)
+#     return hmac.new(key=_key.bytes, msg=_data.bytes, digestmod=hashlib.sha512).digest()
+#
+#
+# def pbkdf2(salt: Any, data: Any, iterations: int = 2048):
+#     _salt = get_data(salt)
+#     _data = get_data(data)
+#     for _ in range(iterations):
+#         _data = Data(hmac512(_salt.bytes, _data.bytes))
+#     return _data.bytes
 
 
 # --- TESTING
 if __name__ == "__main__":
     _tag = 'BIP0340/aux'
     _data = 'deadbeef'
-    _val = tagged_hash_function(_tag, _data, HashType.SHA256)
-    print(_val.hex)
+    # _val = tagged_hash_function(_tag, _data, HashType.SHA256)
+    # print(_val.hex)

@@ -8,7 +8,6 @@ Fixed to run on secp256k1 elliptic curve.
 import logging
 import secrets
 
-from src.library.data_handling import is_hex
 from src.library.ecc import secp256k1
 from src.logger import get_logger
 
@@ -42,8 +41,11 @@ def ecdsa(private_key: int, message: str):
     7) Return the signature (r, s).
 
     """
-    # Verify message is in hex format
-    if not is_hex(message):
+    # Clean and verify message
+    message = message.strip().lower()
+    if message.startswith("0x"):
+        message = message[2:]
+    if not all(char in "0123456789abcdef" for char in message):
         raise ValueError(f"Message must be in hexadecimal format")
 
     # 1) Create elliptic curve object and assign n

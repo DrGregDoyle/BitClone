@@ -3,26 +3,34 @@ Methods for encoding and decoding
 """
 
 from src.library.bech32 import convertbits, bech32_encode, bech32_decode, Encoding
-from src.library.data_handling import Data
 from src.logger import get_logger
 
 logger = get_logger(__name__)
 
 
 # --- BECH32 ENCODING --- #
-def encode_bech32(data: Data):
+def encode_bech32(pubkeyhash: str):
     """
-    Encoding is fixed to BECH32 as we only generate addresses for pubkeyhash. When moving to segwit V1 we need Bech32M.
+    Returns the Bech32 encoding of the provided public key hash.
+
+    Parameters
+    ----------
+    pubkeyhash : str
+        A hexadecimal string representing the public key hash.
+
+    Returns
+    -------
+    str
+        A Bech32-encoded address.
     """
-    # Extract the bytes from the Data instance
-    pubkey_hash = data.bytes
 
     # Ensure pubkey_hash is exactly 20 bytes
-    if len(pubkey_hash) != 20:
+    if len(pubkeyhash) != 40:
+        logger.debug(f"PUBKEY_HASH LENGTH: {len(pubkeyhash)}")
         raise ValueError("P2WPKH pubkey hash must be exactly 20 bytes.")
 
     # Convert 8-bit data to 5-bit using the reference convertbits function
-    converted_data = convertbits(pubkey_hash, 8, 5, pad=False)
+    converted_data = convertbits(bytes.fromhex(pubkeyhash), 8, 5, pad=False)
     if converted_data is None:
         raise ValueError("Failed to convert data from 8-bit to 5-bit.")
 
@@ -51,17 +59,18 @@ def decode_bech32(bech32_address: str):
 
     # Convert 5-bit data to 8-bit using the reference convertbits function
     converted_data = convertbits(decoded_data, 5, 8, pad=False)
+    logger.debug(f"CONVERTED DATA: {converted_data}")
 
     # Return hex string of pubkeyhash
     return bytes(converted_data).hex()
 
 
 if __name__ == "__main__":
-    _data = Data("531331feaf731951a82c8dcd33766af24b04c1c1")
+    _data = "531331feaf731951a82c8dcd33766af24b04c1c1"
     _address = encode_bech32(_data)
-    print(f"ORIGINAL DATA: {_data.hex}")
+    print(f"ORIGINAL DATA: {_data}")
     print(f"ADDRESS: {_address}")
     print(f'BECH32 encoded type: {type(_address)}')
     _decoded_address = decode_bech32(_address)
     print(f"DECODED ADDRESS: {_decoded_address}")
-    assert _decoded_address == _data.hex
+    assert _decoded_address == _data

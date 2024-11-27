@@ -1,9 +1,7 @@
 """
 Methods for Schnorr signatures
 """
-from typing import Union
 
-from src.library.data_handling import Data
 from src.library.ecc import secp256k1
 from src.library.hash_functions import tagged_hash_function, HashType
 from src.logger import get_logger
@@ -12,20 +10,11 @@ logger = get_logger(__name__)
 
 HASHTYPE = HashType.SHA256
 
-# Type aliases for better readability
-KeyType = Union[int, str, bytes, Data]
-MessageType = Union[str, bytes, Data]
 
-
-def schnorr_signature(private_key: KeyType, message: MessageType, auxiliary_bits: KeyType = 1):
+def schnorr_signature(private_key: int, message: bytes, auxiliary_bits: bytes):
     # Curve setup
     curve = secp256k1()
     n = curve.order
-
-    # Data setup
-    private_key = Data(private_key).num  # integer
-    message = Data(message)
-    auxiliary_bits = Data(auxiliary_bits)
 
     # Check that private key is < n
     if private_key >= n:
@@ -41,16 +30,17 @@ def schnorr_signature(private_key: KeyType, message: MessageType, auxiliary_bits
     logger.debug(f"Public key y: {hex(y)}")
 
     # Create private nonce
-    aux_rand_hash = tagged_hash_function("BIP0340/aux", auxiliary_bits, hash_type=HASHTYPE)
-    logger.debug(f"Aux Rand Hash: 0x{aux_rand_hash.hex}")
+    aux_rand_hash = tagged_hash_function(encoded_data=auxiliary_bits, tag=b"BIP0340/aux", function_type=HASHTYPE)
+    logger.debug(f"Aux Rand Hash: 0x{aux_rand_hash.hex()}")
 
     # XOR private key with aux_rand_hash
-    t = private_key ^ aux_rand_hash.num
+    t = private_key ^ int.from_bytes(aux_rand_hash, byteorder="big")
     logger.debug(f"Private key XOR aux_rand_hash: {hex(t)}")
 
     # Create final private nonce
-    hex_data = hex(t)[2:] + hex(x)[2:] + message.hex
-    private_nonce = tagged_hash_function("BIP0340/nonce", hex_data, hash_type=HASHTYPE).num % n
+    hex_data = bytes.fromhex(hex(t)[2:] + hex(x)[2:] + message.hex())
+    private_nonce_bytes = tagged_hash_function(encoded_data=hex_data, tag=b"BIP0340/nonce", function_type=HASHTYPE)
+    private_nonce = int.from_bytes(private_nonce_bytes, byteorder="big") % n
     logger.debug(f"Private Nonce: {hex(private_nonce)}")
 
     # Calculate public nonce - Negate private_nonce if necessary
@@ -62,8 +52,11 @@ def schnorr_signature(private_key: KeyType, message: MessageType, auxiliary_bits
     logger.debug(f"Private nonce after negation if necessary: {hex(private_nonce)}")
 
     # Calculate the challenge
-    challenge_data = hex(px)[2:] + hex(x)[2:] + message.hex
-    challenge = tagged_hash_function("BIP0340/challenge", challenge_data, HASHTYPE).num % n
+    challenge_data = bytes.fromhex(hex(px)[2:] + hex(x)[2:] + message.hex())
+    challenge_bytes = tagged_hash_function(encoded_data=challenge_data, tag=b"BIP0340/challenge",
+                                           function_type=HASHTYPE)
+    challenge = int.from_bytes(challenge_bytes, byteorder="big") % n
+    logger.debug(f"CHALLENGE: {hex(challenge)}")
 
     # Construct signature
     r = px
@@ -73,7 +66,7 @@ def schnorr_signature(private_key: KeyType, message: MessageType, auxiliary_bits
     return format(r, "064x") + format(s, "064x")  # 64 hex chars = 32 bytes
 
 
-def verify_schnorr_signature(public_key_x: KeyType, message: MessageType, signature: str) -> bool:
+def verify_schnorr_signature(public_key_x: int, message: bytes, signature: str) -> bool:
     # Verify signature is 128 characters == 64 bytes
     if len(signature) != 128:
         raise ValueError("Given signature is not 64 bytes.")
@@ -83,9 +76,8 @@ def verify_schnorr_signature(public_key_x: KeyType, message: MessageType, signat
     n = curve.order
     p = curve.p
 
-    # Data setup
-    x = Data(public_key_x).num  # Integer
-    message = Data(message)
+    # Convenience
+    x = public_key_x
 
     # Verify x value restrictions
     if x > p:
@@ -99,36 +91,40 @@ def verify_schnorr_signature(public_key_x: KeyType, message: MessageType, signat
 
     # Extract signature parts
     r, s = signature[:64], signature[64:]
-    sig_r = Data(r)
-    sig_s = Data(s)
+    num_r, num_s = int(r, 16), int(s, 16)
+
+    logger.debug(f"Recovered R: {r}")
+    logger.debug(f"Recovered S: {s}")
 
     # Verify signatures values
     errors = {
-        "r < p": sig_r.num < p,
-        "s < n": sig_s.num < n
+        "r < p": num_r < p,
+        "s < n": num_s < n
     }
 
     if not all(errors.values()):
         raise ValueError(f"One or more signature values is invalid: {errors}")
 
     # Calculate the challenge
-    challenge_data = sig_r.hex + hex(x)[2:] + message.hex
-    challenge = tagged_hash_function("BIP0340/challenge", challenge_data, HASHTYPE).num % n
+    challenge_data = bytes.fromhex(r + hex(x)[2:] + message.hex())
+    challenge_bytes = tagged_hash_function(encoded_data=challenge_data, tag=b"BIP0340/challenge",
+                                           function_type=HASHTYPE)
+    challenge = int.from_bytes(challenge_bytes, byteorder="big") % n
 
     # Verify the signature
-    point1 = curve.multiply_generator(sig_s.num)
+    point1 = curve.multiply_generator(num_s)
     point2 = curve.scalar_multiplication((n - challenge), public_key)
     point3 = curve.add_points(point1, point2)
-    return point3[0] == sig_r.num
+    return point3[0] == num_r
 
 
 if __name__ == "__main__":
-    _priv_key = 0xc9043f04ef0a863b11e4ac69fd6400ac85c9b3e5fe1bd360b18a7dfd8cef5650
-    _message = "ecf966b56f0280388cce9a01af2e18b77b169706d8af4e16bae0af636212ee9c"
+    _priv_key = int("e8b28eb5e32d31e3ae83031654f08cf3cf9872c9391a2f45978f6e2d9ec49031", 16)
+    _message = "f4bd04500ae5c08f89ea4fd130279bcd7624890ae3bb963e8290559c6285357d"
     _x, _ = secp256k1().multiply_generator(_priv_key)
-    aux = "a749377421647fc959f4ffec56d66db7c7b8dc8184b2b65bc047dbc8c040436b"
-    sig = schnorr_signature(_priv_key, _message, aux)
+    aux = "7c575049d9c4188b3d3fe7f8d672ccd45f0b9795df29810c0f584e23b0d15909"
+    sig = schnorr_signature(_priv_key, bytes.fromhex(_message), bytes.fromhex(aux))
     print(f"SCHNORR SIGNATURE: {sig}")
     print(f"BYTES: {len(sig) // 2}")
-    verified = verify_schnorr_signature(_x, _message, sig)
+    verified = verify_schnorr_signature(_x, bytes.fromhex(_message), sig)
     print(f"SIGNATURE VERIFIED: {verified}")
