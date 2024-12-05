@@ -2,8 +2,11 @@
 Hash functions
 """
 import hashlib
+import hmac
 from enum import Enum, auto
 from typing import Callable
+
+import unicodedata
 
 from src.logger import get_logger
 
@@ -90,12 +93,40 @@ def hash160(encoded_data: bytes) -> bytes:
     return ripemd160(sha256(encoded_data))
 
 
-# def hmac512(data: Data, key: Any):
-#     _key = get_data(key)
-#     _data = get_data(data)
-#     return hmac.new(key=_key.bytes, msg=_data.bytes, digestmod=hashlib.sha512).digest()
-#
-#
+def hmac_sha512(key: bytes, message: bytes) -> bytes:
+    return hmac.new(key=key, msg=message, digestmod=hashlib.sha512).digest()
+
+
+def pbkdf2(mnemonic: list, passphrase='', iterations=2048, dklen=64) -> bytes:
+    """
+    Derives a cryptographic key from a mnemonic (list of words) using PBKDF2-HMAC-SHA512.
+
+    :param mnemonic: A list of words representing the mnemonic.
+    :param passphrase: An optional passphrase string (default: empty string).
+    :param iterations: Number of iterations for PBKDF2 (default: 2048).
+    :param dklen: Length of the derived key in bytes (default: 64 bytes).
+    :return: The derived key as a hexadecimal string.
+    """
+    # Step 1: Concatenate the mnemonic list into a single string
+    mnemonic_str = ' '.join(mnemonic)
+
+    # Step 2: Normalize the mnemonic and passphrase using NFKD
+    normalized_mnemonic = unicodedata.normalize('NFKD', mnemonic_str)
+    normalized_passphrase = unicodedata.normalize('NFKD', passphrase)
+
+    # Step 3: Prepare the salt ("mnemonic" + normalized passphrase)
+    salt = f"mnemonic{normalized_passphrase}".encode('utf-8')
+
+    # Step 4: Encode the normalized mnemonic as UTF-8 bytes
+    password_bytes = normalized_mnemonic.encode('utf-8')
+
+    # Step 5: Derive the key using PBKDF2-HMAC-SHA512
+    derived_key = hashlib.pbkdf2_hmac('sha512', password_bytes, salt, iterations, dklen)
+
+    # Return the derived key as a hexadecimal string
+    return derived_key
+
+
 # def pbkdf2(salt: Any, data: Any, iterations: int = 2048):
 #     _salt = get_data(salt)
 #     _data = get_data(data)
@@ -106,7 +137,7 @@ def hash160(encoded_data: bytes) -> bytes:
 
 # --- TESTING
 if __name__ == "__main__":
-    _tag = 'BIP0340/aux'
-    _data = 'deadbeef'
-    # _val = tagged_hash_function(_tag, _data, HashType.SHA256)
-    # print(_val.hex)
+    test_mnemonic = ["nerve", "cannon", "kangaroo", "brief", "tooth", "great", "way", "clean", "become", "chat",
+                     "select", "comfort"]
+    _test_key = pbkdf2(mnemonic=test_mnemonic)
+    print(f"PBKDF2: {_test_key.hex()}")
