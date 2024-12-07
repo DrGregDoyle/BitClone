@@ -1,11 +1,75 @@
 """
 Methods for encoding and decoding
 """
+import re
 
 from src.library.bech32 import convertbits, bech32_encode, bech32_decode, Encoding
 from src.logger import get_logger
 
 logger = get_logger(__name__)
+
+# --- BASE58 ENCODING --- #
+BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+
+def encode_base58(hex_string: str) -> str:
+    """
+    Given a hex string we return a base58 encoded string.
+    (Error handling will be performed ahead of calling the function.}
+    """
+    # Setup
+    base = len(BASE58_ALPHABET)
+    n = int(hex_string, 16)
+    encoded_string = ""
+
+    # Encode into Base58
+    while n > 0:
+        temp_index = n % base
+        n = n // base
+        encoded_string = BASE58_ALPHABET[temp_index] + encoded_string
+
+    # Handle leading zeros in the hexadecimal string
+    leading_zeros = len(re.match(r"^0*", hex_string).group(0)) // 2
+    encoded_string = ("1" * leading_zeros) + encoded_string
+
+    # Debug log
+    logger.debug(f"Hex String: {hex_string} -> Base58: {encoded_string}")
+    return encoded_string
+
+
+def decode_base58(address: str) -> str:
+    """
+    Given a base58 encoded string, return the corresponding hexadecimal representation of the underlying integer.
+    """
+    # Create an integer to hold the result
+    total = 0
+
+    # Reverse the base58 string, so we can read characters from left to right
+    base58 = address[::-1]
+
+    # We sum the corresponding index value of a given character multiplied by 58 to an increasing power corresponding
+    # to the length of the address
+    for i in range(len(base58)):
+        char = base58[i]
+        char_i = BASE58_ALPHABET.index(char)
+        total += char_i * pow(58, i)
+
+    # Get hexadecimal representation
+    hex_string = hex(total)[2:]
+
+    # Handle leading 1s in the Base58 address
+    # Each leading '1' represents a leading zero byte in the hexadecimal string
+    leading_zeros = len(re.match(r"^1*", address).group(0))
+    hex_string = ("00" * leading_zeros) + hex_string
+
+    # Ensure even length of the hexadecimal string
+    if len(hex_string) % 2 != 0:
+        hex_string = "0" + hex_string
+
+    # Logging
+    logger.debug(f"Base58: {address} -> Hex String: {hex_string}")
+
+    return hex_string
 
 
 # --- BECH32 ENCODING --- #
@@ -66,11 +130,7 @@ def decode_bech32(bech32_address: str):
 
 
 if __name__ == "__main__":
-    _data = "531331feaf731951a82c8dcd33766af24b04c1c1"
-    _address = encode_bech32(_data)
-    print(f"ORIGINAL DATA: {_data}")
-    print(f"ADDRESS: {_address}")
-    print(f'BECH32 encoded type: {type(_address)}')
-    _decoded_address = decode_bech32(_address)
-    print(f"DECODED ADDRESS: {_decoded_address}")
-    assert _decoded_address == _data
+    test_hex = "00fff9029e7788f84d34b53aa0575b1336e21d45ddc8ad5d4f"
+    test_address = encode_base58(test_hex)
+    decoded_address = decode_base58(test_address)
+    print(f"DECODE SUCCESSFUL: {test_hex == decoded_address}")
