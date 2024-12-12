@@ -2,7 +2,7 @@
 Tests for the mnemonic seed phrase
 """
 from src.logger import get_logger
-from src.wallet import generate_entropy, get_entropy_checksum, get_mnemonic, verify_mnemonic, mnemonic_to_seed
+from src.wallet import Mnemonic
 
 logger = get_logger(__name__)
 
@@ -14,14 +14,10 @@ KNOWN_SEED = "3a6d4603e997d4335795e2cfce9d62697157d462d02be4d14b3a86a94f7ee290f2
 
 def test_mnemonic_phrase():
     # Get random mnemonic
-    entropy = generate_entropy()
-    checksum = get_entropy_checksum(entropy)
-    mnemonic = get_mnemonic(entropy + checksum)
-
-    # Verify mnemonic yields correct checksum
-    assert verify_mnemonic(mnemonic), f"Mnemonic failed to confirm checksum"
+    random_mnemonic = Mnemonic()
+    assert random_mnemonic.validate_mnemonic(), "Randomly generated mnemonic failed to validate"
 
 
 def test_mnemonic_seed_recovery():
-    assert mnemonic_to_seed(
-        KNOWN_MNEMONIC) == KNOWN_SEED, "PBKDF2 hash failed to generate KNOWN_SEED from KNOWN_MNEMONIC"
+    _mnemonic = Mnemonic(mnemonic=KNOWN_MNEMONIC)
+    assert _mnemonic.mnemonic_to_seed() == KNOWN_SEED, "PBKDF2 hash failed to generate KNOWN_SEED from KNOWN_MNEMONIC"
