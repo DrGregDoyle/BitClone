@@ -6,7 +6,8 @@ HD Wallet
 
 from secrets import randbits
 
-from src.library.hash_functions import sha256, pbkdf2
+from src.library.ecc import secp256k1
+from src.library.hash_functions import sha256, pbkdf2, hmac_sha512
 from src.library.word_list import WORDLIST
 from src.logger import get_logger
 
@@ -106,14 +107,42 @@ class Mnemonic:
         # Return True if both checksums are equal, false otherwise
         return expected_checksum == _checksum
 
-    def mnemonic_to_seed(self, passphrase: str = ""):
+    def mnemonic_to_seed(self, passphrase: str = "") -> bytes:
         seed_bytes = pbkdf2(mnemonic=self.mnemonic, passphrase=passphrase)
-        return seed_bytes.hex()
+        return seed_bytes
+
+
+class MasterKey:
+    KEY = b"Bitcoin seed"
+    HALF_HMAC_HASH_LENGTH = 32  # Avoiding magic numbers
+    CURVE = secp256k1()
+
+    def __init__(self, mnemonic: list | None = None, passphrase: str = ""):
+        # If no mnemonic exists create a random one
+        self.mnemonic = mnemonic if mnemonic is not None else Mnemonic()
+        _seed = self.mnemonic.mnemonic_to_seed(passphrase=passphrase)  # _seed is a bytes object
+        logger.debug(f"SEED GENERATED: {_seed.hex()}")
+
+        # Create hmac hash | bytes object
+        hmac_hash = hmac_sha512(key=self.KEY, message=_seed)
+
+        # Get master private key and master chain code
+        self.__master_private_key = hmac_hash[:self.HALF_HMAC_HASH_LENGTH]
+        self.__master_chain_code = hmac_hash[self.HALF_HMAC_HASH_LENGTH:]
+
+    def get_chain_code(self) -> bytes:
+        return self.__master_chain_code
+
+    def get_private_key(self) -> bytes:
+        return self.__master_private_key
+
+    def __repr__(self):
+        return f"<MasterKey: Chain Code={self.__master_chain_code.hex()[:8]}...>"
 
 
 if __name__ == "__main__":
-    test_list = ["example", "correct", "exile", "method", "age", "guard", "crew", "oil", "mammal", "occur", "pig",
-                 "minimum"]
-    test_mnemonic = Mnemonic(mnemonic=test_list)
-    print(test_mnemonic.mnemonic_to_seed())
-    print(test_mnemonic.validate_mnemonic())
+    m1 = Mnemonic()
+    k1 = MasterKey(mnemonic=m1)
+    print(f"PRIVATE KEY: {k1.get_private_key().hex()}")
+    print(f"CHAIN  CODE: {k1.get_chain_code().hex()}")
+    print(f"REPR: {k1}")

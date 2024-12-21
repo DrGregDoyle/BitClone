@@ -127,17 +127,14 @@ def pbkdf2(mnemonic: list, passphrase='', iterations=2048, dklen=64) -> bytes:
     return derived_key
 
 
-# def pbkdf2(salt: Any, data: Any, iterations: int = 2048):
-#     _salt = get_data(salt)
-#     _data = get_data(data)
-#     for _ in range(iterations):
-#         _data = Data(hmac512(_salt.bytes, _data.bytes))
-#     return _data.bytes
-
-
 # --- TESTING
 if __name__ == "__main__":
-    test_mnemonic = ["nerve", "cannon", "kangaroo", "brief", "tooth", "great", "way", "clean", "become", "chat",
-                     "select", "comfort"]
-    _test_key = pbkdf2(mnemonic=test_mnemonic)
-    print(f"PBKDF2: {_test_key.hex()}")
+    test_data = bytes.fromhex(
+        "d25f95170ac85e074ea357dd978388401100fcddf656df3705cb457ec4b82350f8437440aaf6a66f0fec09db3d09acc51f2c7b9cd4b9c862990dd228035b0dd9")
+    test_key = bytes.fromhex("426974636f696e2073656564")
+    hmach_hash = hmac_sha512(test_key, test_data)
+    print(f"HMAC HASH: {hmach_hash.hex()}")
+    # test_mnemonic = ["nerve", "cannon", "kangaroo", "brief", "tooth", "great", "way", "clean", "become", "chat",
+    #                  "select", "comfort"]
+    # _test_key = pbkdf2(mnemonic=test_mnemonic)
+    # print(f"PBKDF2: {_test_key.hex()}")

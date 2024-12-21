@@ -20,4 +20,4 @@ def test_mnemonic_phrase():
 
 def test_mnemonic_seed_recovery():
     _mnemonic = Mnemonic(mnemonic=KNOWN_MNEMONIC)
-    assert _mnemonic.mnemonic_to_seed() == KNOWN_SEED, "PBKDF2 hash failed to generate KNOWN_SEED from KNOWN_MNEMONIC"
+    assert _mnemonic.mnemonic_to_seed().hex() == KNOWN_SEED, "PBKDF2 hash failed to generate KNOWN_SEED from KNOWN_MNEMONIC"
