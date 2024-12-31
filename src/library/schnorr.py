@@ -11,6 +11,41 @@ logger = get_logger(__name__)
 HASHTYPE = HashType.SHA256
 
 
+# TODO: add verification in each function so that hex strings are always even before being sent to a bytes object
+
+
+def hex_to_bytes(*args) -> bytes:
+    """
+    Converts multiple hexadecimal strings into a concatenated bytes object.
+
+    :param args: Hexadecimal string arguments.
+    :return: A bytes representation of the concatenated hexadecimal string.
+    :raises ValueError: If any argument is not a valid hexadecimal string.
+    """
+    concatenated_hex = ""
+
+    for arg in args:
+        if not isinstance(arg, str):
+            raise ValueError(f"All arguments must be strings. Invalid argument: {arg}")
+
+        # Remove optional "0x" prefix
+        hex_string = arg.lower().removeprefix("0x")
+
+        # Verify the string is valid hexadecimal
+        if not all(c in "0123456789abcdef" for c in hex_string):
+            raise ValueError(f"Invalid hexadecimal string: {arg}")
+
+        # Concatenate the valid hexadecimal string
+        concatenated_hex += hex_string
+
+    # Ensure the concatenated string is of even length
+    if len(concatenated_hex) % 2 != 0:
+        concatenated_hex = "0" + concatenated_hex
+
+    # Convert to bytes and return
+    return bytes.fromhex(concatenated_hex)
+
+
 def schnorr_signature(private_key: int, message: bytes, auxiliary_bits: bytes):
     # Curve setup
     curve = secp256k1()
@@ -38,7 +73,7 @@ def schnorr_signature(private_key: int, message: bytes, auxiliary_bits: bytes):
     logger.debug(f"Private key XOR aux_rand_hash: {hex(t)}")
 
     # Create final private nonce
-    hex_data = bytes.fromhex(hex(t)[2:] + hex(x)[2:] + message.hex())
+    hex_data = hex_to_bytes(hex(t), hex(x), message.hex())
     private_nonce_bytes = tagged_hash_function(encoded_data=hex_data, tag=b"BIP0340/nonce", function_type=HASHTYPE)
     private_nonce = int.from_bytes(private_nonce_bytes, byteorder="big") % n
     logger.debug(f"Private Nonce: {hex(private_nonce)}")
@@ -52,7 +87,7 @@ def schnorr_signature(private_key: int, message: bytes, auxiliary_bits: bytes):
     logger.debug(f"Private nonce after negation if necessary: {hex(private_nonce)}")
 
     # Calculate the challenge
-    challenge_data = bytes.fromhex(hex(px)[2:] + hex(x)[2:] + message.hex())
+    challenge_data = hex_to_bytes(hex(px), hex(x), message.hex())
     challenge_bytes = tagged_hash_function(encoded_data=challenge_data, tag=b"BIP0340/challenge",
                                            function_type=HASHTYPE)
     challenge = int.from_bytes(challenge_bytes, byteorder="big") % n
@@ -106,7 +141,8 @@ def verify_schnorr_signature(public_key_x: int, message: bytes, signature: str) 
         raise ValueError(f"One or more signature values is invalid: {errors}")
 
     # Calculate the challenge
-    challenge_data = bytes.fromhex(r + hex(x)[2:] + message.hex())
+
+    challenge_data = hex_to_bytes(r, hex(x), message.hex())
     challenge_bytes = tagged_hash_function(encoded_data=challenge_data, tag=b"BIP0340/challenge",
                                            function_type=HASHTYPE)
     challenge = int.from_bytes(challenge_bytes, byteorder="big") % n

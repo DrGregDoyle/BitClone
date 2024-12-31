@@ -4,6 +4,7 @@ Methods for encoding and decoding
 import re
 
 from src.library.bech32 import convertbits, bech32_encode, bech32_decode, Encoding
+from src.library.ecc import secp256k1
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -129,8 +130,72 @@ def decode_bech32(bech32_address: str):
     return bytes(converted_data).hex()
 
 
+# --- ECC KEY COMPRESSION --- #
+CURVE = secp256k1()
+
+
+def compress_public_key(*args) -> bytes:
+    """
+    Accepts either:
+       1) a single tuple of two integers, or
+       2) two integers individually.
+    """
+    if len(args) == 1:
+        # Expect args[0] to be a tuple
+        if not isinstance(args[0], tuple):
+            raise TypeError("Expected a single tuple of two integers.")
+        x, y = args[0]  # Unpack the tuple
+    elif len(args) == 2:
+        # Expect two individual integers
+        x, y = args
+    else:
+        raise TypeError("Expected either one tuple or two integers as arguments.")
+
+    # Verify x and y are integers
+    if not (isinstance(x, int) and isinstance(y, int)):
+        raise TypeError("Tuple must contain two integers.")
+
+    prefix = 0x02 if (y % 2) == 0 else 0x03
+
+    # Convert prefix to single byte and x_int to 32-byte big-endian
+    prefix_byte = prefix.to_bytes(1, 'big')
+    x_bytes = x.to_bytes(32, 'big')
+
+    return prefix_byte + x_bytes
+
+
+def decompress_public_key(compressed_key: bytes) -> tuple:
+    if len(compressed_key) != 33:
+        raise ValueError("Invalid compressed public key length (must be 33 bytes).")
+
+    prefix = compressed_key[0]
+    if prefix not in (0x02, 0x03):
+        raise ValueError("Invalid public key prefix (must be 0x02 or 0x03).")
+
+    # Extract x-coordinate
+    x = int.from_bytes(compressed_key[1:], byteorder='big')
+
+    # Get one possible value of y
+    y1 = CURVE.find_y_from_x(x)
+
+    # Get other possible value of y
+    y2 = CURVE.p - y1
+
+    # Check parity of y_candidate. If it doesn't match prefix, use the other root.
+    #  - prefix 0x02 => y should be even
+    #  - prefix 0x03 => y should be odd
+    y = y1 if (y1 & 1) == (prefix & 1) else y2
+
+    return x, y
+
+
 if __name__ == "__main__":
-    test_hex = "00fff9029e7788f84d34b53aa0575b1336e21d45ddc8ad5d4f"
-    test_address = encode_base58(test_hex)
-    decoded_address = decode_base58(test_address)
-    print(f"DECODE SUCCESSFUL: {test_hex == decoded_address}")
+    from secrets import randbits
+
+    random_point = randbits(256)
+    random_point = CURVE.multiply_generator(random_point)
+    print(f"Random point hex: {hex(random_point[0]), hex(random_point[1])}")
+    cpk = compress_public_key(random_point[0], random_point[1])
+    print(f"COMPRESSED PUBLIC KEY: {cpk.hex()}")
+    rkp = decompress_public_key(cpk)
+    print(f"DECOMPRESSED PUBLIC KEY: {hex(rkp[0]), hex(rkp[1])}")

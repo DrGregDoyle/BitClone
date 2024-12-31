@@ -6,8 +6,7 @@ HD Wallet
 
 from secrets import randbits
 
-from src.library.ecc import secp256k1
-from src.library.hash_functions import sha256, pbkdf2, hmac_sha512
+from src.library.hash_functions import sha256, pbkdf2
 from src.library.word_list import WORDLIST
 from src.logger import get_logger
 
@@ -25,7 +24,8 @@ class Mnemonic:
 
         # Check to see if a mnemonic is given
         if mnemonic is not None:
-            # TODO: Verify mnemonic here
+            if not self.validate_mnemonic(mnemonic):
+                raise ValueError("Given mnemonic words do not pass validation")
             self.mnemonic = mnemonic
 
         # Generate new mnemonic otherwise
@@ -112,37 +112,47 @@ class Mnemonic:
         return seed_bytes
 
 
-class MasterKey:
-    KEY = b"Bitcoin seed"
-    HALF_HMAC_HASH_LENGTH = 32  # Avoiding magic numbers
-    CURVE = secp256k1()
-
-    def __init__(self, mnemonic: list | None = None, passphrase: str = ""):
-        # If no mnemonic exists create a random one
-        self.mnemonic = mnemonic if mnemonic is not None else Mnemonic()
-        _seed = self.mnemonic.mnemonic_to_seed(passphrase=passphrase)  # _seed is a bytes object
-        logger.debug(f"SEED GENERATED: {_seed.hex()}")
-
-        # Create hmac hash | bytes object
-        hmac_hash = hmac_sha512(key=self.KEY, message=_seed)
-
-        # Get master private key and master chain code
-        self.__master_private_key = hmac_hash[:self.HALF_HMAC_HASH_LENGTH]
-        self.__master_chain_code = hmac_hash[self.HALF_HMAC_HASH_LENGTH:]
-
-    def get_chain_code(self) -> bytes:
-        return self.__master_chain_code
-
-    def get_private_key(self) -> bytes:
-        return self.__master_private_key
-
-    def __repr__(self):
-        return f"<MasterKey: Chain Code={self.__master_chain_code.hex()[:8]}...>"
+# class MasterKey:
+#     KEY = b"Bitcoin seed"
+#     HALF_HMAC_HASH_LENGTH = 32  # Avoiding magic numbers
+#     CURVE = secp256k1()
+#
+#     def __init__(self, mnemonic: Mnemonic | None = None, passphrase: str = ""):
+#         # If no mnemonic exists create a random one
+#         self.mnemonic = mnemonic if mnemonic is not None else Mnemonic()
+#         _seed = self.mnemonic.mnemonic_to_seed(passphrase=passphrase)  # _seed is a bytes object
+#         logger.debug(f"SEED GENERATED: {_seed.hex()}")
+#
+#         # Create hmac hash | bytes object
+#         hmac_hash = hmac_sha512(key=self.KEY, message=_seed)
+#
+#         # Get master private key and master chain code
+#         self.__master_private_key = hmac_hash[:self.HALF_HMAC_HASH_LENGTH]
+#         self.__master_chain_code = hmac_hash[self.HALF_HMAC_HASH_LENGTH:]
+#
+#         # Get master public key
+#         _public_key_pt = self.CURVE.multiply_generator(int.from_bytes(self.__master_private_key, byteorder="big"))
+#         self.__master_public_key = compress_public_key(_public_key_pt)
+#
+#     def get_chain_code(self) -> bytes:
+#         return self.__master_chain_code
+#
+#     def get_private_key(self) -> bytes:
+#         return self.__master_private_key
+#
+#     def get_public_key(self) -> bytes:
+#         return self.__master_public_key
+#
+#     def __repr__(self):
+#         return f"<MasterKey: Chain Code={self.__master_chain_code.hex()[:8]}...>"
 
 
 if __name__ == "__main__":
     m1 = Mnemonic()
+    m2 = Mnemonic()
     k1 = MasterKey(mnemonic=m1)
+    k2 = MasterKey(mnemonic=m2)
     print(f"PRIVATE KEY: {k1.get_private_key().hex()}")
     print(f"CHAIN  CODE: {k1.get_chain_code().hex()}")
     print(f"REPR: {k1}")
+    print(f"PUBLIC KEY: {k1.get_public_key().hex()}")
