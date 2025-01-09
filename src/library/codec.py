@@ -212,20 +212,26 @@ def decompress_public_key(compressed_key: bytes) -> tuple:
     return x, y
 
 
-if __name__ == "__main__":
-    test_data = "053dca04f0b6a594a43ac7af7315338118299fce44"
-    test_encoding = encode_base58check(test_data)
-    print(f"ENCODING: {test_encoding}")
-    v_d, v_c = decode_base58check(test_encoding)
-    print(f"RECOVERED DATA: {v_d}")
-    print(f"ORIGINAL DATA : {test_data}")
+# --- WIF PRIVATE KEY --- #
+def encode_wif_private_key(private_key: bytes, version_byte: bytes = b"\x80",
+                           compression_byte: bytes | None = b"\x01") -> str:
+    """
+    Given a private key we return the WIF encoding
+    """
+    hex_key = private_key.hex()
+    hex_version_byte = version_byte.hex()
+    hex_compression_byte = compression_byte.hex() if compression_byte is not None else ""
+    data = hex_version_byte + hex_key + hex_compression_byte
+    checksum = hash256(bytes.fromhex(data))[:4].hex()
+    logger.debug(f"CHECKSUM: {checksum}")
+    return encode_base58(data + checksum)
 
-    # from secrets import randbits
-    #
-    # random_point = randbits(256)
-    # random_point = CURVE.multiply_generator(random_point)
-    # print(f"Random point hex: {hex(random_point[0]), hex(random_point[1])}")
-    # cpk = compress_public_key(random_point[0], random_point[1])
-    # print(f"COMPRESSED PUBLIC KEY: {cpk.hex()}")
-    # rkp = decompress_public_key(cpk)
-    # print(f"DECOMPRESSED PUBLIC KEY: {hex(rkp[0]), hex(rkp[1])}")
+
+if __name__ == "__main__":
+    test_privkey = bytes.fromhex("db943987fdd2e80b80e4339dbe45498088245c9c048fe7a8c86ce64a5ff7a61c")
+    encoded_wif = encode_wif_private_key(test_privkey)
+    print(f"WIF ENCODED KEY: {encoded_wif}")
+    encoded_wif_testnet = encode_wif_private_key(test_privkey, version_byte=b"\xef")
+    print(f"WIF TESTNET KEY: {encoded_wif_testnet}")
+    encoded_wif_no_compression = encode_wif_private_key(private_key=test_privkey, compression_byte=None)
+    print(f"WIF KEY NO COMPRESSION: {encoded_wif_no_compression}")
