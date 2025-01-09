@@ -80,7 +80,7 @@ def sha512(encoded_data: bytes) -> bytes:
 
 
 def hash256(encoded_data: bytes) -> bytes:
-    return hashlib.sha256(hashlib.sha256(encoded_data)).digest()
+    return hashlib.sha256(hashlib.sha256(encoded_data).digest()).digest()
 
 
 def ripemd160(encoded_data: bytes) -> bytes:

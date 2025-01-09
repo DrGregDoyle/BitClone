@@ -5,6 +5,7 @@ import re
 
 from src.library.bech32 import convertbits, bech32_encode, bech32_decode, Encoding
 from src.library.ecc import secp256k1
+from src.library.hash_functions import hash256
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -34,8 +35,30 @@ def encode_base58(hex_string: str) -> str:
     encoded_string = ("1" * leading_zeros) + encoded_string
 
     # Debug log
-    logger.debug(f"Hex String: {hex_string} -> Base58: {encoded_string}")
+    # logger.debug(f"Hex String: {hex_string} -> Base58: {encoded_string}")
     return encoded_string
+
+
+def encode_base58check(data: str):
+    """
+    Given a hexadecimal string, we return the base58Check encoding
+    """
+    checksum = hash256(bytes.fromhex(data))[:4].hex()  # First 4 bytes of HASH256(data) as hex chars
+    # logger.debug(f"DATA: {data}\nCHECKSUM: {checksum}")
+    return encode_base58(data + checksum)
+
+
+def decode_base58check(data: str):
+    """
+    Given a string of base58Check chars, we decode it and return data and checksum.
+    Raise ValueError if checksum fails
+    """
+    decoded_data = decode_base58(data)
+    new_data, checksum = decoded_data[:-8], decoded_data[-8:]  # 4 bytes = 8 hex chars
+    test_checksum = hash256(bytes.fromhex(new_data))[:4].hex()
+    if test_checksum != checksum:
+        raise ValueError("Decoded checksum does not equal given checksum")
+    return new_data, checksum
 
 
 def decode_base58(address: str) -> str:
@@ -190,12 +213,19 @@ def decompress_public_key(compressed_key: bytes) -> tuple:
 
 
 if __name__ == "__main__":
-    from secrets import randbits
+    test_data = "053dca04f0b6a594a43ac7af7315338118299fce44"
+    test_encoding = encode_base58check(test_data)
+    print(f"ENCODING: {test_encoding}")
+    v_d, v_c = decode_base58check(test_encoding)
+    print(f"RECOVERED DATA: {v_d}")
+    print(f"ORIGINAL DATA : {test_data}")
 
-    random_point = randbits(256)
-    random_point = CURVE.multiply_generator(random_point)
-    print(f"Random point hex: {hex(random_point[0]), hex(random_point[1])}")
-    cpk = compress_public_key(random_point[0], random_point[1])
-    print(f"COMPRESSED PUBLIC KEY: {cpk.hex()}")
-    rkp = decompress_public_key(cpk)
-    print(f"DECOMPRESSED PUBLIC KEY: {hex(rkp[0]), hex(rkp[1])}")
+    # from secrets import randbits
+    #
+    # random_point = randbits(256)
+    # random_point = CURVE.multiply_generator(random_point)
+    # print(f"Random point hex: {hex(random_point[0]), hex(random_point[1])}")
+    # cpk = compress_public_key(random_point[0], random_point[1])
+    # print(f"COMPRESSED PUBLIC KEY: {cpk.hex()}")
+    # rkp = decompress_public_key(cpk)
+    # print(f"DECOMPRESSED PUBLIC KEY: {hex(rkp[0]), hex(rkp[1])}")
