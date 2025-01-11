@@ -39,7 +39,7 @@ def encode_base58(hex_string: str) -> str:
     return encoded_string
 
 
-def encode_base58check(data: str):
+def encode_base58check(data: str) -> str:
     """
     Given a hexadecimal string, we return the base58Check encoding
     """
@@ -97,7 +97,7 @@ def decode_base58(address: str) -> str:
 
 
 # --- BECH32 ENCODING --- #
-def encode_bech32(pubkeyhash: str):
+def encode_bech32(pubkeyhash: str, hrp: str = "bc") -> str:
     """
     Returns the Bech32 encoding of the provided public key hash.
 
@@ -126,12 +126,13 @@ def encode_bech32(pubkeyhash: str):
     converted_data = [0] + converted_data
 
     # Submit converted_data using "bc" as hrp
-    bech32_address = bech32_encode(hrp="bc", data=converted_data, spec=Encoding.BECH32)
+    bech32_address = bech32_encode(hrp=hrp, data=converted_data, spec=Encoding.BECH32)
 
-    # Decode to verify checksum
-    hrp, decoded_data, spec = bech32_decode(bech32_address)
-    if hrp != 'bc' or decoded_data is None:
-        raise ValueError("Checksum verification failed.")
+    # Decode the address to verify checksum
+    decoded_hrp, decoded_data, spec = bech32_decode(bech32_address)
+    if decoded_hrp != hrp or decoded_data is None or spec != Encoding.BECH32:
+        raise ValueError("Checksum verification failed. The generated Bech32 address is invalid.")
+
     return bech32_address
 
 
@@ -228,10 +229,13 @@ def encode_wif_private_key(private_key: bytes, version_byte: bytes = b"\x80",
 
 
 if __name__ == "__main__":
-    test_privkey = bytes.fromhex("db943987fdd2e80b80e4339dbe45498088245c9c048fe7a8c86ce64a5ff7a61c")
-    encoded_wif = encode_wif_private_key(test_privkey)
-    print(f"WIF ENCODED KEY: {encoded_wif}")
-    encoded_wif_testnet = encode_wif_private_key(test_privkey, version_byte=b"\xef")
-    print(f"WIF TESTNET KEY: {encoded_wif_testnet}")
-    encoded_wif_no_compression = encode_wif_private_key(private_key=test_privkey, compression_byte=None)
-    print(f"WIF KEY NO COMPRESSION: {encoded_wif_no_compression}")
+    # test_privkey = bytes.fromhex("db943987fdd2e80b80e4339dbe45498088245c9c048fe7a8c86ce64a5ff7a61c")
+    # encoded_wif = encode_wif_private_key(test_privkey)
+    # print(f"WIF ENCODED KEY: {encoded_wif}")
+    # encoded_wif_testnet = encode_wif_private_key(test_privkey, version_byte=b"\xef")
+    # print(f"WIF TESTNET KEY: {encoded_wif_testnet}")
+    # encoded_wif_no_compression = encode_wif_private_key(private_key=test_privkey, compression_byte=None)
+    # print(f"WIF KEY NO COMPRESSION: {encoded_wif_no_compression}")
+    _pubkeyhash = "be9f8266e6d3808816601ee9abaf2bbafd279b5c"
+    _address = encode_bech32(_pubkeyhash)
+    print(f"P2WPKH ADDRESS: {_address}")

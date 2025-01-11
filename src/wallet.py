@@ -7,7 +7,7 @@ HD Wallet
 import abc
 from secrets import randbits
 
-from src.library.codec import compress_public_key, decompress_public_key, encode_base58check
+from src.library.codec import compress_public_key, decompress_public_key, encode_base58check, encode_bech32
 from src.library.ecc import secp256k1
 from src.library.hash_functions import sha256, pbkdf2, hmac_sha512, hash160
 from src.library.word_list import WORDLIST
@@ -453,6 +453,10 @@ class XPub(ExtendedKey):
 
 class HDWallet:
     HARDENED_INDEX = 0x80000000
+    BIP44_BASE_PATH = "m/44'/0'/0'/0/0"
+    BIP49_BASE_PATH = "m/49'/0'/0'/0/0"
+    BIP84_BASE_PATH = "m/84'/0'/0'/0/0"
+    BIP86_BASE_PATH = "m/86'/0'/0'/0/0"
 
     def __init__(self, mnemonic: Mnemonic | list | None = None, passphrase: str = "",
                  version=None):
@@ -483,6 +487,78 @@ class HDWallet:
 
         # Cache dict for keys
         self.cache = {}
+
+    def address(self, path: str, script_type: str = "p2pkh") -> str:
+        """
+        Generate an address for the given derivation path and script type.
+        Example script_type values: 'p2pkh', 'p2sh-p2wpkh', 'p2wpkh', etc.
+        """
+        # 1) Derive the key at the specified path (this returns an XPrv)
+        derived_xprv = self.derive_key(path=path)
+
+        # 2) Retrieve the compressed public key (33 bytes) from XPrv
+        pubkey = derived_xprv.compressed_pubkey()
+
+        # 4) Depending on script_type, compute the address
+        match script_type.lower():
+            case "p2pkh":
+                return self._p2pkh_address(pubkey=pubkey)
+            case "p2sh":
+                # pay 2 script hash - have to know redeem script from script sig ahead of time
+                # TODO:
+                pass
+            case "p2wpkh":
+                return self._p2wpkh_address(pubkey=pubkey)
+            case "p2wsh":
+                pass
+            case "p2tr":
+                pass
+            case _:
+                raise ValueError(f"Unsupported script type: {script_type}")
+
+    def _p2pkh_address(self, pubkey: bytes) -> str:
+        """ Pay-to-PubKey-Hash: Base58Check(0x00 + hash160(pubkey)) """
+        pubkeyhash = hash160(pubkey)
+        hex_string = "00" + pubkeyhash.hex()
+        return encode_base58check(hex_string, )
+
+    def _p2wpkh_address(self, pubkey: bytes) -> str:
+        """Pay-to-Witness-PubKeyHash: Bech32(0x00 + hash160(pubkey))"""
+        pubkeyhash = hash160(pubkey).hex()
+        return encode_bech32(pubkeyhash)
+
+    # def _p2pkh_address(self, pubkey: bytes) -> str:
+
+    #     h160 = hash160(pubkey)
+    #     version_byte = b"\x00"  # mainnet P2PKH
+    #     return base58_check_encode(version_byte, h160)
+    #
+    # def _p2sh_p2wpkh_address(self, pubkey: bytes) -> str:
+    #     """
+    #     Pay-to-Script-Hash of the redeem script for P2WPKH (which is 0x00 + push of hash160(pubkey)).
+    #     The redeem script itself is typically:  0x00 0x14 <20-byte hash160(pubkey)>
+    #     Then we do P2SH = base58Check(0x05 + hash160(redeem_script)).
+    #     """
+    #     # 1) Construct the redeem script for P2WPKH:
+    #     #    OP_0 (0x00) + OP_PUSH20 (0x14) + <hash160(pubkey)>
+    #     h160 = hash160(pubkey)
+    #     redeem_script = b"\x00\x14" + h160
+    #
+    #     # 2) Hash160 of that redeem script:
+    #     redeem_script_hash = hash160(redeem_script)
+    #
+    #     # 3) Use version byte for P2SH = 0x05 (mainnet)
+    #     version_byte = b"\x05"
+    #     return base58_check_encode(version_byte, redeem_script_hash)
+
+    # def _p2wpkh_address(self, pubkey: bytes) -> str:
+    #     """
+    #     Native SegWit (Bech32) for v0 witness program = hash160(pubkey).
+    #     Typically encoded as bc1q....
+    #     """
+    #     h160 = hash160(pubkey)
+    #     # For mainnet, hrp = 'bc'. For testnet, hrp = 'tb'.
+    #     return encode_bech32(hrp='bc', witness_version=0, witness_program=h160)
 
     def derive_key(self, path: str, as_public=False):
         """
@@ -525,81 +601,104 @@ class HDWallet:
 
 
 if __name__ == "__main__":
-    # known_mnemonic = ['oak', 'recall', 'season', 'gain', 'awesome', 'master', 'advance', 'plate', 'paddle', 'appear',
-    #                   'siege', 'provide', 'clinic', 'human', 'entire', 'taste', 'observe', 'taste', 'rotate', 'trophy',
-    #                   'brick', 'reveal', 'course', 'flag']
-    # m1 = Mnemonic(mnemonic=known_mnemonic)
-    # w1 = HDWallet(mnemonic=m1, version=ExtendedKey.XPRV_BIP49)
-    # # key = w1.derive_key(path="m/44'/0'/0'/0/0")
-    # base_path = "m/49'/0'/0'/0/"
-    # for i in range(10):
-    #     temp_path = base_path + str(i)
-    #     temp_key = w1.derive_key(path=temp_path)
-    #     print(f"PATH: {temp_path}, KEY: {temp_key.address()}")
-    #
-    # temp_pubkey = bytes.fromhex("02e3af28965693b9ce1228f9d468149b831d6a0540b25e8a9900f71372c11fb277")
-    # temp_pubkeyhash = hash160(temp_pubkey)
-    # print(f"TEMP PUBKEYHASH: {temp_pubkeyhash.hex()}")
+    random_mnemonic = Mnemonic()
+    random_wallet = HDWallet(mnemonic=random_mnemonic)
+    test_path = "m/44'/0'/0'/0/0"
 
-    # temp_xprv = XPrv(
-    #     private_key=bytes.fromhex("929120bea0c6b0f5557e3f6ff8d6e0cf060da29da38d71b9fcf5a830eab64ebe"),
-    #     chain_code=bytes.fromhex("464b1e32c316f91e64ccb014653c91883d0295d7a48ef9fa62786b1002361529"),
-    #     depth=4,
-    #     parent_fingerprint=int("d5777e8f", 16),
-    #     child_number=20,
-    #     version=ExtendedKey.XPRV_BIP84
-    # )
-    # print(f"CRAFTED KEY ADDRESS: {temp_xprv.address()}")
+    # P2pkh
+    test_p2pkh = random_wallet.address(path=test_path)
+    print(f"TEST P2PKH: {test_p2pkh}")
 
-    # print(f"DERIVED KEY: {key.address()}")
-    # print(f"SEED: {m1.mnemonic_to_seed().hex()}")
-    # xprv = XPrv.from_mnemonic(mnemonic_obj=m1)
-    # print(f"XPRV MASTER: {xprv}")
-    # print(f"XPRV PRIVATE KEY: {xprv.private_key.hex()}")
-    # print(f"XPRV ADDRESS:{xprv.address()}")
-    #
-    # w1 = HDWallet(known_mnemonic)
-    # print(w1.master_xprv.address())
+    # P2PWKH
+    test_p2wpkh = random_wallet.address(path=test_path, script_type="p2wpkh")
+    print(f"TEST P2WPKH: {test_p2wpkh}")
 
-    # # xprv1 = xprv.derive_child(0)
-    # # print(f"XPRV INDEX 0 CHILD: {xprv1}")
-    # # xprv2 = xprv.derive_child(0x80000000)
-    # # print(f"XPRV FIRST HARDENED CHILD: {xprv2}")
-    # # xpub = xprv.to_public()
-    # # print(f"XPUB MASTER: {xpub}")
-    # # xpub1 = xpub.derive_child(0)
-    # # xpub2 = xpub.derive_child(1)
-    # # xpubn = xpub2.derive_child(5)
-    # # print(f"XPUB DERIVED CHILD INDEX 0: {xpub1}")
-    # # print(f"XPUB DERIVED CHILD INDEX 1: {xpub2}")
-    # # print(f"XPUB2 DERIVED CHILD INDEX 5: {xpubn}")
-    # # key_list = [xprv, xprv1, xprv2, xpub, xpub1, xpub2, xpubn]
-    # # for k in key_list:
-    # #     print(f"DERIVED PATH FOR {k.fingerprint()} : {k.d}")
+    index_key = random_wallet.derive_key(path=random_wallet.BIP49_BASE_PATH)
+    print(f"INDEX KEY: {index_key.address()}")
 
-    new_mnemonic_list = [
-        "thrive", "quiz", "thing", "kit", "umbrella", "shock", "elevator", "expire", "century", "ketchup", "ill",
-        "salute", "winter", "amused", "crop", "stairs", "spend", "submit", "below", "color", "cook", "concert", "lamp",
-        "photo"]
-    new_mnemonic = Mnemonic(new_mnemonic_list)
-    print(f"BIP39 SEED: {new_mnemonic.mnemonic_to_seed().hex()}")
+    # index_p2pkh
+    test_index_p2pkh = random_wallet.address(path=random_wallet.BIP49_BASE_PATH, script_type="p2pkh")
+    print(f"TEST INDEX P2PKH: {test_index_p2pkh}")
 
-    test_wallet = HDWallet(mnemonic=new_mnemonic)
-    print(f"TEST WALLET ROOT KEY ADDRESS: {test_wallet.master_xprv.address()}")
-    print(f"TEST WALLET MASTER PRIVATE KEY: {test_wallet.master_xprv.private_key.hex()}")
-    print(f"TEST WALLET MASTER CHAIN CODE: {test_wallet.master_xprv.chain_code.hex()}")
-    print(f"TEST WALLET MASTER COMPRESSED PUBLIC KEY: {test_wallet.master_xprv.compressed_pubkey().hex()}")
-    # derived_xprv = test_wallet.derive_key(path="m/84'/0'/0'/0/0")
-    # account_xprv = test_wallet.derive_key(path="m/84'/0'/0")
-    # print(f"ACCOUNT XPRV ADDRESS: {account_xprv.address()}")
+    # index_p2wpkh
+    test_index_p2wpkh = random_wallet.address(path=random_wallet.BIP49_BASE_PATH, script_type="p2wpkh")
+    print(f"TEST INDEX P2WPKH: {test_index_p2wpkh}")
+
+    # # known_mnemonic = ['oak', 'recall', 'season', 'gain', 'awesome', 'master', 'advance', 'plate', 'paddle', 'appear',
+    # #                   'siege', 'provide', 'clinic', 'human', 'entire', 'taste', 'observe', 'taste', 'rotate', 'trophy',
+    # #                   'brick', 'reveal', 'course', 'flag']
+    # # m1 = Mnemonic(mnemonic=known_mnemonic)
+    # # w1 = HDWallet(mnemonic=m1, version=ExtendedKey.XPRV_BIP49)
+    # # # key = w1.derive_key(path="m/44'/0'/0'/0/0")
+    # # base_path = "m/49'/0'/0'/0/"
+    # # for i in range(10):
+    # #     temp_path = base_path + str(i)
+    # #     temp_key = w1.derive_key(path=temp_path)
+    # #     print(f"PATH: {temp_path}, KEY: {temp_key.address()}")
+    # #
+    # # temp_pubkey = bytes.fromhex("02e3af28965693b9ce1228f9d468149b831d6a0540b25e8a9900f71372c11fb277")
+    # # temp_pubkeyhash = hash160(temp_pubkey)
+    # # print(f"TEMP PUBKEYHASH: {temp_pubkeyhash.hex()}")
     #
-    # # derived_xpub = test_wallet.derive_key(path="m/44'/0'/0'/0", as_public=True)
+    # # temp_xprv = XPrv(
+    # #     private_key=bytes.fromhex("929120bea0c6b0f5557e3f6ff8d6e0cf060da29da38d71b9fcf5a830eab64ebe"),
+    # #     chain_code=bytes.fromhex("464b1e32c316f91e64ccb014653c91883d0295d7a48ef9fa62786b1002361529"),
+    # #     depth=4,
+    # #     parent_fingerprint=int("d5777e8f", 16),
+    # #     child_number=20,
+    # #     version=ExtendedKey.XPRV_BIP84
+    # # )
+    # # print(f"CRAFTED KEY ADDRESS: {temp_xprv.address()}")
     #
-    # print(f"DERIVED TYPE: {type(derived_xprv)}")
-    # test_xpub = derived_xprv.to_xpub()
+    # # print(f"DERIVED KEY: {key.address()}")
+    # # print(f"SEED: {m1.mnemonic_to_seed().hex()}")
+    # # xprv = XPrv.from_mnemonic(mnemonic_obj=m1)
+    # # print(f"XPRV MASTER: {xprv}")
+    # # print(f"XPRV PRIVATE KEY: {xprv.private_key.hex()}")
+    # # print(f"XPRV ADDRESS:{xprv.address()}")
+    # #
+    # # w1 = HDWallet(known_mnemonic)
+    # # print(w1.master_xprv.address())
     #
-    # print(f"BIP32 DERIVED XPRV: {derived_xprv.address()}")
-    # print(f"BIP32 DERIVEED XPUB: {test_xpub.address()}")
-    # print(f"COMPRESSED PUBLIC KEY: {derived_xprv.to_xpub().public_key.hex()}")
+    # # # xprv1 = xprv.derive_child(0)
+    # # # print(f"XPRV INDEX 0 CHILD: {xprv1}")
+    # # # xprv2 = xprv.derive_child(0x80000000)
+    # # # print(f"XPRV FIRST HARDENED CHILD: {xprv2}")
+    # # # xpub = xprv.to_public()
+    # # # print(f"XPUB MASTER: {xpub}")
+    # # # xpub1 = xpub.derive_child(0)
+    # # # xpub2 = xpub.derive_child(1)
+    # # # xpubn = xpub2.derive_child(5)
+    # # # print(f"XPUB DERIVED CHILD INDEX 0: {xpub1}")
+    # # # print(f"XPUB DERIVED CHILD INDEX 1: {xpub2}")
+    # # # print(f"XPUB2 DERIVED CHILD INDEX 5: {xpubn}")
+    # # # key_list = [xprv, xprv1, xprv2, xpub, xpub1, xpub2, xpubn]
+    # # # for k in key_list:
+    # # #     print(f"DERIVED PATH FOR {k.fingerprint()} : {k.d}")
     #
-    # bip49_wallet = HDWallet(mnemonic=new_mnemonic)
+    # new_mnemonic_list = [
+    #     "thrive", "quiz", "thing", "kit", "umbrella", "shock", "elevator", "expire", "century", "ketchup", "ill",
+    #     "salute", "winter", "amused", "crop", "stairs", "spend", "submit", "below", "color", "cook", "concert", "lamp",
+    #     "photo"]
+    # new_mnemonic = Mnemonic(new_mnemonic_list)
+    # print(f"BIP39 SEED: {new_mnemonic.mnemonic_to_seed().hex()}")
+    #
+    # test_wallet = HDWallet(mnemonic=new_mnemonic)
+    # print(f"TEST WALLET ROOT KEY ADDRESS: {test_wallet.master_xprv.address()}")
+    # print(f"TEST WALLET MASTER PRIVATE KEY: {test_wallet.master_xprv.private_key.hex()}")
+    # print(f"TEST WALLET MASTER CHAIN CODE: {test_wallet.master_xprv.chain_code.hex()}")
+    # print(f"TEST WALLET MASTER COMPRESSED PUBLIC KEY: {test_wallet.master_xprv.compressed_pubkey().hex()}")
+    # # derived_xprv = test_wallet.derive_key(path="m/84'/0'/0'/0/0")
+    # # account_xprv = test_wallet.derive_key(path="m/84'/0'/0")
+    # # print(f"ACCOUNT XPRV ADDRESS: {account_xprv.address()}")
+    # #
+    # # # derived_xpub = test_wallet.derive_key(path="m/44'/0'/0'/0", as_public=True)
+    # #
+    # # print(f"DERIVED TYPE: {type(derived_xprv)}")
+    # # test_xpub = derived_xprv.to_xpub()
+    # #
+    # # print(f"BIP32 DERIVED XPRV: {derived_xprv.address()}")
+    # # print(f"BIP32 DERIVEED XPUB: {test_xpub.address()}")
+    # # print(f"COMPRESSED PUBLIC KEY: {derived_xprv.to_xpub().public_key.hex()}")
+    # #
+    # # bip49_wallet = HDWallet(mnemonic=new_mnemonic)
