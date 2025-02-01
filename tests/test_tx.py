@@ -70,7 +70,8 @@ def test_transaction():
     _locktime = randbits(32)
 
     # Legacy Transaction (No Witnesses)
-    _test_tx_legacy = Transaction(_version, _inputs, _outputs, _locktime)
+    _no_witness = None
+    _test_tx_legacy = Transaction(_inputs, _outputs, _no_witness, _locktime, _version)
     _fb_tx_legacy = Transaction.from_bytes(_test_tx_legacy.to_bytes())
 
     assert _fb_tx_legacy.to_bytes() == _test_tx_legacy.to_bytes(), \
@@ -83,7 +84,7 @@ def test_transaction():
         for _ in range(_num_witnesses)
     ]
 
-    _test_tx_segwit = Transaction(_version, _inputs, _outputs, _locktime, _witnesses)
+    _test_tx_segwit = Transaction(_inputs, _outputs, _witnesses, _locktime, _version)
     _fb_tx_segwit = Transaction.from_bytes(_test_tx_segwit.to_bytes())
 
     assert _fb_tx_segwit.to_bytes() == _test_tx_segwit.to_bytes(), \

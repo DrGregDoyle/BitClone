@@ -2,7 +2,7 @@
 A module for Merkle trees
 """
 
-from src.backup.library.hash_func import hash256
+from src.library.hash_functions import hash256
 
 
 def create_merkle_tree(tx_list: list) -> dict:
