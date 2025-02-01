@@ -154,11 +154,8 @@ class Input(Serializable):
         Returns:
             bytes: The serialized transaction input.
         """
-        # Convert txid to little-endian for serialization
-        txid_le = self.txid[::-1]
-
         # Pack fixed-size fields
-        fixed_part = self._struct.pack(txid_le, self.vout)
+        fixed_part = self._struct.pack(self.txid, self.vout)
 
         # Pack script_sig (variable size)
         script_sig_part = write_compact_size(len(self.script_sig)) + self.script_sig
@@ -336,13 +333,9 @@ class Witness(Serializable):
 
         num_items = read_compact_size(stream)
         items = []
+        # Loop needed to properly read stream | Do NOT use list comprehension
         for _ in range(num_items):
-            temp_item = WitnessItem.from_bytes(stream)
-            items.append(temp_item)
-            # item_length = read_compact_size(stream)
-            # item = stream.read(item_length)
-            # check_length(item, item_length, "witness item")
-            # items.append(item)
+            items.append(WitnessItem.from_bytes(stream))
 
         return cls(items)
 
@@ -368,11 +361,11 @@ class Witness(Serializable):
           1. Write a CompactSize for the number of items
           2. For each item, write the length as a CompactSize, then the item bytes
         """
-        num_items = write_compact_size(len(self.items))
+
         items_bytes = b""
         for item in self.items:
-            items_bytes += write_compact_size(len(item)) + item
-        return num_items + items_bytes
+            items_bytes += item.to_bytes()
+        return self.stackitems + items_bytes
 
     def to_dict(self) -> dict:
         """
@@ -595,6 +588,20 @@ if __name__ == "__main__":
     # _test_sequence = 0xfffffffd
     # _test_input = Input(_test_txid, _test_vout, _test_scriptsig, _test_sequence)
     # print(f"TEST INPUT: {_test_input}")
+
+    # _knownidhex = "9945a5a440f2d3712ff095cb1efefada1cc52e139defedb92a313daed49d5678010000006a473044022031b6a6b79c666d5568a9ac7c116cacf277e11521aebc6794e2b415ef8c87c899022001fe272499ea32e6e1f6e45eb656973fbb55252f7acc64e1e1ac70837d5b7d9f0121023dec241e4851d1ec1513a48800552bae7be155c6542629636bcaa672eee971dcffffffff"
+    # _knowninput = Input.from_hex(_knownidhex)
+    # print(f"KNOWN INPUT: {_knowninput}")
+    # _recovered_input = Input.from_hex(_knowninput.to_bytes().hex())
+    # print(f"RECOVERED INPUT: {_recovered_input}")
+
+    _witness_item1 = WitnessItem(bytes.fromhex("deadbeef"))
+    _witness_item2 = WitnessItem(bytes.fromhex("badcaddad0"))
+    _witness = Witness([_witness_item1, _witness_item2])
+    print(_witness)
+    _witness_bytes = _witness.to_bytes()
+    _recovered_witness = Witness.from_bytes(_witness_bytes)
+    print(_recovered_witness)
     #
     # _learn_me_input_hex = "9945a5a440f2d3712ff095cb1efefada1cc52e139defedb92a313daed49d5678010000006a473044022031b6a6b79c666d5568a9ac7c116cacf277e11521aebc6794e2b415ef8c87c899022001fe272499ea32e6e1f6e45eb656973fbb55252f7acc64e1e1ac70837d5b7d9f0121023dec241e4851d1ec1513a48800552bae7be155c6542629636bcaa672eee971dcffffffff"
     # _recoved_input = Input.from_bytes(bytes.fromhex(_learn_me_input_hex))
@@ -604,9 +611,9 @@ if __name__ == "__main__":
     # _recovered_output = Output.from_bytes(bytes.fromhex(_learn_me_output_hex))
     # print(f"RECOVERED OUTPUT: {_recovered_output}")
 
-    BASIC_LEGACY_TX_HEX = "010000000110ddd830599b17cc690535f7df28a84466eaca3c22f0d55b79023b6570f4fbc5010000008b483045022100e6186d6f344ce4df46b2e15d87093d34edbf5b50462b6b45f9bd499a6a62fbc4022055f56a1c4a24ea6be61564593c4196b47478a25cf596c1baf59f5a9a229b637c014104a41e997b6656bc4f5dd1f9b9df3b4884cbec254d3b71d928587695b0df0a80417432f4ca6276bc620b1f04308e82e70015a40f597d8260912f801e4b62ab089effffffff0200e9c829010000001976a9146f34d3811aded1df870359f311c2a11a015e945388ac00e40b54020000001976a91470d6734de69c1ac8913892f2df9be0e738d26c2d88ac00000000"
-    BASIC_SEGWIT_TX_HEX = "010000000001013c735f81c1a0115af2e735554fb271ace18c32a3faf443f9db40cb9a11ca63110000000000ffffffff02b113030000000000160014689a681c462536ad7d735b497511e527e9f59245cf120000000000001600148859f1e9ef3ba438e2ec317f8524ed41f8f06c6a024730440220424772d4ad659960d4f1b541fd853f7da62e8cf505c2f16585dc7c8cf643fe9a02207fbc63b9cf317fc41402b2e7f6fdc1b01f1b43c5456cf9b547fe9645a16dcb150121032533cb19cf37842556dd2168b1c7b6f3a70cff25a6ff4d4b76f2889d2c88a3f200000000"
-    ADVANCED_TX_HEX = "01000000000102f11271713fb911ebdb7daa111470853084c5b4f6ad73582517a73b1131839d71000000006a473044022001187384d8b30020a0ad6976805f0676da8e5fd219ffec084f7c22d2acd4838f0220074e3195a6e624b7ac5cb8e072d77f3b6363968040fc99f268affd4c08e11ac7012103510f10304c99bd53af8b3e47b3e282a75a50dad6f459c4c985898fd800a9e9a8fffffffff11271713fb911ebdb7daa111470853084c5b4f6ad73582517a73b1131839d710100000000ffffffff021027000000000000160014858e1f88ff6f383f45a75088e15a095f20fc663f2c1a0000000000001976a9142241a6c3d4cc3367efaa88b58d24748caef79a7288ac0002473044022035345342616cb5d6eefbbffc1de179ee514587dd15efe5ca892602f50336e30502207864061776e39992f317aee92dcc9595cc754b8f13957441d5ccd9ebd1b5cc0c0121022ed6c7d33a59cc16d37ad9ba54230696bd5424b8931c2a68ce76b0dbbc222f6500000000"
-    _learn_me_tx_hex = "0100000002c03b4640baf8e919d9984be0c882fb235df843d33e2eda84e890e3d4143158a9010000006b483045022100dde67b86d5ecd58669635fe7bd5bf83d3b60c1a118f84a4afc3f5f8eaaa4ba68022020e41869e45bb08d241be7b95169dd96a556f52db265eee98d26a8a8b9a9c93e012102da87884e3f9933a3f5bc7c5bc304f3a0ec2f05384b412308cfe0bbc9db70c97ffeffffffacfc00ac820d822d999bdfa8fa4f4b9199faced9c5b328abfb5d34792d590d00040000006b483045022100fdf59d8675914bfb7ff89ae4a133610653f85b58a39b6404a2705ff97d10865102200bdebecf495706cdc114be0435e06999b7f9eef3cb94baa5f83fe252fc2a5dfe01210257827e31f30bb63ab05960c4d9ade1708b60b8e196a39ad038f660477ac1a2ddfeffffff02dc190500000000001976a914a8cffc755b5ba95e79ece8036a044e9b4dceb51f88acdd821100000000001976a914751279ece361265d0acd00c69d1b5f40afb3ad7488ac517c0600"
-    _recovered_tx = Transaction.from_hex(_learn_me_tx_hex)
-    print(f"RECOVERED TX: {_recovered_tx}")
+    # BASIC_LEGACY_TX_HEX = "010000000110ddd830599b17cc690535f7df28a84466eaca3c22f0d55b79023b6570f4fbc5010000008b483045022100e6186d6f344ce4df46b2e15d87093d34edbf5b50462b6b45f9bd499a6a62fbc4022055f56a1c4a24ea6be61564593c4196b47478a25cf596c1baf59f5a9a229b637c014104a41e997b6656bc4f5dd1f9b9df3b4884cbec254d3b71d928587695b0df0a80417432f4ca6276bc620b1f04308e82e70015a40f597d8260912f801e4b62ab089effffffff0200e9c829010000001976a9146f34d3811aded1df870359f311c2a11a015e945388ac00e40b54020000001976a91470d6734de69c1ac8913892f2df9be0e738d26c2d88ac00000000"
+    # BASIC_SEGWIT_TX_HEX = "010000000001013c735f81c1a0115af2e735554fb271ace18c32a3faf443f9db40cb9a11ca63110000000000ffffffff02b113030000000000160014689a681c462536ad7d735b497511e527e9f59245cf120000000000001600148859f1e9ef3ba438e2ec317f8524ed41f8f06c6a024730440220424772d4ad659960d4f1b541fd853f7da62e8cf505c2f16585dc7c8cf643fe9a02207fbc63b9cf317fc41402b2e7f6fdc1b01f1b43c5456cf9b547fe9645a16dcb150121032533cb19cf37842556dd2168b1c7b6f3a70cff25a6ff4d4b76f2889d2c88a3f200000000"
+    # ADVANCED_TX_HEX = "01000000000102f11271713fb911ebdb7daa111470853084c5b4f6ad73582517a73b1131839d71000000006a473044022001187384d8b30020a0ad6976805f0676da8e5fd219ffec084f7c22d2acd4838f0220074e3195a6e624b7ac5cb8e072d77f3b6363968040fc99f268affd4c08e11ac7012103510f10304c99bd53af8b3e47b3e282a75a50dad6f459c4c985898fd800a9e9a8fffffffff11271713fb911ebdb7daa111470853084c5b4f6ad73582517a73b1131839d710100000000ffffffff021027000000000000160014858e1f88ff6f383f45a75088e15a095f20fc663f2c1a0000000000001976a9142241a6c3d4cc3367efaa88b58d24748caef79a7288ac0002473044022035345342616cb5d6eefbbffc1de179ee514587dd15efe5ca892602f50336e30502207864061776e39992f317aee92dcc9595cc754b8f13957441d5ccd9ebd1b5cc0c0121022ed6c7d33a59cc16d37ad9ba54230696bd5424b8931c2a68ce76b0dbbc222f6500000000"
+    # _learn_me_tx_hex = "0100000002c03b4640baf8e919d9984be0c882fb235df843d33e2eda84e890e3d4143158a9010000006b483045022100dde67b86d5ecd58669635fe7bd5bf83d3b60c1a118f84a4afc3f5f8eaaa4ba68022020e41869e45bb08d241be7b95169dd96a556f52db265eee98d26a8a8b9a9c93e012102da87884e3f9933a3f5bc7c5bc304f3a0ec2f05384b412308cfe0bbc9db70c97ffeffffffacfc00ac820d822d999bdfa8fa4f4b9199faced9c5b328abfb5d34792d590d00040000006b483045022100fdf59d8675914bfb7ff89ae4a133610653f85b58a39b6404a2705ff97d10865102200bdebecf495706cdc114be0435e06999b7f9eef3cb94baa5f83fe252fc2a5dfe01210257827e31f30bb63ab05960c4d9ade1708b60b8e196a39ad038f660477ac1a2ddfeffffff02dc190500000000001976a914a8cffc755b5ba95e79ece8036a044e9b4dceb51f88acdd821100000000001976a914751279ece361265d0acd00c69d1b5f40afb3ad7488ac517c0600"
+    # _recovered_tx = Transaction.from_hex(_learn_me_tx_hex)
+    # print(f"RECOVERED TX: {_recovered_tx}")
