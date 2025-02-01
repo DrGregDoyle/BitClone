@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from src.cipher import decode_utxo, decode_outpoint
-from src.tx import UTXO, Outpoint
+from src.tx_old import UTXO, Outpoint
 
 # --- LOGGING --- #
 log_level = logging.DEBUG

@@ -1,124 +1,113 @@
-from typing import Union
+"""
+Methods for handling data in BitClone
+"""
+import struct
+from io import BytesIO
 
-BTCDataType = Union[str, int, bytes]
-HEX_ALPHABET = "0123456789abcdef"
 
-
-class BTCData:
+def check_hex(hex_string: str) -> str:
     """
-    A utility class for handling Bitcoin-related data with representations in bytes, hex, and int.
+    Checks the validity of the hex string
+
+    Returns:
+        hex_string: formatter hex string
+
+    Raises:
+        ValueError: If hex_string is not of str type
+        ValueError: If the hex_string contains a character outside the hex alphabet.
     """
+    # Type
+    if not isinstance(hex_string, str):
+        raise ValueError(f"Input not of str type. Type; {type(hex_string)}")
 
-    def __init__(self, data: BTCDataType, size: int = None, endian: str = "big"):
-        """
-        Initialize BTCData object.
+    if hex_string.startswith("0x"):
+        hex_string = hex_string[2:]
+    hex_string = hex_string.lower()
 
-        Args:
-            data (BTCDataType): The input data as a string, integer, or bytes.
-            size (int, optional): Expected size of the data in bytes. If None, the size is derived from the data.
-            endian (str, optional): Byte order, either "big" or "little". Default is "big".
+    # Check the string
+    if not all(c in "0123456789abcedf" for c in hex_string):
+        raise ValueError("String contains non hexadecimal characters")
+    return hex_string
 
-        Raises:
-            ValueError: If the input data type is unsupported or the size is invalid.
-            ValueError: If endian is not "big" or "little".
-        """
-        if endian not in ("big", "little"):
-            raise ValueError("Endian must be 'big' or 'little'.")
 
-        self._endian = endian
-        self._byte_data = self._parse_data(data, size)
-        self._size = size if size is not None else len(self._byte_data)
+def read_compact_size(stream: bytes | BytesIO):
+    """
+    Reads a Bitcoin CompactSize (a.k.a. varint) from the given stream.
 
-        if self._size != len(self._byte_data):
-            raise ValueError(f"Specified size {self._size} does not match data length {len(self._byte_data)}.")
+    The stream can be either a file-like object (supporting .read())
+    or a bytes object.
 
-    @property
-    def bytes(self) -> bytes:
-        """Return the data as bytes, adjusted for endianness."""
-        return self._byte_data if self._endian == "big" else self._byte_data[::-1]
+    Returns:
+        int: The integer value represented by the CompactSize encoding.
+    """
+    # Check type
+    if isinstance(stream, bytes):
+        stream = BytesIO(stream)
+    if not isinstance(stream, BytesIO):
+        raise ValueError(f"Expected byte data stream, received {type(stream)}")
 
-    @property
-    def hex(self) -> str:
-        """Return the data as a hexadecimal string, adjusted for endianness."""
-        byte_data = self.bytes
-        return byte_data.hex()
+    prefix = stream.read(1)
+    if len(prefix) == 0:
+        raise ValueError("Insufficient data to read CompactSize prefix.")
 
-    @property
-    def int(self) -> int:
-        """Return the data as an integer, adjusted for endianness."""
-        return int.from_bytes(self._byte_data, byteorder=self._endian)  # type: ignore
+    prefix_val = prefix[0]
 
-    def compact_size(self) -> bytes:
-        """
-        Return the CompactSize encoding of the size instance variable.
+    if prefix_val < 0xfd:
+        # Single-byte value
+        return prefix_val
+    elif prefix_val == 0xfd:
+        # Next 2 bytes as uint16 (little-endian)
+        raw = stream.read(2)
+        if len(raw) < 2:
+            raise ValueError("Insufficient data to read CompactSize (0xfd).")
+        return struct.unpack("<H", raw)[0]
+    elif prefix_val == 0xfe:
+        # Next 4 bytes as uint32 (little-endian)
+        raw = stream.read(4)
+        if len(raw) < 4:
+            raise ValueError("Insufficient data to read CompactSize (0xfe).")
+        return struct.unpack("<I", raw)[0]
+    else:
+        # prefix_val == 0xff -> Next 8 bytes as uint64 (little-endian)
+        raw = stream.read(8)
+        if len(raw) < 8:
+            raise ValueError("Insufficient data to read CompactSize (0xff).")
+        return struct.unpack("<Q", raw)[0]
 
-        Returns:
-            bytes: CompactSize encoding of the size.
-        """
-        if self._size < 0xfd:
-            return self._size.to_bytes(1, "little")
-        elif self._size <= 0xffff:
-            return b"\xfd" + self._size.to_bytes(2, "little")
-        elif self._size <= 0xffffffff:
-            return b"\xfe" + self._size.to_bytes(4, "little")
-        else:
-            return b"\xff" + self._size.to_bytes(8, "little")
 
-    def _parse_data(self, raw_data: BTCDataType, size: int = None) -> bytes:
-        """
-        Convert the input data into a byte array, respecting size. We force the data to be returned in natural byte
-        order.
+def write_compact_size(value: int) -> bytes:
+    """
+    Encodes an integer into a Bitcoin CompactSize (varint) byte sequence.
 
-        Args:
-            raw_data (BTCDataType): Input data to be parsed.
-            size (int, optional): Expected size of the data in bytes. Default is None.
+    Args:
+        value (int): The integer value to encode.
 
-        Returns:
-            bytes: Parsed byte representation of the data.
+    Returns:
+        bytes: The bytes representing the CompactSize encoding of `value`.
+    """
+    if value < 0:
+        raise ValueError("Negative values are not allowed in CompactSize encoding.")
 
-        Raises:
-            ValueError: If the input data type is unsupported or cannot be parsed.
-        """
-        if isinstance(raw_data, bytes):
-            return self._pad_or_trim(raw_data, size)
+    if value < 0xfd:
+        return struct.pack("B", value)
+    elif value <= 0xffff:
+        return b'\xfd' + struct.pack("<H", value)
+    elif value <= 0xffffffff:
+        return b'\xfe' + struct.pack("<I", value)
+    else:
+        return b'\xff' + struct.pack("<Q", value)
 
-        if isinstance(raw_data, int):
-            byte_length = (raw_data.bit_length() + 7) // 8
-            if size is not None and size > byte_length:
-                byte_length = size
-            return raw_data.to_bytes(byte_length, byteorder="big")
 
-        if isinstance(raw_data, str):
-            raw_data = raw_data.lower().lstrip("0x")
-            try:
-                parsed_bytes = bytes.fromhex(raw_data)
-                return self._pad_or_trim(parsed_bytes, size)
-            except ValueError:
-                return self._pad_or_trim(raw_data.encode("ascii"), size)
-
-        raise ValueError(f"Unsupported data type: {type(raw_data)}")
-
-    def _pad_or_trim(self, data: bytes, size: int = None) -> bytes:
-        """
-        Adjust the byte array to match the specified size.
-
-        Args:
-            data (bytes): Input byte data.
-            size (int, optional): Desired size in bytes. Default is None.
-
-        Returns:
-            bytes: Padded or trimmed byte data.
-
-        Raises:
-            ValueError: If the data needs to be trimmed but contains too many bytes.
-        """
-        if size is None:
-            return data
-
-        if len(data) > size:
-            return data[:size]  # Trim excess bytes
-        elif len(data) < size:
-            padding = b"\x00" * (size - len(data))
-            return padding + data if self._endian == "big" else data + padding
-
+def byte_format(data: bytes, length: int):
+    diff = length - len(data)
+    if diff == 0:
         return data
+    elif diff > 0:
+        return data.rjust(diff, b'\x00')  # Pad with 0 bytes
+    else:
+        raise ValueError("Data size greater than length")
+
+
+def check_length(data: bytes, length: int, value: str):
+    if len(data) != length:
+        raise ValueError(f"Insufficient data for {value}.")

@@ -4,15 +4,15 @@ The Blockchain class
 
 # --- IMPORTS --- #
 
-from src.backup.cipher import decode_utxo
+from src.backup.signature import *
+from src.database import Database
+from src.tx_old import Transaction, TxInput, TxOutput, Outpoint, UTXO
 
 from src.backup.block import Block
+from src.backup.cipher import decode_utxo
 from src.backup.miner import Miner
 from src.backup.parse import bits_to_target, target_to_bits
-from src.backup.signature import *
 from src.backup.wallet import HDWallet, ExtendedPrivateKey
-from src.database import Database
-from src.tx import Transaction, TxInput, TxOutput, Outpoint, UTXO
 
 # MAX_TARGET = 0x00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 TEST_TARGET = 0x00000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
