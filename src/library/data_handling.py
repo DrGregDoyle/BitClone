@@ -111,3 +111,18 @@ def byte_format(data: bytes, length: int):
 def check_length(data: bytes, length: int, value: str):
     if len(data) != length:
         raise ValueError(f"Insufficient data for {value}.")
+
+
+def to_little_bytes(num: int, length: int = None):
+    """
+    Returns little-endian encoding of the given num. Will be of specified length if included
+    """
+    length = (num.bit_length() + 7) // 8 if length is None else length
+    return num.to_bytes(length, "little")
+
+
+def from_little_bytes(little_bytes: bytes) -> int:
+    """
+    Returns integer from little-endian encoded bytes object
+    """
+    return int.from_bytes(little_bytes, "little")

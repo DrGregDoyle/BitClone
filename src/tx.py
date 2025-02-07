@@ -11,51 +11,12 @@ B: unsigned char (1 byte)
 >Q: uint64 (big-endian)
 """
 import io
-import json
 import struct
 
-from src.library.data_handling import check_length, check_hex, write_compact_size, read_compact_size, byte_format
+from src.library.data_handling import check_length, check_hex, write_compact_size, read_compact_size, byte_format, \
+    from_little_bytes, to_little_bytes
 from src.library.hash_functions import hash256
-
-
-class Serializable:
-    """
-    A base class that defines the interface for serializing and
-    deserializing data to and from Bitcoin's wire format.
-    """
-    __slots__ = ()
-
-    @classmethod
-    def from_bytes(cls, byte_stream):
-        raise NotImplementedError(f"{cls.__name__} must implement from_bytes()")
-
-    @classmethod
-    def from_hex(cls, hex_string: str):
-        hex_string = check_hex(hex_string)
-        if len(hex_string) % 2 != 0:
-            raise ValueError(f"Invalid hex length for {cls.__name__}")
-        return cls.from_bytes(bytes.fromhex(hex_string))
-
-    @property
-    def length(self):
-        """
-        Gives length of the given to_byte serialization
-        """
-        return len(self.to_bytes())
-
-    def to_bytes(self) -> bytes:
-        raise NotImplementedError(f"{self.__class__.__name__} must implement to_bytes()")
-
-    def to_dict(self) -> dict:
-        raise NotImplementedError(f"{self.__class__.__name__} must implement to_dict()")
-
-    def to_json(self) -> str:
-        """ Convert the object to a JSON string. """
-        return json.dumps(self.to_dict(), indent=2)
-
-    def __repr__(self) -> str:
-        """ Return a human-readable JSON representation of the object. """
-        return self.to_json()
+from src.library.serializable import Serializable
 
 
 class Input(Serializable):
@@ -130,7 +91,7 @@ class Input(Serializable):
         # Read sequence (4 bytes, little-endian)
         sequence_data = stream.read(cls.SEQ_BYTES)
         check_length(sequence_data, cls.SEQ_BYTES, "sequence")
-        sequence = int.from_bytes(sequence_data, byteorder="little")
+        sequence = from_little_bytes(sequence_data)
 
         return cls(txid, vout, script_sig, sequence)
 
@@ -148,7 +109,7 @@ class Input(Serializable):
         script_sig_part = self.script_sig_size + self.script_sig
 
         # Pack sequence (4 bytes, little-endian)
-        sequence_part = self.sequence.to_bytes(self.SEQ_BYTES, byteorder="little")
+        sequence_part = to_little_bytes(self.sequence, self.SEQ_BYTES)
 
         return fixed_part + script_sig_part + sequence_part
 
@@ -161,10 +122,11 @@ class Input(Serializable):
         """
         return {
             "txid": self.txid.hex(),  # Natural byte order (big-endian)
-            "vout": self.vout.to_bytes(self.VOUT_BYTES, "little").hex(),
+            "vout": to_little_bytes(self.vout, self.VOUT_BYTES).hex(),
             "script_sig_size": self.script_sig_size.hex(),
             "script_sig": self.script_sig.hex(),
-            "sequence": self.sequence.to_bytes(self.SEQ_BYTES, "little").hex(),
+            "sequence": to_little_bytes(self.sequence, self.SEQ_BYTES)
+
         }
 
 
@@ -201,7 +163,7 @@ class Output(Serializable):
         # Read fixed size fields (amount)
         amount_data = stream.read(cls.AMOUNT_BYTES)
         check_length(amount_data, cls.AMOUNT_BYTES, "amount")
-        amount = int.from_bytes(amount_data, byteorder="little")
+        amount = from_little_bytes(amount_data)
 
         # Read script_pubkey (variable size)
         script_pubkey_length = read_compact_size(stream)
@@ -217,7 +179,7 @@ class Output(Serializable):
           1. value (8 bytes)
           2. CompactSize for scriptPubKey length, then script_pubkey
         """
-        amount_bytes = self.amount.to_bytes(self.AMOUNT_BYTES, byteorder="little")
+        amount_bytes = to_little_bytes(self.AMOUNT_BYTES, self.AMOUNT_BYTES)
         script_pubkey_bytes = self.script_pubkey_size + self.script_pubkey
         return amount_bytes + script_pubkey_bytes
 
@@ -229,7 +191,7 @@ class Output(Serializable):
             dict: A dictionary representation of the Output.
         """
         return {
-            "amount": self.amount.to_bytes(self.AMOUNT_BYTES, byteorder="little").hex(),
+            "amount": to_little_bytes(self.amount, self.AMOUNT_BYTES).hex(),
             "script_pubkey_size": self.script_pubkey_size.hex(),
             "script_pubkey": self.script_pubkey.hex(),
         }
@@ -411,7 +373,7 @@ class Transaction(Serializable):
         # Read version (4 bytes, little-endian)
         version_data = stream.read(4)
         check_length(version_data, cls.VERSION_BYTES, "version")
-        version = int.from_bytes(version_data, byteorder="little")
+        version = from_little_bytes(version_data)
 
         # Check for SegWit marker and flag
         marker = stream.read(1)
@@ -448,7 +410,7 @@ class Transaction(Serializable):
         # Read locktime (4 bytes, little-endian)
         locktime_data = stream.read(4)
         check_length(locktime_data, cls.LOCKTIME_BYTES, "locktime")
-        locktime = int.from_bytes(locktime_data, byteorder="little")
+        locktime = from_little_bytes(locktime_data)
 
         return cls(inputs, outputs, witnesses, locktime, version)
 
@@ -508,7 +470,7 @@ class Transaction(Serializable):
           6. locktime (4 bytes)
         """
         # Version and Marker/Flag (if segwit)
-        version_bytes = self.version.to_bytes(self.VERSION_BYTES, "little")
+        version_bytes = to_little_bytes(self.version, self.VERSION_BYTES)
         marker_flag_bytes = self.MARKER + self.FLAG if self.is_segwit else b''
 
         # Inputs, outputs and witness
@@ -517,7 +479,7 @@ class Transaction(Serializable):
         witnesses_bytes = b''.join(w.to_bytes() for w in self.witnesses) if self.is_segwit else b''
 
         # Locktime and return
-        locktime_bytes = self.locktime.to_bytes(self.LOCKTIME_BYTES, "little")
+        locktime_bytes = to_little_bytes(self.locktime, self.LOCKTIME_BYTES)
         return version_bytes + marker_flag_bytes + inputs_bytes + outputs_bytes + witnesses_bytes + locktime_bytes
 
     def to_dict(self) -> dict:
@@ -529,7 +491,7 @@ class Transaction(Serializable):
         """
         # 1. Add "version" as a 4-byte little-endian hex string
         tx_dict = {
-            "version": self.version.to_bytes(self.VERSION_BYTES, "little").hex()
+            "version": to_little_bytes(self.version, self.VERSION_BYTES).hex()
         }
 
         # 2. If SegWit, add "marker" and "flag"
@@ -548,7 +510,7 @@ class Transaction(Serializable):
             tx_dict["witnesses"] = [w.to_dict() for w in self.witnesses]
 
         # 5. Add locktime and return
-        tx_dict["locktime"] = self.locktime.to_bytes(self.LOCKTIME_BYTES, "little").hex()
+        tx_dict["locktime"] = to_little_bytes(self.locktime, self.LOCKTIME_BYTES).hex()
         return tx_dict
 
     def txid(self) -> str:
@@ -578,11 +540,10 @@ class Transaction(Serializable):
         Returns:
             bytes: The serialized transaction in Bitcoin's standard format, excluding witness data.
         """
-        version_bytes = self.version.to_bytes(self.VERSION_BYTES, byteorder="little")
+        version_bytes = to_little_bytes(self.version, self.VERSION_BYTES)
         inputs_bytes = self.input_count + b''.join(i.to_bytes() for i in self.inputs)
         outputs_bytes = write_compact_size(len(self.outputs)) + b''.join(o.to_bytes() for o in self.outputs)
-        locktime_bytes = self.locktime.to_bytes(self.LOCKTIME_BYTES, byteorder="little")
-
+        locktime_bytes = to_little_bytes(self.locktime, self.LOCKTIME_BYTES)
         return version_bytes + inputs_bytes + outputs_bytes + locktime_bytes
 
 

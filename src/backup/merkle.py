@@ -124,3 +124,9 @@ def verify_element(tx_id: str, proof: dict) -> bool:
     # Return True/False
     merkle_root = proof.get(0)
     return current_id == merkle_root
+
+
+if __name__ == "__main__":
+    tx_ids = ["0000000000000000000000000000000000000000000000000000000000000000",
+              "0000000000000000000000000000000000000000000000000000000000000000"]
+    mt = create_merkle_tree(tx_ids)

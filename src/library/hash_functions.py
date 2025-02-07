@@ -40,7 +40,7 @@ class HashType(Enum):
 #     hash_block = tagged_hash + tagged_hash + data
 #     return hash_function(function_type, hash_block)
 
-
+# SCHNORR
 def hash_function(encoded_data: bytes, function_type: HashType):
     # Mapping of HashType enum members to function objects
     functions: dict[HashType, Callable] = {
@@ -67,6 +67,7 @@ def tagged_hash_function(encoded_data: bytes, tag: bytes, function_type: HashTyp
     return hash_function(hashed_tag + hashed_tag + encoded_data, function_type=function_type)
 
 
+# HASHLIB
 def sha1(encoded_data: bytes) -> bytes:
     return hashlib.sha1(encoded_data).digest()
 
@@ -129,12 +130,9 @@ def pbkdf2(mnemonic: list, passphrase='', iterations=2048, dklen=64) -> bytes:
 
 # --- TESTING
 if __name__ == "__main__":
-    test_data = bytes.fromhex(
-        "d25f95170ac85e074ea357dd978388401100fcddf656df3705cb457ec4b82350f8437440aaf6a66f0fec09db3d09acc51f2c7b9cd4b9c862990dd228035b0dd9")
-    test_key = bytes.fromhex("426974636f696e2073656564")
-    hmach_hash = hmac_sha512(test_key, test_data)
-    print(f"HMAC HASH: {hmach_hash.hex()}")
-    # test_mnemonic = ["nerve", "cannon", "kangaroo", "brief", "tooth", "great", "way", "clean", "become", "chat",
-    #                  "select", "comfort"]
-    # _test_key = pbkdf2(mnemonic=test_mnemonic)
-    # print(f"PBKDF2: {_test_key.hex()}")
+    zerohash1 = sha256(bytes.fromhex("0000000000000000000000000000000000000000000000000000000000000000"))
+    print(f"SHA256('0000000000000000000000000000000000000000000000000000000000000000'): {zerohash1.hex()}")
+    zerohash2 = sha256(zerohash1)
+    print(f"SHA256(SHA256('0000000000000000000000000000000000000000000000000000000000000000'): {zerohash2.hex()}")
+    zerodoublehash = hash256(bytes.fromhex("0000000000000000000000000000000000000000000000000000000000000000"))
+    print(f"HASH256('0000000000000000000000000000000000000000000000000000000000000000'): {zerodoublehash.hex()}")
