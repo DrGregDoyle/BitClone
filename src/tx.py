@@ -125,7 +125,7 @@ class Input(Serializable):
             "vout": to_little_bytes(self.vout, self.VOUT_BYTES).hex(),
             "script_sig_size": self.script_sig_size.hex(),
             "script_sig": self.script_sig.hex(),
-            "sequence": to_little_bytes(self.sequence, self.SEQ_BYTES)
+            "sequence": to_little_bytes(self.sequence, self.SEQ_BYTES).hex()
 
         }
 
@@ -179,7 +179,7 @@ class Output(Serializable):
           1. value (8 bytes)
           2. CompactSize for scriptPubKey length, then script_pubkey
         """
-        amount_bytes = to_little_bytes(self.AMOUNT_BYTES, self.AMOUNT_BYTES)
+        amount_bytes = to_little_bytes(self.amount, self.AMOUNT_BYTES)
         script_pubkey_bytes = self.script_pubkey_size + self.script_pubkey
         return amount_bytes + script_pubkey_bytes
 
@@ -365,10 +365,10 @@ class Transaction(Serializable):
           5. If segwit, read witness data for each input
           6. Read 4-byte locktime
         """
-        if not isinstance(byte_stream, bytes):
-            raise ValueError("byte_stream must be of type `bytes`.")
+        if not isinstance(byte_stream, (bytes, io.BytesIO)):
+            raise ValueError(f"Expected byte data stream, received {type(byte_stream)}")
 
-        stream = io.BytesIO(byte_stream)
+        stream = io.BytesIO(byte_stream) if isinstance(byte_stream, bytes) else byte_stream
 
         # Read version (4 bytes, little-endian)
         version_data = stream.read(4)
@@ -489,10 +489,12 @@ class Transaction(Serializable):
         Returns:
             dict: A dictionary representation of the Transaction.
         """
+        tx_dict = {}
+        # Start with txid - as displayed in block explorers
+        tx_dict["tx_id"] = self.txid()[::-1].hex()  # Change from internal representation to display
+
         # 1. Add "version" as a 4-byte little-endian hex string
-        tx_dict = {
-            "version": to_little_bytes(self.version, self.VERSION_BYTES).hex()
-        }
+        tx_dict["version"] = to_little_bytes(self.version, self.VERSION_BYTES).hex()
 
         # 2. If SegWit, add "marker" and "flag"
         if self.is_segwit:
@@ -513,7 +515,7 @@ class Transaction(Serializable):
         tx_dict["locktime"] = to_little_bytes(self.locktime, self.LOCKTIME_BYTES).hex()
         return tx_dict
 
-    def txid(self) -> str:
+    def txid(self) -> bytes:
         """
         Compute the transaction ID (txid) as the double SHA-256 of the transaction
         without witness data.
@@ -521,9 +523,13 @@ class Transaction(Serializable):
         if self._cached_non_witness_bytes is None:
             self._cached_non_witness_bytes = self._serialize_non_witness()
         txid_hash = hash256(self._cached_non_witness_bytes)
-        return txid_hash[::-1].hex()
+        # Returns internal txid value
+        return txid_hash
 
-    def wtxid(self) -> str:
+    def test_id(self):
+        return hash256(self.to_bytes()).hex()
+
+    def wtxid(self) -> bytes:
         """
         Compute the witness transaction ID (wtxid) as the double SHA-256
         of the full serialized transaction (including witness data).
@@ -531,7 +537,8 @@ class Transaction(Serializable):
         if self._cached_wtxid_bytes is None:
             self._cached_wtxid_bytes = self.to_bytes()
         wtxid_hash = hash256(self._cached_wtxid_bytes)
-        return wtxid_hash[::-1].hex()
+        # Returns wtxid in the internal byte order
+        return wtxid_hash
 
     def _serialize_non_witness(self) -> bytes:
         """
@@ -542,18 +549,20 @@ class Transaction(Serializable):
         """
         version_bytes = to_little_bytes(self.version, self.VERSION_BYTES)
         inputs_bytes = self.input_count + b''.join(i.to_bytes() for i in self.inputs)
-        outputs_bytes = write_compact_size(len(self.outputs)) + b''.join(o.to_bytes() for o in self.outputs)
+        outputs_bytes = self.output_count + b''.join(o.to_bytes() for o in self.outputs)
         locktime_bytes = to_little_bytes(self.locktime, self.LOCKTIME_BYTES)
         return version_bytes + inputs_bytes + outputs_bytes + locktime_bytes
 
 
 # -- TESTING
 if __name__ == "__main__":
-    test_tx_hex = "01000000000101438afdb24e414d54cc4a17a95f3d40be90d23dfeeb07a48e9e782178efddd8890100000000fdffffff020db9a60000000000160014b549d227c9edd758288112fe3573c1f85240166880a81201000000001976a914ae28f233464e6da03c052155119a413d13f3380188ac024730440220200254b765f25126334b8de16ee4badf57315c047243942340c16cffd9b11196022074a9476633f093f229456ad904a9d97e26c271fc4f01d0501dec008e4aae71c2012102c37a3c5b21a5991d3d7b1e203be195be07104a1a19e5c2ed82329a56b431213000000000"
+    test_tx_hex = "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000"
     test_tx = Transaction.from_hex(test_tx_hex)
+
     print(test_tx)
     print(f"BYTES: {test_tx.length}")
     print(f"WEIGHT: {test_tx.wu}")
     print(f"VBYTES: {test_tx.vbytes}")
-    print(f"TXID: {test_tx.txid()}")
-    print(f"WTXID: {test_tx.wtxid()}")
+    print(f"TXID: {test_tx.txid()[::-1].hex()}")
+    print(f"WTXID: {test_tx.wtxid()[::-1].hex()}")
+    print(f"TEST ID: {test_tx.test_id()}")

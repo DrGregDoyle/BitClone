@@ -126,3 +126,40 @@ def from_little_bytes(little_bytes: bytes) -> int:
     Returns integer from little-endian encoded bytes object
     """
     return int.from_bytes(little_bytes, "little")
+
+
+def target_to_bits_from_hex(target: str) -> str:
+    # Check str
+    check_hex(target)
+    return target_to_bits(bytes.fromhex(target)).hex()
+
+
+def target_to_bits(target: bytes) -> bytes:
+    # Find the first significant byte
+    sig_dig = target.lstrip(b'\x00')
+    exp = len(sig_dig).to_bytes(1, "big")
+    coeff = sig_dig[:3]
+    return exp + coeff
+
+
+def bits_to_target(bits: bytes) -> bytes:
+    exp = int.from_bytes(bits[:1], "big")
+    coeff = int.from_bytes(bits[1:4], "big")
+    target_int = coeff * pow(2, 8 * (exp - 3))
+    return target_int.to_bytes(length=32, byteorder="big")
+
+
+def bits_to_target_from_hex(bits: str) -> str:
+    check_hex(bits)
+    return bits_to_target(bytes.fromhex(bits)).hex()
+
+
+# --- TESTING
+if __name__ == "__main__":
+    target_hex = "00000000000000000005ae3af5b1628dc0000000000000000000000000000000"
+    bits_hex = "1705ae3a"
+
+    t_to_b = target_to_bits_from_hex(target_hex)
+    b_to_t = bits_to_target_from_hex(bits_hex)
+    print(f"TARGET TO BITS: {target_hex} --> {t_to_b}")
+    print(f"BITS TO TARGET: {bits_hex} --> {b_to_t}")
