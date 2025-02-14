@@ -12,6 +12,17 @@ def get_randint(byte_size=32):
     return int.from_bytes(token_bytes(byte_size), "big")
 
 
+def get_random_header() -> BlockHeader:
+    random_version = get_randint(4)
+    random_id = token_bytes(32)
+    random_merkleroot = token_bytes(32)
+    random_timestamp = get_randint(4)
+    random_bits = token_bytes(4)
+    random_nonce = get_randint(4)
+
+    return BlockHeader(random_version, random_id, random_merkleroot, random_timestamp, random_bits, random_nonce)
+
+
 def test_merkle_tree():
     """
     r1 + r2 = r_12, r3 + r3 = r_33,
@@ -46,15 +57,7 @@ def test_merkle_tree():
 
 
 def test_block_header():
-    random_version = get_randint(4)
-    random_id = token_bytes(32)
-    random_merkleroot = token_bytes(32)
-    random_timestamp = get_randint(4)
-    random_bits = get_randint(4)
-    random_nonce = get_randint(4)
-
-    random_header = BlockHeader(random_version, random_id, random_merkleroot, random_timestamp, random_bits,
-                                random_nonce)
+    random_header = get_random_header()
     constructed_header = BlockHeader.from_bytes(random_header.to_bytes())
 
     assert random_header.to_bytes() == constructed_header.to_bytes(), "From bytes mismatch"

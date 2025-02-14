@@ -44,3 +44,11 @@ class Serializable:
     def __repr__(self) -> str:
         """ Return a human-readable JSON representation of the object. """
         return self.to_json()
+
+    def __eq__(self, other):
+        """
+        Compares two Serializable instances based on their to_bytes() output.
+        """
+        if not isinstance(other, Serializable):
+            return NotImplemented
+        return self.to_bytes() == other.to_bytes()
