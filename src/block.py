@@ -218,6 +218,7 @@ class BlockHeader(Serializable):
     def to_dict(self):
         """Returns a dictionary representation of the block header."""
         return {
+            "id": self.hash()[::-1].hex(),  # Reverse for display
             "version": self.version,
             "previous_block": self.prev_block[::-1].hex(),  # Reverse for display
             "merkle_root": self.merkle_root[::-1].hex(),  # Reverse for display
