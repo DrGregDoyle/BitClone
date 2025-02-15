@@ -4,23 +4,9 @@ Tests for the MerkleTree, BlockHeader and Block classes
 
 from secrets import token_bytes
 
-from src.block import MerkleTree, BlockHeader
+from src.block import MerkleTree, BlockHeader, Block
 from src.library.hash_functions import hash256
-
-
-def get_randint(byte_size=32):
-    return int.from_bytes(token_bytes(byte_size), "big")
-
-
-def get_random_header() -> BlockHeader:
-    random_version = get_randint(4)
-    random_id = token_bytes(32)
-    random_merkleroot = token_bytes(32)
-    random_timestamp = get_randint(4)
-    random_bits = token_bytes(4)
-    random_nonce = get_randint(4)
-
-    return BlockHeader(random_version, random_id, random_merkleroot, random_timestamp, random_bits, random_nonce)
+from tests.randbtc_generators import get_random_block_header, get_random_block
 
 
 def test_merkle_tree():
@@ -57,7 +43,13 @@ def test_merkle_tree():
 
 
 def test_block_header():
-    random_header = get_random_header()
-    constructed_header = BlockHeader.from_bytes(random_header.to_bytes())
+    rand_blockheader = get_random_block_header()
+    fbrand_header = BlockHeader.from_bytes(rand_blockheader.to_bytes())
+    assert rand_blockheader == fbrand_header, "Block header mismatch"
 
-    assert random_header.to_bytes() == constructed_header.to_bytes(), "From bytes mismatch"
+
+def test_block():
+    rand_block = get_random_block()
+    fbrand_block = Block.from_bytes(rand_block.to_bytes())
+
+    assert rand_block == fbrand_block, "Block mismatch"

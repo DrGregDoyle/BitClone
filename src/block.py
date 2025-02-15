@@ -171,6 +171,14 @@ class MerkleTree:
 class BlockHeader(Serializable):
     """Represents the 80-byte Bitcoin Block Header"""
 
+    # Byte values
+    VERSION_BYTES = 4
+    BLOCKID_BYTES = 32
+    MERKLEROOT_BYTES = 32
+    TIME_BYTES = 4
+    BITS_BYTES = 4
+    NONCE_BYTES = 4
+
     FORMAT = "<L32s32sL4sL"  # Little-endian: uint32, 32 bytes, 32 bytes, uint32, 4 bytes, uint32
     HEADER_SIZE = 80  # 4 + 32 + 32 + 4 + 4 + 4
 

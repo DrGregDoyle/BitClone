@@ -6,6 +6,8 @@ import json
 from src.library.data_handling import check_hex
 
 
+# TODO: Put all the BYTE value constants in the Serializable class
+
 class Serializable:
     """
     A base class that defines the interface for serializing and

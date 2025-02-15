@@ -3,6 +3,7 @@ Methods for generating random BitClone objects
 """
 from secrets import token_bytes, randbits, randbelow
 
+from src.block import Block, BlockHeader
 from src.tx import Input, Output, WitnessItem, Witness, Transaction
 
 
@@ -54,4 +55,27 @@ def get_random_tx(input_num: int = 3, output_num: int = 3, is_segwit: bool = Tru
         witnesses=rand_witness,
         locktime=rand_locktime,
         version=rand_version
+    )
+
+
+def get_random_block(tx_num: int = 3):
+    rand_txs = [get_random_tx() for _ in range(tx_num)]
+    return Block(
+        prev_block=token_bytes(32),
+        transactions=rand_txs,
+        timestamp=randbits(32),
+        bits=token_bytes(4),
+        nonce=randbits(32),
+        version=randbits(32)
+    )
+
+
+def get_random_block_header(tx_num: int = 3):
+    return BlockHeader(
+        version=randbits(32),
+        prev_block=token_bytes(32),
+        merkle_root=token_bytes(32),
+        timestamp=randbits(32),
+        bits=token_bytes(4),
+        nonce=randbits(32)
     )
