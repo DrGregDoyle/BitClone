@@ -170,6 +170,7 @@ class MerkleTree:
 
 class BlockHeader(Serializable):
     """Represents the 80-byte Bitcoin Block Header"""
+    __slots__ = ('version', 'prev_block', 'merkle_root', 'timestamp', 'bits', 'nonce')
 
     # Byte values
     VERSION_BYTES = 4
@@ -227,31 +228,36 @@ class BlockHeader(Serializable):
 
 
 class Block(Serializable):
+    """
+    The Block class for Bitcoin
+
+    Args:
+        prev_block (bytes): the block_id of the previous block
+        transactions (list): the list of txs to be included in the block
+        timestamp (int): unix timestamp for the block
+        bits (bytes): bits encoding of the block target
+        nonce (int): to affect the block_id
+    """
+    __slots__ = ('prev_block', 'txs', 'tx_count', 'merkle_tree', 'timestamp', 'bits', 'nonce', 'version', 'id')
+
     # Constants |
-    VERSION = 2  # Default
-    HEADER_SIZE = 80  # 4 + 32 + 32 + 4 + 4 + 4
-
-    # Struct Formatting
-    HEADER_FORMAT = "<L32s32sLLL"  # Little-endian: uint32, 32 bytes, 32 bytes, uint32, uint32, uint32
-
-    # Byte values
-    VERSION_BYTES = 4
-    BLOCKID_BYTES = 32
-    MERKLEROOT_BYTES = 32
-    TIME_BYTES = 4
-    BITS_BYTES = 4
-    NONCE_BYTES = 4
 
     def __init__(self, prev_block: bytes, transactions: list, timestamp: int, bits: bytes, nonce: int,
-                 version=VERSION):
+                 version: int = None):
+        # Get fixed header values
+        self.prev_block = prev_block
+        self.timestamp = timestamp
+        self.bits = bits
+        self.nonce = nonce
+        self.version = version or self.VERSION
 
-        # First get transactions and the merkle root
+        # Get txs and merkle tree
         self.tx_count = write_compact_size(len(transactions))
         self.txs = transactions
         self.merkle_tree = MerkleTree([tx.txid() for tx in self.txs])
 
-        # Get Header from remaining values
-        self.header = BlockHeader(version, prev_block, self.merkle_tree.merkle_root, timestamp, bits, nonce)
+        # Get id from header
+        self.id = hash256(self.header.to_bytes())
 
     @classmethod
     def from_bytes(cls, byte_stream):
@@ -262,7 +268,7 @@ class Block(Serializable):
 
         # Get byte values
         version = stream.read(cls.VERSION_BYTES)
-        block_id = stream.read(cls.BLOCKID_BYTES)
+        block_id = stream.read(cls.TXID_BYTES)
         merkle_root = stream.read(cls.MERKLEROOT_BYTES)
         block_time = stream.read(cls.TIME_BYTES)
         bits = stream.read(cls.BITS_BYTES)
@@ -291,8 +297,9 @@ class Block(Serializable):
         return cls(block_id, txs, time_int, bits, nonce_int, version_int)
 
     @property
-    def hash(self):
-        return hash256(self.header.to_bytes())
+    def header(self):
+        return BlockHeader(self.version, self.prev_block, self.merkle_tree.merkle_root, self.timestamp, self.bits,
+                           self.nonce)
 
     def to_bytes(self) -> bytes:
         """
@@ -309,31 +316,9 @@ class Block(Serializable):
     def to_dict(self):
 
         block_dict = {
-            "hash": self.hash[::-1].hex(),  # Reverse bytes for display
+            "id": self.id[::-1].hex(),  # Reverse bytes for display
             "header": self.header.to_dict(),
             "tx_count": self.tx_count.hex(),
             "txs": [tx.to_dict() for tx in self.txs]
         }
         return block_dict
-
-
-# -- TESTING
-if __name__ == "__main__":
-    test_ids = ["0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098"]
-    correct_order_ids = [bytes.fromhex(t)[::-1] for t in test_ids]
-    test_tree = MerkleTree(correct_order_ids)
-    print(f"MERKLE ROOT: {test_tree.merkle_root.hex()}")
-
-    block_hex = "010000006fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e61bc6649ffff001d01e362990101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000"
-    test_block = Block.from_hex(block_hex)
-    new_block = Block.from_hex(test_block.to_bytes().hex())
-    print(f"TEST BLOCK: {test_block}")
-    print(f"TEST BLOCK AGREES WITH NEW BLOCK: {test_block.to_bytes() == new_block.to_bytes()}")
-    test_tx_hex = "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000"
-    test_tx = Transaction.from_hex(test_tx_hex)
-    test_merkle_tree = MerkleTree([test_tx.txid()])
-    print(test_merkle_tree.hex_tree)
-
-    header_hex = "04400020861bccb3550a0b639ad912670417c69ddcb64acc39ba02000000000000000000768fd7217bd2948952c8b04edbdf8b034a0c241bdc8121090f2117d09fe5c45483d8b862cc840917f6da3c6c"
-    test_header = BlockHeader.from_hex(header_hex)
-    print(test_header)

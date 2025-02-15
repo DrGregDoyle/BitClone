@@ -11,7 +11,6 @@ B: unsigned char (1 byte)
 >Q: uint64 (big-endian)
 """
 import io
-import struct
 
 from src.library.data_handling import check_length, check_hex, write_compact_size, read_compact_size, byte_format, \
     from_little_bytes, to_little_bytes
@@ -31,15 +30,6 @@ class Input(Serializable):
     """
     __slots__ = ('txid', 'vout', 'script_sig_size', 'script_sig', 'sequence')
 
-    # Constants for fixed-size fields
-    TXID_BYTES = 32  # 32-byte transaction ID
-    VOUT_BYTES = 4  # 4-byte output index
-    SEQ_BYTES = 4  # 4-byte sequence number
-
-    # Struct format for fixed-size fields (txid and vout)
-    STRUCT_FORMAT = f"<{TXID_BYTES}sI"  # Little-endian: 32-byte txid and unsigned int vout
-    _struct = struct.Struct(STRUCT_FORMAT)  # Precompiled struct for performance
-
     def __init__(self, txid: bytes, vout: int, script_sig: bytes, sequence: int):
         """
         Initialize a transaction input.
@@ -53,9 +43,9 @@ class Input(Serializable):
         """
         # Pad w 0's if len(txid) < 32
         self.txid = byte_format(txid, self.TXID_BYTES)  # Store in natural byte order (big-endian)
-        self.vout = vout
-        self.script_sig = script_sig
-        self.sequence = sequence
+        self.vout = vout  # integer
+        self.script_sig = script_sig  # bytes object
+        self.sequence = sequence  # integer
         self.script_sig_size = write_compact_size(len(self.script_sig))
 
     @classmethod
@@ -78,10 +68,11 @@ class Input(Serializable):
         stream = io.BytesIO(byte_stream) if isinstance(byte_stream, bytes) else byte_stream
 
         # Read fixed-size fields (txid and vout)
-        fixed_data = stream.read(cls._struct.size)
-        check_length(fixed_data, cls.TXID_BYTES + cls.VOUT_BYTES, "outpoint")
-        txid, vout = cls._struct.unpack(fixed_data)
-        # txid = txid_le[::-1]  # Convert to natural byte order (big-endian)
+        txid = stream.read(cls.TXID_BYTES)
+        check_length(txid, cls.TXID_BYTES, "txid")
+        vout = stream.read(cls.VOUT_BYTES)
+        check_length(vout, cls.VOUT_BYTES, "vout")
+        vout_int = int.from_bytes(vout, "little")
 
         # Read script_sig (variable size)
         script_sig_length = read_compact_size(stream)
@@ -93,7 +84,7 @@ class Input(Serializable):
         check_length(sequence_data, cls.SEQ_BYTES, "sequence")
         sequence = from_little_bytes(sequence_data)
 
-        return cls(txid, vout, script_sig, sequence)
+        return cls(txid, vout_int, script_sig, sequence)
 
     def to_bytes(self) -> bytes:
         """
@@ -103,7 +94,7 @@ class Input(Serializable):
             bytes: The serialized transaction input.
         """
         # Pack fixed-size fields
-        fixed_part = self._struct.pack(self.txid, self.vout)
+        fixed_part = self.txid + to_little_bytes(self.vout, self.VOUT_BYTES)
 
         # Pack script_sig (variable size)
         script_sig_part = self.script_sig_size + self.script_sig
@@ -140,7 +131,6 @@ class Output(Serializable):
         script_pubkey_size (bytes): The CompactZie encoding of the length of the script_pubkey
     """
     __slots__ = ('amount', 'script_pubkey', 'script_pubkey_size')
-    AMOUNT_BYTES = 8
 
     def __init__(self, amount: int, script_pubkey: bytes):
         self.amount = amount
@@ -328,17 +318,12 @@ class Transaction(Serializable):
     """
     __slots__ = ('version', 'inputs', 'outputs', 'locktime', 'witnesses', 'input_count', 'output_count',
                  '_cached_non_witness_bytes', '_cached_wtxid_bytes')
-    VERSION = 2
-    VERSION_BYTES = 4
-    LOCKTIME_BYTES = 4
-    MARKER_BYTES = 1
-    FLAG_BYTES = 1
-    MARKERFLAG_BYTES = 2
+
     MARKER = b'\x00'
     FLAG = b'\x01'
 
-    def __init__(self, inputs=None, outputs=None, witnesses=None, locktime: int = 0, version: int = VERSION):
-        self.version = version
+    def __init__(self, inputs=None, outputs=None, witnesses=None, locktime: int = 0, version: int = None):
+        self.version = version or self.VERSION
         self.inputs = inputs or []
         self.outputs = outputs or []
         self.locktime = locktime
@@ -489,12 +474,11 @@ class Transaction(Serializable):
         Returns:
             dict: A dictionary representation of the Transaction.
         """
-        tx_dict = {}
-        # Start with txid - as displayed in block explorers
-        tx_dict["tx_id"] = self.txid()[::-1].hex()  # Change from internal representation to display
-
-        # 1. Add "version" as a 4-byte little-endian hex string
-        tx_dict["version"] = to_little_bytes(self.version, self.VERSION_BYTES).hex()
+        # Start with tx_id and version
+        tx_dict = {
+            "tx_id": self.txid()[::-1].hex(),  # Reverse bytes for display
+            "version": to_little_bytes(self.version, self.VERSION_BYTES).hex()
+        }
 
         # 2. If SegWit, add "marker" and "flag"
         if self.is_segwit:
@@ -526,9 +510,6 @@ class Transaction(Serializable):
         # Returns internal txid value
         return txid_hash
 
-    def test_id(self):
-        return hash256(self.to_bytes()).hex()
-
     def wtxid(self) -> bytes:
         """
         Compute the witness transaction ID (wtxid) as the double SHA-256
@@ -552,17 +533,3 @@ class Transaction(Serializable):
         outputs_bytes = self.output_count + b''.join(o.to_bytes() for o in self.outputs)
         locktime_bytes = to_little_bytes(self.locktime, self.LOCKTIME_BYTES)
         return version_bytes + inputs_bytes + outputs_bytes + locktime_bytes
-
-
-# -- TESTING
-if __name__ == "__main__":
-    test_tx_hex = "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000"
-    test_tx = Transaction.from_hex(test_tx_hex)
-
-    print(test_tx)
-    print(f"BYTES: {test_tx.length}")
-    print(f"WEIGHT: {test_tx.wu}")
-    print(f"VBYTES: {test_tx.vbytes}")
-    print(f"TXID: {test_tx.txid()[::-1].hex()}")
-    print(f"WTXID: {test_tx.wtxid()[::-1].hex()}")
-    print(f"TEST ID: {test_tx.test_id()}")

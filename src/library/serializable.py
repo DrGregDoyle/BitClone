@@ -6,14 +6,21 @@ import json
 from src.library.data_handling import check_hex
 
 
-# TODO: Put all the BYTE value constants in the Serializable class
-
 class Serializable:
     """
     A base class that defines the interface for serializing and
     deserializing data to and from Bitcoin's wire format.
     """
     __slots__ = ()
+
+    # -- Constants for fixed-size fields
+    VERSION = 2  # Default
+
+    # -- Common Byte values
+    TXID_BYTES = MERKLEROOT_BYTES = 32
+    AMOUNT_BYTES = 8
+    VOUT_BYTES = SEQ_BYTES = VERSION_BYTES = LOCKTIME_BYTES = TIME_BYTES = BITS_BYTES = NONCE_BYTES = 4
+    MARKERFLAG_BYTES = 2
 
     @classmethod
     def from_bytes(cls, byte_stream):
