@@ -6,7 +6,7 @@ import json
 import math
 import struct
 
-from src.library.data_handling import write_compact_size, read_compact_size, from_little_bytes
+from src.library.data_handling import write_compact_size, read_compact_size, check_length
 from src.library.hash_functions import hash256
 from src.library.serializable import Serializable
 from src.logger import get_logger
@@ -95,8 +95,7 @@ class MerkleTree:
         for level in range(self.height, 0, -1):
             # Verify hash is in tree
             if target_hash not in self.tree[level]:
-                logger.warning(f"Transaction ID not found in Merkle tree: {target_id}")
-                return []
+                raise ValueError(f"Transaction ID {target_id} not found in Merkle tree.")
 
             index = self.tree[level].index(target_hash)
             sibling_index = index + 1 if index % 2 == 0 else index - 1
@@ -139,30 +138,9 @@ class MerkleTree:
     @staticmethod
     def _clean_list(id_list: list[str | bytes]) -> list[bytes]:
         """
-        Converts a list of transaction IDs to bytes. We assume the tx_ids are given in the internal byte
-        representation.
-
-        Args:
-            id_list (list[str | bytes]): List of transaction IDs.
-
-        Returns:
-            list[bytes]: List of internal byte order transaction IDs.
-
-        Raises:
-            ValueError: If an ID is not a valid hex string or bytes object.
+        Converts transaction IDs to bytes format.
         """
-        clean_list = []
-        for _id in id_list:
-            try:
-                _bytesid = bytes.fromhex(_id) if isinstance(_id, str) else _id
-                if not isinstance(_bytesid, bytes):
-                    raise ValueError(f"Invalid ID type: {_id}")
-            except ValueError as e:
-                logger.error(f"Error converting transaction ID to bytes: {_id}. Error: {e}")
-                raise
-
-            clean_list.append(_bytesid)  # Reverse byte order
-        return clean_list
+        return [bytes.fromhex(_id) if isinstance(_id, str) else _id for _id in id_list]
 
     def __repr__(self):
         return json.dumps(self.hex_tree, indent=2)
@@ -170,18 +148,9 @@ class MerkleTree:
 
 class BlockHeader(Serializable):
     """Represents the 80-byte Bitcoin Block Header"""
-    __slots__ = ('version', 'prev_block', 'merkle_root', 'timestamp', 'bits', 'nonce')
+    __slots__ = ('version', 'prev_block', 'merkle_root', 'timestamp', 'bits', 'nonce', 'id')
 
-    # Byte values
-    VERSION_BYTES = 4
-    BLOCKID_BYTES = 32
-    MERKLEROOT_BYTES = 32
-    TIME_BYTES = 4
-    BITS_BYTES = 4
-    NONCE_BYTES = 4
-
-    FORMAT = "<L32s32sL4sL"  # Little-endian: uint32, 32 bytes, 32 bytes, uint32, 4 bytes, uint32
-    HEADER_SIZE = 80  # 4 + 32 + 32 + 4 + 4 + 4
+    HEADER_FORMAT = "<L32s32sL4sL"  # Little-endian: uint32, 32 bytes, 32 bytes, uint32, 4 bytes, uint32
 
     def __init__(self, version: int, prev_block: bytes, merkle_root: bytes, timestamp: int, bits: bytes, nonce: int):
         self.version = version
@@ -190,11 +159,12 @@ class BlockHeader(Serializable):
         self.timestamp = timestamp
         self.bits = bits
         self.nonce = nonce
+        self.id = hash256(self.to_bytes())
 
     def to_bytes(self):
         """Serializes the block header into an 80-byte binary format."""
         return struct.pack(
-            self.FORMAT,
+            self.HEADER_FORMAT,
             self.version,
             self.prev_block,
             self.merkle_root,
@@ -206,19 +176,15 @@ class BlockHeader(Serializable):
     @classmethod
     def from_bytes(cls, byte_stream):
         """Deserializes an 80-byte block header."""
-        if len(byte_stream) != cls.HEADER_SIZE:
+        if len(byte_stream) != cls.HEADER_BYTES:
             raise ValueError("Invalid block header size")
-        fields = struct.unpack(cls.FORMAT, byte_stream)
+        fields = struct.unpack(cls.HEADER_FORMAT, byte_stream)
         return cls(*fields)
-
-    def hash(self):
-        """Computes the double SHA-256 hash of the block header."""
-        return hash256(self.to_bytes())
 
     def to_dict(self):
         """Returns a dictionary representation of the block header."""
         return {
-            "id": self.hash()[::-1].hex(),  # Reverse for display
+            "id": self.id[::-1].hex(),  # Reverse for display
             "version": self.version,
             "previous_block": self.prev_block[::-1].hex(),  # Reverse for display
             "merkle_root": self.merkle_root[::-1].hex(),  # Reverse for display
@@ -240,8 +206,6 @@ class Block(Serializable):
         nonce (int): to affect the block_id
     """
     __slots__ = ('prev_block', 'txs', 'tx_count', 'merkle_tree', 'timestamp', 'bits', 'nonce', 'version', 'id')
-
-    # Constants |
 
     def __init__(self, prev_block: bytes, transactions: list, timestamp: int, bits: bytes, nonce: int,
                  version: int = None):
@@ -267,13 +231,10 @@ class Block(Serializable):
 
         stream = io.BytesIO(byte_stream) if isinstance(byte_stream, bytes) else byte_stream
 
-        # Get byte values
-        version = stream.read(cls.VERSION_BYTES)
-        block_id = stream.read(cls.TXID_BYTES)
-        merkle_root = stream.read(cls.MERKLEROOT_BYTES)
-        block_time = stream.read(cls.TIME_BYTES)
-        bits = stream.read(cls.BITS_BYTES)
-        nonce = stream.read(cls.NONCE_BYTES)
+        # Get header
+        _header_bytes = stream.read(cls.HEADER_BYTES)
+        check_length(_header_bytes, cls.HEADER_BYTES, "header")
+        _header = BlockHeader.from_bytes(_header_bytes)
 
         # Get txs | handle only header data
         tx_count = read_compact_size(stream)
@@ -282,20 +243,12 @@ class Block(Serializable):
             temp_tx = Transaction.from_bytes(stream)
             txs.append(temp_tx)
 
-        # Convert values
-        version_int = from_little_bytes(version)
-        time_int = from_little_bytes(block_time)
-        nonce_int = from_little_bytes(nonce)
-
         # Verify merkle root
-
         temp_tree = MerkleTree([t.txid() for t in txs])
-        if temp_tree.merkle_root != merkle_root:
-            logger.debug(f"DECODED MERKLE ROOT: {merkle_root.hex()}")
-            logger.debug(f"CONSTRUCTED MERKLE ROOT: {temp_tree.merkle_root.hex()}")
+        if temp_tree.merkle_root != _header.merkle_root:
             raise ValueError("Merkle Root mismatch when reconstructing block")
 
-        return cls(block_id, txs, time_int, bits, nonce_int, version_int)
+        return cls(_header.prev_block, txs, _header.timestamp, _header.bits, _header.nonce, _header.version)
 
     @property
     def header(self):

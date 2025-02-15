@@ -1,6 +1,7 @@
 """
 Methods for handling data in BitClone
 """
+import re
 import struct
 from io import BytesIO
 
@@ -20,13 +21,12 @@ def check_hex(hex_string: str) -> str:
     if not isinstance(hex_string, str):
         raise ValueError(f"Input not of str type. Type; {type(hex_string)}")
 
-    if hex_string.startswith("0x"):
-        hex_string = hex_string[2:]
-    hex_string = hex_string.lower()
+    # Remove 0x prefix if present
+    hex_string = (hex_string[2:] if hex_string.startswith('0x') else hex_string).lower()
 
-    # Check the string
-    if not all(c in "0123456789abcedf" for c in hex_string):
-        raise ValueError("String contains non hexadecimal characters")
+    # Validate hex string
+    if len(hex_string) % 2 != 0 or not re.fullmatch(r'^[0-9a-f]+$', hex_string):
+        raise ValueError("Invalid hex format: must be an even-length hexadecimal string.")
     return hex_string
 
 

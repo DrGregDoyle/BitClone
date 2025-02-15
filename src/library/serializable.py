@@ -7,6 +7,8 @@ from abc import ABC, abstractmethod
 from io import BytesIO
 from typing import ClassVar, Any, TypeVar
 
+from src.library.data_handling import check_hex
+
 T = TypeVar('T', bound='Serializable')
 
 
@@ -22,6 +24,7 @@ class Serializable(ABC):
     VERSION: ClassVar[int] = 2
 
     # Field sizes in bytes
+    HEADER_BYTES: ClassVar[int] = 80
     TXID_BYTES: ClassVar[int] = 32
     MERKLEROOT_BYTES: ClassVar[int] = 32
     AMOUNT_BYTES: ClassVar[int] = 8
@@ -65,16 +68,8 @@ class Serializable(ABC):
         Raises:
             ValueError: If the hex string is invalid
         """
-        # Remove 0x prefix if present
-        hex_string = hex_string[2:] if hex_string.startswith('0x') else hex_string
-
-        # Validate hex string
-        if not all(c in "0123456789abcdefABCDEF" for c in hex_string):
-            raise ValueError(f"Invalid hex characters in string: {hex_string}")
-        if len(hex_string) % 2 != 0:
-            raise ValueError(f"Invalid hex length for {cls.__name__}")
-
-        return cls.from_bytes(bytes.fromhex(hex_string.lower()))
+        clean_hexstring = check_hex(hex_string)
+        return cls.from_bytes(bytes.fromhex(clean_hexstring))
 
     @classmethod
     def from_json(cls: type[T], json_string: str) -> T:

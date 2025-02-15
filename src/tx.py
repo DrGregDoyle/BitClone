@@ -12,7 +12,7 @@ B: unsigned char (1 byte)
 """
 import io
 
-from src.library.data_handling import check_length, check_hex, write_compact_size, read_compact_size, byte_format, \
+from src.library.data_handling import check_length, write_compact_size, read_compact_size, byte_format, \
     from_little_bytes, to_little_bytes
 from src.library.hash_functions import hash256
 from src.library.serializable import Serializable
@@ -88,21 +88,13 @@ class Input(Serializable):
 
     def to_bytes(self) -> bytes:
         """
-        Serialize this input into bytes according to Bitcoin's transaction input format.
-
-        Returns:
-            bytes: The serialized transaction input.
+        Serializes the transaction input.
         """
-        # Pack fixed-size fields
-        fixed_part = self.txid + to_little_bytes(self.vout, self.VOUT_BYTES)
-
-        # Pack script_sig (variable size)
-        script_sig_part = self.script_sig_size + self.script_sig
-
-        # Pack sequence (4 bytes, little-endian)
-        sequence_part = to_little_bytes(self.sequence, self.SEQ_BYTES)
-
-        return fixed_part + script_sig_part + sequence_part
+        return (
+                self.txid + to_little_bytes(self.vout, 4) +
+                self.script_sig_size + self.script_sig +
+                to_little_bytes(self.sequence, 4)
+        )
 
     def to_dict(self) -> dict:
         """
@@ -258,21 +250,6 @@ class Witness(Serializable):
 
         return cls(items)
 
-    @classmethod
-    def from_hex(cls, hex_str: str):
-        """
-        Create an Input instance from a hex string.
-
-        Args:
-            hex_str (str): The hex string to deserialize from.
-
-        Returns:
-            Input: An instance of the Input class.
-        """
-        # Check string and use in from_bytes method if valid
-        hex_str = check_hex(hex_str)
-        return cls.from_bytes(bytes.fromhex(hex_str))
-
     def to_bytes(self) -> bytes:
         """
         Serialize the witness data into bytes.
@@ -316,11 +293,8 @@ class Transaction(Serializable):
         input_count (bytes): CompactSize-encoded number of inputs.
         output_count (bytes): CompactSize-encoded number of outputs.
     """
-    __slots__ = ('version', 'inputs', 'outputs', 'locktime', 'witnesses', 'input_count', 'output_count',
+    __slots__ = ('version', 'inputs', 'outputs', 'locktime', 'witnesses', 'input_count', 'output_count', 'is_segwit',
                  '_cached_non_witness_bytes', '_cached_wtxid_bytes')
-
-    MARKER = b'\x00'
-    FLAG = b'\x01'
 
     def __init__(self, inputs=None, outputs=None, witnesses=None, locktime: int = 0, version: int = None):
         self.version = version or self.VERSION
@@ -332,6 +306,9 @@ class Transaction(Serializable):
         # Get input and output counts
         self.input_count = write_compact_size(len(self.inputs))
         self.output_count = write_compact_size(len(self.outputs))
+
+        # Get segwit bool
+        self.is_segwit = len(witnesses) > 0
 
         self._cached_non_witness_bytes = None  # Cache for txid computation
         self._cached_wtxid_bytes = None  # Cache for wtxid computation
@@ -399,24 +376,6 @@ class Transaction(Serializable):
 
         return cls(inputs, outputs, witnesses, locktime, version)
 
-    @classmethod
-    def from_hex(cls, hex_string: str):
-        # Format string and remove leading 0x if it exists
-        if hex_string.startswith("0x"):
-            hex_string = hex_string[2:]
-        hex_string = hex_string.lower()
-
-        # Check the string
-        if not all(c in "0123456789abcedf" for c in hex_string):
-            raise ValueError("String contains non hexadecimal characters")
-
-        # Turn hex to bytes and return from_bytes
-        return cls.from_bytes(bytes.fromhex(hex_string))
-
-    @property
-    def is_segwit(self) -> bool:
-        return len(self.witnesses) > 0
-
     @property
     def wu(self):
         """
@@ -456,7 +415,7 @@ class Transaction(Serializable):
         """
         # Version and Marker/Flag (if segwit)
         version_bytes = to_little_bytes(self.version, self.VERSION_BYTES)
-        marker_flag_bytes = self.MARKER + self.FLAG if self.is_segwit else b''
+        marker_flag_bytes = b'\x00\x01' if self.is_segwit else b''  # Marker + Flag = 0001
 
         # Inputs, outputs and witness
         inputs_bytes = self.input_count + b''.join(i.to_bytes() for i in self.inputs)
@@ -474,7 +433,7 @@ class Transaction(Serializable):
         Returns:
             dict: A dictionary representation of the Transaction.
         """
-        # Start with tx_id and version
+        # 1. Start with tx_id and version
         tx_dict = {
             "tx_id": self.txid()[::-1].hex(),  # Reverse bytes for display
             "version": to_little_bytes(self.version, self.VERSION_BYTES).hex()
@@ -506,9 +465,7 @@ class Transaction(Serializable):
         """
         if self._cached_non_witness_bytes is None:
             self._cached_non_witness_bytes = self._serialize_non_witness()
-        txid_hash = hash256(self._cached_non_witness_bytes)
-        # Returns internal txid value
-        return txid_hash
+        return hash256(self._cached_non_witness_bytes)
 
     def wtxid(self) -> bytes:
         """
@@ -517,9 +474,7 @@ class Transaction(Serializable):
         """
         if self._cached_wtxid_bytes is None:
             self._cached_wtxid_bytes = self.to_bytes()
-        wtxid_hash = hash256(self._cached_wtxid_bytes)
-        # Returns wtxid in the internal byte order
-        return wtxid_hash
+        return hash256(self._cached_wtxid_bytes)
 
     def _serialize_non_witness(self) -> bytes:
         """
