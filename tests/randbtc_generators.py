@@ -7,6 +7,10 @@ from src.block import Block, BlockHeader
 from src.tx import Input, Output, WitnessItem, Witness, Transaction
 
 
+def get_random_scriptpubkey(scriptpubkey_type: str = None):
+    pass
+
+
 def get_random_input(scriptsig_bits: int = 16):
     rand_scriptsig_size = randbits(scriptsig_bits)
     return Input(

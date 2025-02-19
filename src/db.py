@@ -1,3 +1,7 @@
+"""
+DB class. Handles Txs, UTXOs and Blocks
+"""
+
 import sqlite3
 from pathlib import Path
 
@@ -32,10 +36,10 @@ class BitCloneDatabase:
             c.execute('''
                 CREATE TABLE IF NOT EXISTS blocks (
                     height INTEGER PRIMARY KEY,
-                    block_hash TEXT UNIQUE NOT NULL,
-                    prev_hash TEXT NOT NULL,
+                    block_hash BLOB UNIQUE NOT NULL,
+                    prev_hash BLOB NOT NULL,
                     timestamp INTEGER NOT NULL,
-                    merkle_root TEXT NOT NULL,
+                    merkle_root BLOB NOT NULL,
                     nonce INTEGER NOT NULL
                 )
             ''')
@@ -132,9 +136,10 @@ class BitCloneDatabase:
             c.execute("SELECT * FROM transactions WHERE txid = ?", (txid,))
             return c.fetchone()
 
-
-# Example usage
-db = BitCloneDatabase()
-db._clear_db()
-db.add_utxo("txid123", 0, "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", 5000000000, "scriptpubkey_example")
-print(db.get_unspent_utxos("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"))
+    def get_block_height(self):
+        with sqlite3.connect(self.db_path) as conn:
+            c = conn.cursor()
+            c.execute("""
+                SELECT COUNT(*) FROM blocks
+            """)
+            return c.fetchone()[0]

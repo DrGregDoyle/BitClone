@@ -1,7 +1,9 @@
 """
 Methods for encoding and decoding
 """
+
 import re
+from typing import Tuple
 
 from src.library.bech32 import convertbits, bech32_encode, bech32_decode, Encoding
 from src.library.ecc import secp256k1
@@ -14,14 +16,13 @@ logger = get_logger(__name__)
 BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
 
-def encode_base58(hex_string: str) -> str:
+def encode_base58(data: bytes) -> str:
     """
-    Given a hex string we return a base58 encoded string.
-    (Error handling will be performed ahead of calling the function.}
+    We return the base58 encoding of the given bytes data
     """
     # Setup
     base = len(BASE58_ALPHABET)
-    n = int(hex_string, 16)
+    n = int.from_bytes(data, byteorder="big")  # Convert bytes to integer
     encoded_string = ""
 
     # Encode into Base58
@@ -30,38 +31,15 @@ def encode_base58(hex_string: str) -> str:
         n = n // base
         encoded_string = BASE58_ALPHABET[temp_index] + encoded_string
 
-    # Handle leading zeros in the hexadecimal string
-    leading_zeros = len(re.match(r"^0*", hex_string).group(0)) // 2
+    # Handle leading zeros in the byte string
+    leading_zeros = len(data) - len(data.lstrip(b'\x00'))
     encoded_string = ("1" * leading_zeros) + encoded_string
 
-    # Debug log
-    # logger.debug(f"Hex String: {hex_string} -> Base58: {encoded_string}")
+    # Convert the Base58 string to a bytes object
     return encoded_string
 
 
-def encode_base58check(data: str) -> str:
-    """
-    Given a hexadecimal string, we return the base58Check encoding
-    """
-    checksum = hash256(bytes.fromhex(data))[:4].hex()  # First 4 bytes of HASH256(data) as hex chars
-    # logger.debug(f"DATA: {data}\nCHECKSUM: {checksum}")
-    return encode_base58(data + checksum)
-
-
-def decode_base58check(data: str):
-    """
-    Given a string of base58Check chars, we decode it and return data and checksum.
-    Raise ValueError if checksum fails
-    """
-    decoded_data = decode_base58(data)
-    new_data, checksum = decoded_data[:-8], decoded_data[-8:]  # 4 bytes = 8 hex chars
-    test_checksum = hash256(bytes.fromhex(new_data))[:4].hex()
-    if test_checksum != checksum:
-        raise ValueError("Decoded checksum does not equal given checksum")
-    return new_data, checksum
-
-
-def decode_base58(address: str) -> str:
+def decode_base58(data: str) -> bytes:
     """
     Given a base58 encoded string, return the corresponding hexadecimal representation of the underlying integer.
     """
@@ -69,7 +47,7 @@ def decode_base58(address: str) -> str:
     total = 0
 
     # Reverse the base58 string, so we can read characters from left to right
-    base58 = address[::-1]
+    base58 = data[::-1]
 
     # We sum the corresponding index value of a given character multiplied by 58 to an increasing power corresponding
     # to the length of the address
@@ -78,22 +56,36 @@ def decode_base58(address: str) -> str:
         char_i = BASE58_ALPHABET.index(char)
         total += char_i * pow(58, i)
 
-    # Get hexadecimal representation
-    hex_string = hex(total)[2:]
+    # Get bytes from integer
+    decoded_bytes = total.to_bytes((total.bit_length() + 7) // 8, "big")
 
     # Handle leading 1s in the Base58 address
     # Each leading '1' represents a leading zero byte in the hexadecimal string
-    leading_zeros = len(re.match(r"^1*", address).group(0))
-    hex_string = ("00" * leading_zeros) + hex_string
+    leading_zeros = len(re.match(r"^1*", data).group(0))
+    decoded_bytes = (b'\x00' * leading_zeros) + decoded_bytes
 
-    # Ensure even length of the hexadecimal string
-    if len(hex_string) % 2 != 0:
-        hex_string = "0" + hex_string
+    return decoded_bytes
 
-    # Logging
-    logger.debug(f"Base58: {address} -> Hex String: {hex_string}")
 
-    return hex_string
+def encode_base58check(data: bytes) -> str:
+    """
+    Given bytes data, we return the base58 encoding along with checksum
+    """
+    checksum = hash256(data)[:4]  # First 4 bytes of HASH256(data)
+    return encode_base58(data + checksum)
+
+
+def decode_base58check(data: str) -> Tuple[bytes, bytes]:
+    """
+    Given a string of base58Check chars, we decode it and return data and checksum.
+    Raise ValueError if checksum fails
+    """
+    decoded_bytecheck = decode_base58(data)
+    d_bytes, d_checksum = decoded_bytecheck[:-4], decoded_bytecheck[-4:]
+    test_checksum = hash256(d_bytes)[:4]
+    if test_checksum != d_checksum:
+        raise ValueError("Decoded checksum does not equal given checksum")
+    return d_bytes, d_checksum
 
 
 # --- BECH32 ENCODING --- #
@@ -105,6 +97,8 @@ def encode_bech32(pubkeyhash: str, hrp: str = "bc") -> str:
     ----------
     pubkeyhash : str
         A hexadecimal string representing the public key hash.
+    hrp :str
+        A string for bech32 encoding
 
     Returns
     -------

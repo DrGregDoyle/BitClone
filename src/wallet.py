@@ -271,7 +271,7 @@ class XPrv(ExtendedKey):
         key_data_33 = b'\x00' + self.private_key
 
         raw_78 = self._serialize_core(key_data_33)
-        return encode_base58check(raw_78.hex())
+        return encode_base58check(raw_78)
 
     def compressed_pubkey(self) -> bytes:
         """
@@ -440,7 +440,7 @@ class XPub(ExtendedKey):
             raise ValueError("Compressed public key must be 33 bytes.")
 
         raw_78 = self._serialize_core(self.public_key, as_public=True)
-        return encode_base58check(raw_78.hex())
+        return encode_base58check(raw_78)
 
     def __repr__(self):
         return (
@@ -519,8 +519,7 @@ class HDWallet:
     def _p2pkh_address(self, pubkey: bytes) -> str:
         """ Pay-to-PubKey-Hash: Base58Check(0x00 + hash160(pubkey)) """
         pubkeyhash = hash160(pubkey)
-        hex_string = "00" + pubkeyhash.hex()
-        return encode_base58check(hex_string, )
+        return encode_base58check(b'\x00' + pubkeyhash)
 
     def _p2wpkh_address(self, pubkey: bytes) -> str:
         """Pay-to-Witness-PubKeyHash: Bech32(0x00 + hash160(pubkey))"""

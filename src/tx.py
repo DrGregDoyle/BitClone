@@ -488,3 +488,9 @@ class Transaction(Serializable):
         outputs_bytes = self.output_count + b''.join(o.to_bytes() for o in self.outputs)
         locktime_bytes = to_little_bytes(self.locktime, self.LOCKTIME_BYTES)
         return version_bytes + inputs_bytes + outputs_bytes + locktime_bytes
+
+
+class TxEngine:
+    """
+    Used for creating Tx signatures
+    """
