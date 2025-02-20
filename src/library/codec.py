@@ -89,14 +89,14 @@ def decode_base58check(data: str) -> Tuple[bytes, bytes]:
 
 
 # --- BECH32 ENCODING --- #
-def encode_bech32(pubkeyhash: str, hrp: str = "bc") -> str:
+def encode_bech32(pubkeyhash: bytes, hrp: str = "bc") -> str:
     """
     Returns the Bech32 encoding of the provided public key hash.
 
     Parameters
     ----------
-    pubkeyhash : str
-        A hexadecimal string representing the public key hash.
+    pubkeyhash : bytes
+        The pubkeyhash in bytes
     hrp :str
         A string for bech32 encoding
 
@@ -107,12 +107,12 @@ def encode_bech32(pubkeyhash: str, hrp: str = "bc") -> str:
     """
 
     # Ensure pubkey_hash is exactly 20 bytes
-    if len(pubkeyhash) != 40:
+    if len(pubkeyhash) != 20:
         logger.debug(f"PUBKEY_HASH LENGTH: {len(pubkeyhash)}")
         raise ValueError("P2WPKH pubkey hash must be exactly 20 bytes.")
 
     # Convert 8-bit data to 5-bit using the reference convertbits function
-    converted_data = convertbits(bytes.fromhex(pubkeyhash), 8, 5, pad=False)
+    converted_data = convertbits(pubkeyhash, 8, 5, pad=False)
     if converted_data is None:
         raise ValueError("Failed to convert data from 8-bit to 5-bit.")
 
@@ -130,7 +130,7 @@ def encode_bech32(pubkeyhash: str, hrp: str = "bc") -> str:
     return bech32_address
 
 
-def decode_bech32(bech32_address: str):
+def decode_bech32(bech32_address: str) -> bytes:
     """
     Given a bech32 address we return the pubkeyhash
     """
@@ -142,10 +142,9 @@ def decode_bech32(bech32_address: str):
 
     # Convert 5-bit data to 8-bit using the reference convertbits function
     converted_data = convertbits(decoded_data, 5, 8, pad=False)
-    logger.debug(f"CONVERTED DATA: {converted_data}")
 
-    # Return hex string of pubkeyhash
-    return bytes(converted_data).hex()
+    # Return byte encoded pubkeyhash
+    return bytes(converted_data)
 
 
 # --- ECC KEY COMPRESSION --- #
