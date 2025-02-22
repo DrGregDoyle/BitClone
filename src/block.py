@@ -188,7 +188,7 @@ class BlockHeader(Serializable):
             "previous_block": self.prev_block[::-1].hex(),  # Reverse for display
             "merkle_root": self.merkle_root[::-1].hex(),  # Reverse for display
             "timestamp": self.timestamp,
-            "bits": self.bits[::-1].hex(),  # Reverse for display
+            "bits": self.bits.hex(),
             "nonce": self.nonce,
         }
 
@@ -199,9 +199,6 @@ class BlockHeader(Serializable):
     @property
     def block_id_num(self):
         return int.from_bytes(self.block_id, byteorder="little")
-
-    def increment(self):
-        self.nonce += 1
 
 
 class Block(Serializable):

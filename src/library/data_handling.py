@@ -157,9 +157,6 @@ def target_to_bits(target: bytes) -> bytes:
         coeff = b'\x00' + coeff[:2]  # Shift the coefficient
         exp = (int.from_bytes(exp, "big") + 1).to_bytes(1, "big")  # Increment exponent
 
-    logger.debug(f"EXPONENT: {exp.hex()}")
-    logger.debug(f"COEFFICIENT: {coeff.hex()}")
-
     return exp + coeff
 
 

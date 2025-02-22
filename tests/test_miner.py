@@ -1,16 +1,20 @@
 """
 Tests for the miner class
 """
+from src.library.data_handling import target_to_bits
 from src.miner import Miner
 from tests.randbtc_generators import get_random_block
 
 
 def test_miner():
+    # Get random block
     rand_block = get_random_block()
-    rand_block.bits = bytes.fromhex("1f00ff00")
 
+    # Change bits to use low target
     low_target = bytes.fromhex("0000ff0000000000000000000000000000000000000000000000000000000000")
+    rand_block.bits = target_to_bits(low_target)
 
+    # Mine block
     miner = Miner()
     mined_block = miner.mine_block(rand_block)
 
