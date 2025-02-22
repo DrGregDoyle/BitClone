@@ -5,6 +5,10 @@ import re
 import struct
 from io import BytesIO
 
+from src.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 def check_hex(hex_string: str) -> str:
     """
@@ -135,18 +139,40 @@ def target_to_bits_from_hex(target: str) -> str:
 
 
 def target_to_bits(target: bytes) -> bytes:
+    """Convert a full 32-byte target into compact bits encoding."""
     # Find the first significant byte
-    sig_dig = target.lstrip(b'\x00')
-    exp = len(sig_dig).to_bytes(1, "big")
-    coeff = sig_dig[:3]
+    first_nonzero = next((i for i, b in enumerate(target) if b != 0), len(target))
+
+    # Compute exponent (Bitcoin defines this as 32 - index)
+    exp = (32 - first_nonzero).to_bytes(1, "big")
+
+    # Extract first 3 significant bytes
+    sig_dig = target[first_nonzero:first_nonzero + 3]
+
+    # If the coefficient has fewer than 3 bytes, pad with zeros
+    coeff = sig_dig.ljust(3, b'\x00')
+
+    # If the first byte of the coefficient is >= 0x80, prepend `00` and increase exponent
+    if coeff[0] >= 0x80:
+        coeff = b'\x00' + coeff[:2]  # Shift the coefficient
+        exp = (int.from_bytes(exp, "big") + 1).to_bytes(1, "big")  # Increment exponent
+
+    logger.debug(f"EXPONENT: {exp.hex()}")
+    logger.debug(f"COEFFICIENT: {coeff.hex()}")
+
     return exp + coeff
 
 
 def bits_to_target(bits: bytes) -> bytes:
+    target_int = bits_to_target_int(bits)
+    return target_int.to_bytes(length=32, byteorder="big")
+
+
+def bits_to_target_int(bits: bytes) -> int:
     exp = int.from_bytes(bits[:1], "big")
     coeff = int.from_bytes(bits[1:4], "big")
     target_int = coeff * pow(2, 8 * (exp - 3))
-    return target_int.to_bytes(length=32, byteorder="big")
+    return target_int
 
 
 def bits_to_target_from_hex(bits: str) -> str:
@@ -156,10 +182,12 @@ def bits_to_target_from_hex(bits: str) -> str:
 
 # --- TESTING
 if __name__ == "__main__":
-    target_hex = "00000000000000000005ae3af5b1628dc0000000000000000000000000000000"
-    bits_hex = "1705ae3a"
+    target_hex = "00000000ffff0000000000000000000000000000000000000000000000000000"
+    bits_hex = "1d00ffff"
 
     t_to_b = target_to_bits_from_hex(target_hex)
     b_to_t = bits_to_target_from_hex(bits_hex)
     print(f"TARGET TO BITS: {target_hex} --> {t_to_b}")
     print(f"BITS TO TARGET: {bits_hex} --> {b_to_t}")
+    print(f"TARGET TO BITS EQUALS BITS HEX: {t_to_b == bits_hex}")
+    print(f"BITS TO TARGET EQUALS TARGET HEX: {b_to_t == target_hex}")

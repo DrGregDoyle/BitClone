@@ -301,14 +301,14 @@ class Transaction(Serializable):
         self.inputs = inputs or []
         self.outputs = outputs or []
         self.locktime = locktime
-        self.witnesses = witnesses or []
+        self.witnesses = witnesses if witnesses else []
 
         # Get input and output counts
         self.input_count = write_compact_size(len(self.inputs))
         self.output_count = write_compact_size(len(self.outputs))
 
         # Get segwit bool
-        self.is_segwit = len(witnesses) > 0
+        self.is_segwit = len(self.witnesses) > 0
 
         self._cached_non_witness_bytes = None  # Cache for txid computation
         self._cached_wtxid_bytes = None  # Cache for wtxid computation

@@ -148,7 +148,7 @@ class MerkleTree:
 
 class BlockHeader(Serializable):
     """Represents the 80-byte Bitcoin Block Header"""
-    __slots__ = ('version', 'prev_block', 'merkle_root', 'timestamp', 'bits', 'nonce', 'id')
+    __slots__ = ('version', 'prev_block', 'merkle_root', 'timestamp', 'bits', 'nonce')
 
     HEADER_FORMAT = "<L32s32sL4sL"  # Little-endian: uint32, 32 bytes, 32 bytes, uint32, 4 bytes, uint32
 
@@ -159,7 +159,6 @@ class BlockHeader(Serializable):
         self.timestamp = timestamp
         self.bits = bits
         self.nonce = nonce
-        self.id = hash256(self.to_bytes())
 
     def to_bytes(self):
         """Serializes the block header into an 80-byte binary format."""
@@ -184,7 +183,7 @@ class BlockHeader(Serializable):
     def to_dict(self):
         """Returns a dictionary representation of the block header."""
         return {
-            "id": self.id[::-1].hex(),  # Reverse for display
+            "id": self.block_id[::-1].hex(),  # Reverse for display
             "version": self.version,
             "previous_block": self.prev_block[::-1].hex(),  # Reverse for display
             "merkle_root": self.merkle_root[::-1].hex(),  # Reverse for display
@@ -192,6 +191,17 @@ class BlockHeader(Serializable):
             "bits": self.bits[::-1].hex(),  # Reverse for display
             "nonce": self.nonce,
         }
+
+    @property
+    def block_id(self):
+        return hash256(self.to_bytes())
+
+    @property
+    def block_id_num(self):
+        return int.from_bytes(self.block_id, byteorder="little")
+
+    def increment(self):
+        self.nonce += 1
 
 
 class Block(Serializable):
@@ -205,7 +215,7 @@ class Block(Serializable):
         bits (bytes): bits encoding of the block target
         nonce (int): to affect the block_id
     """
-    __slots__ = ('prev_block', 'txs', 'tx_count', 'merkle_tree', 'timestamp', 'bits', 'nonce', 'version', 'id')
+    __slots__ = ('prev_block', 'txs', 'tx_count', 'merkle_tree', 'timestamp', 'bits', 'nonce', 'version')
 
     def __init__(self, prev_block: bytes, transactions: list, timestamp: int, bits: bytes, nonce: int,
                  version: int = None):
@@ -220,9 +230,6 @@ class Block(Serializable):
         self.tx_count = write_compact_size(len(transactions))
         self.txs = transactions
         self.merkle_tree = MerkleTree([tx.txid() for tx in self.txs])
-
-        # Get id from header
-        self.id = hash256(self.header.to_bytes())
 
     @classmethod
     def from_bytes(cls, byte_stream):
@@ -255,6 +262,10 @@ class Block(Serializable):
         return BlockHeader(self.version, self.prev_block, self.merkle_tree.merkle_root, self.timestamp, self.bits,
                            self.nonce)
 
+    @property
+    def id(self):
+        return hash256(self.header.to_bytes())
+
     def to_bytes(self) -> bytes:
         """
         Format block for serialization
@@ -276,3 +287,27 @@ class Block(Serializable):
             "txs": [tx.to_dict() for tx in self.txs]
         }
         return block_dict
+
+    def increment(self):
+        self.nonce += 1
+
+
+# -- TESTING
+from secrets import randbits, token_bytes
+
+if __name__ == "__main__":
+    def get_random_block_header(tx_num: int = 3):
+        return BlockHeader(
+            version=randbits(32),
+            prev_block=token_bytes(32),
+            merkle_root=token_bytes(32),
+            timestamp=randbits(32),
+            bits=token_bytes(4),
+            nonce=randbits(32)
+        )
+
+
+    random_header = get_random_block_header()
+    print(f"RANDOM HEADER ID: {random_header.block_id.hex()}")
+    random_header.increment()
+    print(f"RANDOM HEADER NONCE +1: {random_header.block_id.hex()}")
