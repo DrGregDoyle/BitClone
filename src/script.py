@@ -3,7 +3,7 @@ Classes for executing and verifying scripts
 """
 from collections import deque
 from io import BytesIO
-from typing import Any, Tuple, Callable, Dict
+from typing import Any, Callable, Dict, List
 
 from src.library.data_handling import check_hex, check_length
 from src.library.ecc import secp256k1
@@ -23,13 +23,10 @@ class Stack:
     """
 
     def __init__(self, items: list | None = None):
-        self.stack = deque()
-        if items:
-            items = items[::-1]
-            for i in items:
-                self.push(i)
+        self.stack = deque(items[::-1]) if items else deque()
 
-    def push(self, element: Any):
+    def push(self, element: Any) -> None:
+        """Push an element onto the stack"""
         self.stack.appendleft(element)
 
     def pop(self):
@@ -38,11 +35,15 @@ class Stack:
         except IndexError:
             raise IndexError("Popped from empty stack")
 
-    def pop_two(self) -> Tuple[bytes, bytes]:
-        """Pop two items from the stack at once."""
-        if self.height < 2:
-            raise IndexError("Not enough items on stack")
-        return self.pop(), self.pop()
+    def clear(self) -> None:
+        """Clear the stack"""
+        self.stack.clear()
+
+    def pop_n(self, n: int) -> List[bytes]:
+        """Pop n items from the stack at once."""
+        if self.height < n:
+            raise IndexError(f"Not enough items on stack. Required: {n}, Available: {self.height}")
+        return [self.pop() for _ in range(n)]
 
     def remove_at_index(self, n: int) -> bytes:
         """
@@ -74,6 +75,12 @@ class Stack:
         self.stack.appendleft(item)
         # Rotate the stack back to its original order
         self.stack.rotate(n)
+
+    def peek(self, n: int = 0) -> bytes:
+        """Return the element at index n without removing it"""
+        if n < 0 or n >= self.height:
+            raise IndexError(f"Index out of range: {n}. Stack height: {self.height}")
+        return self.stack[n]
 
     @property
     def top(self):
@@ -145,6 +152,7 @@ class ScriptEngine:
 
     NOTE: All elements pushed to the stack should be bytes objects.
     """
+    BTCZero = [b'', b'\x00']
 
     def __init__(self):
         """
@@ -160,69 +168,79 @@ class ScriptEngine:
 
     def _initialize_op_handlers(self) -> Dict[int, Callable]:
         return {
-            0x00: self._op_false,
-            0x4f: self._op_one_negate,
-            0x61: self._op_nop,
-            0x6b: self._op_to_altstack,
-            0x6c: self._op_from_altstack,
-            0x73: self._op_if_dup,
-            0x74: self._op_depth,
-            0x75: self._op_drop,
-            0x76: self._op_dup,
-            0x77: self._op_nip,
-            0x78: self._op_over,
-            0x79: self._op_pick,
-            0x7a: self._op_roll,
-            0x7b: self._op_rot,
-            0x7c: self._op_swap,
-            0x7d: self._op_tuck,
-            0x6d: self._op_2drop,
-            0x6e: self._op_2dup,
-            0x6f: self._op_3dup,
-            0x70: self._op_2over,
-            0x71: self._op_2rot,
-            0x72: self._op_2swap
+            # Constants
+            0x00: self._op_false,  # OP_0, OP_FALSE
+            0x51: self._op_true,  # OP_1, OP_TRUE
+            0x4f: self._op_1negate,  # OP_1NEGATE
+
+            # Flow control
+            0x61: self._op_nop,  # OP_NOP
+            0x63: self._op_if,  # OP_IF
+            0x64: self._op_notif,  # OP_NOTIF
+            0x67: self._op_else,  # OP_ELSE
+            0x68: self._op_endif,  # OP_ENDIF
+            0x69: self._op_verify,  # OP_VERIFY
+            0x6a: self._op_return,  # OP_RETURN
+
+            # Stack operations
+            0x6b: self._op_to_altstack,  # OP_TOALTSTACK
+            0x6c: self._op_from_altstack,  # OP_FROMALTSTACK
+            0x73: self._op_if_dup,  # OP_IFDUP
+            0x74: self._op_depth,  # OP_DEPTH
+            0x75: self._op_drop,  # OP_DROP
+            0x76: self._op_dup,  # OP_DUP
+            0x77: self._op_nip,  # OP_NIP
+            0x78: self._op_over,  # OP_OVER
+            0x79: self._op_pick,  # OP_PICK
+            0x7a: self._op_roll,  # OP_ROLL
+            0x7b: self._op_rot,  # OP_ROT
+            0x7c: self._op_swap,  # OP_SWAP
+            0x7d: self._op_tuck,  # OP_TUCK
+            0x6d: self._op_2drop,  # OP_2DROP
+            0x6e: self._op_2dup,  # OP_2DUP
+            0x6f: self._op_3dup,  # OP_3DUP
+            0x70: self._op_2over,  # OP_2OVER
+            0x71: self._op_2rot,  # OP_2ROT
+            0x72: self._op_2swap,  # OP_2SWAP
+
+            # Bitwise logic
+            0x83: None,  # self._op_equal,  # OP_EQUAL
+            0x84: None,  # self._op_equal_verify,  # OP_EQUALVERIFY
+
+            # Arithmetic
+            0x93: None,  # self._op_add,  # OP_ADD
+            0x94: None,  # self._op_sub,  # OP_SUB
+            0x95: None,  # self._op_mul,  # OP_MUL
+            0x96: None,  # self._op_div,  # OP_DIV
+            0x97: None,  # self._op_mod,  # OP_MOD
+            0x9a: None,  # self._op_booland,  # OP_BOOLAND
+            0x9b: None,  # self._op_boolor,  # OP_BOOLOR
+            0x9c: self._op_numeq,  # OP_NUMEQUAL
+            0x9d: self._op_numeq_verify,  # OP_NUMEQUALVERIFY
+            0x9e: None,  # self._op_numneq,  # OP_NUMNOTEQUAL
+            0x9f: None,  # self._op_lt,  # OP_LESSTHAN
+            0xa0: None,  # self._op_gt,  # OP_GREATERTHAN
+            0xa1: None,  # self._op_leq,  # OP_LESSTHANOREQUAL
+            0xa2: None,  # self._op_geq,  # OP_GREATERTHANOREQUAL
+            0xa3: None,  # self._op_min,  # OP_MIN
+            0xa4: None,  # self._op_max,  # OP_MAX
+            0xa5: None,  # self._op_within,  # OP_WITHIN
+
+            # Crypto
+            0xa6: None,  # self._op_ripemd160,  # OP_RIPEMD160
+            0xa7: None,  # self._op_sha1,  # OP_SHA1
+            0xa8: None,  # self._op_sha256,  # OP_SHA256
+            0xa9: None,  # self._op_hash160,  # OP_HASH160
+            0xaa: None,  # self._op_hash256,  # OP_HASH256
+            0xac: None,  # self._op_checksig,  # OP_CHECKSIG
         }
-        # return {
-        #     0x00: self._op_false,  # OP_0, OP_FALSE
-        #     0x4c: self._push_data1,
-        #     0x4d: self._push_data2,
-        #     0x4e: self._push_data4,
-        #     0x4f: None,  # self._op_negate,
-        #     0x50: None,  # OP_RESERVED
-        #     0x51: self.op_true,
-        #     0x61: self._op_nop,
-        #     0x69: self._op_verify,
-        #     0x73: self._op_ifdup,
-        #     0x74: self._op_depth,
-        #     0x75: self._op_drop,
-        #     0x76: self._op_dup,
-        #     0x77: self._op_nip,
-        #     0x78: self._op_over,
-        #     0x79: self._op_pick,
-        #     0x7a: self._op_roll,
-        #     0x93: self._op_add,
-        #     0x9a: self._op_booland,
-        #     0x9b: self._op_boolor,
-        #     0x9c: self._op_numeq,
-        #     0x9d: self._op_numeq_verify,
-        #     0x9e: self._op_numneq,
-        #     0x9f: self._op_lt,
-        #     0xa0: self._op_gt,
-        #     0xa1: self._op_leq,
-        #     0xa2: self._op_geq,
-        #     0xa3: self._op_min,
-        #     0xa4: self._op_max,
-        # }
 
     def clear_stacks(self):
         """
         Will remove all elements from main and alt stack. CLears ASM instructions. Used in testing
         """
-        while self.stack.height > 0:
-            self.stack.pop()
-        while self.altstack.height > 0:
-            self.altstack.pop()
+        self.stack.clear()
+        self.altstack.clear()
         self.asm = []
 
     def eval_script_from_hex(self, hex_script: hex):
@@ -243,14 +261,34 @@ class ScriptEngine:
             raise ValueError(f"Expected byte data stream, received {type(script)}")
         stream = BytesIO(script) if isinstance(script, bytes) else script
 
+        # Control flow tracking
+        if_stack = []
+        execution_enabled = True
+
         # Main loop
         while True:
             opcode = stream.read(1)
             if not opcode:
-                break  # End of script
+                # End of script - check if all IFs are properly closed
+                if if_stack:
+                    raise ValueError("Unbalanced IF/ENDIF in script")
+                break
 
             opcode_int = int.from_bytes(opcode, "big")
-            # logger.debug(f"OPCODE HEX: {opcode.hex()}")
+            logger.debug(f"OPCODE HEX: {opcode.hex()}")
+
+            # Handle flow control opcodes
+            if opcode_int in (0x63, 0x64, 0x67, 0x68):  # OP_IF, OP_NOTIF, OP_ELSE, OP_ENDIF
+                handler = self.op_handlers.get(opcode_int)
+                if handler:
+                    # Call the flow control handler which updates if_stack and execution_enabled
+                    if not handler(if_stack, execution_enabled):
+                        return False
+                    continue
+
+            # Skip execution if disabled by flow control
+            if not execution_enabled and opcode_int not in (0x67, 0x68):  # Skip unless OP_ELSE or OP_ENDIF
+                continue
 
             # Check for OP_PUSHBYTES_N
             if 0x00 < opcode_int < 0x4c:
@@ -276,20 +314,17 @@ class ScriptEngine:
                 self._asm_log(OPCODES[opcode_int])  # Append corresponding ASM OP_CODE
                 handler = self.op_handlers.get(opcode_int)
                 if handler:
-                    # Handle conditions here
-                    # OP_IF 0x63
-                    # OP_NOTIF 0x64
-                    # OP_ELSE 0x67
-                    # OP_ENDIF 0x68
-                    # OP_VERIFY 0x69
-                    # OP_RETURN 0x6a
+                    # Special handling for OP_VERIFY and OP_RETURN
                     if opcode_int == 0x69:  # OP_VERIFY
                         if not handler():
                             return False
+                    elif opcode_int == 0x6a:  # OP_RETURN
+                        handler()
+                        return False
                     else:
                         handler()
                 else:
-                    logger.debug(f"Unrecognized or invalid OP code; {opcode_int}")
+                    logger.debug(f"Unrecognized or invalid OP code: {opcode_int:02x}")
                     return False
 
         # Validate stack
@@ -311,7 +346,7 @@ class ScriptEngine:
             return False
         elif self.stack.height == 1:
             # Check zero element
-            if self.stack.top in [b'', b'\x00']:
+            if self.stack.top in self.BTCZero:
                 self._asm_log("Script failed validation: Zero value")
                 return False
             self._asm_log("Script passes validation")
@@ -321,7 +356,12 @@ class ScriptEngine:
             return False
 
     # --- OP_CODE FUNCTIONS --- #
+
+    def _op_true(self):
+        self.stack.push(BTCNum(1).bytes)
+
     def _op_false(self):
+        """OP_0 or OP_FALSE - Push empty bytes onto the stack"""
         self.stack.push(b'')
 
     def _push_data(self, stream: BytesIO, byte_length: int):
@@ -337,11 +377,79 @@ class ScriptEngine:
         self._asm_log(f"OP_PUSHBYTES_{byte_length}")
         self._asm_log(data.hex())
 
-    def _op_one_negate(self):
+    def _op_1negate(self):
+        """OP_1NEGATE - Push -1 onto the stack"""
         self.stack.push(BTCNum(-1).bytes)
 
     def _op_nop(self):
         pass
+
+    def _op_if(self, if_stack, execution_enabled):
+        """
+        OP_IF implementation
+        Marks an if block. The block will be executed if the top stack value is not False.
+        """
+        if execution_enabled:
+            condition = self.stack.pop()
+            result = condition not in self.BTCZero
+            if_stack.append(("IF", result))
+            return result
+        else:
+            if_stack.append(("IF", False))
+            return True
+
+    def _op_notif(self, if_stack, execution_enabled):
+        """
+        OP_NOTIF implementation
+        Marks an if block. The block will be executed if the top stack value is False.
+        """
+        if execution_enabled:
+            condition = self.stack.pop()
+            result = condition in self.BTCZero
+            if_stack.append(("NOTIF", result))
+            return result
+        else:
+            if_stack.append(("NOTIF", False))
+            return True
+
+    def _op_else(self, if_stack, execution_enabled):
+        """
+        OP_ELSE implementation
+        Marks an else block. The else block is executed if the if block is not executed.
+        """
+        if not if_stack:
+            raise ValueError("OP_ELSE without matching OP_IF/OP_NOTIF")
+
+        current_if = if_stack.pop()
+        if_type, was_executed = current_if
+
+        if if_type not in ("IF", "NOTIF"):
+            raise ValueError(f"OP_ELSE after non-IF/NOTIF: {if_type}")
+
+        if_stack.append(("ELSE", not was_executed))
+        return not was_executed
+
+    def _op_endif(self, if_stack, execution_enabled):
+        """
+        OP_ENDIF implementation
+        Marks the end of an if/else block.
+        """
+        if not if_stack:
+            raise ValueError("OP_ENDIF without matching OP_IF/OP_NOTIF/OP_ELSE")
+
+        if_stack.pop()
+        # Compute new execution_enabled based on remaining if_stack
+        new_execution = all(executed for _, executed in if_stack)
+        return new_execution
+
+    def _op_verify(self):
+        """OP_VERIFY - Verify the top element is truthy"""
+        top = self.stack.pop()
+        return False if top in self.BTCZero else True
+
+    def _op_return(self):
+        """OP_RETURN - Marks transaction as invalid"""
+        return False
 
     def _op_to_altstack(self):
         self.altstack.push(self.stack.pop())
@@ -350,7 +458,7 @@ class ScriptEngine:
         self.stack.push(self.altstack.pop())
 
     def _op_if_dup(self):
-        if self.stack.top != b'':
+        if self.stack.top not in self.BTCZero:
             self.stack.push(self.stack.top)
 
     def _op_depth(self):
@@ -363,8 +471,8 @@ class ScriptEngine:
         self.stack.push(self.stack.top)
 
     def _op_nip(self):
-        item, _ = self.stack.pop(), self.stack.pop()
-        self.stack.push(item)
+        """Removes the second-to-top stack item"""
+        self.stack.remove_at_index(1)
 
     def _op_over(self):
         item = self.stack.stack[1]  # 1 from the top
@@ -410,8 +518,6 @@ class ScriptEngine:
         for i in reversed(popped_items):
             self.stack.push(i)
 
-        # --- OP_CODE HELPERS --- #
-
     def _op_2drop(self):
         self.stack.pop()
         self.stack.pop()
@@ -443,6 +549,23 @@ class ScriptEngine:
         for item in reversed(items):
             self.stack.push(item)
 
+    # def _op_booland(self):  # OP_BOOLAND | 0x9a
+    #     """OP_BOOLAND - Boolean AND of two values"""
+    #     self._op_bool_logic(lambda a, b: a and b)
+    #
+    # def _op_boolor(self):  # OP_BOOLOR | 0x9b
+    #     """OP_BOOLOR - Boolean OR of two values"""
+    #     self._op_bool_logic(lambda a, b: a or b)
+    #
+    def _op_numeq(self):  # OP_NUMEQUAL | 0x9c
+        num1 = BTCNum(self.stack.pop()).value
+        num2 = BTCNum(self.stack.pop()).value
+        self._op_true() if num1 == num2 else self._op_false()
+
+    def _op_numeq_verify(self):  # OP_NUMEQUALVERIFY | 0x9d
+        self._op_numeq()
+        return self._op_verify()
+
     # --- HELPERS --- #
 
     def _asm_log(self, log_string: str):
@@ -457,391 +580,23 @@ class ScriptEngine:
         byte_len = BTCNum.from_bytes(stacklen).value
         self._push_data(stream, byte_len)
 
-    # ======================= #
-
-    # ================================= #
-
-    # def check_height(self, min_val: int, asm_code: str):
+    # def _op_bool_logic(self, operation):
+    #     """Generic handler for boolean logic operations
+    #
+    #     Args:
+    #         operation: A function that takes two boolean arguments and returns a boolean
     #     """
-    #     Checks to see that the stack height is greater than or equal to the min_val. If not, raise a valueError
-    #     """
-    #     if self.stack.height < min_val:
-    #         raise ValueError(f"{asm_code} failed due to insuffcient stack height. Needed {min_val} but have "
-    #                          f"{self.stack.height}")
+    #     a_bytes, b_bytes = self.stack.pop_n(2)
     #
-
+    #     a_true = a_bytes not in self.BTCZero
+    #     b_true = b_bytes not in self.BTCZero
     #
-    # def _op_verify(self) -> bool:
-    #     """
-    #     OP_VERIFY is an opcode that allows for quick validation of conditions without explicitly ending the script.
-    #     It's used to ensure certain requirements are met.
+    #     result = operation(a_true, b_true)
     #
-    #     Operation
-    #         -Pop the top stack value.
-    #         -If the value is 0 or an empty string, the script immediately fails and the transaction is considered
-    #         invalid.
-    #         -If the value is non-zero, continue executing the script, with the item now removed from the stack.
-    #         -The primary use of OP_VERIFY is to verify that a certain condition holds without having to use
-    #         conditional opcodes.
-    #         -If the condition does not hold, the script will terminate at the OP_VERIFY step.
-    #     """
-    #     item = self.stack.pop()
-    #     if item in [b'', b'\x00']:
-    #         return False
-    #     return True
-    #
-    # def _op_drop(self):
-    #     """
-    #     OP_DROP is used to remove the top item from the stack, effectively discarding it. This opcode is useful when
-    #     you no longer need the top item and want to proceed with other operations on the remaining stack items.
-    #
-    #     Notes
-    #         OP_DROP is often used to clean up intermediate values that are no longer needed in a script.
-    #         If the stack is empty when OP_DROP is executed, the script will fail.
-    #     """
-    #     # Check height
-    #     self.check_height(1, "OP_DROP")
-    #
-    #     # Pop
-    #     self.stack.pop()
-    #
-    # def _op_dup(self):
-    #     """
-    #     OP_DUP is used to duplicate the top item on the stack, pushing a copy of it onto the stack. This opcode is
-    #     frequently used in Bitcoin scripts to create copies of data, especially for validation purposes like
-    #     signature checking.
-    #
-    #     NOTES:
-    #         OP_DUP is commonly used in scripts like Pay-to-PubKeyHash (P2PKH) to duplicate the public key for
-    #         signature verification.
-    #         If the stack is empty when OP_DUP is executed, the script will fail.
-    #     """
-    #     # Check height
-    #     if self.stack.height < 1:
-    #         raise ValueError("Can't duplicate an empty stack")
-    #
-    #     # Push top element
-    #     self.stack.push(self.stack.top)
-    #
-    # def _op_depth(self):
-    #     """
-    #     OP_DEPTH pushes the number of items on the stack onto the stack.
-    #
-    #     - The number is encoded as a Bitcoin Script integer (max 4 bytes, little-endian, signed).
-    #     - An empty stack results in `b''` (Bitcoin's representation of `0`).
-    #     """
-    #     depth = self.stack.height
-    #     depth_bytes = depth.to_bytes((depth.bit_length() + 7) // 8, "little", signed=True) if depth > 0 else b''
-    #     self.stack.push(depth_bytes)
-    #
-    # def _op_nip(self):
-    #     """
-    #     OP_NIP is used to remove the second item from the top of the stack, while leaving the top item and the rest
-    #     of the stack intact. This opcode is useful when you need to discard an intermediate value but keep the top
-    #     item for further operations.
-    #
-    #     NOTES:
-    #         OP_NIP allows you to efficiently discard the second stack item without disturbing the top of the stack.
-    #         If there are fewer than two items on the stack when OP_NIP is executed, the script will fail.
-    #     """
-    #     # Check height
-    #     self.check_height(2, "OP_NIP")
-    #
-    #     # Remove 2nd element
-    #     del self.stack.stack[1]
-    #
-    # def _op_over(self):
-    #     """
-    #     OP_OVER is used to duplicate the second item from the stack (i.e., the value one over from the top).
-    #
-    #     NOTES:
-    #         This opcode is part of a family of opcodes (OP_OVER, OP_2OVER, OP_DUP, and a few others) designed for
-    #         duplication of stack items.
-    #         If there are fewer than two items on the stack when OP_OVER is executed, the script will fail.
-    #     """
-    #     # Check height
-    #     self.check_height(2, "OP_OVER")
-    #
-    #     # Duplicate 2nd item
-    #     self.stack.push(self.stack.stack[1])  # Push a copy of the second element
-    #
-    # def _op_pick(self):
-    #     """
-    #     OP_PICK is used to select a stack item and copy it to the top.
-    #
-    #     NOTES:
-    #         --If there are fewer than two items on the stack, if n is negative, or if n is larger than the stack when
-    #         OP_PICK is executed, the script will fail.
-    #         --The stack item just before OP_PICK dictates 'n', the location of the item to be copied.
-    #         --Counting begins at 0, not 1; so an n value of 2 would reach the third stack item (0 is first,
-    #         1 is second, 2 is third, and so on).
-    #     """
-    #     # Check height
-    #     self.check_height(2, "OP_PICK")
-    #
-    #     # Pop the integer n (as a byte object) from the stack
-    #     n_bytes = self.stack.pop()
-    #
-    #     # Convert the byte object (little-endian) to a signed integer
-    #     n = int.from_bytes(n_bytes, byteorder='little', signed=True)
-    #
-    #     # Ensure n is a non-negative integer (OP_PICK does not support negative indices)
-    #     if n < 0:
-    #         raise ValueError("n must be a non-negative integer")
-    #
-    #     # Ensure there are at least n + 1 items on the stack
-    #     if self.stack.height < n + 1:
-    #         raise ValueError("Not enough items on the stack to pick from")
-    #
-    #     # Duplicate the n-th item (0-based index, left-to-right) and push it to the stack
-    #     item = self.stack.stack[n]  # Index starts at 0
-    #     self.stack.push(item)
-    #
-    # def _op_roll(self):
-    #     """
-    #     OP_ROLL is used to select a stack item and move it to the top.
-    #
-    #     NOTES:
-    #         -If there are fewer than two items on the stack, if n is negative, or if n is larger than the stack when
-    #             OP_ROLL is executed, the script will fail.
-    #         -The stack item just before OP_ROLL dictates 'n', the location of the item to be moved.
-    #         -Counting begins at 0, not 1; so an n value of 2 would reach the third stack item (0 is first,
-    #             1 is second, 2 is third, and so on).
-    #     """
-    #     # Check height
-    #     self.check_height(2, "OP_ROLL")
-    #
-    #     # Pop the integer n (as a byte object) from the stack
-    #     n_bytes = self.stack.pop()
-    #
-    #     # Convert the byte object (little-endian) to a signed integer
-    #     n = int.from_bytes(n_bytes, byteorder='little', signed=True)
-    #
-    #     # Ensure n is a non-negative integer (OP_ROLL does not support negative indices)
-    #     if n < 0:
-    #         raise ValueError("n must be a non-negative integer")
-    #
-    #     # Ensure there are at least n + 1 items on the stack
-    #     if self.stack.height < n + 1:
-    #         raise ValueError("Not enough items on the stack to pick from")
-    #
-    #     # Remove item at index n
-    #     item = self.stack.remove_at_index(n)
-    #     self.stack.push(item)
-    #
-    # def _op_ifdup(self):
-    #     """
-    #     OP_IFDUP duplicates the top item on the stack if and only if it is non-zero. If the top item is zero,
-    #     the stack remains unchanged.
-    #
-    #     NOTES:
-    #         This opcode is useful in conditional operations, where duplication occurs based on the value of the top
-    #         stack item.
-    #         A related opcode, OP_DUP, always duplicates the top stack item, regardless of its value.
-    #     """
-    #     # Push top element if it's not zero (an empty byte array)
-    #     if self.stack.top != b'':
-    #         self.stack.push(self.stack.top)
-    #
-    # # --- STACK COMPARISON --- #
-    #
-    # def _compare(self, operator, boolean_logic=False):
-    #     """
-    #     Generic comparison function that performs the operation specified by the operator.
-    #     The operator should be a function that takes two integers and returns a boolean.
-    #
-    #     NOTES:
-    #         Both items must be valid integers. Bitcoin Script interprets byte arrays up to 4 bytes as signed integers.
-    #         An empty array ([]) is treated as 0 when compared.
-    #         If there are fewer than two items on the stack when compare is called, the script will fail.
-    #     """
-    #     if self.stack.height < 2:
-    #         raise ValueError("Comparison operation requires at least two elements on the stack")
-    #
-    #     # Get elements
-    #     bytenum1 = self.stack.pop()
-    #     bytenum2 = self.stack.pop()
-    #
-    #     # Check size
-    #     if len(bytenum1) > 4 or len(bytenum2) > 4:
-    #         raise ValueError("Stack elements must be no more than 4 bytes to be considered an integer")
-    #
-    #     # Transform to ints
-    #     num1 = int.from_bytes(bytenum1, "big", signed=True)
-    #     num2 = int.from_bytes(bytenum2, "big", signed=True)
-    #
-    #     # If boolean_logic is enabled, interpret values as truthy/falsy
-    #     if boolean_logic:
-    #         num1 = num1 != 0  # Convert to True (1) or False (0)
-    #         num2 = num2 != 0
-    #
-    #     # Perform the comparison and push the result
-    #     self.stack.push(b'\x01' if operator(num2, num1) else b'')
-    #
-    # def _op_add(self):
-    #     """
-    #     OP_ADD adds two numbers together and returns their sum on the stack.
-    #
-    #     The execution of the OP_ADD opcode involves three steps:
-    #         1. Pop the top item from the stack.
-    #         2. Pop the next top item from the stack.
-    #         3. Add these two items together, and push the result back onto the stack.
-    #     """
-    #     self._compare(lambda x, y: x + y)
-    #
-    # def _op_min_max(self, comparison_func):
-    #     """
-    #     OP_MIN and OP_MAX compare the top two items on the stack as integers and push either
-    #     the smaller (`OP_MIN`) or larger (`OP_MAX`) value back onto the stack.
-    #
-    #     Both original items are removed, and the selected value becomes the new top item.
-    #
-    #     Notes:
-    #         - Both items must be valid integers (Bitcoin Script interprets byte arrays up to 4 bytes as integers).
-    #         - An empty array (`b''`) is treated as 0 when compared.
-    #         - If there are fewer than two items on the stack when executed, the script will fail.
-    #
-    #     param comparison_func: `max` for `OP_MAX`, `min` for `OP_MIN`.
-    #     """
-    #     if self.stack.height < 2:
-    #         raise ValueError(f"{comparison_func.__name__.upper()} requires at least two elements on the stack")
-    #
-    #     # Get elements
-    #     bytenum1 = self.stack.pop()
-    #     bytenum2 = self.stack.pop()
-    #
-    #     # Check size
-    #     if len(bytenum1) > 4 or len(bytenum2) > 4:
-    #         raise ValueError("Stack elements must be no more than 4 bytes to be considered an integer")
-    #
-    #     # Transform to ints
-    #     num1 = int.from_bytes(bytenum1, "big", signed=True)
-    #     num2 = int.from_bytes(bytenum2, "big", signed=True)
-    #
-    #     # Get the min/max value
-    #     result = comparison_func(num1, num2)
-    #
-    #     # Push the result onto the stack
-    #     self.stack.push(result.to_bytes((result.bit_length() + 7) // 8 or 1, "big", signed=True))
-    #
-    # def _op_max(self):
-    #     self._op_min_max(max)
-    #
-    # def _op_min(self):
-    #     self._op_min_max(min)
-    #
-    # def _op_numneq(self):
-    #     """
-    #     OP_NUMNOTEQUAL compares the top two items on the stack as integers. If they are not numerically equal,
-    #     it pushes 1 (true) onto the stack. If they are equal, it pushes an empty array (false). Both items are
-    #     removed from the stack after the comparison.s
-    #     """
-    #     self._compare(lambda x, y: x != y)
-    #
-    # def _op_numeq(self):
-    #     """
-    #     OP_NUMEQUAL compares the top two items on the stack as integers. If they are numerically equal, it pushes 1 (
-    #     true) onto the stack. If they are not equal, it pushes an empty array (false). Both items are removed from
-    #     the stack after the comparison.
-    #     """
-    #     self._compare(lambda x, y: x == y)
-    #
-    # def _op_numeq_verify(self):
-    #     """
-    #     OP_NUMEQUALVERIFY combines the functionality of OP_NUMEQUAL and an implicit verification step. It compares
-    #     the top two items on the stack as integers. If they are numerically equal, both items are removed,
-    #     and the script continues execution. If they are not equal, the script fails immediately.
-    #     """
-    #     self._op_numeq()
-    #     self._op_verify()
-    #
-    # def _op_boolor(self):
-    #     """
-    #     OP_BOOLOR performs a logical OR operation on the top two items on the stack. If either item is non-zero,
-    #     it pushes 1 (true) onto the stack. If both items are zero (or empty arrays), it pushes an empty array (
-    #     false). Both items are interpreted as integers, and must therefore be 4 bytes long or less. If either is
-    #     above 4 bytes in length, the script is invalid.
-    #     """
-    #     self._compare(lambda x, y: x or y, boolean_logic=True)
-    #
-    # def _op_booland(self):
-    #     """
-    #     OP_BOOLAND performs a logical AND operation on the top two items on the stack. If both items are non-zero,
-    #     it pushes 1 (true) onto the stack. If either item is zero (or an empty array), it pushes an empty array (
-    #     false). Both items are interpreted as integers, and must therefore be 4 bytes long or less. If either is
-    #     above 4 bytes in length, the script is invalid.
-    #     """
-    #     self._compare(lambda x, y: x and y, boolean_logic=True)
-    #
-    # def _op_geq(self):
-    #     """
-    #     OP_GREATERTHANOREQUAL compares the top two items on the stack as integers. If the second item is greater than
-    #     or equal to the top item, it pushes 1 (true) onto the stack. If not, it pushes an empty array (false). Both
-    #     items are removed from the stack after the comparison.
-    #     """
-    #     self._compare(lambda x, y: x >= y)
-    #
-    # def _op_leq(self):
-    #     """
-    #     OP_LESSTHANOREQUAL compares the top two items on the stack as integers. If the second item is less than or
-    #     equal to the top item, it pushes 1 (true) onto the stack. If not, it pushes an empty array (false). Both
-    #     items are removed from the stack after the comparison.
-    #     """
-    #     self._compare(lambda x, y: x <= y)
-    #
-    # def _op_lt(self):
-    #     """
-    #     OP_LESSTHAN compares the top two items on the stack as integers. If the second item is less than the top
-    #     item, it pushes 1 (true) onto the stack. If not, it pushes an empty array (false). Both items are removed
-    #     from the stack after the comparison.
-    #     """
-    #     self._compare(lambda x, y: x < y)
-    #
-    # def _op_gt(self):
-    #     """
-    #     OP_GREATERTHAN compares the top two items on the stack as integers. If the second item is greater than the
-    #     top item, it pushes 1 (true) onto the stack. If not, it pushes an empty array (false). Both items are
-    #     removed
-    #     from the stack after the comparison.
-    #     """
-    #     self._compare(lambda x, y: x > y)
-    #
-    # # --- HASH FUNCTIONS --- #
-    # def _op_hash(self, hash_func):
-    #     """
-    #     Generalized hash function for OP_SHA1, OP_HASH160, OP_SHA256, OP_HASH256, and OP_RIPEMD160.
-    #
-    #     This function replaces the top stack item with the result of applying the given hash function.
-    #
-    #     param hash_func: The hash function to apply. Can be one of:
-    #         - `hash160(element)`: Applies RIPEMD-160(SHA-256(x)) (used in OP_HASH160)
-    #         - `sha256(element)`: Applies SHA-256 (used in OP_SHA256)
-    #         - `hash256(element)`: Applies SHA-256(SHA-256(x)) (used in OP_HASH256)
-    #         - `ripemd160(element)`: Applies RIPEMD-160 (used in OP_RIPEMD160)
-    #         - 'sha1(element)': Applies SHA-1 (used in OP_SHA1)
-    #
-    #     If the stack is empty, the script fails.
-    #     """
-    #     if self.stack.height < 1:
-    #         raise ValueError(f"{hash_func.__name__.upper()} requires at least one element on the stack")
-    #
-    #     element = self.stack.pop()
-    #     self.stack.push(hash_func(element))
-    #
-    # def _op_hash160(self):
-    #     self._op_hash(hash160)
-    #
-    # def _op_sha256(self):
-    #     self._op_hash(sha256)
-    #
-    # def _op_hash256(self):
-    #     self._op_hash(hash256)
-    #
-    # def _op_ripemd160(self):
-    #     self._op_hash(ripemd160)
-    #
-    # def _op_sha1(self):
-    #     self._op_hash(sha1)
+    #     if result:
+    #         self._op_true()
+    #     else:
+    #         self._op_false()
 
 
 # --- TESTING
