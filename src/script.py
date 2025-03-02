@@ -170,7 +170,6 @@ class ScriptEngine:
         return {
             # Constants
             0x00: self._op_false,  # OP_0, OP_FALSE
-            0x51: self._op_true,  # OP_1, OP_TRUE
             0x4f: self._op_1negate,  # OP_1NEGATE
 
             # Flow control
@@ -185,7 +184,7 @@ class ScriptEngine:
             # Stack operations
             0x6b: self._op_to_altstack,  # OP_TOALTSTACK
             0x6c: self._op_from_altstack,  # OP_FROMALTSTACK
-            0x73: self._op_if_dup,  # OP_IFDUP
+            0x73: self._op_ifdup,  # OP_IFDUP
             0x74: self._op_depth,  # OP_DEPTH
             0x75: self._op_drop,  # OP_DROP
             0x76: self._op_dup,  # OP_DUP
@@ -202,10 +201,11 @@ class ScriptEngine:
             0x70: self._op_2over,  # OP_2OVER
             0x71: self._op_2rot,  # OP_2ROT
             0x72: self._op_2swap,  # OP_2SWAP
+            0x82: self._op_size,  # OP_SIZE
 
             # Bitwise logic
-            0x83: None,  # self._op_equal,  # OP_EQUAL
-            0x84: None,  # self._op_equal_verify,  # OP_EQUALVERIFY
+            0x87: self._op_equal,  # OP_EQUAL
+            0x88: self._op_equal_verify,  # OP_EQUALVERIFY
 
             # Arithmetic
             0x93: None,  # self._op_add,  # OP_ADD
@@ -215,8 +215,8 @@ class ScriptEngine:
             0x97: None,  # self._op_mod,  # OP_MOD
             0x9a: None,  # self._op_booland,  # OP_BOOLAND
             0x9b: None,  # self._op_boolor,  # OP_BOOLOR
-            0x9c: self._op_numeq,  # OP_NUMEQUAL
-            0x9d: self._op_numeq_verify,  # OP_NUMEQUALVERIFY
+            0x9c: None,  # self._op_numeq,  # OP_NUMEQUAL
+            0x9d: None,  # self._op_numeq_verify,  # OP_NUMEQUALVERIFY
             0x9e: None,  # self._op_numneq,  # OP_NUMNOTEQUAL
             0x9f: None,  # self._op_lt,  # OP_LESSTHAN
             0xa0: None,  # self._op_gt,  # OP_GREATERTHAN
@@ -457,7 +457,7 @@ class ScriptEngine:
     def _op_from_altstack(self):
         self.stack.push(self.altstack.pop())
 
-    def _op_if_dup(self):
+    def _op_ifdup(self):
         if self.stack.top not in self.BTCZero:
             self.stack.push(self.stack.top)
 
@@ -549,6 +549,25 @@ class ScriptEngine:
         for item in reversed(items):
             self.stack.push(item)
 
+    def _op_size(self):
+        # Check for empty stack
+        top_element = self.stack.top if self.stack.height > 0 else b''
+        if top_element in self.BTCZero:
+            self.stack.push(BTCNum(0).bytes)
+        else:
+            self.stack.push(BTCNum(len(top_element)).bytes)
+
+    def _op_equal(self):
+        items = self.stack.pop_n(2)
+        if items[0] == items[1]:
+            self._op_true()
+        else:
+            self._op_false()
+
+    def _op_equal_verify(self):
+        self._op_equal()
+        return self._op_verify()
+
     # def _op_booland(self):  # OP_BOOLAND | 0x9a
     #     """OP_BOOLAND - Boolean AND of two values"""
     #     self._op_bool_logic(lambda a, b: a and b)
@@ -557,14 +576,14 @@ class ScriptEngine:
     #     """OP_BOOLOR - Boolean OR of two values"""
     #     self._op_bool_logic(lambda a, b: a or b)
     #
-    def _op_numeq(self):  # OP_NUMEQUAL | 0x9c
-        num1 = BTCNum(self.stack.pop()).value
-        num2 = BTCNum(self.stack.pop()).value
-        self._op_true() if num1 == num2 else self._op_false()
-
-    def _op_numeq_verify(self):  # OP_NUMEQUALVERIFY | 0x9d
-        self._op_numeq()
-        return self._op_verify()
+    # def _op_numeq(self):  # OP_NUMEQUAL | 0x9c
+    #     num1 = BTCNum(self.stack.pop()).value
+    #     num2 = BTCNum(self.stack.pop()).value
+    #     self._op_true() if num1 == num2 else self._op_false()
+    #
+    # def _op_numeq_verify(self):  # OP_NUMEQUALVERIFY | 0x9d
+    #     self._op_numeq()
+    #     return self._op_verify()
 
     # --- HELPERS --- #
 
@@ -602,7 +621,7 @@ class ScriptEngine:
 # --- TESTING
 
 if __name__ == "__main__":
-    test_script_hex = "5152535a5b7d"
+    test_script_hex = "515288"
     # test_script_bytes = bytes.fromhex(test_script_hex)
     engine = ScriptEngine()
     engine.eval_script_from_hex(test_script_hex)

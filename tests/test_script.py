@@ -190,3 +190,107 @@ def test_op_tuck2(engine):
     assert engine.stack.stack[3] == bytes.fromhex("03")
     assert engine.stack.stack[4] == bytes.fromhex("02")
     assert engine.stack.stack[5] == bytes.fromhex("01")
+
+
+def test_op_2drop(engine):
+    op_2drop_hex = "51526d"
+    engine.eval_script_from_hex(op_2drop_hex)
+    assert engine.stack.height == 0
+
+
+def test_op_2dup(engine):
+    op_2dup_hex = "51526e"
+    engine.eval_script_from_hex(op_2dup_hex)
+    assert engine.stack.height == 4
+    assert engine.stack.stack[0] == bytes.fromhex("02")
+    assert engine.stack.stack[1] == bytes.fromhex("01")
+    assert engine.stack.stack[2] == bytes.fromhex("02")
+    assert engine.stack.stack[3] == bytes.fromhex("01")
+
+
+def test_op_3dup(engine):
+    op_3dup_hex = "5152536f"
+    engine.eval_script_from_hex(op_3dup_hex)
+    assert engine.stack.height == 6
+    assert engine.stack.stack[0] == bytes.fromhex("03")
+    assert engine.stack.stack[1] == bytes.fromhex("02")
+    assert engine.stack.stack[2] == bytes.fromhex("01")
+    assert engine.stack.stack[3] == bytes.fromhex("03")
+    assert engine.stack.stack[4] == bytes.fromhex("02")
+    assert engine.stack.stack[5] == bytes.fromhex("01")
+
+
+def test_op_2over(engine):
+    op_2over_hex = "51525354555670"
+    engine.eval_script_from_hex(op_2over_hex)
+    assert engine.stack.height == 8
+    assert engine.stack.stack[0] == bytes.fromhex("04")
+    assert engine.stack.stack[1] == bytes.fromhex("03")
+    assert engine.stack.stack[2] == bytes.fromhex("06")
+    assert engine.stack.stack[3] == bytes.fromhex("05")
+    assert engine.stack.stack[4] == bytes.fromhex("04")
+    assert engine.stack.stack[5] == bytes.fromhex("03")
+    assert engine.stack.stack[6] == bytes.fromhex("02")
+    assert engine.stack.stack[7] == bytes.fromhex("01")
+
+
+def test_op_2rot(engine):
+    op_2rot_hex = "51525354555671"
+    engine.eval_script_from_hex(op_2rot_hex)
+    assert engine.stack.height == 6
+    assert engine.stack.stack[0] == bytes.fromhex("02")
+    assert engine.stack.stack[1] == bytes.fromhex("01")
+    assert engine.stack.stack[2] == bytes.fromhex("06")
+    assert engine.stack.stack[3] == bytes.fromhex("05")
+    assert engine.stack.stack[4] == bytes.fromhex("04")
+    assert engine.stack.stack[5] == bytes.fromhex("03")
+
+
+def test_op_2swap(engine):
+    op_2swap_hex = "51525354555672"
+    engine.eval_script_from_hex(op_2swap_hex)
+    assert engine.stack.height == 6
+    assert engine.stack.stack[0] == bytes.fromhex("04")
+    assert engine.stack.stack[1] == bytes.fromhex("03")
+    assert engine.stack.stack[2] == bytes.fromhex("06")
+    assert engine.stack.stack[3] == bytes.fromhex("05")
+    assert engine.stack.stack[4] == bytes.fromhex("02")
+    assert engine.stack.stack[5] == bytes.fromhex("01")
+
+
+def test_op_size1(engine):
+    op_2swap_hex = "0082"
+    engine.eval_script_from_hex(op_2swap_hex)
+    assert engine.stack.height == 2
+    assert engine.stack.stack[0] == b''
+    assert engine.stack.stack[1] == b''
+
+
+def test_op_size2(engine):
+    op_2swap_hex = "5a82"
+    engine.eval_script_from_hex(op_2swap_hex)
+    assert engine.stack.height == 2
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+    assert engine.stack.stack[1] == bytes.fromhex("0a")
+
+
+def test_op_size3(engine):
+    op_2swap_hex = "03a4b5c682"
+    engine.eval_script_from_hex(op_2swap_hex)
+    assert engine.stack.height == 2
+    assert engine.stack.stack[0] == bytes.fromhex("03")
+    assert engine.stack.stack[1] == bytes.fromhex("a4b5c6")
+
+
+def test_op_equal(engine):
+    op_equal_hex = "515187"
+    engine.eval_script_from_hex(op_equal_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_op_equal_verify(engine):
+    op_equal_verify_hex = "515187"
+    assert engine.eval_script_from_hex(op_equal_verify_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("01")
