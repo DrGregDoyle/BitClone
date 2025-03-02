@@ -60,6 +60,21 @@ class Stack:
         self.stack.rotate(n)
         return item
 
+    def insert_below_index(self, item: bytes, n: int):
+        """
+        Inserts item into position below given index.
+        Index begins at 0
+        """
+        if n < 0 or n >= self.height:
+            raise IndexError("Index out of range")
+
+        # Rotate the stack to bring the nth element to the leftmost position
+        self.stack.rotate(-n)
+        # Insert the item at the leftmost position (which is now below the nth element)
+        self.stack.appendleft(item)
+        # Rotate the stack back to its original order
+        self.stack.rotate(n)
+
     @property
     def top(self):
         try:
@@ -154,7 +169,19 @@ class ScriptEngine:
             0x74: self._op_depth,
             0x75: self._op_drop,
             0x76: self._op_dup,
-            0x77: self._op_nip
+            0x77: self._op_nip,
+            0x78: self._op_over,
+            0x79: self._op_pick,
+            0x7a: self._op_roll,
+            0x7b: self._op_rot,
+            0x7c: self._op_swap,
+            0x7d: self._op_tuck,
+            0x6d: self._op_2drop,
+            0x6e: self._op_2dup,
+            0x6f: self._op_3dup,
+            0x70: self._op_2over,
+            0x71: self._op_2rot,
+            0x72: self._op_2swap
         }
         # return {
         #     0x00: self._op_false,  # OP_0, OP_FALSE
@@ -246,7 +273,7 @@ class ScriptEngine:
                 self._asm_log(f"OP_{num}")
                 self.stack.push(BTCNum(num).bytes)  # Push int from 1 to 16
             else:
-                self.asm.append(OPCODES[opcode_int])  # Append corresponding ASM OP_CODE
+                self._asm_log(OPCODES[opcode_int])  # Append corresponding ASM OP_CODE
                 handler = self.op_handlers.get(opcode_int)
                 if handler:
                     # Handle conditions here
@@ -339,7 +366,84 @@ class ScriptEngine:
         item, _ = self.stack.pop(), self.stack.pop()
         self.stack.push(item)
 
-    # --- OP_CODE HELPERS --- #
+    def _op_over(self):
+        item = self.stack.stack[1]  # 1 from the top
+        self.stack.push(item)
+
+    def _op_pick(self):
+        pick_index_bytes = self.stack.pop()
+        pick_index = BTCNum.from_bytes(pick_index_bytes).value
+        logger.debug(f"PICK INDEX: {pick_index}")
+
+        # Check height
+        if self.stack.height <= pick_index:
+            raise ValueError("Incorrect pick index")
+
+        pick_item = self.stack.stack[pick_index]  # Indexed at 0
+        self.stack.push(pick_item)
+
+    def _op_roll(self):
+        roll_index_bytes = self.stack.pop()
+        roll_index = BTCNum.from_bytes(roll_index_bytes).value
+        logger.debug(f"ROLL INDEX: {roll_index}")
+
+        # Check height
+        if self.stack.height <= roll_index:
+            raise ValueError("Incorrect pick index")
+
+        roll_item = self.stack.remove_at_index(roll_index)
+        self.stack.push(roll_item)
+
+    def _op_rot(self):
+        item = self.stack.remove_at_index(2)
+        self.stack.push(item)
+
+    def _op_swap(self):
+        item0, item1 = self.stack.pop(), self.stack.pop()
+        self.stack.push(item0)
+        self.stack.push(item1)
+
+    def _op_tuck(self):
+        item = self.stack.top
+        popped_items = [self.stack.pop() for _ in range(2)]
+        popped_items.append(item)
+        for i in reversed(popped_items):
+            self.stack.push(i)
+
+        # --- OP_CODE HELPERS --- #
+
+    def _op_2drop(self):
+        self.stack.pop()
+        self.stack.pop()
+
+    def _op_2dup(self):
+        items = [self.stack.stack[i] for i in range(1, -1, -1)]
+        for item in items:
+            self.stack.push(item)
+
+    def _op_3dup(self):
+        items = [self.stack.stack[i] for i in range(2, -1, -1)]
+        for item in items:
+            self.stack.push(item)
+
+    def _op_2over(self):
+        items = [self.stack.stack[i] for i in range(3, 1, -1)]
+        for item in items:
+            self.stack.push(item)
+
+    def _op_2rot(self):
+        popped_items = [self.stack.pop() for _ in range(6)]
+        items = popped_items[-2:] + popped_items[:-2]
+        for item in reversed(items):
+            self.stack.push(item)
+
+    def _op_2swap(self):
+        popped_items = [self.stack.pop() for _ in range(4)]
+        items = popped_items[-2:] + popped_items[:-2]
+        for item in reversed(items):
+            self.stack.push(item)
+
+    # --- HELPERS --- #
 
     def _asm_log(self, log_string: str):
         self.asm.append(log_string)
@@ -743,7 +847,7 @@ class ScriptEngine:
 # --- TESTING
 
 if __name__ == "__main__":
-    test_script_hex = "5a"
+    test_script_hex = "5152535a5b7d"
     # test_script_bytes = bytes.fromhex(test_script_hex)
     engine = ScriptEngine()
     engine.eval_script_from_hex(test_script_hex)
