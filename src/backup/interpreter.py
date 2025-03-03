@@ -1,8 +1,8 @@
 """
 The Bitcoin interpreter.cpp as written in Python by ChatGPT 4o
 """
-from src.library.op_codes import OPCODES
-from src.script import Stack
+from src.library.Script.op_codes import OPCODES
+from src.library.Script.script import Stack
 
 
 def eval_script(stack, script, altstack=None, flags=0):
