@@ -13,591 +13,6 @@ from src.logger import get_logger
 logger = get_logger(__name__)
 
 
-# def op_0():
-#     """
-#     OP_0, 0x00 - An empty array of bytes is pushed onto the stack.
-#     """
-#     pass
-#
-# def op_pushdata1():
-#     """
-#     OP_PUSHDATA1, 0x4c - The next byte contains the number of bytes to be pushed onto the stack.
-#     """
-#     pass
-#
-# def op_pushdata2():
-#     """
-#     OP_PUSHDATA2, 0x4d - The next two bytes contain the number of bytes to be pushed onto the stack.
-#     """
-#     pass
-#
-# def op_pushdata4():
-#     """
-#     OP_PUSHDATA4, 0x4e - The next four bytes contain the number of bytes to be pushed onto the stack.
-#     """
-#     pass
-#
-# def op_1negate():
-#     """
-#     OP_1NEGATE, 0x4f - The number -1 is pushed onto the stack.
-#     """
-#     pass
-#
-# def op_1():
-#     """
-#     OP_1, 0x51 - The number 1 is pushed onto the stack.
-#     """
-#     pass
-#
-# def op_2():
-#     """
-#     OP_2, 0x52 - The number 2 is pushed onto the stack.
-#     """
-#     pass
-#
-# def op_3():
-#     """
-#     OP_3, 0x53 - The number 3 is pushed onto the stack.
-#     """
-#     pass
-#
-# def op_4():
-#     """
-#     OP_4, 0x54 - The number 4 is pushed onto the stack.
-#     """
-#     pass
-#
-# def op_5():
-#     """
-#     OP_5, 0x55 - The number 5 is pushed onto the stack.
-#     """
-#     pass
-#
-# def op_6():
-#     """
-#     OP_6, 0x56 - The number 6 is pushed onto the stack.
-#     """
-#     pass
-#
-# def op_7():
-#     """
-#     OP_7, 0x57 - The number 7 is pushed onto the stack.
-#     """
-#     pass
-#
-# def op_8():
-#     """
-#     OP_8, 0x58 - The number 8 is pushed onto the stack.
-#     """
-#     pass
-#
-# def op_9():
-#     """
-#     OP_9, 0x59 - The number 9 is pushed onto the stack.
-#     """
-#     pass
-#
-# def op_10():
-#     """
-#     OP_10, 0x5a - The number 10 is pushed onto the stack.
-#     """
-#     pass
-#
-# def op_11():
-#     """
-#     OP_11, 0x5b - The number 11 is pushed onto the stack.
-#     """
-#     pass
-#
-# def op_12():
-#     """
-#     OP_12, 0x5c - The number 12 is pushed onto the stack.
-#     """
-#     pass
-#
-# def op_13():
-#     """
-#     OP_13, 0x5d - The number 13 is pushed onto the stack.
-#     """
-#     pass
-#
-# def op_14():
-#     """
-#     OP_14, 0x5e - The number 14 is pushed onto the stack.
-#     """
-#     pass
-#
-# def op_15():
-#     """
-#     OP_15, 0x5f - The number 15 is pushed onto the stack.
-#     """
-#     pass
-#
-# def op_16():
-#     """
-#     OP_16, 0x60 - The number 16 is pushed onto the stack.
-#     """
-#     pass
-#
-# def op_nop():
-#     """
-#     OP_NOP, 0x61 - Does nothing.
-#     """
-#     pass
-#
-# def op_if():
-#     """
-#     OP_IF, 0x63 - If the top stack value is not 0, the statements are executed.
-#     """
-#     pass
-#
-# def op_notif():
-#     """
-#     OP_NOTIF, 0x64 - If the top stack value is 0, the statements are executed.
-#     """
-#     pass
-#
-# def op_else():
-#     """
-#     OP_ELSE, 0x67 - If the preceding OP_IF or OP_NOTIF was not executed, these statements are.
-#     """
-#     pass
-#
-# def op_endif():
-#     """
-#     OP_ENDIF, 0x68 - Ends an if/else block.
-#     """
-#     pass
-#
-# def op_verify():
-#     """
-#     OP_VERIFY, 0x69 - Marks transaction as invalid if top stack value is not true.
-#     """
-#     pass
-#
-# def op_return():
-#     """
-#     OP_RETURN, 0x6a - Marks transaction as invalid.
-#     """
-#     pass
-#
-# def op_toaltstack():
-#     """
-#     OP_TOALTSTACK, 0x6b - Puts the input onto the top of the alt stack. Removes it from the main stack.
-#     """
-#     pass
-#
-# def op_fromaltstack():
-#     """
-#     OP_FROMALTSTACK, 0x6c - Puts the input onto the top of the main stack. Removes it from the alt stack.
-#     """
-#     pass
-#
-# def op_2drop():
-#     """
-#     OP_2DROP, 0x6d - Removes the top two stack items.
-#     """
-#     pass
-#
-# def op_2dup():
-#     """
-#     OP_2DUP, 0x6e - Duplicates the top two stack items.
-#     """
-#     pass
-#
-# def op_3dup():
-#     """
-#     OP_3DUP, 0x6f - Duplicates the top three stack items.
-#     """
-#     pass
-#
-# def op_2over():
-#     """
-#     OP_2OVER, 0x70 - Copies the pair of items two spaces back in the stack to the front.
-#     """
-#     pass
-#
-# def op_2rot():
-#     """
-#     OP_2ROT, 0x71 - The fifth and sixth items back are moved to the top of the stack.
-#     """
-#     pass
-#
-# def op_2swap():
-#     """
-#     OP_2SWAP, 0x72 - Swaps the top two pairs of items.
-#     """
-#     pass
-#
-# def op_ifdup():
-#     """
-#     OP_IFDUP, 0x73 - If the top stack value is not 0, duplicate it.
-#     """
-#     pass
-#
-# def op_depth():
-#     """
-#     OP_DEPTH, 0x74 - Puts the number of stack items onto the stack.
-#     """
-#     pass
-#
-# def op_drop():
-#     """
-#     OP_DROP, 0x75 - Removes the top stack item.
-#     """
-#     pass
-#
-# def op_dup():
-#     """
-#     OP_DUP, 0x76 - Duplicates the top stack item.
-#     """
-#     pass
-#
-# def op_nip():
-#     """
-#     OP_NIP, 0x77 - Removes the second-to-top stack item.
-#     """
-#     pass
-#
-# def op_over():
-#     """
-#     OP_OVER, 0x78 - Copies the second-to-top stack item to the top.
-#     """
-#     pass
-#
-# def op_pick():
-#     """
-#     OP_PICK, 0x79 - The item n back in the stack is copied to the top.
-#     """
-#     pass
-#
-# def op_roll():
-#     """
-#     OP_ROLL, 0x7a - The item n back in the stack is moved to the top.
-#     """
-#     pass
-#
-# def op_rot():
-#     """
-#     OP_ROT, 0x7b - The top three items on the stack are rotated to the left.
-#     """
-#     pass
-#
-# def op_swap():
-#     """
-#     OP_SWAP, 0x7c - The top two items on the stack are swapped.
-#     """
-#     pass
-#
-# def op_tuck():
-#     """
-#     OP_TUCK, 0x7d - The item at the top of the stack is copied and inserted before the second-to-top item.
-#     """
-#     pass
-#
-# def op_size():
-#     """
-#     OP_SIZE, 0x82 - Pushes the string length of the top element of the stack (without popping it).
-#     """
-#     pass
-#
-# def op_equal():
-#     """
-#     OP_EQUAL, 0x87 - Returns 1 if the inputs are exactly equal, 0 otherwise.
-#     """
-#     pass
-#
-# def op_equalverify():
-#     """
-#     OP_EQUALVERIFY, 0x88 - Same as OP_EQUAL, but runs OP_VERIFY afterward.
-#     """
-#     pass
-#
-# def op_1add():
-#     """
-#     OP_1ADD, 0x8b - 1 is added to the input.
-#     """
-#     pass
-#
-# def op_1sub():
-#     """
-#     OP_1SUB, 0x8c - 1 is subtracted from the input.
-#     """
-#     pass
-#
-# def op_negate():
-#     """
-#     OP_NEGATE, 0x8f - The sign of the input is flipped.
-#     """
-#     pass
-#
-# def op_abs():
-#     """
-#     OP_ABS, 0x90 - The input is made positive.
-#     """
-#     pass
-#
-# def op_not():
-#     """
-#     OP_NOT, 0x91 - If the input is 0 or 1, it is flipped. Otherwise the output will be 0.
-#     """
-#     pass
-#
-# def op_0notequal():
-#     """
-#     OP_0NOTEQUAL, 0x92 - Returns 0 if the input is 0. 1 otherwise.
-#     """
-#     pass
-#
-# def op_add():
-#     """
-#     OP_ADD, 0x93 - a is added to b.
-#     """
-#     pass
-#
-# def op_sub():
-#     """
-#     OP_SUB, 0x94 - b is subtracted from a.
-#     """
-#     pass
-#
-# def op_mul():
-#     """
-#     OP_MUL, 0x95 - a is multiplied by b.
-#     """
-#     pass
-#
-# def op_div():
-#     """
-#     OP_DIV, 0x96 - a is divided by b.
-#     """
-#     pass
-#
-# def op_mod():
-#     """
-#     OP_MOD, 0x97 - Returns the remainder after dividing a by b.
-#     """
-#     pass
-#
-# def op_lshift():
-#     """
-#     OP_LSHIFT, 0x98 - Shifts a left b bits, preserving sign.
-#     """
-#     pass
-#
-# def op_rshift():
-#     """
-#     OP_RSHIFT, 0x99 - Shifts a right b bits, preserving sign.
-#     """
-#     pass
-#
-# def op_booland():
-#     """
-#     OP_BOOLAND, 0x9a - If both a and b are not 0, the output is 1. Otherwise 0.
-#     """
-#     pass
-#
-# def op_boolor():
-#     """
-#     OP_BOOLOR, 0x9b - If a or b is not 0, the output is 1. Otherwise 0.
-#     """
-#     pass
-#
-# def op_numequal():
-#     """
-#     OP_NUMEQUAL, 0x9c - Returns 1 if the numbers are equal, 0 otherwise.
-#     """
-#     pass
-#
-# def op_numequalverify():
-#     """
-#     OP_NUMEQUALVERIFY, 0x9d - Same as OP_NUMEQUAL, but runs OP_VERIFY afterward.
-#     """
-#     pass
-#
-# def op_numnotequal():
-#     """
-#     OP_NUMNOTEQUAL, 0x9e - Returns 1 if the numbers are not equal, 0 otherwise.
-#     """
-#     pass
-#
-# def op_lessthan():
-#     """
-#     OP_LESSTHAN, 0x9f - Returns 1 if a is less than b, 0 otherwise.
-#     """
-#     pass
-#
-# def op_greaterthan():
-#     """
-#     OP_GREATERTHAN, 0xa0 - Returns 1 if a is greater than b, 0 otherwise.
-#     """
-#     pass
-#
-# def op_lessthanorequal():
-#     """
-#     OP_LESSTHANOREQUAL, 0xa1 - Returns 1 if a is less than or equal to b, 0 otherwise.
-#     """
-#     pass
-#
-# def op_greaterthanorequal():
-#     """
-#     OP_GREATERTHANOREQUAL, 0xa2 - Returns 1 if a is greater than or equal to b, 0 otherwise.
-#     """
-#     pass
-#
-# def op_min():
-#     """
-#     OP_MIN, 0xa3 - Returns the smaller of a and b.
-#     """
-#     pass
-#
-# def op_max():
-#     """
-#     OP_MAX, 0xa4 - Returns the larger of a and b.
-#     """
-#     pass
-#
-# def op_within():
-#     """
-#     OP_WITHIN, 0xa5 - Returns 1 if x is within the specified range (left-inclusive), 0 otherwise.
-#     """
-#     pass
-#
-# def op_ripemd160():
-#     """
-#     OP_RIPEMD160, 0xa6 - The input is hashed using RIPEMD-160.
-#     """
-#     pass
-#
-# def op_sha1():
-#     """
-#     OP_SHA1, 0xa7 - The input is hashed using SHA-1.
-#     """
-#     pass
-#
-# def op_sha256():
-#     """
-#     OP_SHA256, 0xa8 - The input is hashed using SHA-256.
-#     """
-#     pass
-#
-# def op_hash160():
-#     """
-#     OP_HASH160, 0xa9 - The input is hashed twice: first with SHA-256 and then with RIPEMD-160.
-#     """
-#     pass
-#
-# def op_hash256():
-#     """
-#     OP_HASH256, 0xaa - The input is hashed two times with SHA-256.
-#     """
-#     pass
-#
-# def op_codeseparator():
-#     """
-#     OP_CODESEPARATOR, 0xab - All of the signature checking words will only match signatures to the data after the
-#     most recently-executed OP_CODESEPARATOR.
-#     """
-#     pass
-#
-# def op_checksig():
-#     """
-#     OP_CHECKSIG, 0xac - The entire transaction's outputs, inputs, and script (from the most recently-executed
-#     OP_CODESEPARATOR to the end) are hashed. The signature used by OP_CHECKSIG must be a valid signature for this
-#     hash and public key.
-#     """
-#     pass
-#
-# def op_checksigverify():
-#     """
-#     OP_CHECKSIGVERIFY, 0xad - Same as OP_CHECKSIG, but OP_VERIFY is executed afterward.
-#     """
-#     pass
-#
-# def op_checkmultisig():
-#     """
-#     OP_CHECKMULTISIG, 0xae - Compares the first signature against each public key until it finds an ECDSA match.
-#     Starting with the subsequent public key, it compares the second signature against each remaining public key
-#     until it finds an ECDSA match. The process is repeated until all signatures have been checked or not enough
-#     public keys remain to produce a successful result.
-#     """
-#     pass
-#
-# def op_checkmultisigverify():
-#     """
-#     OP_CHECKMULTISIGVERIFY, 0xaf - Same as OP_CHECKMULTISIG, but OP_VERIFY is executed afterward.
-#     """
-#     pass
-#
-# def op_nop1():
-#     """
-#     OP_NOP1, 0xb0 - Does nothing.
-#     """
-#     pass
-#
-# def op_checklocktimeverify():
-#     """
-#     OP_CHECKLOCKTIMEVERIFY, 0xb1 - Marks transaction as invalid if the top stack item is greater than the
-#     transaction's nLockTime field.
-#     """
-#     pass
-#
-# def op_checksequenceverify():
-#     """
-#     OP_CHECKSEQUENCEVERIFY, 0xb2 - Marks transaction as invalid if the relative lock time of the input (enforced by
-#     BIP 68 with nSequence) is not equal to or longer than the value of the top stack item.
-#     """
-#     pass
-#
-# def op_nop4():
-#     """
-#     OP_NOP4, 0xb3 - Does nothing.
-#     """
-#     pass
-#
-# def op_nop5():
-#     """
-#     OP_NOP5, 0xb4 - Does nothing.
-#     """
-#     pass
-#
-# def op_nop6():
-#     """
-#     OP_NOP6, 0xb5 - Does nothing.
-#     """
-#     pass
-#
-# def op_nop7():
-#     """
-#     OP_NOP7, 0xb6 - Does nothing.
-#     """
-#     pass
-#
-# def op_nop8():
-#     """
-#     OP_NOP8, 0xb7 - Does nothing.
-#     """
-#     pass
-#
-# def op_nop9():
-#     """
-#     OP_NOP9, 0xb8 - Does nothing.
-#     """
-#     pass
-#
-# def op_nop10():
-#     """
-#     OP_NOP10, 0xb9 - Does nothing.
-#     """
-#     pass
-#
-# def op_invalidopcode():
-#     """
-#     OP_INVALIDOPCODE, 0xff - Represents an invalid opcode.
-#     """
-#     pass
-
-
 class ScriptEngine:
     """
     A class for evaluating script.
@@ -660,31 +75,37 @@ class ScriptEngine:
             0x88: self._op_equal_verify,  # OP_EQUALVERIFY
 
             # Arithmetic
-            0x93: None,  # self._op_add,  # OP_ADD
-            0x94: None,  # self._op_sub,  # OP_SUB
-            0x95: None,  # self._op_mul,  # OP_MUL
-            0x96: None,  # self._op_div,  # OP_DIV
-            0x97: None,  # self._op_mod,  # OP_MOD
-            0x9a: None,  # self._op_booland,  # OP_BOOLAND
-            0x9b: None,  # self._op_boolor,  # OP_BOOLOR
-            0x9c: None,  # self._op_numeq,  # OP_NUMEQUAL
-            0x9d: None,  # self._op_numeq_verify,  # OP_NUMEQUALVERIFY
-            0x9e: None,  # self._op_numneq,  # OP_NUMNOTEQUAL
-            0x9f: None,  # self._op_lt,  # OP_LESSTHAN
-            0xa0: None,  # self._op_gt,  # OP_GREATERTHAN
-            0xa1: None,  # self._op_leq,  # OP_LESSTHANOREQUAL
-            0xa2: None,  # self._op_geq,  # OP_GREATERTHANOREQUAL
-            0xa3: None,  # self._op_min,  # OP_MIN
-            0xa4: None,  # self._op_max,  # OP_MAX
-            0xa5: None,  # self._op_within,  # OP_WITHIN
+            0x8b: self._op_1add,  # OP_1ADD
+            0x8c: self._op_1sub,  # OP_1SUB
+            0x8f: self._op_negate,  # OP_NEGATE
+            0x90: self._op_abs,  # OP_ABS
+            0x91: self._op_not,  # OP_NOT
+            0x92: self._op_0notequal,  # OP_0NOTEQUAL
+            0x93: self._op_add,  # OP_ADD
+            0x94: self._op_sub,  # OP_SUB
+            # 0x95:  self._op_mul,  # OP_MUL
+            # 0x96:  self._op_div,  # OP_DIV
+            # 0x97: self._op_mod,  # OP_MOD
+            0x9a: self._op_booland,  # OP_BOOLAND
+            0x9b: self._op_boolor,  # OP_BOOLOR
+            0x9c: self._op_numeq,  # OP_NUMEQUAL
+            0x9d: self._op_numeq_verify,  # OP_NUMEQUALVERIFY
+            0x9e: self._op_numneq,  # OP_NUMNOTEQUAL
+            0x9f: self._op_lt,  # OP_LESSTHAN
+            0xa0: self._op_gt,  # OP_GREATERTHAN
+            0xa1: self._op_leq,  # OP_LESSTHANOREQUAL
+            0xa2: self._op_geq,  # OP_GREATERTHANOREQUAL
+            0xa3: self._op_min,  # OP_MIN
+            0xa4: self._op_max,  # OP_MAX
+            0xa5: self._op_within,  # OP_WITHIN
 
             # Crypto
-            0xa6: None,  # self._op_ripemd160,  # OP_RIPEMD160
-            0xa7: None,  # self._op_sha1,  # OP_SHA1
-            0xa8: None,  # self._op_sha256,  # OP_SHA256
-            0xa9: None,  # self._op_hash160,  # OP_HASH160
-            0xaa: None,  # self._op_hash256,  # OP_HASH256
-            0xac: None,  # self._op_checksig,  # OP_CHECKSIG
+            0xa6: self._op_ripemd160,  # OP_RIPEMD160
+            0xa7: self._op_sha1,  # OP_SHA1
+            0xa8: self._op_sha256,  # OP_SHA256
+            0xa9: self._op_hash160,  # OP_HASH160
+            0xaa: self._op_hash256,  # OP_HASH256
+            0xac: self._op_checksig,  # OP_CHECKSIG
         }
 
     def clear_stacks(self):
@@ -1014,6 +435,269 @@ class ScriptEngine:
         self._op_equal()
         return self._op_verify()
 
+    def _op_1add(self):
+        """
+        OP_1ADD, 0x8b - 1 is added to the input.
+        """
+        item = self.stack.pop()
+        item_plus1 = BTCNum.from_bytes(item) + BTCNum(1)
+        self.stack.push(item_plus1.bytes)
+
+    def _op_1sub(self):
+        """
+        OP_1SUB, 0x8c - 1 is subtracted from the input.
+        """
+        item = self.stack.pop()
+        item_plus1 = BTCNum.from_bytes(item) - BTCNum(1)
+        self.stack.push(item_plus1.bytes)
+
+    def _op_negate(self):
+        """
+        OP_NEGATE, 0x8f - The sign of the input is flipped.
+        """
+        stack_num = BTCNum.from_bytes(self.stack.pop())
+        neg_stack_num = -stack_num
+        self.stack.push(neg_stack_num.bytes)
+
+    def _op_abs(self):
+        """
+        OP_ABS, 0x90 - The input is made positive.
+        """
+        stack_num = BTCNum.from_bytes(self.stack.pop())
+        self.stack.push(abs(stack_num).bytes)
+
+    def _op_not(self):
+        """
+        OP_NOT, 0x91 - If the input is 0 or 1, it is flipped. Otherwise the output will be 0.
+        """
+        item = self.stack.pop()
+        self._op_true() if item == b'' else self._op_false()
+
+    def _op_0notequal(self):
+        """
+        OP_0NOTEQUAL, 0x92 - Returns 0 if the input is 0. 1 otherwise.
+        """
+        pass
+
+    def _op_add(self):
+        """
+        OP_ADD, 0x93 - a is added to b.
+        """
+        pass
+
+    def _op_sub(self):
+        """
+        OP_SUB, 0x94 - b is subtracted from a.
+        """
+        pass
+
+    def _op_booland(self):
+        """
+        OP_BOOLAND, 0x9a - If both a and b are not 0, the output is 1. Otherwise 0.
+        """
+        pass
+
+    def _op_boolor(self):
+        """
+        OP_BOOLOR, 0x9b - If a or b is not 0, the output is 1. Otherwise 0.
+        """
+        pass
+
+    def _op_numeq(self):
+        """
+        OP_NUMEQUAL, 0x9c - Returns 1 if the numbers are equal, 0 otherwise.
+        """
+        pass
+
+    def _op_numeq_verify(self):
+        """
+        OP_NUMEQUALVERIFY, 0x9d - Same as OP_NUMEQUAL, but runs OP_VERIFY afterward.
+        """
+        pass
+
+    def _op_numneq(self):
+        """
+        OP_NUMNOTEQUAL, 0x9e - Returns 1 if the numbers are not equal, 0 otherwise.
+        """
+        pass
+
+    def _op_lt(self):
+        """
+        OP_LESSTHAN, 0x9f - Returns 1 if a is less than b, 0 otherwise.
+        """
+        pass
+
+    def _op_gt(self):
+        """
+        OP_GREATERTHAN, 0xa0 - Returns 1 if a is greater than b, 0 otherwise.
+        """
+        pass
+
+    def _op_leq(self):
+        """
+        OP_LESSTHANOREQUAL, 0xa1 - Returns 1 if a is less than or equal to b, 0 otherwise.
+        """
+        pass
+
+    def _op_geq(self):
+        """
+        OP_GREATERTHANOREQUAL, 0xa2 - Returns 1 if a is greater than or equal to b, 0 otherwise.
+        """
+        pass
+
+    def _op_min(self):
+        """
+        OP_MIN, 0xa3 - Returns the smaller of a and b.
+        """
+        pass
+
+    def _op_max(self):
+        """
+        OP_MAX, 0xa4 - Returns the larger of a and b.
+        """
+        pass
+
+    def _op_within(self):
+        """
+        OP_WITHIN, 0xa5 - Returns 1 if x is within the specified range (left-inclusive), 0 otherwise.
+        """
+        pass
+
+    def _op_ripemd160(self):
+        """
+        OP_RIPEMD160, 0xa6 - The input is hashed using RIPEMD-160.
+        """
+        pass
+
+    def _op_sha1(self):
+        """
+        OP_SHA1, 0xa7 - The input is hashed using SHA-1.
+        """
+        pass
+
+    def _op_sha256(self):
+        """
+        OP_SHA256, 0xa8 - The input is hashed using SHA-256.
+        """
+        pass
+
+    def _op_hash160(self):
+        """
+        OP_HASH160, 0xa9 - The input is hashed twice: first with SHA-256 and then with RIPEMD-160.
+        """
+        pass
+
+    def _op_hash256(self):
+        """
+        OP_HASH256, 0xaa - The input is hashed two times with SHA-256.
+        """
+        pass
+
+    def _op_codeseparator(self):
+        """
+        OP_CODESEPARATOR, 0xab - All of the signature checking words will only match signatures to the data after the
+        most recently-executed OP_CODESEPARATOR.
+        """
+        pass
+
+    def _op_checksig(self):
+        """
+        OP_CHECKSIG, 0xac - The entire transaction's outputs, inputs, and script (from the most recently-executed
+        OP_CODESEPARATOR to the end) are hashed. The signature used by OP_CHECKSIG must be a valid signature for this
+        hash and public key.
+        """
+        pass
+
+    def _op_checksigverify(self):
+        """
+        OP_CHECKSIGVERIFY, 0xad - Same as OP_CHECKSIG, but OP_VERIFY is executed afterward.
+        """
+        pass
+
+    def _op_checkmultisig(self):
+        """
+        OP_CHECKMULTISIG, 0xae - Compares the first signature against each public key until it finds an ECDSA match.
+        Starting with the subsequent public key, it compares the second signature against each remaining public key
+        until it finds an ECDSA match. The process is repeated until all signatures have been checked or not enough
+        public keys remain to produce a successful result.
+        """
+        pass
+
+    def _op_checkmultisigverify(self):
+        """
+        OP_CHECKMULTISIGVERIFY, 0xaf - Same as OP_CHECKMULTISIG, but OP_VERIFY is executed afterward.
+        """
+        pass
+
+    def _op_nop1(self):
+        """
+        OP_NOP1, 0xb0 - Does nothing.
+        """
+        pass
+
+    def _op_checklocktimeverify(self):
+        """
+        OP_CHECKLOCKTIMEVERIFY, 0xb1 - Marks transaction as invalid if the top stack item is greater than the
+        transaction's nLockTime field.
+        """
+        pass
+
+    def _op_checksequenceverify(self):
+        """
+        OP_CHECKSEQUENCEVERIFY, 0xb2 - Marks transaction as invalid if the relative lock time of the input (
+        enforced by
+        BIP 68 with nSequence) is not equal to or longer than the value of the top stack item.
+        """
+        pass
+
+    def _op_nop4(self):
+        """
+        OP_NOP4, 0xb3 - Does nothing.
+        """
+        pass
+
+    def _op_nop5(self):
+        """
+        OP_NOP5, 0xb4 - Does nothing.
+        """
+        pass
+
+    def _op_nop6(self):
+        """
+        OP_NOP6, 0xb5 - Does nothing.
+        """
+        pass
+
+    def _op_nop7(self):
+        """
+        OP_NOP7, 0xb6 - Does nothing.
+        """
+        pass
+
+    def _op_nop8(self):
+        """
+        OP_NOP8, 0xb7 - Does nothing.
+        """
+        pass
+
+    def _op_nop9(self):
+        """
+        OP_NOP9, 0xb8 - Does nothing.
+        """
+        pass
+
+    def _op_nop10(self):
+        """
+        OP_NOP10, 0xb9 - Does nothing.
+        """
+        pass
+
+    def _op_invalidopcode(self):
+        """
+        OP_INVALIDOPCODE, 0xff - Represents an invalid opcode.
+        """
+        pass
+
     # --- HELPERS --- #
 
     def _asm_log(self, log_string: str):
@@ -1032,7 +716,7 @@ class ScriptEngine:
 # --- TESTING
 
 if __name__ == "__main__":
-    test_script_hex = "5152537b"
+    test_script_hex = "5191"
     # test_script_bytes = bytes.fromhex(test_script_hex)
     engine = ScriptEngine()
     engine.eval_script_from_hex(test_script_hex)

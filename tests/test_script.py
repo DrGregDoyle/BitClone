@@ -294,3 +294,52 @@ def test_op_equal_verify(engine):
     assert engine.eval_script_from_hex(op_equal_verify_hex)
     assert engine.stack.height == 1
     assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_op_1add(engine):
+    op_1add_hex = "528b"
+    assert engine.eval_script_from_hex(op_1add_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("03")
+
+
+def test_op_1sub(engine):
+    op_1add_hex = "528c"
+    assert engine.eval_script_from_hex(op_1add_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_op_negate(engine):
+    op_negate_hex = "528f"
+    assert engine.eval_script_from_hex(op_negate_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("82")
+
+
+def test_op_abs1(engine):
+    op_abs_hex = "528f90"
+    assert engine.eval_script_from_hex(op_abs_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("02")
+
+
+def test_op_abs2(engine):
+    op_abs_hex = "4f90"
+    assert engine.eval_script_from_hex(op_abs_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_op_not1(engine):
+    op_not_hex = "0091"
+    assert engine.eval_script_from_hex(op_not_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_op_not2(engine):
+    op_not_hex = "5191"
+    engine.eval_script_from_hex(op_not_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == b''
