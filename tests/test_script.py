@@ -343,3 +343,120 @@ def test_op_not2(engine):
     engine.eval_script_from_hex(op_not_hex)
     assert engine.stack.height == 1
     assert engine.stack.stack[0] == b''
+
+
+def test_op_0notequal1(engine):
+    op_not_hex = "5192"
+    engine.eval_script_from_hex(op_not_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_op_0notequal2(engine):
+    op_not_hex = "0092"
+    engine.eval_script_from_hex(op_not_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == b''
+
+
+def test_op_add(engine):
+    op_add_hex = "515193"
+    engine.eval_script_from_hex(op_add_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("02")
+
+
+def test_op_add2(engine):
+    op_add_hex = "5253935487"
+    engine.eval_script_from_hex(op_add_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == b''
+
+
+def test_op_sub(engine):
+    op_add_hex = "555394"
+    engine.eval_script_from_hex(op_add_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("02")
+
+
+def test_booland(engine):
+    op_booland_hex = "51519a"
+    assert engine.eval_script_from_hex(op_booland_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_booland2(engine):
+    op_booland2_hex = "51009a"
+    engine.eval_script_from_hex(op_booland2_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == b''
+
+
+def test_booland3(engine):
+    op_booland3_hex = "00009a"
+    engine.eval_script_from_hex(op_booland3_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == b''
+
+
+def test_booland4(engine):
+    op_booland4_hex = "02a4b6559a"
+    assert engine.eval_script_from_hex(op_booland4_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_boolor(engine):
+    op_boolor_hex = "51519b"
+    assert engine.eval_script_from_hex(op_boolor_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_boolor2(engine):
+    op_boolor2_hex = "51009b"
+    assert engine.eval_script_from_hex(op_boolor2_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_boolor3(engine):
+    op_boolor3_hex = "00009b"
+    engine.eval_script_from_hex(op_boolor3_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == b''  # bytes.fromhex("00")
+
+
+def test_boolor4(engine):
+    op_boolor4_hex = "02a4b6559b"
+    assert engine.eval_script_from_hex(op_boolor4_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_numeq1(engine):
+    op_numeq1_hex = "52529c"
+    assert engine.eval_script_from_hex(op_numeq1_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_numeq2(engine):
+    op_numeq2_hex = "52539c"
+    engine.eval_script_from_hex(op_numeq2_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == b''  # bytes.fromhex("01")
+
+
+def test_numeq3(engine):
+    op_numeq3_hex = "0100009c"
+    assert engine.eval_script_from_hex(op_numeq3_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_op_return(engine):
+    op_return_hex = "515151515253546a5353"
+    engine.eval_script_from_hex(op_return_hex)

@@ -21,6 +21,7 @@ class ScriptEngine:
     """
     BTCZero = [b'', b'\x00']
 
+    # TODO: Add parse_script function to output the ASM of the script
     def __init__(self):
         """
         Setup stack and operation handlers
@@ -116,10 +117,15 @@ class ScriptEngine:
         self.altstack.clear()
         self.asm = []
 
-    def eval_script_from_hex(self, hex_script: hex):
+    def eval_script_from_hex(self, hex_script: str):
         clean_hex_script = check_hex(hex_script)
         bytes_eval = self.eval_script(bytes.fromhex(clean_hex_script))
         return bytes_eval
+
+    def parse_script_from_hex(self, hex_script: str):
+        clean_hex_script = check_hex(hex_script)
+        parsed_script = self.parse_script(bytes.fromhex(clean_hex_script))
+        return parsed_script
 
     def eval_script(self, script: bytes, clear_stacks: bool = True) -> bool:
         """
@@ -148,8 +154,7 @@ class ScriptEngine:
                     raise ValueError("Unbalanced IF/ENDIF in script")
                 break
 
-            opcode_int = int.from_bytes(opcode, "big")
-            logger.debug(f"OPCODE HEX: {opcode.hex()}")
+            opcode_int = int.from_bytes(opcode, "little")
 
             # Handle flow control opcodes
             if opcode_int in (0x63, 0x64, 0x67, 0x68):  # OP_IF, OP_NOTIF, OP_ELSE, OP_ENDIF
@@ -198,13 +203,43 @@ class ScriptEngine:
                         handler()
                         valid_script = False
                     else:
-                        handler()
+                        # Check for False returns
+
+                        exit_val = handler()
+                        if exit_val:
+                            logger.debug(f"Handler {handler.__name__} returned exit val {exit_val}")
                 else:
                     logger.debug(f"Unrecognized or invalid OP code: {opcode_int:02x}")
                     valid_script = False
 
         # Validate stack
         return self._validate_stack() if valid_script else False
+
+    def parse_script(self, script: bytes):
+        """
+        Outputs the corresponding ASM of the script
+        """
+        # Get script as byte strem
+        if not isinstance(script, (bytes, BytesIO)):
+            raise ValueError(f"Expected byte data stream, received {type(script)}")
+        stream = BytesIO(script) if isinstance(script, bytes) else script
+
+        asm_log = []
+
+        while True:
+            opcode = stream.read(1)
+            if not opcode:
+                break
+
+            # get op_code as int value
+            opcode_int = int.from_bytes(opcode, "little")
+
+            # Determine asm
+            if 0x00 < opcode_int < 0x4c:
+                asm_log.append(f"OP_PUSHBYTES_{opcode_int}")
+            else:
+                asm_log.append(OPCODES[opcode_int])
+        return asm_log
 
     def _validate_stack(self):
         """
@@ -477,43 +512,59 @@ class ScriptEngine:
         """
         OP_0NOTEQUAL, 0x92 - Returns 0 if the input is 0. 1 otherwise.
         """
-        pass
+        item = self.stack.pop()
+        self._op_false() if item == b'' else self._op_true()
 
     def _op_add(self):
         """
         OP_ADD, 0x93 - a is added to b.
         """
-        pass
+        stack_nums = [BTCNum.from_bytes(n) for n in self.stack.pop_n(2)]
+        sum_total = stack_nums[0] + stack_nums[1]
+        self.stack.push(sum_total.bytes)
 
     def _op_sub(self):
         """
         OP_SUB, 0x94 - b is subtracted from a.
         """
-        pass
+        a, b = self.stack.pop_n(2)
+        sub_total = BTCNum.from_bytes(b) - BTCNum.from_bytes(a)
+        self.stack.push(sub_total.bytes)
 
     def _op_booland(self):
         """
         OP_BOOLAND, 0x9a - If both a and b are not 0, the output is 1. Otherwise 0.
         """
-        pass
+        a, b = self.stack.pop_n(2)
+        if a != b'' and b != b'':
+            self._op_true()
+        else:
+            self._op_false()
 
     def _op_boolor(self):
         """
         OP_BOOLOR, 0x9b - If a or b is not 0, the output is 1. Otherwise 0.
         """
-        pass
+        a, b = self.stack.pop_n(2)
+        if a != b'' or b != b'':
+            self._op_true()
+        else:
+            self._op_false()
 
     def _op_numeq(self):
         """
         OP_NUMEQUAL, 0x9c - Returns 1 if the numbers are equal, 0 otherwise.
         """
-        pass
+        a, b = self.stack.pop_n(2)
+        num_a, num_b = BTCNum.from_bytes(a), BTCNum.from_bytes(b)
+        self._op_true() if num_a == num_b else self._op_false()
 
     def _op_numeq_verify(self):
         """
         OP_NUMEQUALVERIFY, 0x9d - Same as OP_NUMEQUAL, but runs OP_VERIFY afterward.
         """
-        pass
+        self._op_numeq()
+        return self._op_verify()
 
     def _op_numneq(self):
         """
@@ -716,13 +767,14 @@ class ScriptEngine:
 # --- TESTING
 
 if __name__ == "__main__":
-    test_script_hex = "5191"
+    test_script_hex = "515151515253546a5353"
     # test_script_bytes = bytes.fromhex(test_script_hex)
     engine = ScriptEngine()
     engine.eval_script_from_hex(test_script_hex)
     # print(f"ENGINE STACK: {engine.stack.top.hex()}")
     print(f"STACK HEIGHT: {engine.stack.height}")
-    print(f"ASM CODE: {engine.asm}")
+    print(f"ASM LOG: {engine.asm}")
+    print(f"PARSED SCRIPT: {engine.parse_script_from_hex(test_script_hex)}")
     print(f"---- MAIN STACK PRINTOUT ----")
     for s in range(engine.stack.height):
         temp_val = engine.stack.pop()
