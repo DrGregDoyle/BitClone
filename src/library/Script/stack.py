@@ -19,16 +19,16 @@ class BTCNum:
     - Zero is represented as an empty byte array
     - Limited to 4 bytes (32 bits) in standard consensus rules
     """
+    __slots__ = ("value", "bytes")
 
     # Bitcoin standard limits
-    MAX_NUM_SIZE = 4  # Standard Bitcoin script limits integers to 4 bytes
+    MAX_NUM_SIZE = 4  # Standard Bitcoin script limit for integers (in bytes)
 
-    def __init__(self, value: int):
-        """
-        Initialize a BTCNum with a Python integer value.
-        """
-        self.value = value  # Store as Python int
-        self.bytes = self._encode(self.value)
+    def __init__(self, value: int) -> None:
+        if not isinstance(value, int):
+            raise TypeError("BTCNum value must be an integer")
+        self.value: int = value
+        self.bytes: bytes = self._encode(value)
 
     @classmethod
     def from_bytes(cls, data: bytes):
@@ -44,7 +44,7 @@ class BTCNum:
 
         num = int.from_bytes(data, "little", signed=False)
 
-        # Check if negative (Bitcoin sets the sign bit in last byte)
+        # If the sign bit is set in the last byte, interpret as a negative number.
         if data[-1] & 0x80:
             num &= ~(1 << (8 * len(data) - 1))  # Clear sign bit using ~ to reverse bitmask
             num = -num
@@ -76,72 +76,70 @@ class BTCNum:
         return abs_bytes
 
     # Arithmetic operations
-    def __add__(self, other):
+    def __add__(self, other: object) -> "BTCNum":
         if isinstance(other, BTCNum):
             return BTCNum(self.value + other.value)
         elif isinstance(other, int):
             return BTCNum(self.value + other)
         return NotImplemented
 
-    def __radd__(self, other):
-        # Handles cases like int + BTCNum
+    def __radd__(self, other: object) -> "BTCNum":
         if isinstance(other, int):
             return BTCNum(other + self.value)
         return NotImplemented
 
-    def __sub__(self, other):
+    def __sub__(self, other: object) -> "BTCNum":
         if isinstance(other, BTCNum):
             return BTCNum(self.value - other.value)
         elif isinstance(other, int):
             return BTCNum(self.value - other)
         return NotImplemented
 
-    def __rsub__(self, other):
-        # Handles cases like int - BTCNum
+    def __rsub__(self, other: object) -> "BTCNum":
         if isinstance(other, int):
             return BTCNum(other - self.value)
         return NotImplemented
 
     # Comparison operations
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         """Check if two BTCNum values are equal."""
         if isinstance(other, BTCNum):
             return self.value == other.value
         return False
 
-    def __lt__(self, other):
+    def __lt__(self, other: "BTCNum") -> bool:
         """Check if this BTCNum is less than another."""
         if not isinstance(other, BTCNum):
             raise TypeError(f"Cannot compare BTCNum and {type(other)}")
         return self.value < other.value
 
-    def __le__(self, other):
+    def __le__(self, other: "BTCNum") -> bool:
         """Check if this BTCNum is less than or equal to another."""
         if not isinstance(other, BTCNum):
             raise TypeError(f"Cannot compare BTCNum and {type(other)}")
         return self.value <= other.value
 
-    def __gt__(self, other):
+    def __gt__(self, other: "BTCNum") -> bool:
         """Check if this BTCNum is greater than another."""
         if not isinstance(other, BTCNum):
             raise TypeError(f"Cannot compare BTCNum and {type(other)}")
         return self.value > other.value
 
-    def __ge__(self, other):
+    def __ge__(self, other: "BTCNum") -> bool:
         """Check if this BTCNum is greater than or equal to another."""
         if not isinstance(other, BTCNum):
             raise TypeError(f"Cannot compare BTCNum and {type(other)}")
         return self.value >= other.value
 
-    def __neg__(self):
+    def __neg__(self) -> "BTCNum":
         """Negate this BTCNum."""
         return BTCNum(-self.value)
 
-    def __abs__(self):
+    def __abs__(self) -> "BTCNum":
         """Get the absolute value of this BTCNum."""
         return BTCNum(abs(self.value))
 
-    def __int__(self):
+    def __int__(self) -> int:
         """Convert to Python int."""
         return self.value
 
