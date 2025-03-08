@@ -20,7 +20,6 @@ class ScriptEngine:
 
     NOTE: All elements pushed to the stack should be bytes objects.
     """
-    BTCZero = [b'', b'\x00']
 
     def __init__(self):
         """
@@ -84,9 +83,6 @@ class ScriptEngine:
             0x92: self._op_0notequal,  # OP_0NOTEQUAL
             0x93: self._op_add,  # OP_ADD
             0x94: self._op_sub,  # OP_SUB
-            # 0x95:  self._op_mul,  # OP_MUL
-            # 0x96:  self._op_div,  # OP_DIV
-            # 0x97: self._op_mod,  # OP_MOD
             0x9a: self._op_booland,  # OP_BOOLAND
             0x9b: self._op_boolor,  # OP_BOOLOR
             0x9c: self._op_numeq,  # OP_NUMEQUAL
@@ -117,150 +113,6 @@ class ScriptEngine:
         self.altstack.clear()
         self.ops_log = []
 
-    # # --------------------------------------------------------------------------
-    # # 1) PARSE THE SCRIPT INTO STRUCTURED TOKENS
-    # # --------------------------------------------------------------------------
-    # def parse_script_into_ops(self, script: bytes):
-    #     """
-    #     Returns a list of tokens from the script, so we don't have to parse
-    #     from a stream each time we evaluate.
-    #
-    #     Each element in the returned list is a tuple of (kind, value):
-    #
-    #       ("push", b"...")  for push-data instructions
-    #       ("op", opcode)    for actual opcodes (integers)
-    #
-    #     For example:
-    #       [("push", b"\x01\x02"), ("op", 0x76), ...]
-    #     """
-    #     if not isinstance(script, (bytes, BytesIO)):
-    #         raise ValueError(f"Expected byte data stream, received {type(script)}")
-    #     stream = BytesIO(script) if isinstance(script, bytes) else script
-    #
-    #     parsed_ops = []
-    #
-    #     while True:
-    #         opcode = stream.read(1)
-    #         if not opcode:
-    #             break  # Reached end of script
-    #
-    #         opcode_int = int.from_bytes(opcode, "little")
-    #
-    #         # Check for OP_PUSHBYTES_n
-    #         if 0x01 <= opcode_int < 0x4c:
-    #             data = stream.read(opcode_int)
-    #             check_length(data, opcode_int, "pushdata")
-    #             parsed_ops.append(("push", data))
-    #
-    #         elif 0x4c <= opcode_int == 0x4c:
-    #             match opcode_int:
-    #                 case 0x4c:
-    #                     num = 1  # OP_PUSHDATA1
-    #                 case 0x4d:
-    #                     num = 2  # OP_PUSHDATA2
-    #                 case _:
-    #                     num = 4  # OP_PUSHDATA4
-    #             length_byte = stream.read(num)
-    #             length = int.from_bytes(length_byte, "little")
-    #             data = stream.read(length)
-    #             check_length(data, length, f"pushdata{num}")
-    #             parsed_ops.append(("push", data))
-    #         else:
-    #             # This covers 0x00 (OP_0) and any other opcode
-    #             parsed_ops.append(("op", opcode_int))
-    #
-    #     return parsed_ops
-    #
-    # # --------------------------------------------------------------------------
-    # # 2) EVALUATE A PRE-PARSED LIST OF TOKENS
-    # # --------------------------------------------------------------------------
-    # def eval_parsed_script(self, parsed_ops: list, clear_stacks: bool = True) -> bool:
-    #     """
-    #     Evaluate a script that has already been parsed into a list of (kind, value).
-    #
-    #     This avoids re-decoding the bytes every time we run the script.
-    #     """
-    #     if clear_stacks:
-    #         self.clear_stacks()
-    #
-    #     # Control-flow tracking
-    #     if_stack = []
-    #     execution_enabled = True
-    #     valid_script = True
-    #
-    #     for kind, value in parsed_ops:
-    #         if not valid_script:
-    #             break
-    #
-    #         if kind == "push":
-    #             # Pushing raw data
-    #             data = value
-    #             self.stack.push(data)
-    #             # Log ASM if you want it
-    #             self._op_log(f"OP_PUSHBYTES_{len(data)}")
-    #             self._op_log(data.hex())
-    #
-    #         elif kind == "op":
-    #             opcode_int = value
-    #
-    #             # Handle flow-control first (OP_IF, OP_NOTIF, etc.)
-    #             if opcode_int in (0x63, 0x64, 0x67, 0x68):
-    #                 handler = self.op_handlers.get(opcode_int)
-    #                 if handler:
-    #                     # The handler expects (if_stack, execution_enabled) in your code
-    #                     # If it returns False, we consider it "invalid"
-    #                     result = handler(if_stack, execution_enabled)
-    #                     if not result:
-    #                         valid_script = False
-    #                     # After OP_IF/NOTIF/ELSE/ENDIF, we have to recalc execution_enabled
-    #                     # based on the entire if_stack. (Your code does it inside the handler.)
-    #                 continue
-    #
-    #             # If we are inside a non-executing branch, skip unless it's an OP_ELSE or OP_ENDIF.
-    #             if not execution_enabled and opcode_int not in (0x67, 0x68):
-    #                 continue
-    #
-    #             # Log ASM
-    #             if opcode_int in self.op_codes:
-    #                 self._op_log(self.op_codes[opcode_int])
-    #             else:
-    #                 self._op_log(f"UNKNOWN_0x{opcode_int:02x}")
-    #
-    #             # Dispatch to the correct handler
-    #             handler = self.op_handlers.get(opcode_int)
-    #             if handler:
-    #                 # Some special handling
-    #                 if opcode_int == 0x69:  # OP_VERIFY
-    #                     result = handler()
-    #                     if not result:
-    #                         self._op_log("Failed OP_VERIFY")
-    #                         valid_script = False
-    #                 elif opcode_int == 0x6a:  # OP_RETURN
-    #                     self._op_log("Processing OP_RETURN")
-    #                     handler()
-    #                     valid_script = False
-    #
-    #                 else:
-    #                     exit_val = handler()
-    #                     # If the op handler returns a False, it can mean "abort execution"
-    #                     if exit_val is False:
-    #                         logger.debug(f"Handler {handler.__name__} returned exit val {exit_val}")
-    #                         valid_script = False
-    #             else:
-    #                 # Unknown opcode
-    #                 logger.debug(f"Unrecognized or invalid OP code: {opcode_int:02x}")
-    #                 valid_script = False
-    #
-    #         else:
-    #             logger.debug(f"Unknown token kind: {kind}")
-    #             valid_script = False
-    #
-    #         # Recompute execution_enabled after each token if needed
-    #         execution_enabled = all(executed for _, executed in if_stack)
-    #
-    #     return self._validate_stack() if valid_script else False
-
-    ##----------------------------under construction-----------------------------############
     def eval_script(self, script: bytes, clear_stacks: bool = True) -> bool:
         """
         Evaluates the script - returns True/False based on results of main stack
@@ -401,7 +253,7 @@ class ScriptEngine:
             return False
         elif self.stack.height == 1:
             # Check zero element
-            if self.stack.top in self.BTCZero:
+            if self.stack.top == b'':
                 self._op_log("Script failed validation: Zero value")
                 return False
             self._op_log("Script passes validation")
@@ -413,10 +265,11 @@ class ScriptEngine:
     # --- OP_CODE FUNCTIONS --- #
 
     def _op_true(self):
+        """OP_TRUE or OP_1 | 0x51 - Push 1 to the stack """
         self.stack.push(BTCNum(1).bytes)
 
     def _op_false(self):
-        """OP_0 or OP_FALSE - Push empty bytes onto the stack"""
+        """OP_0 or OP_FALSE | 0x00 - Push empty bytes onto the stack"""
         self.stack.push(b'')
 
     def _push_data(self, stream: BytesIO, byte_length: int):
@@ -433,10 +286,11 @@ class ScriptEngine:
         self._op_log(data.hex())
 
     def _op_1negate(self):
-        """OP_1NEGATE - Push -1 onto the stack"""
+        """OP_1NEGATE | 0x4f - Push -1 onto the stack"""
         self.stack.push(BTCNum(-1).bytes)
 
     def _op_nop(self):
+        """OP_NOP | 0x61 - Does nothing"""
         pass
 
     def _op_if(self, if_stack, execution_enabled):
@@ -446,7 +300,7 @@ class ScriptEngine:
         """
         if execution_enabled:
             condition = self.stack.pop()
-            result = condition not in self.BTCZero
+            result = condition != b''
             if_stack.append(("IF", result))
             return result
         else:
@@ -460,7 +314,7 @@ class ScriptEngine:
         """
         if execution_enabled:
             condition = self.stack.pop()
-            result = condition in self.BTCZero
+            result = condition != b''
             if_stack.append(("NOTIF", result))
             return result
         else:
@@ -500,7 +354,7 @@ class ScriptEngine:
     def _op_verify(self):
         """OP_VERIFY - Verify the top element is truthy"""
         top = self.stack.pop()
-        return False if top in self.BTCZero else True
+        return False if top == b'' else True
 
     def _op_return(self):
         """OP_RETURN - Marks transaction as invalid"""
@@ -513,7 +367,8 @@ class ScriptEngine:
         self.stack.push(self.altstack.pop())
 
     def _op_ifdup(self):
-        if self.stack.top not in self.BTCZero:
+        """OP_IFDUP 0x73 - Duplicates the top item on the stick iff it's non-zero"""
+        if self.stack.top != b'':
             self.stack.push(self.stack.top)
 
     def _op_depth(self):
@@ -534,9 +389,7 @@ class ScriptEngine:
         self.stack.push(item)
 
     def _op_pick(self):
-        pick_index_bytes = self.stack.pop()
-        pick_index = BTCNum.from_bytes(pick_index_bytes).value
-        logger.debug(f"PICK INDEX: {pick_index}")
+        pick_index = BTCNum.from_bytes(self.stack.pop()).value
 
         # Check height
         if self.stack.height <= pick_index:
@@ -553,62 +406,51 @@ class ScriptEngine:
         self.stack.rot()
 
     def _op_swap(self):
-        item0, item1 = self.stack.pop(), self.stack.pop()
-        self.stack.push(item0)
-        self.stack.push(item1)
+        self.stack.swap()
 
     def _op_tuck(self):
-        item = self.stack.top
-        popped_items = [self.stack.pop() for _ in range(2)]
-        popped_items.append(item)
-        for i in reversed(popped_items):
-            self.stack.push(i)
+        self.stack.tuck()
 
     def _op_2drop(self):
         self.stack.pop()
         self.stack.pop()
 
     def _op_2dup(self):
-        items = [self.stack.stack[i] for i in range(1, -1, -1)]
-        for item in items:
-            self.stack.push(item)
+        items = self.stack.pop_n(2)
+        items = items + items
+        self.stack.pushitems(list(reversed(items)))
 
     def _op_3dup(self):
-        items = [self.stack.stack[i] for i in range(2, -1, -1)]
-        for item in items:
-            self.stack.push(item)
+        items = self.stack.pop_n(3)
+        items = items + items
+        self.stack.pushitems(list(reversed(items)))
 
     def _op_2over(self):
-        items = [self.stack.stack[i] for i in range(3, 1, -1)]
-        for item in items:
-            self.stack.push(item)
+        """OP_2OVER | 0x70 - Duplicate the 3rd and 4th items in the stack"""
+        items = self.stack.pop_n(4)
+        items = items[2:] + items
+        self.stack.pushitems(list(reversed(items)))
 
     def _op_2rot(self):
-        popped_items = [self.stack.pop() for _ in range(6)]
-        items = popped_items[-2:] + popped_items[:-2]
-        for item in reversed(items):
-            self.stack.push(item)
+        """OP_2ROT | 0x71 - Move the 5th and 6th items to the top"""
+        items = self.stack.pop_n(6)  # items = [top, 1, 2, 3, 4, 5]
+        items = items[4:] + items[:4]  # items = [5, 6, top, 1, 2, 3]
+        self.stack.pushitems(list(reversed(items)))
 
     def _op_2swap(self):
-        popped_items = [self.stack.pop() for _ in range(4)]
-        items = popped_items[-2:] + popped_items[:-2]
-        for item in reversed(items):
-            self.stack.push(item)
+        """OP_2SWAP | 0x72 - Swap the top two pairs of items"""
+        items = self.stack.pop_n(4)  # items = [top, 1, 2, 3]
+        items = items[2:] + items[:2]  # items = [2, 3, top, 1]
+        self.stack.pushitems(list(reversed(items)))
 
     def _op_size(self):
         # Check for empty stack
         top_element = self.stack.top if self.stack.height > 0 else b''
-        if top_element in self.BTCZero:
-            self.stack.push(BTCNum(0).bytes)
-        else:
-            self.stack.push(BTCNum(len(top_element)).bytes)
+        self.stack.push(b'') if top_element == b'' else self.stack.push(BTCNum(len(top_element)).bytes)
 
     def _op_equal(self):
         items = self.stack.pop_n(2)
-        if items[0] == items[1]:
-            self._op_true()
-        else:
-            self._op_false()
+        self._op_true() if items[0] == items[1] else self._op_false()
 
     def _op_equal_verify(self):
         self._op_equal()
@@ -618,25 +460,19 @@ class ScriptEngine:
         """
         OP_1ADD, 0x8b - 1 is added to the input.
         """
-        item = self.stack.pop()
-        item_plus1 = BTCNum.from_bytes(item) + BTCNum(1)
-        self.stack.push(item_plus1.bytes)
+        self.stack.push((self._pop_num() + 1).bytes)
 
     def _op_1sub(self):
         """
         OP_1SUB, 0x8c - 1 is subtracted from the input.
         """
-        item = self.stack.pop()
-        item_plus1 = BTCNum.from_bytes(item) - BTCNum(1)
-        self.stack.push(item_plus1.bytes)
+        self.stack.push((self._pop_num() - 1).bytes)
 
     def _op_negate(self):
         """
         OP_NEGATE, 0x8f - The sign of the input is flipped.
         """
-        stack_num = BTCNum.from_bytes(self.stack.pop())
-        neg_stack_num = -stack_num
-        self.stack.push(neg_stack_num.bytes)
+        self.stack.push((-self._pop_num()).bytes)
 
     def _op_abs(self):
         """
@@ -663,45 +499,36 @@ class ScriptEngine:
         """
         OP_ADD, 0x93 - a is added to b.
         """
-        stack_nums = [BTCNum.from_bytes(n) for n in self.stack.pop_n(2)]
-        sum_total = stack_nums[0] + stack_nums[1]
-        self.stack.push(sum_total.bytes)
+        a, b = self._pop_nums(2)
+        self.stack.push((a + b).bytes)
 
     def _op_sub(self):
         """
         OP_SUB, 0x94 - b is subtracted from a.
         """
-        a, b = self.stack.pop_n(2)
-        sub_total = BTCNum.from_bytes(b) - BTCNum.from_bytes(a)
-        self.stack.push(sub_total.bytes)
+        a, b = self._pop_nums(2)
+        self.stack.push((b - a).bytes)
 
     def _op_booland(self):
         """
         OP_BOOLAND, 0x9a - If both a and b are not 0, the output is 1. Otherwise 0.
         """
         a, b = self.stack.pop_n(2)
-        if a != b'' and b != b'':
-            self._op_true()
-        else:
-            self._op_false()
+        self._op_true() if a != b'' and b != b'' else self._op_false()
 
     def _op_boolor(self):
         """
         OP_BOOLOR, 0x9b - If a or b is not 0, the output is 1. Otherwise 0.
         """
         a, b = self.stack.pop_n(2)
-        if a != b'' or b != b'':
-            self._op_true()
-        else:
-            self._op_false()
+        self._op_true() if a != b'' or b != b'' else self._op_false()
 
     def _op_numeq(self):
         """
         OP_NUMEQUAL, 0x9c - Returns 1 if the numbers are equal, 0 otherwise.
         """
-        a, b = self.stack.pop_n(2)
-        num_a, num_b = BTCNum.from_bytes(a), BTCNum.from_bytes(b)
-        self._op_true() if num_a == num_b else self._op_false()
+        a, b = self._pop_nums(2)
+        self._op_true() if a == b else self._op_false()
 
     def _op_numeq_verify(self):
         """
@@ -714,50 +541,49 @@ class ScriptEngine:
         """
         OP_NUMNOTEQUAL, 0x9e - Returns 1 if the numbers are not equal, 0 otherwise.
         """
-        a, b = self.stack.pop_n(2)
-        num_a, num_b = BTCNum.from_bytes(a), BTCNum.from_bytes(b)
-        self._op_true() if num_a != num_b else self._op_false()
+        a, b = self._pop_nums(2)
+        self._op_true() if a != b else self._op_false()
 
     def _op_lt(self):
         """
         OP_LESSTHAN, 0x9f - Returns 1 if a is less than b, 0 otherwise.
         """
-        a, b = self._pop_two_nums()
+        a, b = self._pop_nums(2)
         self._op_true() if a < b else self._op_false()
 
     def _op_gt(self):
         """
         OP_GREATERTHAN, 0xa0 - Returns 1 if a is greater than b, 0 otherwise.
         """
-        a, b = self._pop_two_nums()
+        a, b = self._pop_nums(2)
         self._op_true() if a > b else self._op_false()
 
     def _op_leq(self):
         """
         OP_LESSTHANOREQUAL, 0xa1 - Returns 1 if a is less than or equal to b, 0 otherwise.
         """
-        a, b = self._pop_two_nums()
+        a, b = self._pop_nums(2)
         self._op_true() if a <= b else self._op_false()
 
     def _op_geq(self):
         """
         OP_GREATERTHANOREQUAL, 0xa2 - Returns 1 if a is greater than or equal to b, 0 otherwise.
         """
-        a, b = self._pop_two_nums()
+        a, b = self._pop_nums(2)
         self._op_true() if a >= b else self._op_false()
 
     def _op_min(self):
         """
         OP_MIN, 0xa3 - Returns the smaller of a and b.
         """
-        a, b = self._pop_two_nums()
+        a, b = self._pop_nums(2)
         self.stack.push(min(a, b).bytes)
 
     def _op_max(self):
         """
         OP_MAX, 0xa4 - Returns the larger of a and b.
         """
-        a, b = self._pop_two_nums()
+        a, b = self._pop_nums(2)
         self.stack.push(max(a, b).bytes)
 
     def _op_within(self):
@@ -771,16 +597,14 @@ class ScriptEngine:
         """
         OP_RIPEMD160, 0xa6 - The input is hashed using RIPEMD-160.
         """
-        item = self.stack.pop()
-        hashed_item = ripemd160(item)
+        hashed_item = ripemd160(self.stack.pop())
         self.stack.push(hashed_item)
 
     def _op_sha1(self):
         """
         OP_SHA1, 0xa7 - The input is hashed using SHA-1.
         """
-        item = self.stack.pop()
-        hashed_item = sha1(item)
+        hashed_item = sha1(self.stack.pop())
         self.stack.push(hashed_item)
 
     def _op_sha256(self):
@@ -795,16 +619,14 @@ class ScriptEngine:
         """
         OP_HASH160, 0xa9 - The input is hashed twice: first with SHA-256 and then with RIPEMD-160.
         """
-        item = self.stack.pop()
-        hashed_item = hash160(item)
+        hashed_item = hash160(self.stack.pop())
         self.stack.push(hashed_item)
 
     def _op_hash256(self):
         """
         OP_HASH256, 0xaa - The input is hashed two times with SHA-256.
         """
-        item = self.stack.pop()
-        hashed_item = hash256(item)
+        hashed_item = hash256(self.stack.pop())
         self.stack.push(hashed_item)
 
     def _op_codeseparator(self):
@@ -926,14 +748,11 @@ class ScriptEngine:
         byte_len = BTCNum.from_bytes(stacklen).value
         self._push_data(stream, byte_len)
 
-    def _pop_two_nums(self):
+    def _pop_num(self):
         """
-        Pops 2 stack items and returns their BTCNum representation
+        Pops the top of the stacka and returns a BTCNum object
         """
-        a, b = self.stack.pop_n(2)
-        a = BTCNum.from_bytes(a)
-        b = BTCNum.from_bytes(b)
-        return a, b
+        return BTCNum.from_bytes(self.stack.pop())
 
     def _pop_nums(self, count: int):
         """
@@ -948,7 +767,7 @@ class ScriptEngine:
 # --- TESTING
 
 if __name__ == "__main__":
-    test_script_hex = "525153a5"
+    test_script_hex = "528b"
     # test_script_bytes = bytes.fromhex(test_script_hex)
     engine = ScriptEngine()
     engine.eval_script_from_hex(test_script_hex)

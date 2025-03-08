@@ -77,16 +77,30 @@ class BTCNum:
 
     # Arithmetic operations
     def __add__(self, other):
-        """Add two BTCNum values."""
-        if not isinstance(other, BTCNum):
-            raise TypeError(f"Cannot add BTCNum and {type(other)}")
-        return BTCNum(self.value + other.value)
+        if isinstance(other, BTCNum):
+            return BTCNum(self.value + other.value)
+        elif isinstance(other, int):
+            return BTCNum(self.value + other)
+        return NotImplemented
+
+    def __radd__(self, other):
+        # Handles cases like int + BTCNum
+        if isinstance(other, int):
+            return BTCNum(other + self.value)
+        return NotImplemented
 
     def __sub__(self, other):
-        """Subtract two BTCNum values."""
-        if not isinstance(other, BTCNum):
-            raise TypeError(f"Cannot subtract {type(other)} from BTCNum")
-        return BTCNum(self.value - other.value)
+        if isinstance(other, BTCNum):
+            return BTCNum(self.value - other.value)
+        elif isinstance(other, int):
+            return BTCNum(self.value - other)
+        return NotImplemented
+
+    def __rsub__(self, other):
+        # Handles cases like int - BTCNum
+        if isinstance(other, int):
+            return BTCNum(other - self.value)
+        return NotImplemented
 
     # Comparison operations
     def __eq__(self, other):
@@ -403,9 +417,9 @@ class BTCStack(Generic[T]):
         Raises:
             InsufficientElementsError: If there are fewer than 2 items on the stack
         """
-        items = self.pop_n(2)
-        items = items[1:] + items
-        self.pushitems(list(reversed(items)))
+        items = self.pop_n(2)  # items = [top, +1]
+        items.append(items[0])  # items = [top, + 1, top]
+        self.pushitems(items)  # list is a palindrome so order doesn't matter
 
     def nip(self):
         items = self.pop_n(2)
