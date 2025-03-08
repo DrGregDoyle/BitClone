@@ -8,6 +8,7 @@ from src.library.Script.op_codes import OPCODES
 from src.library.Script.stack import BTCNum, BTCStack
 from src.library.data_handling import check_hex, check_length
 from src.library.ecc import secp256k1
+from src.library.hash_functions import ripemd160, sha1, sha256, hash160, hash256
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -21,7 +22,6 @@ class ScriptEngine:
     """
     BTCZero = [b'', b'\x00']
 
-    # TODO: Add parse_script function to output the ASM of the script
     def __init__(self):
         """
         Setup stack and operation handlers
@@ -30,7 +30,7 @@ class ScriptEngine:
         self.curve = secp256k1()
         self.stack = BTCStack()
         self.altstack = BTCStack()
-        self.asm = []  # List of ASM instructions when evaluating script
+        self.ops_log = []  # List of ASM instructions when evaluating script
 
         self.op_handlers = self._initialize_op_handlers()
 
@@ -111,22 +111,156 @@ class ScriptEngine:
 
     def clear_stacks(self):
         """
-        Will remove all elements from main and alt stack. CLears ASM instructions. Used in testing
+        Will remove all elements from main and alt stack, plus the OP log.
         """
         self.stack.clear()
         self.altstack.clear()
-        self.asm = []
+        self.ops_log = []
 
-    def eval_script_from_hex(self, hex_script: str):
-        clean_hex_script = check_hex(hex_script)
-        bytes_eval = self.eval_script(bytes.fromhex(clean_hex_script))
-        return bytes_eval
+    # # --------------------------------------------------------------------------
+    # # 1) PARSE THE SCRIPT INTO STRUCTURED TOKENS
+    # # --------------------------------------------------------------------------
+    # def parse_script_into_ops(self, script: bytes):
+    #     """
+    #     Returns a list of tokens from the script, so we don't have to parse
+    #     from a stream each time we evaluate.
+    #
+    #     Each element in the returned list is a tuple of (kind, value):
+    #
+    #       ("push", b"...")  for push-data instructions
+    #       ("op", opcode)    for actual opcodes (integers)
+    #
+    #     For example:
+    #       [("push", b"\x01\x02"), ("op", 0x76), ...]
+    #     """
+    #     if not isinstance(script, (bytes, BytesIO)):
+    #         raise ValueError(f"Expected byte data stream, received {type(script)}")
+    #     stream = BytesIO(script) if isinstance(script, bytes) else script
+    #
+    #     parsed_ops = []
+    #
+    #     while True:
+    #         opcode = stream.read(1)
+    #         if not opcode:
+    #             break  # Reached end of script
+    #
+    #         opcode_int = int.from_bytes(opcode, "little")
+    #
+    #         # Check for OP_PUSHBYTES_n
+    #         if 0x01 <= opcode_int < 0x4c:
+    #             data = stream.read(opcode_int)
+    #             check_length(data, opcode_int, "pushdata")
+    #             parsed_ops.append(("push", data))
+    #
+    #         elif 0x4c <= opcode_int == 0x4c:
+    #             match opcode_int:
+    #                 case 0x4c:
+    #                     num = 1  # OP_PUSHDATA1
+    #                 case 0x4d:
+    #                     num = 2  # OP_PUSHDATA2
+    #                 case _:
+    #                     num = 4  # OP_PUSHDATA4
+    #             length_byte = stream.read(num)
+    #             length = int.from_bytes(length_byte, "little")
+    #             data = stream.read(length)
+    #             check_length(data, length, f"pushdata{num}")
+    #             parsed_ops.append(("push", data))
+    #         else:
+    #             # This covers 0x00 (OP_0) and any other opcode
+    #             parsed_ops.append(("op", opcode_int))
+    #
+    #     return parsed_ops
+    #
+    # # --------------------------------------------------------------------------
+    # # 2) EVALUATE A PRE-PARSED LIST OF TOKENS
+    # # --------------------------------------------------------------------------
+    # def eval_parsed_script(self, parsed_ops: list, clear_stacks: bool = True) -> bool:
+    #     """
+    #     Evaluate a script that has already been parsed into a list of (kind, value).
+    #
+    #     This avoids re-decoding the bytes every time we run the script.
+    #     """
+    #     if clear_stacks:
+    #         self.clear_stacks()
+    #
+    #     # Control-flow tracking
+    #     if_stack = []
+    #     execution_enabled = True
+    #     valid_script = True
+    #
+    #     for kind, value in parsed_ops:
+    #         if not valid_script:
+    #             break
+    #
+    #         if kind == "push":
+    #             # Pushing raw data
+    #             data = value
+    #             self.stack.push(data)
+    #             # Log ASM if you want it
+    #             self._op_log(f"OP_PUSHBYTES_{len(data)}")
+    #             self._op_log(data.hex())
+    #
+    #         elif kind == "op":
+    #             opcode_int = value
+    #
+    #             # Handle flow-control first (OP_IF, OP_NOTIF, etc.)
+    #             if opcode_int in (0x63, 0x64, 0x67, 0x68):
+    #                 handler = self.op_handlers.get(opcode_int)
+    #                 if handler:
+    #                     # The handler expects (if_stack, execution_enabled) in your code
+    #                     # If it returns False, we consider it "invalid"
+    #                     result = handler(if_stack, execution_enabled)
+    #                     if not result:
+    #                         valid_script = False
+    #                     # After OP_IF/NOTIF/ELSE/ENDIF, we have to recalc execution_enabled
+    #                     # based on the entire if_stack. (Your code does it inside the handler.)
+    #                 continue
+    #
+    #             # If we are inside a non-executing branch, skip unless it's an OP_ELSE or OP_ENDIF.
+    #             if not execution_enabled and opcode_int not in (0x67, 0x68):
+    #                 continue
+    #
+    #             # Log ASM
+    #             if opcode_int in self.op_codes:
+    #                 self._op_log(self.op_codes[opcode_int])
+    #             else:
+    #                 self._op_log(f"UNKNOWN_0x{opcode_int:02x}")
+    #
+    #             # Dispatch to the correct handler
+    #             handler = self.op_handlers.get(opcode_int)
+    #             if handler:
+    #                 # Some special handling
+    #                 if opcode_int == 0x69:  # OP_VERIFY
+    #                     result = handler()
+    #                     if not result:
+    #                         self._op_log("Failed OP_VERIFY")
+    #                         valid_script = False
+    #                 elif opcode_int == 0x6a:  # OP_RETURN
+    #                     self._op_log("Processing OP_RETURN")
+    #                     handler()
+    #                     valid_script = False
+    #
+    #                 else:
+    #                     exit_val = handler()
+    #                     # If the op handler returns a False, it can mean "abort execution"
+    #                     if exit_val is False:
+    #                         logger.debug(f"Handler {handler.__name__} returned exit val {exit_val}")
+    #                         valid_script = False
+    #             else:
+    #                 # Unknown opcode
+    #                 logger.debug(f"Unrecognized or invalid OP code: {opcode_int:02x}")
+    #                 valid_script = False
+    #
+    #         else:
+    #             logger.debug(f"Unknown token kind: {kind}")
+    #             valid_script = False
+    #
+    #         # Recompute execution_enabled after each token if needed
+    #         execution_enabled = all(executed for _, executed in if_stack)
+    #
+    #     return self._validate_stack() if valid_script else False
 
-    def parse_script_from_hex(self, hex_script: str):
-        clean_hex_script = check_hex(hex_script)
-        parsed_script = self.parse_script(bytes.fromhex(clean_hex_script))
-        return parsed_script
-
+    ##----------------------------under construction-----------------------------############
     def eval_script(self, script: bytes, clear_stacks: bool = True) -> bool:
         """
         Evaluates the script - returns True/False based on results of main stack
@@ -176,44 +310,54 @@ class ScriptEngine:
             elif 0x4c <= opcode_int <= 0x4e:
                 match opcode_int:
                     case 0x4c:
-                        self._asm_log("OP_PUSHDATA1")
+                        self._op_log("OP_PUSHDATA1")
                         self._push_data_n(stream, 1)  # Reads 1 byte for length encoding
                     case 0x4d:
-                        self._asm_log("OP_PUSHDATA2")
+                        self._op_log("OP_PUSHDATA2")
                         self._push_data_n(stream, 2)  # Reads 2 bytes for length encoding
                     case 0x4e:
-                        self._asm_log("OP_PUSHDATA4")
+                        self._op_log("OP_PUSHDATA4")
                         self._push_data_n(stream, 4)  # Reads 4 bytes for length encoding
             # Check for PushNum
             elif 0x50 < opcode_int < 0x61:
                 num = opcode_int - 0x50
-                self._asm_log(f"OP_{num}")
+                self._op_log(f"OP_{num}")
                 self.stack.push(BTCNum(num).bytes)  # Push int from 1 to 16
             else:
-                self._asm_log(OPCODES[opcode_int])  # Append corresponding ASM OP_CODE
+                self._op_log(OPCODES[opcode_int])  # Append corresponding ASM OP_CODE
                 handler = self.op_handlers.get(opcode_int)
                 if handler:
                     # Special handling for OP_VERIFY and OP_RETURN
                     if opcode_int == 0x69:  # OP_VERIFY
                         if not handler():
-                            self._asm_log("Failed OP_VERIFY")
+                            self._op_log("Failed OP_VERIFY")
                             valid_script = False
                     elif opcode_int == 0x6a:  # OP_RETURN
-                        self._asm_log("Processing OP_RETURN")
+                        self._op_log("Processing OP_RETURN")
                         handler()
                         valid_script = False
                     else:
                         # Check for False returns
-
                         exit_val = handler()
-                        if exit_val:
+                        if exit_val is not None and not exit_val:  # Exit val exists and is False
                             logger.debug(f"Handler {handler.__name__} returned exit val {exit_val}")
+                            valid_script = False
                 else:
                     logger.debug(f"Unrecognized or invalid OP code: {opcode_int:02x}")
                     valid_script = False
 
         # Validate stack
         return self._validate_stack() if valid_script else False
+
+    def eval_script_from_hex(self, hex_script: str):
+        clean_hex_script = check_hex(hex_script)
+        bytes_eval = self.eval_script(bytes.fromhex(clean_hex_script))
+        return bytes_eval
+
+    def parse_script_from_hex(self, hex_script: str):
+        clean_hex_script = check_hex(hex_script)
+        parsed_script = self.parse_script(bytes.fromhex(clean_hex_script))
+        return parsed_script
 
     def parse_script(self, script: bytes):
         """
@@ -253,17 +397,17 @@ class ScriptEngine:
         """
         # Proceed by stack height
         if self.stack.height == 0:
-            self._asm_log("Script failed validation: Empty stack")
+            self._op_log("Script failed validation: Empty stack")
             return False
         elif self.stack.height == 1:
             # Check zero element
             if self.stack.top in self.BTCZero:
-                self._asm_log("Script failed validation: Zero value")
+                self._op_log("Script failed validation: Zero value")
                 return False
-            self._asm_log("Script passes validation")
+            self._op_log("Script passes validation")
             return True
         else:
-            self._asm_log("Script failed validation: Stack height > 1")
+            self._op_log("Script failed validation: Stack height > 1")
             return False
 
     # --- OP_CODE FUNCTIONS --- #
@@ -285,8 +429,8 @@ class ScriptEngine:
         self.stack.push(data)
 
         # Logging
-        self._asm_log(f"OP_PUSHBYTES_{byte_length}")
-        self._asm_log(data.hex())
+        self._op_log(f"OP_PUSHBYTES_{byte_length}")
+        self._op_log(data.hex())
 
     def _op_1negate(self):
         """OP_1NEGATE - Push -1 onto the stack"""
@@ -570,79 +714,98 @@ class ScriptEngine:
         """
         OP_NUMNOTEQUAL, 0x9e - Returns 1 if the numbers are not equal, 0 otherwise.
         """
-        pass
+        a, b = self.stack.pop_n(2)
+        num_a, num_b = BTCNum.from_bytes(a), BTCNum.from_bytes(b)
+        self._op_true() if num_a != num_b else self._op_false()
 
     def _op_lt(self):
         """
         OP_LESSTHAN, 0x9f - Returns 1 if a is less than b, 0 otherwise.
         """
-        pass
+        a, b = self._pop_two_nums()
+        self._op_true() if a < b else self._op_false()
 
     def _op_gt(self):
         """
         OP_GREATERTHAN, 0xa0 - Returns 1 if a is greater than b, 0 otherwise.
         """
-        pass
+        a, b = self._pop_two_nums()
+        self._op_true() if a > b else self._op_false()
 
     def _op_leq(self):
         """
         OP_LESSTHANOREQUAL, 0xa1 - Returns 1 if a is less than or equal to b, 0 otherwise.
         """
-        pass
+        a, b = self._pop_two_nums()
+        self._op_true() if a <= b else self._op_false()
 
     def _op_geq(self):
         """
         OP_GREATERTHANOREQUAL, 0xa2 - Returns 1 if a is greater than or equal to b, 0 otherwise.
         """
-        pass
+        a, b = self._pop_two_nums()
+        self._op_true() if a >= b else self._op_false()
 
     def _op_min(self):
         """
         OP_MIN, 0xa3 - Returns the smaller of a and b.
         """
-        pass
+        a, b = self._pop_two_nums()
+        self.stack.push(min(a, b).bytes)
 
     def _op_max(self):
         """
         OP_MAX, 0xa4 - Returns the larger of a and b.
         """
-        pass
+        a, b = self._pop_two_nums()
+        self.stack.push(max(a, b).bytes)
 
     def _op_within(self):
         """
         OP_WITHIN, 0xa5 - Returns 1 if x is within the specified range (left-inclusive), 0 otherwise.
         """
-        pass
+        _max, _min, num = self._pop_nums(3)
+        self._op_true() if _min <= num < _max else self._op_false()
 
     def _op_ripemd160(self):
         """
         OP_RIPEMD160, 0xa6 - The input is hashed using RIPEMD-160.
         """
-        pass
+        item = self.stack.pop()
+        hashed_item = ripemd160(item)
+        self.stack.push(hashed_item)
 
     def _op_sha1(self):
         """
         OP_SHA1, 0xa7 - The input is hashed using SHA-1.
         """
-        pass
+        item = self.stack.pop()
+        hashed_item = sha1(item)
+        self.stack.push(hashed_item)
 
     def _op_sha256(self):
         """
         OP_SHA256, 0xa8 - The input is hashed using SHA-256.
         """
-        pass
+        item = self.stack.pop()
+        hashed_item = sha256(item)
+        self.stack.push(hashed_item)
 
     def _op_hash160(self):
         """
         OP_HASH160, 0xa9 - The input is hashed twice: first with SHA-256 and then with RIPEMD-160.
         """
-        pass
+        item = self.stack.pop()
+        hashed_item = hash160(item)
+        self.stack.push(hashed_item)
 
     def _op_hash256(self):
         """
         OP_HASH256, 0xaa - The input is hashed two times with SHA-256.
         """
-        pass
+        item = self.stack.pop()
+        hashed_item = hash256(item)
+        self.stack.push(hashed_item)
 
     def _op_codeseparator(self):
         """
@@ -751,8 +914,8 @@ class ScriptEngine:
 
     # --- HELPERS --- #
 
-    def _asm_log(self, log_string: str):
-        self.asm.append(log_string)
+    def _op_log(self, log_string: str):
+        self.ops_log.append(log_string)
 
     def _push_data_n(self, stream: BytesIO, length_bytes: int):
         """
@@ -763,17 +926,36 @@ class ScriptEngine:
         byte_len = BTCNum.from_bytes(stacklen).value
         self._push_data(stream, byte_len)
 
+    def _pop_two_nums(self):
+        """
+        Pops 2 stack items and returns their BTCNum representation
+        """
+        a, b = self.stack.pop_n(2)
+        a = BTCNum.from_bytes(a)
+        b = BTCNum.from_bytes(b)
+        return a, b
+
+    def _pop_nums(self, count: int):
+        """
+        Pops 'count' items from the stack and returns their BTCNum representations
+        as comma-separated values.
+        """
+        items = self.stack.pop_n(count)
+        nums = [BTCNum.from_bytes(item) for item in items]
+        return tuple(nums)
+
 
 # --- TESTING
 
 if __name__ == "__main__":
-    test_script_hex = "515151515253546a5353"
+    test_script_hex = "525153a5"
     # test_script_bytes = bytes.fromhex(test_script_hex)
     engine = ScriptEngine()
     engine.eval_script_from_hex(test_script_hex)
+
     # print(f"ENGINE STACK: {engine.stack.top.hex()}")
     print(f"STACK HEIGHT: {engine.stack.height}")
-    print(f"ASM LOG: {engine.asm}")
+    print(f"OP LOG: {engine.ops_log}")
     print(f"PARSED SCRIPT: {engine.parse_script_from_hex(test_script_hex)}")
     print(f"---- MAIN STACK PRINTOUT ----")
     for s in range(engine.stack.height):
@@ -785,3 +967,7 @@ if __name__ == "__main__":
         temp_val = engine.stack.pop()
         print(f"STACK LEVEL: {s} || STACK ITEM: {temp_val.hex()}")
     print("==" * 20)
+    print(f"SHA1 empty HEX: {sha1(b'').hex()}")
+    print(f"SHA256 empty HEX: {sha256(b'').hex()}")
+    print(f"HASH160 empty HEX: {hash160(b'').hex()} ")
+    print(f"HASH256 empty HEX: {hash256(b'').hex()}")

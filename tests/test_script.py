@@ -458,5 +458,163 @@ def test_numeq3(engine):
 
 
 def test_op_return(engine):
-    op_return_hex = "515151515253546a5353"
+    op_return_hex = "51526a5353"
     engine.eval_script_from_hex(op_return_hex)
+    assert engine.stack.height == 2
+    assert engine.stack.stack[0] == bytes.fromhex("02")
+    assert engine.stack.stack[1] == bytes.fromhex("01")
+
+
+def test_numeq_verify1(engine):
+    numeq_verify_hex1 = "51519d"
+    engine.eval_script_from_hex(numeq_verify_hex1)
+    assert engine.stack.height == 0
+
+
+def test_numeq_verify2(engine):
+    numeq_verify_hex1 = "51529d5151"
+    engine.eval_script_from_hex(numeq_verify_hex1)
+    assert engine.stack.height == 0
+
+
+def test_numneq1(engine):
+    numneq_hex1 = "51529e"  # Numbers not equal, pushes true to stack
+    engine.eval_script_from_hex(numneq_hex1)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_numneq2(engine):
+    numneq_hex1 = "51519e"  # Numbers equal, pushes false to stack
+    engine.eval_script_from_hex(numneq_hex1)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == b''  # bytes.fromhex("01")
+
+
+def test_lt1(engine):
+    lt_hex1 = "52519f"
+    engine.eval_script_from_hex(lt_hex1)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_lt2(engine):
+    lt_hex2 = "51529f"
+    engine.eval_script_from_hex(lt_hex2)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == b''  # bytes.fromhex("01")
+
+
+def test_gt1(engine):
+    gt_hex1 = "5152a0"
+    engine.eval_script_from_hex(gt_hex1)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_gt2(engine):
+    gt_hex2 = "5251a0"
+    engine.eval_script_from_hex(gt_hex2)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == b''  # bytes.fromhex("01")
+
+
+def test_leq1(engine):
+    lt_hex1 = "5151a15251a1"
+    engine.eval_script_from_hex(lt_hex1)
+    assert engine.stack.height == 2
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_leq2(engine):
+    lt_hex1 = "5152a1"
+    engine.eval_script_from_hex(lt_hex1)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == b''  # bytes.fromhex("01")
+
+
+def test_geq1(engine):
+    lt_hex1 = "5151a15152a2"
+    engine.eval_script_from_hex(lt_hex1)
+    assert engine.stack.height == 2
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_geq2(engine):
+    lt_hex1 = "5251a2"
+    engine.eval_script_from_hex(lt_hex1)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == b''  # bytes.fromhex("01")
+
+
+def test_min(engine):
+    min_hex = "5358a3"
+    engine.eval_script_from_hex(min_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("03")
+
+
+def test_max(engine):
+    min_hex = "5358a4"
+    engine.eval_script_from_hex(min_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("08")
+
+
+def test_within1(engine):
+    within_hex1 = "525153a5"
+    engine.eval_script_from_hex(within_hex1)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("01")
+
+
+def test_ripemd160(engine):
+    """
+    Known ripemd160 hash of b'' = 9c1185a5c5e9fc54612808977ee8f548b2258d31
+    """
+    ripemd160_hex = "00a6"
+    engine.eval_script_from_hex(ripemd160_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("9c1185a5c5e9fc54612808977ee8f548b2258d31")
+
+
+def test_sha1(engine):
+    """
+    Known sha1 hash of b'' = da39a3ee5e6b4b0d3255bfef95601890afd80709
+    """
+    sha1_hex = "00a7"
+    engine.eval_script_from_hex(sha1_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("da39a3ee5e6b4b0d3255bfef95601890afd80709")
+
+
+def test_sha256(engine):
+    """
+    Known sha256 hash of b'' = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    """
+    sha256_hex = "00a8"
+    engine.eval_script_from_hex(sha256_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+
+
+def test_hash160(engine):
+    """
+    Known hash160 hash of b'' = b472a266d0bd89c13706a4132ccfb16f7c3b9fcb
+    """
+    hash160_hex = "00a9"
+    engine.eval_script_from_hex(hash160_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("b472a266d0bd89c13706a4132ccfb16f7c3b9fcb")
+
+
+def test_hash256(engine):
+    """
+    Known hash256 hash of b'' = 5df6e0e2761359d30a8275058e299fcc0381534545f55cf43e41983f5d4c9456
+    """
+    hash256_hex = "00aa"
+    engine.eval_script_from_hex(hash256_hex)
+    assert engine.stack.height == 1
+    assert engine.stack.stack[0] == bytes.fromhex("5df6e0e2761359d30a8275058e299fcc0381534545f55cf43e41983f5d4c9456")
