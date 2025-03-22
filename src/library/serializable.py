@@ -36,6 +36,7 @@ class Serializable(ABC):
     BITS_BYTES: ClassVar[int] = 4
     NONCE_BYTES: ClassVar[int] = 4
     MARKERFLAG_BYTES: ClassVar[int] = 2
+    SIGHASH_BYTES: ClassVar[int] = 4
 
     @classmethod
     @abstractmethod

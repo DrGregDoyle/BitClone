@@ -14,16 +14,16 @@ from src.logger import get_logger
 logger = get_logger(__name__)
 
 
-def ecdsa(private_key: int, message: str):
+def ecdsa(private_key: int, message_hash: bytes):
     """
-    Generates an ECDSA signature for a given private_key and hex_string on the specified curve.
+    Generates an ECDSA signature for a given private_key and message hash on the specified curve.
 
     Parameters:
     ----------
     private_key : int
         The signer's private key.
-    message : str
-        The message in hex format that will be signed.
+    message_hash : bytes
+        The hash of the message (typically a transaction hash) that will be signed.
 
     Returns:
     --------
@@ -33,7 +33,7 @@ def ecdsa(private_key: int, message: str):
     Algorithm:
     ----------
     1) Initialize curve parameters and group order n.
-    2) Compute z as the integer value of the first n bits of hex_string.
+    2) Compute z as the integer value of the first n bits of message hash.
     3) Select a random integer k in [1, n-1].
     4) Calculate curve point (x, y) = k * generator.
     5) Compute r = x (mod n) and s = k^(-1)(Z + r * private_key) (mod n).
@@ -41,19 +41,12 @@ def ecdsa(private_key: int, message: str):
     7) Return the signature (r, s).
 
     """
-    # Clean and verify message
-    message = message.strip().lower()
-    if message.startswith("0x"):
-        message = message[2:]
-    if not all(char in "0123456789abcdef" for char in message):
-        raise ValueError(f"Message must be in hexadecimal format")
-
     # 1) Create elliptic curve object and assign n
     curve = secp256k1()
     n = curve.order
 
     # 2) Take the first n bits of the message using a binary mask
-    z = int(message, 16) & ((1 << n.bit_length()) - 1)
+    z = int.from_bytes(message_hash, byteorder='big') & ((1 << n.bit_length()) - 1)
 
     # 3 ) Generate the signature
     r, s = None, None
@@ -83,7 +76,7 @@ def ecdsa(private_key: int, message: str):
     if logger.level == logging.DEBUG:
         logger.debug("Verifying ECDSA")
         public_key = curve.multiply_generator(private_key)
-        signed = verify_ecdsa(signature=(r, s), message=message, public_key=public_key)
+        signed = verify_ecdsa(signature=(r, s), message_hash=message_hash, public_key=public_key)
         assert signed, logger.error("Failed to verify ECDSA")
         logger.debug("ECDSA has been successfully verified.")
 
@@ -91,7 +84,7 @@ def ecdsa(private_key: int, message: str):
     return r, s
 
 
-def verify_ecdsa(signature: tuple, message: str, public_key: tuple) -> bool:
+def verify_ecdsa(signature: tuple, message_hash: bytes, public_key: tuple) -> bool:
     """
     We verify that the given signature corresponds to the correct public_key for the given hex_string.
 
@@ -99,8 +92,8 @@ def verify_ecdsa(signature: tuple, message: str, public_key: tuple) -> bool:
     ----------
     signature : tuple
         The signature (r, s) to verify.
-    message : str
-        The message that was signed, in hex format.
+    message_hash : bytes
+        The hash of the message that was signed.
     public_key : tuple
         The public key used for verification.
 
@@ -136,7 +129,7 @@ def verify_ecdsa(signature: tuple, message: str, public_key: tuple) -> bool:
         return False
 
     # 2) Take the first n bits of the transaction hash using a binary mask
-    z = int(message, 16) & ((1 << n.bit_length()) - 1)
+    z = int.from_bytes(message_hash, byteorder='big') & ((1 << n.bit_length()) - 1)
 
     # 3) Calculate u1 and u2
     s_inv = pow(s, -1, n)

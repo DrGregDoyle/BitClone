@@ -5,12 +5,16 @@ DB class. Handles Txs, UTXOs and Blocks
 import sqlite3
 from pathlib import Path
 
+from src.logger import get_logger
+
+logger = get_logger(__name__)
+
 # Database file path
 DB_PATH = Path(__file__).parent / "bitclone_db" / "bitclone.db"
 
 
 class BitCloneDatabase:
-    def __init__(self, db_path=DB_PATH):
+    def __init__(self, db_path=DB_PATH, testing=False):
         self.db_path = db_path
         self._initialize_database()
 
@@ -68,7 +72,7 @@ class BitCloneDatabase:
             conn.commit()
         self._initialize_database()
 
-    def add_utxo(self, txid, vout, address, amount, script_pubkey):
+    def add_utxo(self, txid: bytes, vout: int, address: str, amount: int, script_pubkey: bytes):
         """Adds a new UTXO to the database."""
         with sqlite3.connect(self.db_path) as conn:
             c = conn.cursor()
@@ -134,6 +138,13 @@ class BitCloneDatabase:
         with sqlite3.connect(self.db_path) as conn:
             c = conn.cursor()
             c.execute("SELECT * FROM transactions WHERE txid = ?", (txid,))
+            return c.fetchone()
+
+    def get_utxo(self, txid, vout):
+        """Returns an utxo by output (txid+vout)"""
+        with sqlite3.connect(self.db_path) as conn:
+            c = conn.cursor()
+            c.execute("SELECT * FROM utxos WHERE txid = ? AND vout = ?", (txid, vout))
             return c.fetchone()
 
     def get_block_height(self):

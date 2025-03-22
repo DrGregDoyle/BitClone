@@ -1,5 +1,10 @@
 """
 Methods for generating random BitClone objects
+--
+
+NOTE: SQLITE supports signed 64-bit integers, hence the maximum random value for an integer in the database should be
+63 bytes
+
 """
 from secrets import token_bytes, randbits, randbelow
 
@@ -8,7 +13,37 @@ from src.tx import Input, Output, WitnessItem, Witness, Transaction
 
 
 def get_random_scriptpubkey(scriptpubkey_type: str = None):
-    pass
+    r = randbelow(100)
+    if r < 40:  # P2WPKH, P2PKH, P2SH (most common, 22-25 bytes)
+        return token_bytes(randbelow(4) + 22)
+    elif r < 80:  # P2WSH, P2TR (next most common, 34 bytes)
+        return token_bytes(34)
+    elif r < 90:  # OP_RETURN (variable but usually small)
+        return token_bytes(randbelow(80) + 1)
+    else:  # Other less common types
+        return token_bytes(randbelow(35) + 1)  # 1-35 bytes
+
+
+def get_random_scriptsig(scriptsig_type: str = None):
+    """
+    Generate a random script_sig with realistic sizes.
+
+    Args:
+        scriptsig_type (str, optional): Not used in this simplified version.
+
+    Returns:
+        bytes: A randomly sized script_sig
+    """
+    # Choose a size based on common scriptSig lengths
+    r = randbelow(100)
+    if r < 60:  # P2PKH (most common, ~106-107 bytes)
+        return token_bytes(randbelow(5) + 105)
+    elif r < 85:  # P2SH (typically between 23-150 bytes)
+        return token_bytes(randbelow(128) + 23)
+    elif r < 95:  # Segwit (empty script_sig, 0 bytes)
+        return b''
+    else:  # Other less common or complex redeem scripts
+        return token_bytes(randbelow(400) + 1)  # 1-400 bytes
 
 
 def get_random_input(scriptsig_bits: int = 16):
@@ -16,16 +51,16 @@ def get_random_input(scriptsig_bits: int = 16):
     return Input(
         txid=token_bytes(32),  # txid | 32 bytes
         vout=randbits(32),  # vout | 4 bytes
-        script_sig=token_bytes(rand_scriptsig_size),  # scriptsig | var len
+        script_sig=get_random_scriptsig(),  # scriptsig | var len
         sequence=randbits(32)  # sequqnce | 4 bytes
     )
 
 
-def get_random_output(scriptpubkey_bits: int = 8):
+def get_random_output(scriptpubkey_bits: int = 1):
     rand_scriptpubkey_sze = randbits(scriptpubkey_bits)
     return Output(
-        amount=randbits(64),  # 8 byte integer
-        script_pubkey=token_bytes(rand_scriptpubkey_sze)  # script pubkey | var len
+        amount=randbits(63),  # 8 byte integer | Account for SQLITE signed integer storage
+        script_pubkey=get_random_scriptpubkey()  # script pubkey | var len
     )
 
 

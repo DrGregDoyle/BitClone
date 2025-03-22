@@ -179,12 +179,15 @@ def bits_to_target_from_hex(bits: str) -> str:
 
 # --- TESTING
 if __name__ == "__main__":
-    target_hex = "00000000ffff0000000000000000000000000000000000000000000000000000"
-    bits_hex = "1d00ffff"
-
-    t_to_b = target_to_bits_from_hex(target_hex)
-    b_to_t = bits_to_target_from_hex(bits_hex)
-    print(f"TARGET TO BITS: {target_hex} --> {t_to_b}")
-    print(f"BITS TO TARGET: {bits_hex} --> {b_to_t}")
-    print(f"TARGET TO BITS EQUALS BITS HEX: {t_to_b == bits_hex}")
-    print(f"BITS TO TARGET EQUALS TARGET HEX: {b_to_t == target_hex}")
+    # target_hex = "00000000ffff0000000000000000000000000000000000000000000000000000"
+    # bits_hex = "1d00ffff"
+    #
+    # t_to_b = target_to_bits_from_hex(target_hex)
+    # b_to_t = bits_to_target_from_hex(bits_hex)
+    # print(f"TARGET TO BITS: {target_hex} --> {t_to_b}")
+    # print(f"BITS TO TARGET: {bits_hex} --> {b_to_t}")
+    # print(f"TARGET TO BITS EQUALS BITS HEX: {t_to_b == bits_hex}")
+    # print(f"BITS TO TARGET EQUALS TARGET HEX: {b_to_t == target_hex}")
+    zero_cs = write_compact_size(0)
+    print(f"ZERO COMPACT SIZE: {zero_cs}")
+    print(f"READ COMPACT SIZE: {read_compact_size(zero_cs)}")

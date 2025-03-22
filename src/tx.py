@@ -294,7 +294,7 @@ class Transaction(Serializable):
         output_count (bytes): CompactSize-encoded number of outputs.
     """
     __slots__ = ('version', 'inputs', 'outputs', 'locktime', 'witnesses', 'input_count', 'output_count', 'is_segwit',
-                 '_cached_non_witness_bytes', '_cached_wtxid_bytes')
+                 '_cached_non_witness_bytes', '_cached_wtxid_bytes', 'sighash')
 
     def __init__(self, inputs=None, outputs=None, witnesses=None, locktime: int = 0, version: int = None):
         self.version = version or self.VERSION
@@ -370,9 +370,11 @@ class Transaction(Serializable):
                 witnesses.append(Witness.from_bytes(stream))
 
         # Read locktime (4 bytes, little-endian)
+        print(f"STREAM BEFORE READING LOCKTIME DATA: {stream}")
         locktime_data = stream.read(4)
         check_length(locktime_data, cls.LOCKTIME_BYTES, "locktime")
         locktime = from_little_bytes(locktime_data)
+        print(f"FROM BYTES: LOCKTIME BYTES: {locktime}")
 
         return cls(inputs, outputs, witnesses, locktime, version)
 
@@ -418,12 +420,14 @@ class Transaction(Serializable):
         marker_flag_bytes = b'\x00\x01' if self.is_segwit else b''  # Marker + Flag = 0001
 
         # Inputs, outputs and witness
-        inputs_bytes = self.input_count + b''.join(i.to_bytes() for i in self.inputs)
-        outputs_bytes = self.output_count + b''.join(o.to_bytes() for o in self.outputs)
-        witnesses_bytes = b''.join(w.to_bytes() for w in self.witnesses) if self.is_segwit else b''
+        inputs_bytes = self.input_count + b''.join(i.to_bytes() for i in self.inputs) if self.inputs else \
+            self.input_count + b''
+        outputs_bytes = self.output_count + b''.join(o.to_bytes() for o in self.outputs) if self.outputs else b''
+        witnesses_bytes = b''.join(w.to_bytes() for w in self.witnesses) if self.is_segwit else self.output_count + b''
 
         # Locktime and return
         locktime_bytes = to_little_bytes(self.locktime, self.LOCKTIME_BYTES)
+        print(f"TO BYTES LOCKTIME BYTES: {locktime_bytes.hex()}")
         return version_bytes + marker_flag_bytes + inputs_bytes + outputs_bytes + witnesses_bytes + locktime_bytes
 
     def to_dict(self) -> dict:
@@ -484,13 +488,22 @@ class Transaction(Serializable):
             bytes: The serialized transaction in Bitcoin's standard format, excluding witness data.
         """
         version_bytes = to_little_bytes(self.version, self.VERSION_BYTES)
-        inputs_bytes = self.input_count + b''.join(i.to_bytes() for i in self.inputs)
-        outputs_bytes = self.output_count + b''.join(o.to_bytes() for o in self.outputs)
+        inputs_bytes = self.input_count + b''.join(i.to_bytes() for i in self.inputs) if self.inputs else \
+            self.input_count + b''
+        outputs_bytes = self.output_count + b''.join(o.to_bytes() for o in self.outputs) if self.outputs else \
+            self.output_count + b''
         locktime_bytes = to_little_bytes(self.locktime, self.LOCKTIME_BYTES)
         return version_bytes + inputs_bytes + outputs_bytes + locktime_bytes
 
 
-class TxEngine:
-    """
-    Used for creating Tx signatures
-    """
+from tests.randbtc_generators import get_random_tx
+
+if __name__ == "__main__":
+    rand_tx_segwit = get_random_tx()
+
+    print(f"RANDOM TX: {rand_tx_segwit.to_json()}")
+
+    # rand_tx_legacy = get_random_tx(is_segwit=False)
+
+    fbrand_segwit = Transaction.from_bytes(rand_tx_segwit.to_bytes())
+    # fbrand_legacy = Transaction.from_bytes(rand_tx_legacy.to_bytes())
