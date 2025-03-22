@@ -3,7 +3,7 @@ Methods for testing encoding and decoding
 """
 from secrets import token_bytes
 
-from src.library.codec import encode_bech32, decode_bech32
+from src.crypto.codec import encode_bech32, decode_bech32
 from src.logger import get_logger
 
 logger = get_logger(__name__)

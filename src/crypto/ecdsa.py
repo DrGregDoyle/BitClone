@@ -8,7 +8,7 @@ Fixed to run on secp256k1 elliptic curve.
 import logging
 import secrets
 
-from src.library.ecc import secp256k1
+from src.crypto.ecc import secp256k1
 from src.logger import get_logger
 
 logger = get_logger(__name__)

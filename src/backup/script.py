@@ -271,7 +271,7 @@ class ScriptEngine:
 
         if op_code in [0x7e, 0x7f, 0x80, 0x81]:
             # OP_CAT, OP_SUBSTR, OP_LEFT, OP_SIZE
-            raise ValueError("Script contains disabled string OP_ codes")
+            raise ValueError("script contains disabled string OP_ codes")
         else:
             # OP_SIZE - push string length of top element to stack
             top_element = self.main_stack.top
@@ -286,7 +286,7 @@ class ScriptEngine:
 
         if op_code in [0x83, 0x84, 0x85, 0x86]:
             # OP_INVERT, OP_AND, OP_OR, OP_XOR
-            raise ValueError(f"Script contains disabled bitwise logic OP-code: {hex(op_code)}")
+            raise ValueError(f"script contains disabled bitwise logic OP-code: {hex(op_code)}")
         elif op_code in [0x87, 0x88]:
             # OP_EQUAL - Pushes True to the stack if top 2 elements are equal, False otherwise
             item1 = self.main_stack.pop()
@@ -307,7 +307,7 @@ class ScriptEngine:
 
         if op_code in [0x8d, 0x8e, 0x95, 0x96, 0x97, 0x98, 0x99]:
             # OP_2MUL, OP_2DIV, OP_MUL, OP_DIV, OP_MOD, OP_LSHIFT, OP_RSHIFT
-            raise ValueError(f"Script contains disabled numeric op-code: {hex(op_code)}")
+            raise ValueError(f"script contains disabled numeric op-code: {hex(op_code)}")
         else:
             # Valid numeric op-code
             verify = False  # Flag for OP_NUMEQUALVERIFY
@@ -342,7 +342,7 @@ class ScriptEngine:
                             if op_code == 0x9d:
                                 verify = True
                                 if val == 0:
-                                    raise ValueError("Script failed OP_NUMEQUALVERIFY")
+                                    raise ValueError("script failed OP_NUMEQUALVERIFY")
                         case 0x9e:  # OP_NUMNOTEQUAL
                             val = 1 if (v0 != v1) else 0
                         case 0x9f:  # OP_LESSTHAN
@@ -450,7 +450,7 @@ class ScriptEngine:
 
             # OP_CHECKSIGVERIFY
             if not val:
-                raise ValueError("Script failed OP_CHECKSIGVERIFY")
+                raise ValueError("script failed OP_CHECKSIGVERIFY")
         elif op_code == 0xa:
             # OP_CHECKMULTISIG
             print("OP_CHECKMULTISIG")
@@ -489,7 +489,7 @@ class ScriptEngine:
             # OP_CHECKSIGADD
             print("OP_CHECKSIGADD")
         else:
-            raise ValueError(f"Script used invalid code: {hex(op_code)}")
+            raise ValueError(f"script used invalid code: {hex(op_code)}")
 
         return current_index
 

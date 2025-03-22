@@ -2,8 +2,8 @@
 Methods for Schnorr signatures
 """
 
-from src.library.ecc import secp256k1
-from src.library.hash_functions import tagged_hash_function, HashType
+from src.crypto.ecc import secp256k1
+from src.crypto.hash_functions import tagged_hash_function, HashType
 from src.logger import get_logger
 
 logger = get_logger(__name__)

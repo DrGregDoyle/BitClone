@@ -12,10 +12,10 @@ B: unsigned char (1 byte)
 """
 import io
 
-from src.library.data_handling import check_length, write_compact_size, read_compact_size, byte_format, \
+from src.crypto.hash_functions import hash256
+from src.data.data_handling import check_length, write_compact_size, read_compact_size, byte_format, \
     from_little_bytes, to_little_bytes
-from src.library.hash_functions import hash256
-from src.library.serializable import Serializable
+from src.data.serializable import Serializable
 
 
 class Input(Serializable):

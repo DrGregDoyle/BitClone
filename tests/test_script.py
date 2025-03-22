@@ -1,12 +1,12 @@
 """
-Tests for BTC Script
+Tests for BTC script
 """
 from random import randint
 from secrets import token_bytes
 
 import pytest
 
-from src.library.Script.script import ScriptEngine, BTCNum
+from src.script.script import ScriptEngine, BTCNum
 
 
 @pytest.fixture

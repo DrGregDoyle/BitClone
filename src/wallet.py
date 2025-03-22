@@ -7,10 +7,10 @@ HD Wallet
 import abc
 from secrets import randbits
 
-from src.library.codec import compress_public_key, decompress_public_key, encode_base58check, encode_bech32
-from src.library.ecc import secp256k1
-from src.library.hash_functions import sha256, pbkdf2, hmac_sha512, hash160
-from src.library.word_list import WORDLIST
+from src.crypto.ecc import secp256k1
+from src.crypto.hash_functions import sha256, pbkdf2, hmac_sha512, hash160
+from src.crypto.codec import compress_public_key, decompress_public_key, encode_base58check, encode_bech32
+from src.data.word_list import WORDLIST
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -534,7 +534,7 @@ class HDWallet:
     #
     # def _p2sh_p2wpkh_address(self, pubkey: bytes) -> str:
     #     """
-    #     Pay-to-Script-Hash of the redeem script for P2WPKH (which is 0x00 + push of hash160(pubkey)).
+    #     Pay-to-script-Hash of the redeem script for P2WPKH (which is 0x00 + push of hash160(pubkey)).
     #     The redeem script itself is typically:  0x00 0x14 <20-byte hash160(pubkey)>
     #     Then we do P2SH = base58Check(0x05 + hash160(redeem_script)).
     #     """
@@ -623,8 +623,10 @@ if __name__ == "__main__":
     test_index_p2wpkh = random_wallet.address(path=random_wallet.BIP49_BASE_PATH, script_type="p2wpkh")
     print(f"TEST INDEX P2WPKH: {test_index_p2wpkh}")
 
-    # # known_mnemonic = ['oak', 'recall', 'season', 'gain', 'awesome', 'master', 'advance', 'plate', 'paddle', 'appear',
-    # #                   'siege', 'provide', 'clinic', 'human', 'entire', 'taste', 'observe', 'taste', 'rotate', 'trophy',
+    # # known_mnemonic = ['oak', 'recall', 'season', 'gain', 'awesome', 'master', 'advance', 'plate', 'paddle',
+    # 'appear',
+    # #                   'siege', 'provide', 'clinic', 'human', 'entire', 'taste', 'observe', 'taste', 'rotate',
+    # 'trophy',
     # #                   'brick', 'reveal', 'course', 'flag']
     # # m1 = Mnemonic(mnemonic=known_mnemonic)
     # # w1 = HDWallet(mnemonic=m1, version=ExtendedKey.XPRV_BIP49)
@@ -677,7 +679,8 @@ if __name__ == "__main__":
     #
     # new_mnemonic_list = [
     #     "thrive", "quiz", "thing", "kit", "umbrella", "shock", "elevator", "expire", "century", "ketchup", "ill",
-    #     "salute", "winter", "amused", "crop", "stairs", "spend", "submit", "below", "color", "cook", "concert", "lamp",
+    #     "salute", "winter", "amused", "crop", "stairs", "spend", "submit", "below", "color", "cook", "concert",
+    #     "lamp",
     #     "photo"]
     # new_mnemonic = Mnemonic(new_mnemonic_list)
     # print(f"BIP39 SEED: {new_mnemonic.mnemonic_to_seed().hex()}")

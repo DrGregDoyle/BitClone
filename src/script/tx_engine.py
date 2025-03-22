@@ -3,9 +3,9 @@ The TxEngine class - Used for signing a transaction
 """
 
 from src.db import BitCloneDatabase
-from src.library.data_handling import write_compact_size
-from src.library.ecdsa import ecdsa
-from src.library.hash_functions import hash256
+from src.crypto.ecdsa import ecdsa
+from src.crypto.hash_functions import hash256
+from src.data.data_handling import write_compact_size
 from src.logger import get_logger
 from src.tx import Transaction, Output, Input
 
@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 from enum import IntEnum
 
-from src.library.Script.stack import BTCNum
+from src.script.stack import BTCNum
 
 
 class SigHash(IntEnum):
@@ -100,7 +100,7 @@ class TxEngine:
 if __name__ == "__main__":
     # Setup DB and start your engines
     test_db = BitCloneDatabase(
-        db_path="C:\\GREG\\Programming\\BitClone\\src\\bitclone_db\\bitclone.db"
+        db_path="/src/bitclone_db/bitclone.db"
     )
     test_db._clear_db()
     engine = TxEngine(test_db)

@@ -4,16 +4,14 @@ Classes for BTCNum and BTCStack
 from collections import deque
 from typing import List, Optional, TypeVar, Generic
 
-from src.library.Script.stackerr import *
-
 T = TypeVar('T')  # Generic type for stack elements
 
 
 class BTCNum:
     """
-    Represents a Bitcoin Script numeric value.
+    Represents a Bitcoin script numeric value.
 
-    Bitcoin Script uses a special encoding for integers:
+    Bitcoin script uses a special encoding for integers:
     - Little-endian representation
     - Negative numbers set the sign bit (0x80) in the last byte
     - Zero is represented as an empty byte array
@@ -33,7 +31,7 @@ class BTCNum:
     @classmethod
     def from_bytes(cls, data: bytes):
         """
-        Decode Bitcoin Script encoded integer bytes into a BTCNum object.
+        Decode Bitcoin script encoded integer bytes into a BTCNum object.
         """
         if data == b'':
             return cls(0)  # Empty bytes = 0
@@ -154,10 +152,10 @@ class BTCNum:
 
 class BTCStack(Generic[T]):
     """
-    A Bitcoin Script stack implementation using deque for efficient push/pop operations.
+    A Bitcoin script stack implementation using deque for efficient push/pop operations.
     The leftmost element (index 0) is the top of the stack.
 
-    Following Bitcoin Script conventions:
+    Following Bitcoin script conventions:
     - The stack grows upward
     - Index 0 refers to the top item
     - Higher indices refer to deeper items in the stack
@@ -338,7 +336,7 @@ class BTCStack(Generic[T]):
         items = list(self.stack)
         return f"BTCStack({items})"
 
-    # Bitcoin Script specific stack operations
+    # Bitcoin script specific stack operations
     def dup(self) -> None:
         """
         Duplicate the top stack item.

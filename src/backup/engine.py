@@ -58,7 +58,7 @@ class TxEngine:
 
     def get_segwit_signature(self, tx: Transaction, input_index=0, sighash=1):
         """
-        Used to create a signature for use in sigwit Script signatures.
+        Used to create a signature for use in sigwit script signatures.
 
         NOTE: tx must have tx.segwit = True
         """

@@ -2,7 +2,7 @@
 The Miner class
 """
 from src.block import Block
-from src.library.data_handling import bits_to_target_int
+from src.data.data_handling import bits_to_target_int
 from src.logger import get_logger
 
 logger = get_logger(__name__)

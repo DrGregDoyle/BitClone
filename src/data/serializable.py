@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from io import BytesIO
 from typing import ClassVar, Any, TypeVar
 
-from src.library.data_handling import check_hex
+from src.data.data_handling import check_hex
 
 T = TypeVar('T', bound='Serializable')
 

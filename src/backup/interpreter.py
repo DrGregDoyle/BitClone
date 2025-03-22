@@ -1,8 +1,8 @@
 """
 The Bitcoin interpreter.cpp as written in Python by ChatGPT 4o
 """
-from src.library.Script.op_codes import OPCODES
-from src.library.Script.script import Stack
+from src.script.op_codes import OPCODES
+from src.script.script import Stack
 
 
 def eval_script(stack, script, altstack=None, flags=0):
@@ -150,4 +150,4 @@ def eval_script(stack, script, altstack=None, flags=0):
             return False
 
     # Final validation
-    return stack.height > 0 and stack.top != b'\x00'  # Script succeeds if top of stack is nonzero
+    return stack.height > 0 and stack.top != b'\x00'  # script succeeds if top of stack is nonzero

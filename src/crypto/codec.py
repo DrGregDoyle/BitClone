@@ -5,9 +5,9 @@ Methods for encoding and decoding
 import re
 from typing import Tuple
 
-from src.library.bech32 import convertbits, bech32_encode, bech32_decode, Encoding
-from src.library.ecc import secp256k1
-from src.library.hash_functions import hash256
+from src.crypto.ecc import secp256k1
+from src.crypto.hash_functions import hash256
+from src.crypto.bech32 import convertbits, bech32_encode, bech32_decode, Encoding
 from src.logger import get_logger
 
 logger = get_logger(__name__)

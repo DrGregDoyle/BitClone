@@ -4,11 +4,11 @@ The ScriptEngine class
 from io import BytesIO
 from typing import Callable, Dict
 
-from src.library.Script.op_codes import OPCODES
-from src.library.Script.stack import BTCNum, BTCStack
-from src.library.data_handling import check_hex, check_length
-from src.library.ecc import secp256k1
-from src.library.hash_functions import ripemd160, sha1, sha256, hash160, hash256
+from src.crypto.ecc import secp256k1
+from src.crypto.hash_functions import ripemd160, sha1, sha256, hash160, hash256
+from src.script.op_codes import OPCODES
+from src.script.stack import BTCNum, BTCStack
+from src.data.data_handling import check_hex, check_length
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -96,7 +96,7 @@ class ScriptEngine:
             0xa4: self._op_max,  # OP_MAX
             0xa5: self._op_within,  # OP_WITHIN
 
-            # Crypto
+            # crypto
             0xa6: self._op_ripemd160,  # OP_RIPEMD160
             0xa7: self._op_sha1,  # OP_SHA1
             0xa8: self._op_sha256,  # OP_SHA256
@@ -249,17 +249,17 @@ class ScriptEngine:
         """
         # Proceed by stack height
         if self.stack.height == 0:
-            self._op_log("Script failed validation: Empty stack")
+            self._op_log("script failed validation: Empty stack")
             return False
         elif self.stack.height == 1:
             # Check zero element
             if self.stack.top == b'':
-                self._op_log("Script failed validation: Zero value")
+                self._op_log("script failed validation: Zero value")
                 return False
-            self._op_log("Script passes validation")
+            self._op_log("script passes validation")
             return True
         else:
-            self._op_log("Script failed validation: Stack height > 1")
+            self._op_log("script failed validation: Stack height > 1")
             return False
 
     # --- OP_CODE FUNCTIONS --- #
