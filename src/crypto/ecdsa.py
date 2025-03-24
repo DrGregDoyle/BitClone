@@ -5,10 +5,10 @@ Fixed to run on secp256k1 elliptic curve.
 
 """
 
-import logging
 import secrets
+from logging import DEBUG
 
-from src.crypto.ecc import secp256k1
+from src.crypto import secp256k1
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -73,7 +73,7 @@ def ecdsa(private_key: int, message_hash: bytes):
         break
 
     # -- DEBUG: Verify signature
-    if logger.level == logging.DEBUG:
+    if logger.level == DEBUG:
         logger.debug("Verifying ECDSA")
         public_key = curve.multiply_generator(private_key)
         signed = verify_ecdsa(signature=(r, s), message_hash=message_hash, public_key=public_key)

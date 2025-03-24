@@ -8,9 +8,6 @@ import json
 import secrets
 
 from src.crypto.ecc_math import tonelli_shanks, legendre_symbol
-from src.logger import get_logger
-
-logger = get_logger(__name__)
 
 MAX_PRIME = pow(2, 19) - 1  # 7th Mersenne Prime
 

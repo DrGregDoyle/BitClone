@@ -5,8 +5,7 @@ Methods for encoding and decoding
 import re
 from typing import Tuple
 
-from src.crypto.ecc import secp256k1
-from src.crypto.hash_functions import hash256
+from src.crypto import secp256k1, hash256
 from src.crypto.bech32 import convertbits, bech32_encode, bech32_decode, Encoding
 from src.logger import get_logger
 
@@ -229,6 +228,6 @@ if __name__ == "__main__":
     # print(f"WIF TESTNET KEY: {encoded_wif_testnet}")
     # encoded_wif_no_compression = encode_wif_private_key(private_key=test_privkey, compression_byte=None)
     # print(f"WIF KEY NO COMPRESSION: {encoded_wif_no_compression}")
-    _pubkeyhash = "be9f8266e6d3808816601ee9abaf2bbafd279b5c"
+    _pubkeyhash = bytes.fromhex("be9f8266e6d3808816601ee9abaf2bbafd279b5c")
     _address = encode_bech32(_pubkeyhash)
     print(f"P2WPKH ADDRESS: {_address}")
