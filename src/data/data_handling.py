@@ -5,10 +5,6 @@ import re
 import struct
 from io import BytesIO
 
-from src.logger import get_logger
-
-logger = get_logger(__name__)
-
 
 def check_hex(hex_string: str) -> str:
     """

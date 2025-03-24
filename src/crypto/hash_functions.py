@@ -8,10 +8,6 @@ from typing import Callable
 
 import unicodedata
 
-from src.logger import get_logger
-
-logger = get_logger(__name__)
-
 
 # noinspection PyArgumentList
 class HashType(Enum):
@@ -21,24 +17,6 @@ class HashType(Enum):
     HASH160 = auto()
     RIPEMD160 = auto()
 
-
-#
-#
-# def tagged_hash_function(function_type: HashType, data: bytes, tag: bytes):
-#     # Format tag for downstream functions
-#     try:
-#         tag = get_data(tag)
-#     except ValueError as e:
-#         logger.debug(f"Tagged hash function failed to convert tag to data: {e}")
-#         raise ValueError(f"Invalid data: {tag}") from e
-#
-#     # Get tagged hash
-#     tagged_hash = hash_function(function_type, data=tag)
-#
-#     # Prep data
-#     data = get_data(data)
-#     hash_block = tagged_hash + tagged_hash + data
-#     return hash_function(function_type, hash_block)
 
 # SCHNORR
 def hash_function(encoded_data: bytes, function_type: HashType):

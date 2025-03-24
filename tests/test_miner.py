@@ -1,7 +1,8 @@
 # """
 # Tests for the miner class
 # """
-# from src.library.data_handling import target_to_bits
+# from src.data.data_handling import target_to_bits
+#
 # from src.miner import Miner
 # from tests.randbtc_generators import get_random_block
 #

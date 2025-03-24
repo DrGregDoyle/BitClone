@@ -290,21 +290,21 @@ class Block(Serializable):
 
 
 # -- TESTING
-from secrets import randbits, token_bytes
 
 if __name__ == "__main__":
-    def get_random_block_header(tx_num: int = 3):
-        return BlockHeader(
-            version=randbits(32),
-            prev_block=token_bytes(32),
-            merkle_root=token_bytes(32),
-            timestamp=randbits(32),
-            bits=token_bytes(4),
-            nonce=randbits(32)
-        )
-
-
-    random_header = get_random_block_header()
-    print(f"RANDOM HEADER ID: {random_header.block_id.hex()}")
-    random_header.increment()
-    print(f"RANDOM HEADER NONCE +1: {random_header.block_id.hex()}")
+    pass
+    # def get_random_block_header(tx_num: int = 3):
+    #     return BlockHeader(
+    #         version=randbits(32),
+    #         prev_block=token_bytes(32),
+    #         merkle_root=token_bytes(32),
+    #         timestamp=randbits(32),
+    #         bits=token_bytes(4),
+    #         nonce=randbits(32)
+    #     )
+    #
+    #
+    # random_header = get_random_block_header()
+    # print(f"RANDOM HEADER ID: {random_header.block_id.hex()}")
+    # random_header.increment()
+    # print(f"RANDOM HEADER NONCE +1: {random_header.block_id.hex()}")
