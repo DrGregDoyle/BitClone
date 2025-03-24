@@ -495,15 +495,15 @@ class Transaction(Serializable):
         locktime_bytes = to_little_bytes(self.locktime, self.LOCKTIME_BYTES)
         return version_bytes + inputs_bytes + outputs_bytes + locktime_bytes
 
-
-from tests.randbtc_generators import get_random_tx
-
-if __name__ == "__main__":
-    rand_tx_segwit = get_random_tx()
-
-    print(f"RANDOM TX: {rand_tx_segwit.to_json()}")
-
-    # rand_tx_legacy = get_random_tx(is_segwit=False)
-
-    fbrand_segwit = Transaction.from_bytes(rand_tx_segwit.to_bytes())
-    # fbrand_legacy = Transaction.from_bytes(rand_tx_legacy.to_bytes())
+## NO RANDOM TX IN MAIN NAMESPACE OF DEV FOLDERS
+# from tests.randbtc_generators import get_random_tx
+#
+# if __name__ == "__main__":
+#     # rand_tx_segwit = get_random_tx()
+#
+#     print(f"RANDOM TX: {rand_tx_segwit.to_json()}")
+#
+#     # rand_tx_legacy = get_random_tx(is_segwit=False)
+#
+#     fbrand_segwit = Transaction.from_bytes(rand_tx_segwit.to_bytes())
+#     # fbrand_legacy = Transaction.from_bytes(rand_tx_legacy.to_bytes())

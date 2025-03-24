@@ -6,7 +6,7 @@ import json
 import math
 import struct
 
-from src.crypto.hash_functions import hash256
+from src.crypto import hash256
 from src.data.data_handling import write_compact_size, read_compact_size, check_length
 from src.data.serializable import Serializable
 from src.logger import get_logger
