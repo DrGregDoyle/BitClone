@@ -2,18 +2,19 @@
 The TxEngine class - Used for signing a transaction
 """
 
-from src.db import BitCloneDatabase
+from enum import IntEnum
+
+from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
+
 from src.crypto.ecdsa import ecdsa
 from src.crypto.hash_functions import hash256
 from src.data.data_handling import write_compact_size
+from src.db import BitCloneDatabase
 from src.logger import get_logger
+from src.script.stack import BTCNum
 from src.tx import Transaction, Output, Input
 
 logger = get_logger(__name__)
-
-from enum import IntEnum
-
-from src.script.stack import BTCNum
 
 
 class SigHash(IntEnum):
@@ -46,6 +47,10 @@ class TxEngine:
             1. Remove all existing script_sigs
             2. Put the script_pubkey from referenced output in the script_sig for the input.
             3. Append the sighash byte(s) at the end of the serialized tx data
+            4. Hash the serialized tx data
+            5. Sign the hashed data using ECDSA
+            6. DER encode the signature
+
         """
 
         # Create copy to not modify original
@@ -86,8 +91,18 @@ class TxEngine:
         logger.debug(f"TYPE: {type(hashed_tx_data)}")
         logger.debug(f"{hashed_tx_data.hex()}")
 
-        # Step 5: Sign the hashed_tx_data using ECDSA
-        ecdsa_sig = ecdsa(private_key, hashed_tx_data)
+        # Step 5: Sign the hashed_tx_data using ECDSA (uses low-s value)
+        (r, s) = ecdsa(private_key, hashed_tx_data)
+        logger.debug(f"ECDSA TUPLE")
+        logger.debug(f"(R,S) = {(hex(r), hex(s))}")
+
+        # Step 6: DER encode the signature
+        serialized_signature = encode_der_signature(r, s)
+
+        # Step 7: Append sighash byte and return for use in script sig
+        serialized_signature = serialized_signature + sighash.to_byte()
+        logger.debug(f"SIGNATURE: {serialized_signature.hex()}")
+        return serialized_signature
 
     def _remove_scriptsig(self, tx: Transaction) -> Transaction:
         # Remove all scriptsigs from the inputs
@@ -97,11 +112,27 @@ class TxEngine:
         return tx
 
 
+def encode_der_signature(r: int, s: int) -> bytes:
+    """
+    Encodes ECDSA integers r and s into a DER-encoded signature.
+    """
+    return encode_dss_signature(r, s)
+
+
+def decode_der_signature(der_sig: bytes) -> tuple[int, int]:
+    """
+    Decodes a DER-encoded ECDSA signature back into integers r and s.
+    """
+    return decode_dss_signature(der_sig)
+
+
 if __name__ == "__main__":
+    # r = 41
+    # s = 99
+    # encode_der_signature(r, s)
+
     # Setup DB and start your engines
-    test_db = BitCloneDatabase(
-        db_path="/src/bitclone_db/bitclone.db"
-    )
+    test_db = BitCloneDatabase()
     test_db._clear_db()
     engine = TxEngine(test_db)
 

@@ -28,7 +28,7 @@ def ecdsa(private_key: int, message_hash: bytes):
     Returns:
     --------
     tuple
-        The ECDSA signature (r, s).
+        The ECDSA signature (r, s). (using low s as per BIP-62)
 
     Algorithm:
     ----------
@@ -72,6 +72,10 @@ def ecdsa(private_key: int, message_hash: bytes):
         # Valid signature found, exit loop
         break
 
+    # 6) Get low_s
+    low_s = n - s
+    s = min(low_s, s)
+
     # -- DEBUG: Verify signature
     if logger.level == DEBUG:
         logger.debug("Verifying ECDSA")
@@ -80,7 +84,7 @@ def ecdsa(private_key: int, message_hash: bytes):
         assert signed, logger.error("Failed to verify ECDSA")
         logger.debug("ECDSA has been successfully verified.")
 
-    # 6) Return the signature (r,s)
+    # 7) Return the signature (r,s)
     return r, s
 
 
