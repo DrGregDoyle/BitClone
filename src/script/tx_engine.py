@@ -8,7 +8,7 @@ from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
 from src.crypto.ecdsa import ecdsa
 from src.crypto.hash_functions import hash256
-from src.data.data_handling import write_compact_size
+from src.data.data_handling import write_compact_size, to_little_bytes
 from src.db import BitCloneDatabase
 from src.logger import get_logger
 from src.script.stack import BTCNum
@@ -38,9 +38,10 @@ class TxEngine:
     def __init__(self, db: BitCloneDatabase):
         self.db = db
 
-    def sign_legacy_tx(self, private_key: int, tx: Transaction, input_index=0, sighash: SigHash = SigHash.ALL) -> bytes:
+    def get_legacy_sig(self, private_key: int, tx: Transaction, input_index=0, sighash: SigHash = SigHash.ALL) -> bytes:
         """
-        Signs a legacy Bitcoin transaction input and returns the transaction data to be signed.
+        Given a private key, transaction with input to be signed, and corresponding input_index, we return the
+        signature for use in the scriptsig for the input.
 
         Legacy Signing Algorithm:
         --
@@ -50,6 +51,7 @@ class TxEngine:
             4. Hash the serialized tx data
             5. Sign the hashed data using ECDSA
             6. DER encode the signature
+            7. Append the sighash byte and return
 
         """
 
@@ -94,7 +96,7 @@ class TxEngine:
         # Step 5: Sign the hashed_tx_data using ECDSA (uses low-s value)
         (r, s) = ecdsa(private_key, hashed_tx_data)
         logger.debug(f"ECDSA TUPLE")
-        logger.debug(f"(R,S) = {(hex(r), hex(s))}")
+        logger.debug(f"(R,S) = {(r, s)}")
 
         # Step 6: DER encode the signature
         serialized_signature = encode_der_signature(r, s)
@@ -103,6 +105,30 @@ class TxEngine:
         serialized_signature = serialized_signature + sighash.to_byte()
         logger.debug(f"SIGNATURE: {serialized_signature.hex()}")
         return serialized_signature
+
+    def get_segwit_sig(self, private_key: int, tx: Transaction, input_amount: int, input_index=0,
+                       sighash: SigHash = SigHash.ALL) -> bytes:
+        """
+        Given a private key, transaction with input to be signed, and corresponding input_index, we return the
+        signature for use in the scriptsig for the input.
+
+        Legacy Signing Algorithm:
+        --
+            1. Construct the preimage and preimage hash
+
+        """
+        # 1. Construct the pre-image hash
+        pre_image_version = tx.version  # 4 bytes | little-endian
+
+        # Serialize and hash the txids and vouts for the inputs
+        # Serialize and hash the sequences for the inputs
+        serialized_inputs = b''
+        serialized_sequences = b''
+        for i in tx.inputs:
+            serialized_inputs += i.txid + to_little_bytes(i.vout, Input.VOUT_BYTES)
+            serialized_sequences += to_little_bytes(i.sequence, Input.SEQ_BYTES)
+        hashed_input = hash256(serialized_inputs)
+        hashed_sequences = hash256(serialized_sequences)
 
     def _remove_scriptsig(self, tx: Transaction) -> Transaction:
         # Remove all scriptsigs from the inputs
