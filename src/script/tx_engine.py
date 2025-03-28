@@ -2,6 +2,7 @@
 The TxEngine class - Used for signing a transaction
 """
 
+from dataclasses import dataclass
 from enum import IntEnum
 
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
@@ -15,6 +16,35 @@ from src.script.stack import BTCNum
 from src.tx import Transaction, Output, Input
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class UTXO:
+    txid: bytes  # Transaction ID that created this UTXO
+    vout: int  # Output index in the transaction
+    address: str  # Address that can spend this UTXO
+    amount: int  # Amount in satoshis
+    script_pubkey: bytes  # Script that locks this output
+    spent: bool = False  # Indicates whether the UTXO has been spent (default is False)
+
+    @classmethod
+    def from_tuple(cls, data: tuple):
+        """
+        Creates UTXO from db entry
+        """
+        txid, vout, address, amount, script_pubkey, spent = data
+        return cls(txid, vout, address, amount, script_pubkey, bool(spent))
+
+    def to_dict(self) -> dict:
+        """Converts the UTXO to a dictionary."""
+        return {
+            "txid": self.txid.hex(),
+            "vout": self.vout,
+            "address": self.address,
+            "amount": self.amount,
+            "script_pubkey": self.script_pubkey.hex(),
+            "spent": self.spent
+        }
 
 
 class SigHash(IntEnum):
@@ -124,11 +154,19 @@ class TxEngine:
         # Serialize and hash the sequences for the inputs
         serialized_inputs = b''
         serialized_sequences = b''
+        serialized_outputs = b''
         for i in tx.inputs:
             serialized_inputs += i.txid + to_little_bytes(i.vout, Input.VOUT_BYTES)
             serialized_sequences += to_little_bytes(i.sequence, Input.SEQ_BYTES)
         hashed_input = hash256(serialized_inputs)
         hashed_sequences = hash256(serialized_sequences)
+
+        input_to_sign = tx.inputs[input_index]
+        serialized_outpoint = b'' + input_to_sign.txid + to_little_bytes(input_to_sign.vout, Input.VOUT_BYTES)
+
+        # Get referenced output
+        ref_utxo = UTXO.from_tuple(self.db.get_utxo(txid=input_to_sign.txid, vout=input_to_sign.vout))
+        print(f"UTXO: {ref_utxo.to_dict()}")
 
     def _remove_scriptsig(self, tx: Transaction) -> Transaction:
         # Remove all scriptsigs from the inputs
@@ -136,6 +174,9 @@ class TxEngine:
             i.script_sig = bytes()
             i.script_sig_size = write_compact_size(0)
         return tx
+
+    def _parse_utxo(self):
+        pass
 
 
 def encode_der_signature(r: int, s: int) -> bytes:
@@ -180,4 +221,6 @@ if __name__ == "__main__":
     input_tx = Transaction(inputs=[test_input])
 
     # Test engine
-    engine.sign_legacy_tx(private_key=41, tx=input_tx)
+    legacy_sig = engine.get_legacy_sig(private_key=41, tx=input_tx)
+    print(f"LEGACY SIG: {legacy_sig.hex()}")
+    segwit_sig = engine.get_segwit_sig(private_key=41, input_amount=75, tx=input_tx)
