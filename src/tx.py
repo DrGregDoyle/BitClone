@@ -11,6 +11,7 @@ B: unsigned char (1 byte)
 >Q: uint64 (big-endian)
 """
 import io
+from dataclasses import dataclass
 
 from src.crypto.hash_functions import hash256
 from src.data import Serializable, write_compact_size, read_compact_size, byte_format, from_little_bytes, \
@@ -279,6 +280,33 @@ class Witness(Serializable):
         return witness_dict
 
 
+@dataclass
+class UTXO:
+    txid: bytes  # Transaction ID that created this UTXO
+    vout: int  # Output index in the transaction
+    amount: int  # Amount in satoshis
+    script_pubkey: bytes  # Script that locks this output
+    spent: bool = False  # Indicates whether the UTXO has been spent (default is False)
+
+    @classmethod
+    def from_tuple(cls, data: tuple):
+        """
+        Creates UTXO from db entry
+        """
+        txid, vout, amount, script_pubkey, spent = data
+        return cls(txid, vout, amount, script_pubkey, bool(spent))
+
+    def to_dict(self) -> dict:
+        """Converts the UTXO to a dictionary."""
+        return {
+            "txid": self.txid.hex(),
+            "vout": self.vout,
+            "amount": self.amount,
+            "script_pubkey": self.script_pubkey.hex(),
+            "spent": self.spent
+        }
+
+
 class Transaction(Serializable):
     """
     Represents a Bitcoin transaction.
@@ -399,6 +427,16 @@ class Transaction(Serializable):
     def vbytes(self):
         return round(self.wu / 4, 2)
 
+    def get_utxos(self):
+        """
+        Return a list of UTXOs associated with the transaction
+        """
+        utxo_list = []
+        for p in self.outputs:
+            output_index = self.outputs.index(p)
+            utxo_list.append(UTXO(self.txid(), output_index, p.amount, p.script_pubkey))
+        return utxo_list
+
     def to_bytes(self) -> bytes:
         """
         Serialize this transaction into bytes according to Bitcoin's transaction format.
@@ -490,16 +528,3 @@ class Transaction(Serializable):
             self.output_count + b''
         locktime_bytes = to_little_bytes(self.locktime, self.LOCKTIME_BYTES)
         return version_bytes + inputs_bytes + outputs_bytes + locktime_bytes
-
-## NO RANDOM TX IN MAIN NAMESPACE OF DEV FOLDERS
-# from tests.randbtc_generators import get_random_tx
-#
-# if __name__ == "__main__":
-#     # rand_tx_segwit = get_random_tx()
-#
-#     print(f"RANDOM TX: {rand_tx_segwit.to_json()}")
-#
-#     # rand_tx_legacy = get_random_tx(is_segwit=False)
-#
-#     fbrand_segwit = Transaction.from_bytes(rand_tx_segwit.to_bytes())
-#     # fbrand_legacy = Transaction.from_bytes(rand_tx_legacy.to_bytes())

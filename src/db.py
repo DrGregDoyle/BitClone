@@ -72,15 +72,15 @@ class BitCloneDatabase:
             conn.commit()
         self._initialize_database()
 
-    def add_utxo(self, txid: bytes, vout: int, address: str, amount: int, script_pubkey: bytes):
+    def add_utxo(self, txid: bytes, vout: int, amount: int, script_pubkey: bytes):
         """Adds a new UTXO to the database."""
         with sqlite3.connect(self.db_path) as conn:
             c = conn.cursor()
             try:
                 c.execute("""
-                    INSERT INTO utxos (txid, vout, address, amount, script_pubkey, spent)
-                    VALUES (?, ?, ?, ?, ?, 0)
-                """, (txid, vout, address, amount, script_pubkey))
+                    INSERT INTO utxos (txid, vout,  amount, script_pubkey, spent)
+                    VALUES (?, ?,  ?, ?, 0)
+                """, (txid, vout, amount, script_pubkey))
                 conn.commit()
             except sqlite3.IntegrityError:
                 print(f"UTXO {txid}:{vout} already exists.")

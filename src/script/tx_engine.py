@@ -21,33 +21,7 @@ from src.tx import Transaction, Output, Input, WitnessItem, Witness
 logger = get_logger(__name__)
 
 
-@dataclass
-class UTXO:
-    txid: bytes  # Transaction ID that created this UTXO
-    vout: int  # Output index in the transaction
-    address: str  # Address that can spend this UTXO
-    amount: int  # Amount in satoshis
-    script_pubkey: bytes  # Script that locks this output
-    spent: bool = False  # Indicates whether the UTXO has been spent (default is False)
 
-    @classmethod
-    def from_tuple(cls, data: tuple):
-        """
-        Creates UTXO from db entry
-        """
-        txid, vout, address, amount, script_pubkey, spent = data
-        return cls(txid, vout, address, amount, script_pubkey, bool(spent))
-
-    def to_dict(self) -> dict:
-        """Converts the UTXO to a dictionary."""
-        return {
-            "txid": self.txid.hex(),
-            "vout": self.vout,
-            "address": self.address,
-            "amount": self.amount,
-            "script_pubkey": self.script_pubkey.hex(),
-            "spent": self.spent
-        }
 
 
 class SigHash(IntEnum):
@@ -67,9 +41,15 @@ class SigHash(IntEnum):
 
 
 class TxEngine:
+    """
+    A class used to construct transactions
+    """
 
     def __init__(self, db: BitCloneDatabase):
         self.db = db
+
+
+    def get_inputs(self):
 
     def get_legacy_sig(self, private_key: int, tx: Transaction, input_index=0, sighash: SigHash = SigHash.ALL) -> bytes:
         """
