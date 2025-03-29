@@ -358,9 +358,6 @@ class Transaction(Serializable):
         outputs = []
         for _ in range(num_outputs):
             outputs.append(Output.from_bytes(stream))
-            # output_data_length = read_compact_size(stream)
-            # output_data = stream.read(output_data_length)
-            # outputs.append(Output.from_bytes(output_data))
 
         # Read witnesses if SegWit
         witnesses = []

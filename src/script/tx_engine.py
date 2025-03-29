@@ -12,11 +12,11 @@ from enum import IntEnum
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
 
 from src.crypto import secp256k1, ecdsa, hash256, hash160
-from src.data import write_compact_size, to_little_bytes
+from src.data import write_compact_size, to_little_bytes, compress_public_key
 from src.db import BitCloneDatabase
 from src.logger import get_logger
 from src.script import OPCODES, ScriptEngine, BTCNum
-from src.tx import Transaction, Output, Input, WitnessItem
+from src.tx import Transaction, Output, Input, WitnessItem, Witness
 
 logger = get_logger(__name__)
 
@@ -227,7 +227,11 @@ class TxEngine:
 
         # Construct Witness for signature and compressed public key
         item1 = WitnessItem(serialized_sig)
-        item2 = WitnessItem()
+        item2 = WitnessItem(compress_public_key(private_key))
+        ref_witness = Witness([item1, item2])
+        print(f"REF WITNESS: {ref_witness.to_json()}")
+
+        # Add Witness to witness position in tx
 
     def _get_cpk(self, private_key: int) -> bytes:
         """
