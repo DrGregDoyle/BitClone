@@ -4,9 +4,7 @@ Tests for verifying schnorr signatures
 
 from secrets import randbits
 
-from src.crypto.ecc import secp256k1
-from src.crypto.hash_functions import hash_function, HashType
-from src.crypto.schnorr import schnorr_signature, verify_schnorr_signature
+from src.crypto import secp256k1, hash_function, HashType, schnorr_signature, verify_schnorr_signature
 
 BIT_LENGTH = 256
 HASHTYPE = HashType.SHA256

@@ -13,9 +13,8 @@ B: unsigned char (1 byte)
 import io
 
 from src.crypto.hash_functions import hash256
-from src.data.data_handling import check_length, write_compact_size, read_compact_size, byte_format, \
-    from_little_bytes, to_little_bytes
-from src.data.serializable import Serializable
+from src.data import Serializable, write_compact_size, read_compact_size, byte_format, from_little_bytes, \
+    to_little_bytes, check_length
 
 
 class Input(Serializable):

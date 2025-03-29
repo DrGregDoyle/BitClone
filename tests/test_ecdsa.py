@@ -3,8 +3,7 @@ The generate signature has a verification method in it, so we need only sign a t
 """
 from secrets import randbits, token_bytes
 
-from src.crypto.ecc import secp256k1
-from src.crypto.ecdsa import ecdsa, verify_ecdsa
+from src.crypto import secp256k1, ecdsa, verify_ecdsa
 
 BIT_LENGTH = 256
 

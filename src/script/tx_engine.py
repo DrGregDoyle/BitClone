@@ -11,15 +11,11 @@ from enum import IntEnum
 
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
 
-from src.crypto import secp256k1
-from src.crypto.ecdsa import ecdsa
-from src.crypto.hash_functions import hash256, hash160
-from src.data.data_handling import write_compact_size, to_little_bytes
+from src.crypto import secp256k1, ecdsa, hash256, hash160
+from src.data import write_compact_size, to_little_bytes
 from src.db import BitCloneDatabase
 from src.logger import get_logger
-from src.script.op_codes import OPCODES
-from src.script.script import ScriptEngine
-from src.script.stack import BTCNum
+from src.script import OPCODES, ScriptEngine, BTCNum
 from src.tx import Transaction, Output, Input, WitnessItem
 
 logger = get_logger(__name__)
@@ -239,7 +235,7 @@ class TxEngine:
         """
         curve = secp256k1()
         pk_point = curve.multiply_generator(private_key)
-        
+
     def _remove_scriptsig(self, tx: Transaction) -> Transaction:
         # Remove all scriptsigs from the inputs
         for i in tx.inputs:

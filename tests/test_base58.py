@@ -1,7 +1,7 @@
 """
 Tests for base58 and base58Check encoding
 """
-from src.crypto.codec import encode_base58, decode_base58
+from src.data import encode_base58, decode_base58
 
 
 def test_base58():

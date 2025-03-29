@@ -7,8 +7,7 @@ import math
 import struct
 
 from src.crypto import hash256
-from src.data.data_handling import write_compact_size, read_compact_size, check_length
-from src.data.serializable import Serializable
+from src.data import Serializable, write_compact_size, check_length, read_compact_size
 from src.logger import get_logger
 from src.tx import Transaction
 

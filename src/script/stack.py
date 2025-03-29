@@ -4,6 +4,8 @@ Classes for BTCNum and BTCStack
 from collections import deque
 from typing import List, Optional, TypeVar, Generic
 
+from src.script.stackerr import StackError, EmptyStackError, StackIndexError, InsufficientElementsError
+
 T = TypeVar('T')  # Generic type for stack elements
 
 

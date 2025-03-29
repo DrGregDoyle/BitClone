@@ -2,7 +2,7 @@
 The Miner class
 """
 from src.block import Block
-from src.data.data_handling import bits_to_target_int
+from src.data import bits_to_target_int
 
 
 class Miner:

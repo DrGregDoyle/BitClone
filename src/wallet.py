@@ -7,10 +7,8 @@ HD Wallet
 import abc
 from secrets import randbits
 
-from src.crypto.ecc import secp256k1
-from src.crypto.hash_functions import sha256, pbkdf2, hmac_sha512, hash160
-from src.crypto.codec import compress_public_key, decompress_public_key, encode_base58check, encode_bech32
-from src.data.word_list import WORDLIST
+from src.crypto import secp256k1, sha256, pbkdf2, hmac_sha512, hash160
+from src.data import compress_public_key, decompress_public_key, encode_base58check, encode_bech32, WORDLIST
 from src.logger import get_logger
 
 logger = get_logger(__name__)

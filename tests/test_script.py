@@ -6,7 +6,7 @@ from secrets import token_bytes
 
 import pytest
 
-from src.script.script import ScriptEngine, BTCNum
+from src.script import ScriptEngine, BTCNum
 
 
 @pytest.fixture
