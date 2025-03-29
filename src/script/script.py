@@ -6,10 +6,10 @@ from typing import Callable, Dict
 
 from src.crypto.ecc import secp256k1
 from src.crypto.hash_functions import ripemd160, sha1, sha256, hash160, hash256
-from src.script.op_codes import OPCODES
-from src.script.stack import BTCNum, BTCStack
 from src.data.data_handling import check_hex, check_length
 from src.logger import get_logger
+from src.script.op_codes import OPCODES
+from src.script.stack import BTCNum, BTCStack
 
 logger = get_logger(__name__)
 
@@ -233,6 +233,8 @@ class ScriptEngine:
             # Determine asm
             if 0x00 < opcode_int < 0x4c:
                 asm_log.append(f"OP_PUSHBYTES_{opcode_int}")
+                data = stream.read(opcode_int)
+                asm_log.append(data.hex())
             else:
                 asm_log.append(OPCODES[opcode_int])
         return asm_log

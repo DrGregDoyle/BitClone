@@ -1,5 +1,9 @@
 """
 The TxEngine class - Used for signing a transaction
+
+NOTES:
+    - Signatures are designed with an output in mind. They are designed to unlock an output.
+    - Hence a legacy, segwit or taproot signature will be used depending ont the type of output referenced.
 """
 
 from dataclasses import dataclass
@@ -7,13 +11,16 @@ from enum import IntEnum
 
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
 
+from src.crypto import secp256k1
 from src.crypto.ecdsa import ecdsa
-from src.crypto.hash_functions import hash256
+from src.crypto.hash_functions import hash256, hash160
 from src.data.data_handling import write_compact_size, to_little_bytes
 from src.db import BitCloneDatabase
 from src.logger import get_logger
+from src.script.op_codes import OPCODES
+from src.script.script import ScriptEngine
 from src.script.stack import BTCNum
-from src.tx import Transaction, Output, Input
+from src.tx import Transaction, Output, Input, WitnessItem
 
 logger = get_logger(__name__)
 
@@ -136,19 +143,34 @@ class TxEngine:
         logger.debug(f"SIGNATURE: {serialized_signature.hex()}")
         return serialized_signature
 
-    def get_segwit_sig(self, private_key: int, tx: Transaction, input_amount: int, input_index=0,
+    def get_segwit_sig(self, private_key: int, tx: Transaction, input_amount: int, input_index=0, nonce: int = 0,
                        sighash: SigHash = SigHash.ALL) -> bytes:
         """
         Given a private key, transaction with input to be signed, and corresponding input_index, we return the
         signature for use in the scriptsig for the input.
 
+        NB: nonce is used for testing. TODO: Remove once testing complete. Use a random nonce each time
+
         Legacy Signing Algorithm:
         --
             1. Construct the preimage and preimage hash
+                - Grab the version field (reusable)
+                - Serialize and hash the txids and vouts for the inputs (reusable)
+                - Serialize and hash the sequences for the inputs (reusable)
+                - Serialize the txid + vout for the input we're signing (not reusable)
+                - Create a scriptcode for the input we're signing (not reusable)
+                - Get the sequence for the input we're signing (not reusable)
+                - Serialize and hash all the outputs (reusable)
+                - Grab the locktime
+                - preimage = version + hash256(inputs) + hash256(sequences) + input_outpoint + scriptcode + amount +
+                    sequence + hash256(outputs) + locktime
+            2. Sign the preimage hash
+            3. DER encode the signature
+            4. Append signature hash to DER encoding
 
         """
         # 1. Construct the pre-image hash
-        pre_image_version = tx.version  # 4 bytes | little-endian
+        pre_image_version = to_little_bytes(tx.version, Input.VERSION_BYTES)  # 4 bytes | little-endian
 
         # Serialize and hash the txids and vouts for the inputs
         # Serialize and hash the sequences for the inputs
@@ -158,8 +180,11 @@ class TxEngine:
         for i in tx.inputs:
             serialized_inputs += i.txid + to_little_bytes(i.vout, Input.VOUT_BYTES)
             serialized_sequences += to_little_bytes(i.sequence, Input.SEQ_BYTES)
-        hashed_input = hash256(serialized_inputs)
+        for j in tx.outputs:
+            serialized_outputs += j.to_bytes()
+        hashed_inputs = hash256(serialized_inputs)
         hashed_sequences = hash256(serialized_sequences)
+        hashed_outputs = hash256(serialized_outputs)
 
         input_to_sign = tx.inputs[input_index]
         serialized_outpoint = b'' + input_to_sign.txid + to_little_bytes(input_to_sign.vout, Input.VOUT_BYTES)
@@ -168,15 +193,59 @@ class TxEngine:
         ref_utxo = UTXO.from_tuple(self.db.get_utxo(txid=input_to_sign.txid, vout=input_to_sign.vout))
         print(f"UTXO: {ref_utxo.to_dict()}")
 
+        # Verify scriptpubkey is in proper format
+        script_engine = ScriptEngine()
+        parsed_script = script_engine.parse_script(ref_utxo.script_pubkey)
+        print(f"PARSED SCRIPT: {parsed_script}")
+
+        is_segwit = parsed_script[0] == OPCODES[0]
+        data_len = len(parsed_script[2]) // 2
+        is_pushdata = parsed_script[1] == f"OP_PUSHBYTES_{data_len}"
+        if not is_segwit or not is_pushdata:
+            raise ValueError("Referenced scriptpub key not in proper format")
+
+        # Create scriptcode
+        scriptcode = bytes.fromhex("1976a914") + ref_utxo.script_pubkey + bytes.fromhex("88ac")
+
+        # Find the input amount
+        amount = to_little_bytes(input_amount, Input.AMOUNT_BYTES)
+
+        # Get the sequence
+        input_seq = to_little_bytes(input_to_sign.vout, Input.VOUT_BYTES)
+
+        # Get the locktime
+        locktime = to_little_bytes(tx.locktime, Transaction.LOCKTIME_BYTES)
+
+        # Create the preimage
+        preimage = (pre_image_version + hashed_inputs + hashed_sequences + serialized_outpoint + scriptcode +
+                    amount + input_seq + hashed_outputs + locktime)
+
+        # 2. Sign the preimage hash
+        r, s = ecdsa(private_key, preimage)
+
+        # 3. DER encode the signature
+        der_encoded_sig = encode_der_signature(r, s)
+
+        # 4. Append sighash byte
+        serialized_sig = der_encoded_sig + sighash.to_byte()
+
+        # Construct Witness for signature and compressed public key
+        item1 = WitnessItem(serialized_sig)
+        item2 = WitnessItem()
+
+    def _get_cpk(self, private_key: int) -> bytes:
+        """
+        We return a compressed public key for the given private key
+        """
+        curve = secp256k1()
+        pk_point = curve.multiply_generator(private_key)
+        
     def _remove_scriptsig(self, tx: Transaction) -> Transaction:
         # Remove all scriptsigs from the inputs
         for i in tx.inputs:
             i.script_sig = bytes()
             i.script_sig_size = write_compact_size(0)
         return tx
-
-    def _parse_utxo(self):
-        pass
 
 
 def encode_der_signature(r: int, s: int) -> bytes:
@@ -203,10 +272,15 @@ if __name__ == "__main__":
     test_db._clear_db()
     engine = TxEngine(test_db)
 
+    pubkeyhash = hash160(bytes.fromhex("41"))
+    version_byte = bytes.fromhex("00")
+    push_data = bytes.fromhex(hex(len(pubkeyhash))[2:])
+    segwit_scriptpubkey = version_byte + push_data + pubkeyhash
+
     # Create tx for utxo
     test_output = Output(100, bytes.fromhex('deadbeef'))
-    test_tx = Transaction(outputs=[test_output])
-    print(f"TEST_TX TXID: {test_tx.txid().hex()}")
+    segwit_output = Output(100, segwit_scriptpubkey)
+    test_tx = Transaction(outputs=[test_output, segwit_output])
 
     test_db.add_utxo(
         txid=test_tx.txid(),
@@ -215,12 +289,20 @@ if __name__ == "__main__":
         amount=test_tx.outputs[0].amount,
         script_pubkey=test_tx.outputs[0].script_pubkey
     )
+    test_db.add_utxo(
+        txid=test_tx.txid(),
+        vout=1,
+        address="dummy",
+        amount=test_tx.outputs[1].amount,
+        script_pubkey=test_tx.outputs[1].script_pubkey
+    )
 
     # Create tx to sign
     test_input = Input(test_tx.txid(), 0, bytes.fromhex('babefade'), 0)
-    input_tx = Transaction(inputs=[test_input])
+    segwit_input = Input(test_tx.txid(), 1, b'', 0)
+    input_tx = Transaction(inputs=[test_input, segwit_input])
 
     # Test engine
     legacy_sig = engine.get_legacy_sig(private_key=41, tx=input_tx)
     print(f"LEGACY SIG: {legacy_sig.hex()}")
-    segwit_sig = engine.get_segwit_sig(private_key=41, input_amount=75, tx=input_tx)
+    segwit_sig = engine.get_segwit_sig(private_key=41, input_amount=75, tx=input_tx, input_index=1)

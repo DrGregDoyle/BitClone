@@ -83,6 +83,12 @@ def ecdsa(private_key: int, message_hash: bytes):
         signed = verify_ecdsa(signature=(r, s), message_hash=message_hash, public_key=public_key)
         assert signed, logger.error("Failed to verify ECDSA")
         logger.debug("ECDSA has been successfully verified.")
+        logger.debug("\n" + "=" * 256)
+        logger.debug("Verifying Low s")
+        logger.debug(f"S: {s}")
+        logger.debug(f"Order -S: {n - s}")
+        assert s < n - s, logger.error(f"Failed to return low s.")
+        logger.debug(f"Return low S has been successfully verified.")
 
     # 7) Return the signature (r,s)
     return r, s
