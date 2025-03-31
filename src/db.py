@@ -28,7 +28,6 @@ class BitCloneDatabase:
                 CREATE TABLE IF NOT EXISTS utxos (
                     txid TEXT NOT NULL,
                     vout INTEGER NOT NULL,
-                    address TEXT NOT NULL,
                     amount INTEGER NOT NULL,
                     script_pubkey TEXT NOT NULL,
                     spent INTEGER DEFAULT 0,
@@ -58,8 +57,8 @@ class BitCloneDatabase:
                 )
             ''')
 
-            # Index for faster UTXO lookups
-            c.execute("CREATE INDEX IF NOT EXISTS utxo_address_idx ON utxos(address)")
+            # # Index for faster UTXO lookups
+            # c.execute("CREATE INDEX IF NOT EXISTS utxo_address_idx ON utxos(address)")
             conn.commit()
 
     def _clear_db(self):
@@ -91,13 +90,6 @@ class BitCloneDatabase:
             c = conn.cursor()
             c.execute("UPDATE utxos SET spent = 1 WHERE txid = ? AND vout = ?", (txid, vout))
             conn.commit()
-
-    def get_unspent_utxos(self, address):
-        """Returns all unspent UTXOs for a given address."""
-        with sqlite3.connect(self.db_path) as conn:
-            c = conn.cursor()
-            c.execute("SELECT txid, vout, amount, script_pubkey FROM utxos WHERE address = ? AND spent = 0", (address,))
-            return c.fetchall()
 
     def add_block(self, height, block_hash, prev_hash, timestamp, merkle_root, nonce):
         """Adds a new block to the database."""

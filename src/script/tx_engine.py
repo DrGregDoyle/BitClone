@@ -6,7 +6,6 @@ NOTES:
     - Hence a legacy, segwit or taproot signature will be used depending ont the type of output referenced.
 """
 
-from dataclasses import dataclass
 from enum import IntEnum
 
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
@@ -16,12 +15,9 @@ from src.data import write_compact_size, to_little_bytes, compress_public_key
 from src.db import BitCloneDatabase
 from src.logger import get_logger
 from src.script import OPCODES, ScriptEngine, BTCNum
-from src.tx import Transaction, Output, Input, WitnessItem, Witness
+from src.tx import Transaction, Output, Input, WitnessItem, Witness, UTXO
 
 logger = get_logger(__name__)
-
-
-
 
 
 class SigHash(IntEnum):
@@ -47,9 +43,6 @@ class TxEngine:
 
     def __init__(self, db: BitCloneDatabase):
         self.db = db
-
-
-    def get_inputs(self):
 
     def get_legacy_sig(self, private_key: int, tx: Transaction, input_index=0, sighash: SigHash = SigHash.ALL) -> bytes:
         """
@@ -89,7 +82,7 @@ class TxEngine:
         if not ref_utxo:
             raise ValueError("Referenced UTXO not found.")
 
-        r_txid, r_vout, r_address, r_amount, r_script_pubkey, r_spent = ref_utxo
+        r_txid, r_vout, r_amount, r_script_pubkey, r_spent = ref_utxo
         ref_input.script_sig = bytes(r_script_pubkey)
         ref_input.script_sig_size = write_compact_size(len(ref_input.script_sig))
         test_state("ADD SCRIPT SIG (script_pubkey as placeholder)")
@@ -212,7 +205,7 @@ class TxEngine:
         print(f"REF WITNESS: {ref_witness.to_json()}")
 
         # Add Witness to witness position in tx
-
+        
     def _get_cpk(self, private_key: int) -> bytes:
         """
         We return a compressed public key for the given private key
@@ -265,17 +258,19 @@ if __name__ == "__main__":
     test_db.add_utxo(
         txid=test_tx.txid(),
         vout=0,
-        address="dummy",
         amount=test_tx.outputs[0].amount,
         script_pubkey=test_tx.outputs[0].script_pubkey
     )
     test_db.add_utxo(
         txid=test_tx.txid(),
         vout=1,
-        address="dummy",
         amount=test_tx.outputs[1].amount,
         script_pubkey=test_tx.outputs[1].script_pubkey
     )
+
+    # Test UTXOS
+    utxos = test_tx.get_utxos()
+    print(f"UTXOS in test tx: {[u.to_dict() for u in utxos]}")
 
     # Create tx to sign
     test_input = Input(test_tx.txid(), 0, bytes.fromhex('babefade'), 0)
