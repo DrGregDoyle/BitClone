@@ -113,10 +113,10 @@ class TxEngine:
         return serialized_signature
 
     def get_segwit_sig(self, private_key: int, tx: Transaction, input_amount: int, input_index=0, nonce: int = 0,
-                       sighash: SigHash = SigHash.ALL) -> bytes:
+                       sighash: SigHash = SigHash.ALL) -> Transaction:
         """
         Given a private key, transaction with input to be signed, and corresponding input_index, we return the
-        signature for use in the scriptsig for the input.
+        transaction with the signed Witness item
 
         NB: nonce is used for testing. TODO: Remove once testing complete. Use a random nonce each time
 
@@ -136,6 +136,8 @@ class TxEngine:
             2. Sign the preimage hash
             3. DER encode the signature
             4. Append signature hash to DER encoding
+            5. Construct Witness for corresponding input
+            6. Insert Witness into proper spot in witness list and return tx
 
         """
         # 1. Construct the pre-image hash
@@ -205,7 +207,9 @@ class TxEngine:
         print(f"REF WITNESS: {ref_witness.to_json()}")
 
         # Add Witness to witness position in tx
-        
+        tx.witnesses[input_index] = ref_witness
+        return tx
+
     def _get_cpk(self, private_key: int) -> bytes:
         """
         We return a compressed public key for the given private key
@@ -275,9 +279,12 @@ if __name__ == "__main__":
     # Create tx to sign
     test_input = Input(test_tx.txid(), 0, bytes.fromhex('babefade'), 0)
     segwit_input = Input(test_tx.txid(), 1, b'', 0)
-    input_tx = Transaction(inputs=[test_input, segwit_input])
+    input_tx = Transaction(inputs=[test_input, segwit_input], segwit=True)
 
     # Test engine
-    legacy_sig = engine.get_legacy_sig(private_key=41, tx=input_tx)
-    print(f"LEGACY SIG: {legacy_sig.hex()}")
-    segwit_sig = engine.get_segwit_sig(private_key=41, input_amount=75, tx=input_tx, input_index=1)
+    # legacy_sig = engine.get_legacy_sig(private_key=41, tx=input_tx)
+    # print(f"LEGACY SIG: {legacy_sig.hex()}")
+    print(f"INPUT TX BEFORE SIGNING: {input_tx.to_json()}")
+    signed_tx = engine.get_segwit_sig(private_key=41, input_amount=75, tx=input_tx, input_index=1)
+    print(f"INPUT TX AFTER SIGNING: {input_tx.to_json()}")
+

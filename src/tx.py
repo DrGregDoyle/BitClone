@@ -311,19 +311,15 @@ class Transaction(Serializable):
     """
     Represents a Bitcoin transaction.
 
-    Attributes:
-        version (int): The transaction version (4 bytes).
-        inputs (list[Input]): A list of transaction inputs.
-        outputs (list[Output]): A list of transaction outputs.
-        locktime (int): The locktime (4 bytes).
-        witnesses (list[Witness]): The witness data (if present, for SegWit transactions).
-        input_count (bytes): CompactSize-encoded number of inputs.
-        output_count (bytes): CompactSize-encoded number of outputs.
+    This class can be used to construct a finished transaction or, more likely, create a Transaction for signing.
+    This means we will enable the "segwit" boolean, which specifies whether a Transaction contains
+
     """
     __slots__ = ('version', 'inputs', 'outputs', 'locktime', 'witnesses', 'input_count', 'output_count', 'is_segwit',
                  '_cached_non_witness_bytes', '_cached_wtxid_bytes', 'sighash')
 
-    def __init__(self, inputs=None, outputs=None, witnesses=None, locktime: int = 0, version: int = None):
+    def __init__(self, inputs=None, outputs=None, witnesses=None, locktime: int = 0, version: int = None,
+                 segwit: bool = True):
         self.version = version or self.VERSION
         self.inputs = inputs or []
         self.outputs = outputs or []
@@ -335,7 +331,16 @@ class Transaction(Serializable):
         self.output_count = write_compact_size(len(self.outputs))
 
         # Get segwit bool
-        self.is_segwit = len(self.witnesses) > 0
+        self.is_segwit = segwit
+
+        # Check or fill witnesses
+        if self.is_segwit:
+            # Check witnesses
+            if self.witnesses and len(self.witnesses) != len(self.inputs):
+                raise ValueError("Given number of witness objects doesn't agree with number of inputs")
+            # No witnesses case
+            else:
+                self.witnesses = [Witness() for _ in range(len(self.inputs))]
 
         self._cached_non_witness_bytes = None  # Cache for txid computation
         self._cached_wtxid_bytes = None  # Cache for wtxid computation
@@ -394,13 +399,12 @@ class Transaction(Serializable):
                 witnesses.append(Witness.from_bytes(stream))
 
         # Read locktime (4 bytes, little-endian)
-        print(f"STREAM BEFORE READING LOCKTIME DATA: {stream}")
         locktime_data = stream.read(4)
         check_length(locktime_data, cls.LOCKTIME_BYTES, "locktime")
         locktime = from_little_bytes(locktime_data)
         print(f"FROM BYTES: LOCKTIME BYTES: {locktime}")
 
-        return cls(inputs, outputs, witnesses, locktime, version)
+        return cls(inputs, outputs, witnesses, locktime, version, is_segwit)
 
     @property
     def wu(self):
@@ -456,12 +460,12 @@ class Transaction(Serializable):
         # Inputs, outputs and witness
         inputs_bytes = self.input_count + b''.join(i.to_bytes() for i in self.inputs) if self.inputs else \
             self.input_count + b''
-        outputs_bytes = self.output_count + b''.join(o.to_bytes() for o in self.outputs) if self.outputs else b''
-        witnesses_bytes = b''.join(w.to_bytes() for w in self.witnesses) if self.is_segwit else self.output_count + b''
+        outputs_bytes = self.output_count + b''.join(o.to_bytes() for o in self.outputs) if self.outputs else \
+            self.output_count + b''
+        witnesses_bytes = b''.join(w.to_bytes() for w in self.witnesses) if self.is_segwit else b''
 
         # Locktime and return
         locktime_bytes = to_little_bytes(self.locktime, self.LOCKTIME_BYTES)
-        print(f"TO BYTES LOCKTIME BYTES: {locktime_bytes.hex()}")
         return version_bytes + marker_flag_bytes + inputs_bytes + outputs_bytes + witnesses_bytes + locktime_bytes
 
     def to_dict(self) -> dict:
@@ -528,3 +532,10 @@ class Transaction(Serializable):
             self.output_count + b''
         locktime_bytes = to_little_bytes(self.locktime, self.LOCKTIME_BYTES)
         return version_bytes + inputs_bytes + outputs_bytes + locktime_bytes
+
+
+if __name__ == "__main__":
+    w1 = Witness()
+    print(f"EMPTY WITNESS: {w1.to_json()}")
+    print(f"EMPTY WITNESS BYTES: {w1.to_bytes().hex()}")
+    print(f"CONSTRUCTED WITNESS: {Witness.from_bytes(w1.to_bytes()).to_json()}")
