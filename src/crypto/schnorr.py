@@ -11,41 +11,6 @@ logger = get_logger(__name__)
 HASHTYPE = HashType.SHA256
 
 
-# TODO: add verification in each function so that hex strings are always even before being sent to a bytes object
-
-
-def hex_to_bytes(*args) -> bytes:
-    """
-    Converts multiple hexadecimal strings into a concatenated bytes object.
-
-    :param args: Hexadecimal string arguments.
-    :return: A bytes representation of the concatenated hexadecimal string.
-    :raises ValueError: If any argument is not a valid hexadecimal string.
-    """
-    concatenated_hex = ""
-
-    for arg in args:
-        if not isinstance(arg, str):
-            raise ValueError(f"All arguments must be strings. Invalid argument: {arg}")
-
-        # Remove optional "0x" prefix
-        hex_string = arg.lower().removeprefix("0x")
-
-        # Verify the string is valid hexadecimal
-        if not all(c in "0123456789abcdef" for c in hex_string):
-            raise ValueError(f"Invalid hexadecimal string: {arg}")
-
-        # Concatenate the valid hexadecimal string
-        concatenated_hex += hex_string
-
-    # Ensure the concatenated string is of even length
-    if len(concatenated_hex) % 2 != 0:
-        concatenated_hex = "0" + concatenated_hex
-
-    # Convert to bytes and return
-    return bytes.fromhex(concatenated_hex)
-
-
 def schnorr_signature(private_key: int, message: bytes, auxiliary_bits: bytes):
     # Curve setup
     curve = secp256k1()
@@ -60,50 +25,41 @@ def schnorr_signature(private_key: int, message: bytes, auxiliary_bits: bytes):
     if y % 2 != 0:
         private_key = n - private_key
 
-    logger.debug(f"Private key: {hex(private_key)}")
-    logger.debug(f"Public key x: {hex(x)}")
-    logger.debug(f"Public key y: {hex(y)}")
-
     # Create private nonce
     aux_rand_hash = tagged_hash_function(encoded_data=auxiliary_bits, tag=b"BIP0340/aux", function_type=HASHTYPE)
-    logger.debug(f"Aux Rand Hash: 0x{aux_rand_hash.hex()}")
 
     # XOR private key with aux_rand_hash
-    t = private_key ^ int.from_bytes(aux_rand_hash, byteorder="big")
-    logger.debug(f"Private key XOR aux_rand_hash: {hex(t)}")
+    nonce_input_value = private_key ^ int.from_bytes(aux_rand_hash, byteorder="big")
 
     # Create final private nonce
-    hex_data = hex_to_bytes(hex(t), hex(x), message.hex())
-    private_nonce_bytes = tagged_hash_function(encoded_data=hex_data, tag=b"BIP0340/nonce", function_type=HASHTYPE)
+    nonce_input_bytes = nonce_input_value.to_bytes(32, "big") + x.to_bytes(32, "big") + message
+    private_nonce_bytes = tagged_hash_function(encoded_data=nonce_input_bytes, tag=b"BIP0340/nonce",
+                                               function_type=HASHTYPE)
     private_nonce = int.from_bytes(private_nonce_bytes, byteorder="big") % n
-    logger.debug(f"Private Nonce: {hex(private_nonce)}")
 
     # Calculate public nonce - Negate private_nonce if necessary
     px, py = curve.multiply_generator(private_nonce)
     if py % 2 != 0:
         private_nonce = n - private_nonce
-    logger.debug(f"Public nonce x: {hex(px)}")
-    logger.debug(f"Public nonce y: {hex(py)}")
-    logger.debug(f"Private nonce after negation if necessary: {hex(private_nonce)}")
 
     # Calculate the challenge
-    challenge_data = hex_to_bytes(hex(px), hex(x), message.hex())
-    challenge_bytes = tagged_hash_function(encoded_data=challenge_data, tag=b"BIP0340/challenge",
+    challenge_input_bytes = px.to_bytes(32, "big") + x.to_bytes(32, "big") + message
+    challenge_bytes = tagged_hash_function(encoded_data=challenge_input_bytes, tag=b"BIP0340/challenge",
                                            function_type=HASHTYPE)
     challenge = int.from_bytes(challenge_bytes, byteorder="big") % n
-    logger.debug(f"CHALLENGE: {hex(challenge)}")
 
     # Construct signature
     r = px
     s = (private_nonce + challenge * private_key) % n
 
-    # Return 64 byte hex string composed of two 32 byte hex strings from r and s
-    return format(r, "064x") + format(s, "064x")  # 64 hex chars = 32 bytes
+    # Return 64 byte signature
+    return r.to_bytes(32, "big") + s.to_bytes(32, "big")
+    # return format(r, "064x") + format(s, "064x")  # 64 hex chars = 32 bytes
 
 
-def verify_schnorr_signature(public_key_x: int, message: bytes, signature: str) -> bool:
-    # Verify signature is 128 characters == 64 bytes
-    if len(signature) != 128:
+def verify_schnorr_signature(public_key_x: int, message: bytes, signature: bytes) -> bool:
+    # Verify signature is 64 bytes
+    if len(signature) != 64:
         raise ValueError("Given signature is not 64 bytes.")
 
     # Curve Setup
@@ -125,11 +81,11 @@ def verify_schnorr_signature(public_key_x: int, message: bytes, signature: str) 
     public_key = (x, y)
 
     # Extract signature parts
-    r, s = signature[:64], signature[64:]
-    num_r, num_s = int(r, 16), int(s, 16)
+    r, s = signature[:32], signature[32:]
+    num_r, num_s = int.from_bytes(r, "big"), int.from_bytes(s, "big")
 
-    logger.debug(f"Recovered R: {r}")
-    logger.debug(f"Recovered S: {s}")
+    logger.debug(f"Recovered R: {r.hex()}")
+    logger.debug(f"Recovered S: {s.hex()}")
 
     # Verify signatures values
     errors = {
@@ -141,8 +97,9 @@ def verify_schnorr_signature(public_key_x: int, message: bytes, signature: str) 
         raise ValueError(f"One or more signature values is invalid: {errors}")
 
     # Calculate the challenge
+    challenge_data = num_r.to_bytes(32, "big") + x.to_bytes(32, "big") + message
 
-    challenge_data = hex_to_bytes(r, hex(x), message.hex())
+    # hex_to_bytes(r, hex(x), message.hex())
     challenge_bytes = tagged_hash_function(encoded_data=challenge_data, tag=b"BIP0340/challenge",
                                            function_type=HASHTYPE)
     challenge = int.from_bytes(challenge_bytes, byteorder="big") % n
