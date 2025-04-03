@@ -21,7 +21,7 @@ class ScriptEngine:
     NOTE: All elements pushed to the stack should be bytes objects.
     """
 
-    def __init__(self):
+    def __init__(self, taproot: bool = False):
         """
         Setup stack and operation handlers
         """
@@ -32,6 +32,9 @@ class ScriptEngine:
         self.ops_log = []  # List of ASM instructions when evaluating script
 
         self.op_handlers = self._initialize_op_handlers()
+
+        # Flag for TapScript engine
+        self.taproot = taproot
 
     def _initialize_op_handlers(self) -> Dict[int, Callable]:
         return {
@@ -102,7 +105,8 @@ class ScriptEngine:
             0xa8: self._op_sha256,  # OP_SHA256
             0xa9: self._op_hash160,  # OP_HASH160
             0xaa: self._op_hash256,  # OP_HASH256
-            0xac: self._op_checksig,  # OP_CHECKSIG
+            0xac: self._op_checksig,  # OP_CHECKSIG,
+            0xad: self._op_checksigverify,  # OP_CHECKSIGVERIFY
         }
 
     def clear_stacks(self):
@@ -115,7 +119,7 @@ class ScriptEngine:
 
     def eval_script(self, script: bytes, clear_stacks: bool = True) -> bool:
         """
-        Evaluates the script - returns True/False based on results of main stack
+        Evaluates the script - returns True/False based on results of main stack.
         """
         # Empty stacks
         if clear_stacks:
@@ -643,12 +647,15 @@ class ScriptEngine:
         OP_CHECKSIG, 0xac - The entire transaction's outputs, inputs, and script (from the most recently-executed
         OP_CODESEPARATOR to the end) are hashed. The signature used by OP_CHECKSIG must be a valid signature for this
         hash and public key.
+
+        NOTE: If taproot = true we use Schnorr signatures instead of ECDSA
         """
         pass
 
     def _op_checksigverify(self):
         """
         OP_CHECKSIGVERIFY, 0xad - Same as OP_CHECKSIG, but OP_VERIFY is executed afterward.
+        NOTE: If taproot = true we use Schnorr signatures instead of ECDSA
         """
         pass
 
@@ -658,12 +665,16 @@ class ScriptEngine:
         Starting with the subsequent public key, it compares the second signature against each remaining public key
         until it finds an ECDSA match. The process is repeated until all signatures have been checked or not enough
         public keys remain to produce a successful result.
+
+        NOTE: It Taproot = True, this OP_CODE is disabled
         """
         pass
 
     def _op_checkmultisigverify(self):
         """
         OP_CHECKMULTISIGVERIFY, 0xaf - Same as OP_CHECKMULTISIG, but OP_VERIFY is executed afterward.
+
+        NOTE: It Taproot = True, this OP_CODE is disabled
         """
         pass
 
@@ -729,6 +740,11 @@ class ScriptEngine:
         OP_NOP10, 0xb9 - Does nothing.
         """
         pass
+
+    def _op_checksigadd(self):
+        """
+        OP_CHECKSIGADD, 0xba - Used in Taproot. Replaces OP_CHECKMULTISIG and OP_CHECKMULTISIGVERIFY
+        """
 
     def _op_invalidopcode(self):
         """

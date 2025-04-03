@@ -210,6 +210,32 @@ class TxEngine:
         tx.witnesses[input_index] = ref_witness
         return tx
 
+    def get_taproot_sig(self, private_key: int, tx: Transaction, input_index: int, input_amount: int,
+                        auxiliary_bits: bytes) -> Transaction:
+        """
+        pseudo code
+
+        # 1. Construct the taproot preimage according to BIP341. # This involves computing fields such as
+            hashPrevouts, hashAmounts, hashScriptPubKeys, hashSequences, hashOutputs. preimage =
+            construct_taproot_preimage(tx, input_index, input_amount)
+
+        # 2. Compute the taproot sighash message using a tagged hash (e.g., tag "TapSighash")
+          tap_sighash = tagged_hash_function(preimage, tag=b"TapSighash", function_type=HASHTYPE)
+
+        # 3. Generate the Schnorr signature using your existing function
+          sig_hex = schnorr_signature(private_key, tap_sighash, auxiliary_bits)
+          sig_bytes = bytes.fromhex(sig_hex)
+
+        # 4. Create a witness for key path spending (just the signature)
+          tap_witness = Witness([WitnessItem(sig_bytes)])
+
+        # 5. Place the witness in the proper position in the tx.witnesses list
+          tx.witnesses[input_index] = tap_witness
+          return tx
+        """
+        # Get public key
+        x, _ = secp256k1().multiply_generator(private_key)  # Don't need y coordinate
+
     def _get_cpk(self, private_key: int) -> bytes:
         """
         We return a compressed public key for the given private key
@@ -287,4 +313,3 @@ if __name__ == "__main__":
     print(f"INPUT TX BEFORE SIGNING: {input_tx.to_json()}")
     signed_tx = engine.get_segwit_sig(private_key=41, input_amount=75, tx=input_tx, input_index=1)
     print(f"INPUT TX AFTER SIGNING: {input_tx.to_json()}")
-
