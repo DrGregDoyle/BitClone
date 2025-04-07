@@ -10,7 +10,7 @@ from enum import IntEnum
 
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
 
-from src.crypto import secp256k1, ecdsa, hash256, hash160
+from src.crypto import secp256k1, ecdsa, hash256, hash160, tagged_hash_function, HashType
 from src.data import write_compact_size, to_little_bytes, compress_public_key
 from src.db import BitCloneDatabase
 from src.logger import get_logger
@@ -40,6 +40,7 @@ class TxEngine:
     """
     A class used to construct transactions
     """
+    PUBLICKEY_BYTES = 32
 
     def __init__(self, db: BitCloneDatabase):
         self.db = db
@@ -210,38 +211,43 @@ class TxEngine:
         tx.witnesses[input_index] = ref_witness
         return tx
 
-    def get_taproot_sig(self, private_key: int, tx: Transaction, input_index: int, input_amount: int,
-                        auxiliary_bits: bytes) -> Transaction:
+    def get_taproot_scriptpubkey(self, private_key: int, merkle_root: bytes, pubkey: bytes = None):
         """
-        pseudo code
-
-        # 1. Construct the taproot preimage according to BIP341. # This involves computing fields such as
-            hashPrevouts, hashAmounts, hashScriptPubKeys, hashSequences, hashOutputs. preimage =
-            construct_taproot_preimage(tx, input_index, input_amount)
-
-        # 2. Compute the taproot sighash message using a tagged hash (e.g., tag "TapSighash")
-          tap_sighash = tagged_hash_function(preimage, tag=b"TapSighash", function_type=HASHTYPE)
-
-        # 3. Generate the Schnorr signature using your existing function
-          sig_hex = schnorr_signature(private_key, tap_sighash, auxiliary_bits)
-          sig_bytes = bytes.fromhex(sig_hex)
-
-        # 4. Create a witness for key path spending (just the signature)
-          tap_witness = Witness([WitnessItem(sig_bytes)])
-
-        # 5. Place the witness in the proper position in the tx.witnesses list
-          tx.witnesses[input_index] = tap_witness
-          return tx
-        """
-        # Get public key
-        x, _ = secp256k1().multiply_generator(private_key)  # Don't need y coordinate
-
-    def _get_cpk(self, private_key: int) -> bytes:
-        """
-        We return a compressed public key for the given private key
+        Returns a P2TR scriptpubkey following the format: OP_1, OP_PUSHBYTES_32, <32-byte tweaked public key>
         """
         curve = secp256k1()
-        pk_point = curve.multiply_generator(private_key)
+        n = curve.order
+        # Get public key point
+        if pubkey is None:
+            x, y = curve.multiply_generator(private_key)  # Don't need y coordinate
+            public_key = x.to_bytes(self.PUBLICKEY_BYTES, "big")
+        else:
+            # Assume pubkey is x-point on curve
+            public_key = pubkey
+            x = int.from_bytes(pubkey, "big")
+            y = curve.find_y_from_x(x)
+
+        # Check for even y
+        if y % 2 != 0:
+            y = n - y
+
+        # public_key = x-coordinate in bytes
+        print(f"PUBLIC KEY: {public_key.hex()}")
+
+        # Get tweaked public key
+        tweaked_data = public_key + merkle_root
+        tweak = tagged_hash_function(tweaked_data, b"TapTweak", HashType.SHA256)
+        print(f"TWEAK: {tweak.hex()}")
+
+        # Get tweaked point
+        tweak_int = int.from_bytes(tweak, "big")
+        tweak_point = curve.multiply_generator(tweak_int)
+        tweaked_public_key = curve.add_points(tweak_point, (x, y))
+        tpk_x, _ = tweaked_public_key
+        print(f"TWEAKED PUBLIC KEY: {tpk_x.to_bytes(32, 'big').hex()}")
+
+        # Return scriptsig
+        return b'\x01' + b'\x20' + tpk_x.to_bytes(32, 'big')
 
     def _remove_scriptsig(self, tx: Transaction) -> Transaction:
         # Remove all scriptsigs from the inputs
@@ -310,6 +316,9 @@ if __name__ == "__main__":
     # Test engine
     # legacy_sig = engine.get_legacy_sig(private_key=41, tx=input_tx)
     # print(f"LEGACY SIG: {legacy_sig.hex()}")
-    print(f"INPUT TX BEFORE SIGNING: {input_tx.to_json()}")
-    signed_tx = engine.get_segwit_sig(private_key=41, input_amount=75, tx=input_tx, input_index=1)
-    print(f"INPUT TX AFTER SIGNING: {input_tx.to_json()}")
+    # print(f"INPUT TX BEFORE SIGNING: {input_tx.to_json()}")
+    # signed_tx = engine.get_segwit_sig(private_key=41, input_amount=75, tx=input_tx, input_index=1)
+    # print(f"INPUT TX AFTER SIGNING: {input_tx.to_json()}")
+    taproot_tx = engine.get_taproot_sig(41, bytes.fromhex(
+        "b5b72eea07b3e338962944a752a98772bbe1f1b6550e6fb6ab8c6e6adb152e7c"), pubkey=bytes.fromhex(
+        "a2fc329a085d8cfc4fa28795993d7b666cee024e94c40115141b8e9be4a29fa4"))
