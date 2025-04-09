@@ -4,8 +4,8 @@ Block and MerkleTree classes
 import io
 import struct
 
-from src.crypto import hash256, MerkleTree
-from src.data import Serializable, write_compact_size, check_length, read_compact_size
+from src.crypto import hash256
+from src.data import Serializable, write_compact_size, check_length, read_compact_size, MerkleTree
 from src.logger import get_logger
 from src.tx import Transaction
 

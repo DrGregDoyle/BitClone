@@ -5,8 +5,7 @@ Methods for encoding and decoding
 import re
 from typing import Tuple
 
-from src.crypto import hash256
-from src.crypto.bech32 import convertbits, bech32_encode, bech32_decode, Encoding
+from src.crypto import hash256, convertbits, bech32_encode, bech32_decode, Encoding
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -88,42 +87,45 @@ def decode_base58check(data: str) -> Tuple[bytes, bytes]:
 
 
 # --- BECH32 ENCODING --- #
-def encode_bech32(pubkeyhash: bytes, hrp: str = "bc") -> str:
+def encode_bech32(pubkeydata: bytes, hrp: str = "bc", witver: int = 0) -> str:
     """
-    Returns the Bech32 encoding of the provided public key hash.
+    Returns the Bech32 or Bech32m encoding of the provided witness program.
 
     Parameters
     ----------
-    pubkeyhash : bytes
-        The pubkeyhash in bytes
-    hrp :str
-        A string for bech32 encoding
+    pubkeydata : bytes
+        The witness program (e.g. 20 bytes for P2WPKH, 32 bytes for P2TR)
+    hrp : str
+        Human-readable part (e.g. 'bc' for mainnet, 'tb' for testnet)
+    witver : int
+        Witness version (0 for P2WPKH/P2WSH, 1 for P2TR)
 
     Returns
     -------
     str
-        A Bech32-encoded address.
+        A Bech32 or Bech32m encoded address.
     """
+    # Check witness version
+    if not (0 <= witver <= 16):
+        raise ValueError("Witness version must be between 0 and 16.")
 
-    # Ensure pubkey_hash is exactly 20 bytes
-    if len(pubkeyhash) != 20:
-        logger.debug(f"PUBKEY_HASH LENGTH: {len(pubkeyhash)}")
-        raise ValueError("P2WPKH pubkey hash must be exactly 20 bytes.")
-
-    # Convert 8-bit data to 5-bit using the reference convertbits function
-    converted_data = convertbits(pubkeyhash, 8, 5, pad=False)
+    # Convert 8-bit data to 5-bit
+    converted_data = convertbits(list(pubkeydata), 8, 5, pad=True)
     if converted_data is None:
         raise ValueError("Failed to convert data from 8-bit to 5-bit.")
 
     # Prepend version byte (0x00 for SegWit v0)
-    converted_data = [0] + converted_data
+    converted_data = [witver] + converted_data
+
+    # Choose encoding type
+    spec = Encoding.BECH32M if witver > 0 else Encoding.BECH32
 
     # Submit converted_data using "bc" as hrp
-    bech32_address = bech32_encode(hrp=hrp, data=converted_data, spec=Encoding.BECH32)
+    bech32_address = bech32_encode(hrp=hrp, data=converted_data, spec=spec)
 
     # Decode the address to verify checksum
     decoded_hrp, decoded_data, spec = bech32_decode(bech32_address)
-    if decoded_hrp != hrp or decoded_data is None or spec != Encoding.BECH32:
+    if decoded_hrp != hrp or decoded_data is None or spec != spec:
         raise ValueError("Checksum verification failed. The generated Bech32 address is invalid.")
 
     return bech32_address

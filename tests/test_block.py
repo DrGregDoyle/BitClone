@@ -4,8 +4,9 @@ Tests for the MerkleTree, BlockHeader and Block classes
 
 from secrets import token_bytes
 
-from src.block import MerkleTree, BlockHeader, Block
+from src.block import BlockHeader, Block
 from src.crypto import hash256
+from src.data import MerkleTree
 from tests.randbtc_generators import get_random_block_header, get_random_block
 
 

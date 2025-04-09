@@ -11,7 +11,7 @@ from enum import IntEnum
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
 
 from src.crypto import secp256k1, ecdsa, hash256, hash160, tagged_hash_function, HashType
-from src.data import write_compact_size, to_little_bytes, compress_public_key
+from src.data import write_compact_size, to_little_bytes, compress_public_key, encode_bech32
 from src.db import BitCloneDatabase
 from src.logger import get_logger
 from src.script import OPCODES, ScriptEngine, BTCNum
@@ -247,7 +247,7 @@ class TxEngine:
         print(f"TWEAKED PUBLIC KEY: {tpk_x.to_bytes(32, 'big').hex()}")
 
         # Return scriptsig
-        return b'\x01' + b'\x20' + tpk_x.to_bytes(32, 'big')
+        return b'\x51' + b'\x20' + tpk_x.to_bytes(32, 'big')
 
     def _remove_scriptsig(self, tx: Transaction) -> Transaction:
         # Remove all scriptsigs from the inputs
@@ -319,6 +319,10 @@ if __name__ == "__main__":
     # print(f"INPUT TX BEFORE SIGNING: {input_tx.to_json()}")
     # signed_tx = engine.get_segwit_sig(private_key=41, input_amount=75, tx=input_tx, input_index=1)
     # print(f"INPUT TX AFTER SIGNING: {input_tx.to_json()}")
-    taproot_tx = engine.get_taproot_sig(41, bytes.fromhex(
+    taproot_scriptpubkey = engine.get_taproot_scriptpubkey(41, bytes.fromhex(
         "b5b72eea07b3e338962944a752a98772bbe1f1b6550e6fb6ab8c6e6adb152e7c"), pubkey=bytes.fromhex(
         "a2fc329a085d8cfc4fa28795993d7b666cee024e94c40115141b8e9be4a29fa4"))
+    print(f"SCRIPT PUBKEY: {taproot_scriptpubkey.hex()}")
+    taproot_data = taproot_scriptpubkey[2:]
+    bech32_encoding = encode_bech32(taproot_data, witver=1)
+    print(f"BECH 32 ENCODING: {bech32_encoding}")
