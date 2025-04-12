@@ -125,6 +125,9 @@ class ScriptEngine:
         self.altstack.clear()
         self.ops_log = []
 
+    def is_execution_enabled(self, if_stack: list):
+        return all(executed for (_, executed) in if_stack)
+
     def eval_script(self, script: bytes, clear_stacks: bool = True) -> bool:
         """
         Evaluates the script - returns True/False based on results of main stack.
@@ -143,6 +146,8 @@ class ScriptEngine:
         execution_enabled = True
         valid_script = True
 
+        # Handle execution_enabled
+
         # Main loop
         while valid_script:
             opcode = stream.read(1)
@@ -158,13 +163,13 @@ class ScriptEngine:
             if opcode_int in (0x63, 0x64, 0x67, 0x68):  # OP_IF, OP_NOTIF, OP_ELSE, OP_ENDIF
                 handler = self.op_handlers.get(opcode_int)
                 if handler:
-                    # Call the flow control handler which updates if_stack and execution_enabled
-                    if not handler(if_stack, execution_enabled):
-                        valid_script = False
-                    continue
+                    # Pass in current execution status for conditional evaluation
+                    handler(if_stack, execution_enabled)
+                    execution_enabled = self.is_execution_enabled(if_stack)
+                continue
 
-            # Skip execution if disabled by flow control
-            if not execution_enabled and opcode_int not in (0x67, 0x68):  # Skip unless OP_ELSE or OP_ENDIF
+            # Skip non-control opcodes if execution is currently disabled
+            if not execution_enabled:
                 continue
 
             # Check for OP_PUSHBYTES_N
@@ -798,7 +803,7 @@ class ScriptPubKeyEngine:
     def __init__(self):
         self.curve = secp256k1()
 
-    def p2pk(self, pubkey: bytes) -> ScriptPubKeyResult:
+    def p2pk(self, pubkey: bytes, testnet: bool = False) -> ScriptPubKeyResult:
         """
         Pay to public key
         (The address is the corresponding P2PKH address).
@@ -817,16 +822,15 @@ class ScriptPubKeyEngine:
         op_pushbytes = b'\x21' if compressed else b'\x41'
         op_checksig = b'\xac'
 
-        # ADDRESS
-        hashed_address = hash160(pubkey)
-        print(f"HASHED PUBKEY: {hashed_address.hex()}")
-        address = self.get_base58_address(hashed_address)
+        # ADDRESS | We use P2PKH address format
+        prefix = b'\x00' if not testnet else b'\x6f'
+        address = self.get_base58_address(hash160(pubkey), prefix)
 
         # ScriptPubKeyResult
         script = op_pushbytes + pubkey + op_checksig
         return ScriptPubKeyResult(scriptpubkey=script, address=address, script_type='p2pk')
 
-    def p2pkh(self, pubkey: bytes) -> ScriptPubKeyResult:
+    def p2pkh(self, pubkey: bytes, testnet: bool = False) -> ScriptPubKeyResult:
         """
         Pay to Public Key Hash
         """
@@ -841,11 +845,68 @@ class ScriptPubKeyEngine:
 
         # script
         script = op_dup + op_hash160 + op_pushbytes + pubkeyhash + op_equalverify + op_checksig
-        address = self.get_base58_address(pubkeyhash)
+        prefix = b'\x00' if not testnet else b'\x6f'
+        address = self.get_base58_address(pubkeyhash, prefix)
 
         return ScriptPubKeyResult(scriptpubkey=script, address=address, script_type="p2pkh")
 
-    def get_base58_address(self, scriptpubkey: bytes, prefix: bytes = b'\x00'):
+    def p2ms(self, key_list: list, signum: int = None) -> ScriptPubKeyResult:
+        """
+        Pay To MultiSig
+
+        Uses multiple keys to lock bitcoins, and requires some (or all) of the signatures to unlock it.
+        P2MS has no address format
+        """
+        # signum
+        numkeys = len(key_list)
+        signum = numkeys if signum is None else signum
+
+        # OPCODES
+        op_reqsig = (0x50 + signum).to_bytes(1, "little")  # Required number of signatures
+        op_totalsig = (0x50 + numkeys).to_bytes(1, "little")  # Total number of signatures
+        op_checkmultisig = b'\xae'
+        pushbytes_list = []
+        for k in key_list:
+            # Compressed key
+            if len(k) == 33:
+                pushbytes_list.append(b'\x21')
+            elif len(k) == 65:
+                pushbytes_list.append(b'\x41')
+            else:
+                raise ValueError("Key in key_list not of correct size")
+
+        # Script
+        script = op_reqsig
+        for x in range(numkeys):
+            script += pushbytes_list[x] + key_list[x]
+        script += op_totalsig + op_checkmultisig
+
+        return ScriptPubKeyResult(scriptpubkey=script, address=None, script_type="p2ms")
+
+    def p2sh(self, script: bytes, testnet: bool = False) -> ScriptPubKeyResult:
+        """
+        Pay to Script Hash
+        Given the provided script, we hash160 it and return the corresponding scriptpubkey
+        """
+        # Hash160
+        hashed_script = hash160(script)
+        print(f"HASHED SCRIPT: {hashed_script.hex()}")
+
+        # Op Codes
+        op_hash160 = b'\xa9'
+        op_equal = b'\x87'
+        op_pushbytes = b'\x14'
+
+        # Script
+        script = op_hash160 + op_pushbytes + hashed_script + op_equal
+
+        # Address
+        prefix = b'\x05' if not testnet else b'\xc4'
+        address = self.get_base58_address(hashed_script, prefix)  # Address is the hashed script
+
+        return ScriptPubKeyResult(scriptpubkey=script, address=address, script_type="p2sh")
+
+    def get_base58_address(self, scriptpubkey: bytes, prefix: bytes):
         return encode_base58check(prefix + scriptpubkey)
 
 
@@ -854,7 +915,7 @@ class ScriptPubKeyEngine:
 if __name__ == "__main__":
     # test_script_hex = "528b"
     # # test_script_bytes = bytes.fromhex(test_script_hex)
-    # engine = ScriptEngine()
+    engine = ScriptEngine()
     # engine.eval_script_from_hex(test_script_hex)
     #
     # # print(f"ENGINE STACK: {engine.stack.top.hex()}")
@@ -875,14 +936,44 @@ if __name__ == "__main__":
     # print(f"SHA256 empty HEX: {sha256(b'').hex()}")
     # print(f"HASH160 empty HEX: {hash160(b'').hex()} ")
     # print(f"HASH256 empty HEX: {hash256(b'').hex()}")
-    _pubkey1 = bytes.fromhex(
-        "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f")
+    # _pubkey1 = bytes.fromhex(
+    #     "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f")
     pubkey_engine = ScriptPubKeyEngine()
-    p2pk1 = pubkey_engine.p2pk(_pubkey1)
-    print(f"P2PK: {p2pk1.scriptpubkey.hex()}")
-    print(f"P2PK ADDRESS: {p2pk1.address}")
-    _pubkey2 = bytes.fromhex("022655c1686a986c498d6eccc9a4f4b64db5e1f22c01675f4eabe953874c4366e8")
-    _pubkeyhash = hash160(_pubkey2)
-    print(f"PUBKEYHASH: {_pubkeyhash.hex()}")
-    p2pkh1 = pubkey_engine.p2pkh(_pubkey2)
-    print(f"ADDRESS: {p2pkh1.address}")
+    # p2pk1 = pubkey_engine.p2pk(_pubkey1)
+    # print(f"P2PK: {p2pk1.scriptpubkey.hex()}")
+    # print(f"P2PK ADDRESS: {p2pk1.address}")
+    # _pubkey2 = bytes.fromhex(
+    #     "02bbb9c9e8b346271d5f179f4f06c83bc15e753f0800b933fabbebbede6199a3d3")
+    # _pubkeyhash = hash160(_pubkey2)
+    # print(f"PUBKEYHASH: {_pubkeyhash.hex()}")
+    # p2pkh1 = pubkey_engine.p2pkh(_pubkey2, testnet=True)
+    # print(f"ADDRESS: {p2pkh1.address}")
+    #
+    # pk1 = bytes.fromhex(
+    #     "04d81fd577272bbe73308c93009eec5dc9fc319fc1ee2e7066e17220a5d47a18314578be2faea34b9f1f8ca078f8621acd4bc22897b03daa422b9bf56646b342a2")
+    # pk2 = bytes.fromhex(
+    #     "04ec3afff0b2b66e8152e9018fe3be3fc92b30bf886b3487a525997d00fd9da2d012dce5d5275854adc3106572a5d1e12d4211b228429f5a7b2f7ba92eb0475bb1")
+    # pk3 = bytes.fromhex(
+    #     "04b49b496684b02855bc32f5daefa2e2e406db4418f3b86bca5195600951c7d918cdbe5e6d3736ec2abf2dd7610995c3086976b2c0c7b4e459d10b34a316d5a5e7")
+    #
+    # p2ms1 = pubkey_engine.p2ms(key_list=[pk1, pk2, pk3], signum=2)
+    # print(f"P2MS1: {p2ms1.scriptpubkey.hex()}")
+
+    # script1 = bytes.fromhex("6e879169a77ca787")
+    # p2sh1 = pubkey_engine.p2sh(script1, True)
+    # print(f"P2SH SCRIPTPUBKEY: {p2sh1.scriptpubkey.hex()}")
+    # print(f"P2SH ADDRESS: {p2sh1.address}")
+    # parsed_script1 = engine.parse_script(script1)
+    # print(f"SCRIPT1: {parsed_script1}")
+
+    # return_script = bytes.fromhex("516351676a68")
+    # return_script_parse = engine.parse_script(return_script)
+    # print(f"OP_RETURN SCRIPT: {return_script_parse}")
+    # result = engine.eval_script(return_script)
+    # print(f"SCRIPT RESULT: {result}")
+
+    return_script2 = bytes.fromhex("006351636a686851")
+    return_script2_parse = engine.parse_script(return_script2)
+    print(f"OP RETURN SCRIPT 2: {return_script2_parse}")
+    result2 = engine.eval_script(return_script2)
+    print(f"SCRIPT2 RESULT: {result2}")
