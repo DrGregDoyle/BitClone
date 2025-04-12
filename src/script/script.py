@@ -1,17 +1,25 @@
 """
 The ScriptEngine class
 """
+from dataclasses import dataclass
 from io import BytesIO
 from typing import Callable, Dict
+from typing import Optional
 
-from src.crypto.ecc import secp256k1
-from src.crypto.hash_functions import ripemd160, sha1, sha256, hash160, hash256
-from src.data.data_handling import check_hex, check_length
+from src.crypto import secp256k1, ripemd160, sha1, sha256, hash160, hash256
+from src.data import check_hex, check_length, encode_base58check
 from src.logger import get_logger
 from src.script.op_codes import OPCODES
 from src.script.stack import BTCNum, BTCStack
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class ScriptPubKeyResult:
+    scriptpubkey: bytes
+    address: Optional[str]
+    script_type: str
 
 
 class ScriptEngine:
@@ -782,29 +790,99 @@ class ScriptEngine:
         return tuple(nums)
 
 
+class ScriptPubKeyEngine:
+    """
+    A class used to create known ScriptPubKeys from a given private or public key
+    """
+
+    def __init__(self):
+        self.curve = secp256k1()
+
+    def p2pk(self, pubkey: bytes) -> ScriptPubKeyResult:
+        """
+        Pay to public key
+        (The address is the corresponding P2PKH address).
+        """
+        # Check public key type
+        if len(pubkey) == 33:
+            compressed = True
+            print(f"COMPRESSED")
+        elif len(pubkey) == 65:
+            compressed = False
+            print(f"NOT COMPRESSED")
+        else:
+            raise ValueError("Given pubkey is not of correct length")
+
+        # OP_CODES
+        op_pushbytes = b'\x21' if compressed else b'\x41'
+        op_checksig = b'\xac'
+
+        # ADDRESS
+        hashed_address = hash160(pubkey)
+        print(f"HASHED PUBKEY: {hashed_address.hex()}")
+        address = self.get_base58_address(hashed_address)
+
+        # ScriptPubKeyResult
+        script = op_pushbytes + pubkey + op_checksig
+        return ScriptPubKeyResult(scriptpubkey=script, address=address, script_type='p2pk')
+
+    def p2pkh(self, pubkey: bytes) -> ScriptPubKeyResult:
+        """
+        Pay to Public Key Hash
+        """
+        pubkeyhash = hash160(pubkey)
+
+        # OPCODES
+        op_dup = b'\x76'
+        op_hash160 = b'\xa9'
+        op_pushbytes = b'\x14'
+        op_equalverify = b'\x88'
+        op_checksig = b'\ac'
+
+        # script
+        script = op_dup + op_hash160 + op_pushbytes + pubkeyhash + op_equalverify + op_checksig
+        address = self.get_base58_address(pubkeyhash)
+
+        return ScriptPubKeyResult(scriptpubkey=script, address=address, script_type="p2pkh")
+
+    def get_base58_address(self, scriptpubkey: bytes, prefix: bytes = b'\x00'):
+        return encode_base58check(prefix + scriptpubkey)
+
+
 # --- TESTING
 
 if __name__ == "__main__":
-    test_script_hex = "528b"
-    # test_script_bytes = bytes.fromhex(test_script_hex)
-    engine = ScriptEngine()
-    engine.eval_script_from_hex(test_script_hex)
-
-    # print(f"ENGINE STACK: {engine.stack.top.hex()}")
-    print(f"STACK HEIGHT: {engine.stack.height}")
-    print(f"OP LOG: {engine.ops_log}")
-    print(f"PARSED SCRIPT: {engine.parse_script_from_hex(test_script_hex)}")
-    print(f"---- MAIN STACK PRINTOUT ----")
-    for s in range(engine.stack.height):
-        temp_val = engine.stack.pop()
-        print(f"STACK LEVEL: {s} || STACK ITEM: {temp_val.hex()}")
-    print("--" * 20)
-    print(f"---- ALT STACK PRINTOUT ----")
-    for s in range(engine.stack.height):
-        temp_val = engine.stack.pop()
-        print(f"STACK LEVEL: {s} || STACK ITEM: {temp_val.hex()}")
-    print("==" * 20)
-    print(f"SHA1 empty HEX: {sha1(b'').hex()}")
-    print(f"SHA256 empty HEX: {sha256(b'').hex()}")
-    print(f"HASH160 empty HEX: {hash160(b'').hex()} ")
-    print(f"HASH256 empty HEX: {hash256(b'').hex()}")
+    # test_script_hex = "528b"
+    # # test_script_bytes = bytes.fromhex(test_script_hex)
+    # engine = ScriptEngine()
+    # engine.eval_script_from_hex(test_script_hex)
+    #
+    # # print(f"ENGINE STACK: {engine.stack.top.hex()}")
+    # print(f"STACK HEIGHT: {engine.stack.height}")
+    # print(f"OP LOG: {engine.ops_log}")
+    # print(f"PARSED SCRIPT: {engine.parse_script_from_hex(test_script_hex)}")
+    # print(f"---- MAIN STACK PRINTOUT ----")
+    # for s in range(engine.stack.height):
+    #     temp_val = engine.stack.pop()
+    #     print(f"STACK LEVEL: {s} || STACK ITEM: {temp_val.hex()}")
+    # print("--" * 20)
+    # print(f"---- ALT STACK PRINTOUT ----")
+    # for s in range(engine.stack.height):
+    #     temp_val = engine.stack.pop()
+    #     print(f"STACK LEVEL: {s} || STACK ITEM: {temp_val.hex()}")
+    # print("==" * 20)
+    # print(f"SHA1 empty HEX: {sha1(b'').hex()}")
+    # print(f"SHA256 empty HEX: {sha256(b'').hex()}")
+    # print(f"HASH160 empty HEX: {hash160(b'').hex()} ")
+    # print(f"HASH256 empty HEX: {hash256(b'').hex()}")
+    _pubkey1 = bytes.fromhex(
+        "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f")
+    pubkey_engine = ScriptPubKeyEngine()
+    p2pk1 = pubkey_engine.p2pk(_pubkey1)
+    print(f"P2PK: {p2pk1.scriptpubkey.hex()}")
+    print(f"P2PK ADDRESS: {p2pk1.address}")
+    _pubkey2 = bytes.fromhex("022655c1686a986c498d6eccc9a4f4b64db5e1f22c01675f4eabe953874c4366e8")
+    _pubkeyhash = hash160(_pubkey2)
+    print(f"PUBKEYHASH: {_pubkeyhash.hex()}")
+    p2pkh1 = pubkey_engine.p2pkh(_pubkey2)
+    print(f"ADDRESS: {p2pkh1.address}")
