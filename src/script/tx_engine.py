@@ -10,7 +10,7 @@ from enum import IntEnum
 
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
 
-from src.crypto import secp256k1, ecdsa, hash256, hash160, tagged_hash_function, HashType
+from src.crypto import ecdsa, hash256, hash160
 from src.data import write_compact_size, to_little_bytes, compress_public_key, encode_bech32
 from src.db import BitCloneDatabase
 from src.logger import get_logger
@@ -210,44 +210,6 @@ class TxEngine:
         # Add Witness to witness position in tx
         tx.witnesses[input_index] = ref_witness
         return tx
-
-    def get_taproot_scriptpubkey(self, private_key: int, merkle_root: bytes, pubkey: bytes = None):
-        """
-        Returns a P2TR scriptpubkey following the format: OP_1, OP_PUSHBYTES_32, <32-byte tweaked public key>
-        """
-        curve = secp256k1()
-        n = curve.order
-        # Get public key point
-        if pubkey is None:
-            x, y = curve.multiply_generator(private_key)  # Don't need y coordinate
-            public_key = x.to_bytes(self.PUBLICKEY_BYTES, "big")
-        else:
-            # Assume pubkey is x-point on curve
-            public_key = pubkey
-            x = int.from_bytes(pubkey, "big")
-            y = curve.find_y_from_x(x)
-
-        # Check for even y
-        if y % 2 != 0:
-            y = n - y
-
-        # public_key = x-coordinate in bytes
-        print(f"PUBLIC KEY: {public_key.hex()}")
-
-        # Get tweaked public key
-        tweaked_data = public_key + merkle_root
-        tweak = tagged_hash_function(tweaked_data, b"TapTweak", HashType.SHA256)
-        print(f"TWEAK: {tweak.hex()}")
-
-        # Get tweaked point
-        tweak_int = int.from_bytes(tweak, "big")
-        tweak_point = curve.multiply_generator(tweak_int)
-        tweaked_public_key = curve.add_points(tweak_point, (x, y))
-        tpk_x, _ = tweaked_public_key
-        print(f"TWEAKED PUBLIC KEY: {tpk_x.to_bytes(32, 'big').hex()}")
-
-        # Return scriptsig
-        return b'\x51' + b'\x20' + tpk_x.to_bytes(32, 'big')
 
     def _remove_scriptsig(self, tx: Transaction) -> Transaction:
         # Remove all scriptsigs from the inputs
