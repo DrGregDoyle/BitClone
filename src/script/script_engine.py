@@ -11,11 +11,13 @@ import operator
 from io import BytesIO
 from typing import Callable, Dict
 
-from src.crypto import secp256k1, ripemd160, sha1, sha256, hash160, hash256
-from src.data import check_hex
+from src.crypto import secp256k1, ripemd160, sha1, sha256, hash160, hash256, verify_ecdsa
+from src.data import check_hex, decode_der_signature, write_compact_size, get_public_key_point
+from src.db import BitCloneDatabase, DB_PATH
 from src.logger import get_logger
 from src.script.op_codes import OPCODES
 from src.script.stack import BTCStack, OpcodeMixin, BTCNum
+from src.tx import Transaction
 
 logger = get_logger(__name__)
 
@@ -25,7 +27,7 @@ class ScriptEngine(OpcodeMixin):
     Evalute Script
     """
 
-    def __init__(self, taproot: bool = False):
+    def __init__(self, db: BitCloneDatabase = DB_PATH, taproot: bool = False):
         """
         Setup stack and operation handlers
         """
@@ -39,6 +41,9 @@ class ScriptEngine(OpcodeMixin):
 
         # Flag for TapScript engine
         self.taproot = taproot
+
+        # Load DB
+        self.db = db
 
     # -- OPCODE HANLDERS
 
@@ -179,9 +184,72 @@ class ScriptEngine(OpcodeMixin):
         opcode = BTCNum.from_bytes(stacklen).value
         self._handle_pushdata(stream, opcode)
 
+    def _handle_checksig(self, opcode: int, tx: Transaction, input_index: int):
+        if self.taproot:
+            if opcode == 0xba:
+                self._handle_checksigadd(tx, input_index)
+            else:
+                raise ValueError("Invalid opcode in Taproot context")
+        else:
+            if opcode == 0xac:
+                self._handle_legacy_checksig(tx, input_index)
+            elif opcode == 0xad:
+                self._handle_legacy_checksig(tx, input_index)
+                self._op_verify()
+                # return self._op_verify_result(result)
+            else:
+                raise ValueError("Unexpected signature opcode")
+
+    def _handle_checksigadd(self, tx: Transaction, input_index: int):
+        pass
+
+    def _handle_legacy_checksig(self, tx: Transaction, input_index: int):
+        if tx is None or input_index is None:
+            raise ValueError("Missing either tx or input_index")
+
+        # Pop pubkey and signature, in that order
+        pubkey, signature = self.stack.pop_n(2)
+
+        # Get signature tuple
+        der_sig = signature[:-1]
+        hash_type = int.from_bytes(signature[-1], "little")
+        sig_tuple = decode_der_signature(der_sig)
+
+        # copy tx
+        tx_copy = Transaction.from_bytes(tx.to_bytes())
+
+        # Get input utxo
+        tx_input = tx_copy.inputs[input_index]
+        utxo = self.db.get_utxo(tx_input.txid, tx_input.vout)
+        subscript = utxo.script_pubkey
+
+        # scriptsigs for all inputs in tx_copy set to empty scripts
+        for x in range(len(tx_copy.inputs)):
+            temp_input = tx_copy.inputs[x]
+            temp_input.script_sig = b""  # Empty Script
+            temp_input.script_sig_size = b"\x00"  # Null byte length for encoding
+            tx_copy.inputs[x] = temp_input
+
+        # Change input script sig to scriptpubkey from utxo
+        tx_input.script_sig = subscript
+        tx_input.script_sig_size = write_compact_size(len(subscript))
+
+        # Handle hash type
+
+        # Get data to hash
+        data = tx_copy.to_bytes() + hash_type.to_bytes(4, "little")
+        message_hash = hash256(data)
+
+        # Get public key point
+        pubkey_point = get_public_key_point(pubkey)
+
+        # Verify ECDSA
+        valid_signature = verify_ecdsa(sig_tuple, message_hash, pubkey_point)
+        self._push_bool(valid_signature)
+
     # -- EVAL
 
-    def eval_script(self, script: bytes | str) -> bool:
+    def eval_script(self, script: bytes | str, tx: Transaction = None, input_index: int = None) -> bool:
         """
         Evaluate a Bitcoin script and return success/failure.
         """
@@ -251,50 +319,13 @@ class ScriptEngine(OpcodeMixin):
                 self.stack.push(BTCNum(opcode - 0x50).bytes)
                 continue
 
+            # 0xac -- 0xba - OP_CHECKSIGS
+            if 0xac <= opcode <= 0xba:
+                self._handle_checksig(opcode, tx, input_index)
+
             valid_script = self._dispatch_opcode(opcode)
 
         return self._validate_stack() if valid_script else False
-
-        #     # Check for OP_PUSHBYTES_N
-        #     if 0x00 < opcode < 0x4c:
-        #         self._handle_pushdata(stream, opcode)
-        #     # Check for OP_PUSHDATA_N
-        #     elif 0x4c <= opcode <= 0x4e:
-        #         match opcode:
-        #             case 0x4c:
-        #                 self._handle_pushdata_n(stream, 1)  # Reads 1 byte for length encoding
-        #             case 0x4d:
-        #                 self._handle_pushdata_n(stream, 2)  # Reads 2 bytes for length encoding
-        #             case 0x4e:
-        #                 self._handle_pushdata_n(stream, 4)  # Reads 4 bytes for length encoding
-        #     # Check for PushNum
-        #     elif 0x50 < opcode < 0x61:
-        #         num = opcode - 0x50
-        #         self.stack.push(BTCNum(num).bytes)  # Push int from 1 to 16
-        #     else:
-        #         handler = self.op_handlers.get(opcode)
-        #         if handler:
-        #             # Special handling for OP_VERIFY and OP_RETURN
-        #             if opcode == 0x69:  # OP_VERIFY
-        #                 if not handler():
-        #                     self._op_log("Failed OP_VERIFY")
-        #                     valid_script = False
-        #             elif opcode == 0x6a:  # OP_RETURN
-        #                 self._op_log("Processing OP_RETURN")
-        #                 handler()
-        #                 valid_script = False
-        #             else:
-        #                 # Check for False returns
-        #                 exit_val = handler()
-        #                 if exit_val is not None and not exit_val:  # Exit val exists and is False
-        #                     self._op_log(f"Handler {handler.__name__} returned exit val {exit_val}")
-        #                     valid_script = False
-        #         else:
-        #             self._op_log(f"Unrecognized or invalid OP code: {opcode:02x}")
-        #             valid_script = False
-        #
-        #     # Validate stack
-        # return self._validate_stack() if valid_script else False
 
     # -- OPCODE FUNCTIONS
     def _op_1negate(self):
@@ -781,8 +812,9 @@ class ScriptEngine(OpcodeMixin):
         OP_CHECKSIGVERIFY | 0xad
         Same as OP_CHECKSIG, but OP_VERIFY is executed afterward.
         """
-        self._op_checksig()
-        self._op_verify()
+        # self._op_checksig()
+        # self._op_verify()
+        pass
 
     def _op_checkmultisig(self):
         """

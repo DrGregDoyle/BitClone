@@ -5,6 +5,8 @@ Methods for encoding and decoding
 import re
 from typing import Tuple
 
+from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature, decode_dss_signature
+
 from src.crypto import hash256, convertbits, bech32_encode, bech32_decode, Encoding
 from src.logger import get_logger
 
@@ -146,6 +148,21 @@ def decode_bech32(bech32_address: str) -> bytes:
 
     # Return byte encoded pubkeyhash
     return bytes(converted_data)
+
+
+# --- DER SIGNATURE ENCODING --- #
+def encode_der_signature(r: int, s: int) -> bytes:
+    """
+    Encodes ECDSA integers r and s into a DER-encoded signature.
+    """
+    return encode_dss_signature(r, s)
+
+
+def decode_der_signature(der_sig: bytes) -> tuple[int, int]:
+    """
+    Decodes a DER-encoded ECDSA signature back into integers r and s.
+    """
+    return decode_dss_signature(der_sig)
 
 
 # # --- WIF PRIVATE KEY --- #

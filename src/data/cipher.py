@@ -3,6 +3,8 @@ Used for encoding and decoding
 """
 from src.crypto import secp256k1
 
+PUBKEY_BYTELENGTH = 32
+
 
 # --- ECC PUBLIC/PRIVATE KEY ENCODING --- #
 
@@ -60,3 +62,48 @@ def decompress_public_key(compressed_key: bytes) -> tuple:
     y = y1 if (y1 & 1) == (prefix & 1) else y2
 
     return x, y
+
+
+def get_public_key_point(pubkey: bytes) -> tuple[int, int]:
+    """
+    Converts a public key in various formats into an (x, y) point on the secp256k1 curve.
+
+    Accepts:
+        - 32 bytes (x-only): used in Taproot
+        - 33 bytes (compressed): 1-byte prefix + 32-byte x
+        - 64 bytes (x||y): raw coordinates
+        - 65 bytes (uncompressed): 1-byte prefix + 32-byte x + 32-byte y
+    """
+    curve = secp256k1()
+    length = len(pubkey)
+
+    if length == 32:
+        x = int.from_bytes(pubkey, "big")
+        y = curve.find_y_from_x(x)
+        if y % 2 != 0:
+            y = curve.order - y
+        return x, y
+
+    elif length == 33:
+        prefix = pubkey[0]
+        if prefix not in (0x02, 0x03):
+            raise ValueError("Invalid prefix for compressed pubkey")
+        x = int.from_bytes(pubkey[1:], "big")
+        y = curve.find_y_from_x(x)
+        if y % 2 != prefix % 2:
+            y = curve.order - y
+        return x, y
+
+    elif length == 64:
+        x = int.from_bytes(pubkey[:32], "big")
+        y = int.from_bytes(pubkey[32:], "big")
+        return x, y
+
+    elif length == 65:
+        if pubkey[0] != 0x04:
+            raise ValueError("Invalid prefix for uncompressed pubkey")
+        x = int.from_bytes(pubkey[1:33], "big")
+        y = int.from_bytes(pubkey[33:], "big")
+        return x, y
+
+    raise ValueError("Unknown pubkey format")

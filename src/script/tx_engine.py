@@ -8,10 +8,8 @@ NOTES:
 
 from enum import IntEnum
 
-from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
-
 from src.crypto import ecdsa, hash256, hash160
-from src.data import write_compact_size, to_little_bytes, compress_public_key, encode_bech32
+from src.data import write_compact_size, to_little_bytes, compress_public_key, encode_bech32, encode_der_signature
 from src.db import BitCloneDatabase
 from src.logger import get_logger
 from src.script import OPCODES, ScriptEngine, BTCNum
@@ -217,20 +215,6 @@ class TxEngine:
             i.script_sig = bytes()
             i.script_sig_size = write_compact_size(0)
         return tx
-
-
-def encode_der_signature(r: int, s: int) -> bytes:
-    """
-    Encodes ECDSA integers r and s into a DER-encoded signature.
-    """
-    return encode_dss_signature(r, s)
-
-
-def decode_der_signature(der_sig: bytes) -> tuple[int, int]:
-    """
-    Decodes a DER-encoded ECDSA signature back into integers r and s.
-    """
-    return decode_dss_signature(der_sig)
 
 
 if __name__ == "__main__":
