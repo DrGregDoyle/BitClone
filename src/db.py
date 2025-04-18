@@ -6,6 +6,7 @@ import sqlite3
 from pathlib import Path
 
 from src.logger import get_logger
+from src.tx import UTXO
 
 logger = get_logger(__name__)
 
@@ -71,7 +72,7 @@ class BitCloneDatabase:
             conn.commit()
         self._initialize_database()
 
-    def add_utxo(self, txid: bytes, vout: int, amount: int, script_pubkey: bytes):
+    def add_utxo(self, utxo: UTXO):
         """Adds a new UTXO to the database."""
         with sqlite3.connect(self.db_path) as conn:
             c = conn.cursor()
@@ -79,10 +80,10 @@ class BitCloneDatabase:
                 c.execute("""
                     INSERT INTO utxos (txid, vout,  amount, script_pubkey, spent)
                     VALUES (?, ?,  ?, ?, 0)
-                """, (txid, vout, amount, script_pubkey))
+                """, (utxo.txid, utxo.vout, utxo.amount, utxo.script_pubkey))
                 conn.commit()
             except sqlite3.IntegrityError:
-                print(f"UTXO {txid}:{vout} already exists.")
+                print(f"UTXO {utxo.txid}:{utxo.vout} already exists.")
 
     def spend_utxo(self, txid, vout):
         """Marks a UTXO as spent."""
