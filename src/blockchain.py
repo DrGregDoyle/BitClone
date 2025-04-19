@@ -4,6 +4,7 @@ The Blockchain class
 from pathlib import Path
 
 from src.block import Block
+from src.data import to_little_bytes
 from src.db import BitCloneDatabase, DB_PATH
 
 
@@ -12,7 +13,9 @@ class Blockchain:
     def __init__(self, db_path: Path = DB_PATH):
         # Load DB
         self.db = BitCloneDatabase(db_path)
-        self.height = self.db.get_block_height()
+
+        # Get block reward
+        self.block_reward = 0
 
     def add_block(self, new_block: Block):
         # Add UTXOS, Txs and Block to DB
@@ -39,9 +42,18 @@ class Blockchain:
         """
         return True
 
+    def create_coinbase_tx(self, outputs: [list], script_sig: bytes = b''):
+        coinbase_txid = b'\x00' * 32  # txid = all zeros
+        cointbase_vout = 0xffffffff  # vout = max value
+        script_sig = to_little_bytes(self.height) + script_sig  # BIP 34 | Current height at start of script_sig
+
     @property
     def last_block(self):
         return self.db.get_latest_block()
+
+    @property
+    def height(self):
+        return self.db.get_block_height()
 
 
 # --- TESTING
