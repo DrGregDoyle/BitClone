@@ -6,32 +6,15 @@ NOTES:
     - Hence a legacy, segwit or taproot signature will be used depending ont the type of output referenced.
 """
 
-from enum import IntEnum
-
 from src.crypto import ecdsa, hash256, hash160
 from src.data import write_compact_size, to_little_bytes, compress_public_key, encode_bech32, encode_der_signature
 from src.db import BitCloneDatabase
 from src.logger import get_logger
-from src.script import OPCODES, ScriptEngine, BTCNum
+from src.script import OPCODES, ScriptEngine, ScriptParser
+from src.script.sighash import SigHash
 from src.tx import Transaction, Output, Input, WitnessItem, Witness, UTXO
 
 logger = get_logger(__name__)
-
-
-class SigHash(IntEnum):
-    ALL = 1
-    NONE = 2
-    SINGLE = 3
-    ALL_ANYONECANPAY = -127  # (0x81 interpreted as signed int)
-    NONE_ANYONECANPAY = -126  # (0x82 interpreted as signed int)
-    SINGLE_ANYONECANPAY = -125  # (0x83 interpreted as signed int)
-
-    def to_byte(self) -> bytes:
-        """
-        Encodes the sighash integer using Bitcoin numeric encoding (BTCNum).
-        """
-        btc_num = BTCNum(int(self.value))
-        return btc_num.bytes
 
 
 class TxEngine:
@@ -86,8 +69,10 @@ class TxEngine:
         ref_input.script_sig_size = write_compact_size(len(ref_input.script_sig))
         test_state("ADD SCRIPT SIG (script_pubkey as placeholder)")
 
+        print(f"TX ENGINE TX BEFORE HASHING: {tx_copy.to_json()}")
+
         # Step 3: Get sighash tx data for hashing
-        tx_sighash_data = tx.to_bytes() + sighash.to_byte()
+        tx_sighash_data = tx_copy.to_bytes() + sighash.for_hashing()
         logger.debug("SIGHASH TX DATA")
         logger.debug(f"TYPE: {type(tx_sighash_data)}")
         logger.debug(f"{tx_sighash_data.hex()}")
@@ -165,7 +150,7 @@ class TxEngine:
 
         # Verify scriptpubkey is in proper format
         script_engine = ScriptEngine()
-        parsed_script = script_engine.parse_script(ref_utxo.script_pubkey)
+        parsed_script = ScriptParser().parse_script(ref_utxo.script_pubkey)
         print(f"PARSED SCRIPT: {parsed_script}")
 
         is_segwit = parsed_script[0] == OPCODES[0]

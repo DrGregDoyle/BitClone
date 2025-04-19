@@ -17,8 +17,8 @@ class ScriptSigEngine:
         """
         Pay to public key | OP_PUSHBYTES + DER-ENCODED SIGNATURE
         """
-        if not self._verify_signature(signature):
-            raise ValueError("Signature is incorrectly formatted")
+        # if not self._verify_signature(signature):
+        #     raise ValueError("Signature is incorrectly formatted")
 
         # Return script sig
         return len(signature).to_bytes(1, "little") + signature

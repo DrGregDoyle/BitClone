@@ -51,6 +51,20 @@ class BTCNum:
 
         return cls(num)
 
+    def padded(self, size: int) -> bytes:
+        """
+        Return the BTCNum bytes padded with zeros to the specified size.
+
+        Useful for appending sighash to a transaction (must be 4 bytes).
+
+        Raises:
+            ValueError if encoded value exceeds the requested size.
+        """
+        b = self.bytes
+        if len(b) > size:
+            raise ValueError(f"Encoded value exceeds requested size: {len(b)} > {size}")
+        return b + b'\x00' * (size - len(b))
+
     def _encode(self, n: int) -> bytes:
         """
         Encode an integer to Bitcoin's minimal encoding format.

@@ -52,9 +52,13 @@ def ecdsa(private_key: int, message_hash: bytes):
     r, s = None, None
     while True:
         # Select a random k in [1, n-1]
-        k = secrets.randbelow(n)
-        if k == 0:
-            continue  # Ensure k is non-zero and invertible
+        while True:
+            k = int.from_bytes(secrets.token_bytes(32), "big")
+            if 1 <= k < n:
+                break
+        # k = secrets.randbelow(n)
+        # if k == 0:
+        #     continue  # Ensure k is non-zero and invertible
 
         # 4) Calculate the curve point (x, y) = k * generator
         x, y = curve.multiply_generator(k)

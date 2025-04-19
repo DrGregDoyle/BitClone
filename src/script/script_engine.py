@@ -16,8 +16,9 @@ from src.data import check_hex, decode_der_signature, write_compact_size, get_pu
 from src.db import BitCloneDatabase, DB_PATH
 from src.logger import get_logger
 from src.script.op_codes import OPCODES
+from src.script.sighash import SigHash
 from src.script.stack import BTCStack, OpcodeMixin, BTCNum
-from src.tx import Transaction
+from src.tx import Transaction, UTXO
 
 logger = get_logger(__name__)
 
@@ -212,7 +213,7 @@ class ScriptEngine(OpcodeMixin):
 
         # Get signature tuple
         der_sig = signature[:-1]
-        hash_type = int.from_bytes(signature[-1], "little")
+        hash_type = signature[-1]
         sig_tuple = decode_der_signature(der_sig)
 
         # copy tx
@@ -220,25 +221,28 @@ class ScriptEngine(OpcodeMixin):
 
         # Get input utxo
         tx_input = tx_copy.inputs[input_index]
-        utxo = self.db.get_utxo(tx_input.txid, tx_input.vout)
+        utxo_tuple = self.db.get_utxo(tx_input.txid, tx_input.vout)
+        utxo = UTXO(utxo_tuple[0], utxo_tuple[1], utxo_tuple[2], utxo_tuple[3], bool(utxo_tuple[4]))
         subscript = utxo.script_pubkey
 
         # scriptsigs for all inputs in tx_copy set to empty scripts
         for x in range(len(tx_copy.inputs)):
             temp_input = tx_copy.inputs[x]
-            temp_input.script_sig = b""  # Empty Script
-            temp_input.script_sig_size = b"\x00"  # Null byte length for encoding
+            temp_input.script_sig = bytes()  # Empty Script
+            temp_input.script_sig_size = write_compact_size(0)  # Null byte length for encoding
             tx_copy.inputs[x] = temp_input
 
         # Change input script sig to scriptpubkey from utxo
         tx_input.script_sig = subscript
         tx_input.script_sig_size = write_compact_size(len(subscript))
 
-        # Handle hash type
+        print(f"OP_CHECKSIG TX BEFORE HASHING: {tx_copy.to_json()}")
 
         # Get data to hash
-        data = tx_copy.to_bytes() + hash_type.to_bytes(4, "little")
+        sighash_type = SigHash(hash_type)
+        data = tx_copy.to_bytes() + sighash_type.for_hashing()  # Returns 4 byte for hash
         message_hash = hash256(data)
+        print(f"OP_CHECKSIG MESSAGE HASH: {message_hash.hex()}")
 
         # Get public key point
         pubkey_point = get_public_key_point(pubkey)

@@ -7,6 +7,7 @@ from typing import Optional
 from src.crypto import secp256k1, sha256, hash160, tagged_hash_function, HashType
 from src.data import encode_base58check, encode_bech32
 from src.logger import get_logger
+from src.script.script_engine import ScriptParser
 
 logger = get_logger(__name__)
 
@@ -26,6 +27,7 @@ class ScriptPubKeyEngine:
     OP_0 = b'\x00'
     OP_PUSHBYTES_20 = b'\x14'
     OP_PUSHBYTES_32 = b'\x20'
+    OP_PUSHBYTES_33 = b'\x21'
     OP_PUSHBYTES_65 = b'\x41'
     OP_1 = b'\x51'
     OP_DUP = b'\x76'
@@ -37,6 +39,7 @@ class ScriptPubKeyEngine:
 
     def __init__(self):
         self.curve = secp256k1()
+        self.parser = ScriptParser()
 
     # -- Helper Functions
     def _get_pubkey_info(self, pubkey: bytes) -> tuple[bytes, bool]:
@@ -44,7 +47,7 @@ class ScriptPubKeyEngine:
         Returns the appropriate push opcode and compression flag for a given pubkey.
         """
         if len(pubkey) == 33:
-            return self.OP_PUSHBYTES_20, True
+            return self.OP_PUSHBYTES_33, True
         elif len(pubkey) == 65:
             return self.OP_PUSHBYTES_65, False
         else:
