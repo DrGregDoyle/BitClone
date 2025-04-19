@@ -247,6 +247,10 @@ class ScriptEngine(OpcodeMixin):
         # Get public key point
         pubkey_point = get_public_key_point(pubkey)
 
+        # Verify point is on curve
+        if not self.curve.is_point_on_curve(pubkey_point):
+            raise ValueError(f"OP_CHECKSIG FAILED TO GET POINT ON CURVE")
+
         # Verify ECDSA
         valid_signature = verify_ecdsa(sig_tuple, message_hash, pubkey_point)
         self._push_bool(valid_signature)

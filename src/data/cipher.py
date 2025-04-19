@@ -81,7 +81,7 @@ def get_public_key_point(pubkey: bytes) -> tuple[int, int]:
         x = int.from_bytes(pubkey, "big")
         y = curve.find_y_from_x(x)
         if y % 2 != 0:
-            y = curve.order - y
+            y = curve.p - y
         return x, y
 
     elif length == 33:
@@ -91,7 +91,7 @@ def get_public_key_point(pubkey: bytes) -> tuple[int, int]:
         x = int.from_bytes(pubkey[1:], "big")
         y = curve.find_y_from_x(x)
         if y % 2 != prefix % 2:
-            y = curve.order - y
+            y = curve.p - y
         return x, y
 
     elif length == 64:
