@@ -122,19 +122,23 @@ class ScriptPubKeyEngine:
         Pay To MultiSig | OP_min OP_PUSHBYTES key1 OP_PUSHBYTES key2 ... OP_tot OP_CHECKMULTISIG
 
         OP_min = minimum number of signatures needed to unlock, OP_1 or greater
-        OP_tot = total number of signatures
+        OP_total = total number of signatures
 
         Uses multiple keys to lock bitcoins, and requires some (or all) of the signatures to unlock it.
         P2MS has no address format
         """
-        numkeys = len(key_list)
-        signum = signum if signum is not None else numkeys
+        _total = len(key_list)  # Number of pubkeys
+        _min = signum if signum is not None else _total
 
-        if not (1 <= signum <= numkeys <= 16):
+        if not (1 <= _min <= _total <= 16):
             raise ValueError("Invalid number of keys or required signatures")
 
-        # Minimum number of signatures
-        script_parts = [bytes(0x50 + signum)]
+        # Get op_min and op_total as byte code
+        op_min = bytes.fromhex(hex(0x50 + _min)[2:])
+        op_total = bytes.fromhex(hex(0x50 + _total)[2:])
+
+        # Get list of op_codes | Start with op_min
+        script_parts = [op_min]
 
         # Pushbytes and key for each key
         for pubkey in key_list:
@@ -142,7 +146,7 @@ class ScriptPubKeyEngine:
             script_parts.extend([push_code, pubkey])
 
         # Total number and OP_CHECKMULTISIG
-        script_parts.extend([bytes(0x50 + numkeys), self.OP_CHECKMULTISIG])
+        script_parts.extend([op_total, self.OP_CHECKMULTISIG])
 
         return ScriptPubKeyResult(
             scriptpubkey=self._assemble_script(script_parts),

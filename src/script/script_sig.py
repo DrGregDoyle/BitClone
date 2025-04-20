@@ -1,7 +1,7 @@
 """
 The ScriptSigEngine class
 """
-from src.data import decode_der_signature
+from src.data import decode_der_signature, to_little_bytes
 
 
 class ScriptSigEngine:
@@ -48,7 +48,9 @@ class ScriptSigEngine:
         """
         scriptsig = self.OP_0
         for sig in signatures:
-            scriptsig += len(sig).to_bytes(1, "little") + sig
+            if not 0x01 <= len(sig) <= 0x4b:
+                raise ValueError("Signature outside of pushbytes range")
+            scriptsig += to_little_bytes(len(sig), 1) + sig
         return scriptsig
 
     def p2sh(self, locking_script: bytes, redeem_script: bytes):

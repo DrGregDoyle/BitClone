@@ -192,17 +192,56 @@ class ScriptEngine(OpcodeMixin):
             else:
                 raise ValueError("Invalid opcode in Taproot context")
         else:
-            if opcode == 0xac:
+            if opcode == 0xac:  # OP_CHECKSIG
                 self._handle_legacy_checksig(tx, input_index)
-            elif opcode == 0xad:
+            elif opcode == 0xad:  # OP_CHECKSIGVERIFY
                 self._handle_legacy_checksig(tx, input_index)
                 self._op_verify()
                 # return self._op_verify_result(result)
+            elif opcode == 0xae:  # OP_CHECKSIGALL
+                self._handle_multisig(tx, input_index)
             else:
-                raise ValueError("Unexpected signature opcode")
+                raise ValueError(f"Unexpected signature opcode: {hex(opcode)}")
 
     def _handle_checksigadd(self, tx: Transaction, input_index: int):
         pass
+
+    def _handle_multisig(self, tx: Transaction = None, input_index: int = 0):
+        """
+        Implements OP_CHECKMULTISIG logic.
+        """
+
+        # Step 1: Extract values
+        sig_count = self._pop_num().value  # e.g. 2
+        pubkeys = self.stack.pop_n(sig_count)  # pubkey_N .. pubkey_1
+        pub_count = self._pop_num().value  # e.g. 3
+        sigs = self.stack.pop_n(pub_count)  # sig_M .. sig_1
+        empty_byte = self.stack.pop()
+
+        if empty_byte != b'':
+            raise ValueError("Missing dummy OP_0 before signatures (required due to off-by-one bug)")
+
+        # Step 2: Initialize indexes
+        sig_index = 0
+        key_index = 0
+        matches = 0
+
+        # Step 3: Try to match signatures to public keys
+        while sig_index < len(sigs) and key_index < len(pubkeys):
+            sig = sigs[sig_index]
+            pub = pubkeys[key_index]
+
+            if self._verify_sig(sig, pub, tx, input_index):
+                matches += 1
+                sig_index += 1
+
+            key_index += 1  # always advance key_index
+
+        # Step 4: Validation result
+        if matches == len(sigs):
+            self._op_true()
+        else:
+            self._op_false()
 
     def _handle_legacy_checksig(self, tx: Transaction, input_index: int):
         if tx is None or input_index is None:
@@ -254,6 +293,47 @@ class ScriptEngine(OpcodeMixin):
         # Verify ECDSA
         valid_signature = verify_ecdsa(sig_tuple, message_hash, pubkey_point)
         self._push_bool(valid_signature)
+
+    def _verify_sig(self, sig: bytes, pubkey: bytes, tx: Transaction, input_index: int) -> bool:
+        try:
+            sig_val = sig[:-1]  # DER part
+            sighash_flag = sig[-1]
+            message_hash = self._get_sighash(tx, input_index, sighash_flag)
+            pub_point = get_public_key_point(pubkey)
+            r, s = decode_der_signature(sig_val)
+            return verify_ecdsa((r, s), message_hash, pub_point)
+        except ValueError as e:
+            logger.debug(f"Verify multisig failed with error: {e}")
+            return False
+
+    def _get_sighash(self, tx: Transaction, input_index: int, sighash_flag: int) -> bytes:
+        """
+        Constructs the sighash digest for legacy transactions (non-SegWit).
+
+        This is the digest that is signed or verified for a given input.
+        """
+        # Step 1: Copy tx to avoid mutation
+        tx_copy = Transaction.from_bytes(tx.to_bytes())
+
+        # Step 2: Clear all scriptSigs
+        for txin in tx_copy.inputs:
+            txin.script_sig = b''
+            txin.script_sig_size = write_compact_size(0)
+
+        # Step 3: Insert scriptPubKey from UTXO at the input being signed
+        utxo = self.db.get_utxo(tx_copy.inputs[input_index].txid, tx_copy.inputs[input_index].vout)
+        if utxo is None:
+            raise ValueError("UTXO not found during sighash computation")
+        script_pubkey = utxo[3]  # script is 4th item in returned tuple
+        tx_copy.inputs[input_index].script_sig = script_pubkey
+        tx_copy.inputs[input_index].script_sig_size = write_compact_size(len(script_pubkey))
+
+        # Step 4: Append 4-byte sighash flag (little-endian)
+        sighash_bytes = sighash_flag.to_bytes(4, "little")
+        serialized = tx_copy.to_bytes() + sighash_bytes
+
+        # Step 5: Return double SHA256
+        return hash256(serialized)
 
     # -- EVAL
 
@@ -311,6 +391,11 @@ class ScriptEngine(OpcodeMixin):
             if not execution_enabled:
                 continue
 
+            # 0x00 -- OP_0, OP_FALSE
+            if opcode == 0x00:
+                self._push_bool(False)
+                continue
+
             # 0x01 -- 0x4b - OP_PUSHBYTES
             if 0x01 <= opcode <= 0x4b:
                 self._handle_pushdata(stream, opcode)
@@ -330,6 +415,7 @@ class ScriptEngine(OpcodeMixin):
             # 0xac -- 0xba - OP_CHECKSIGS
             if 0xac <= opcode <= 0xba:
                 self._handle_checksig(opcode, tx, input_index)
+                continue
 
             valid_script = self._dispatch_opcode(opcode)
 
