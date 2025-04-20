@@ -201,3 +201,7 @@ def test_p2ms(curve, test_db, script_engine, tx_engine, scriptsig_engine, pubkey
     asm = parser.parse_script(final_script)
     logger.debug(f"P2MS ASM: {asm}")
     assert script_engine.eval_script(final_script, final_tx, input_index=0), "p2ms 2-of-3 failed"
+
+
+def test_p2sh(curve, test_db, script_engine, tx_engine, scriptsig_engine, pubkey_engine, parser):
+    pass
