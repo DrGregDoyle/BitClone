@@ -85,7 +85,11 @@ class ScriptPubKeyEngine:
 
         # Ensure even y
         if y % 2 != 0:
-            y = self.curve.order - y
+            y = self.curve.p - y
+
+        # Verify (x,y)
+        if not self.curve.is_point_on_curve((x, y)):
+            raise ValueError("Public key point not on curve")
 
         # Calculate tweak
         tweak_data = pubkey + merkle_root
@@ -162,7 +166,7 @@ class ScriptPubKeyEngine:
         scripthash = hash160(script)
         scriptpubkey = self._assemble_script([self.OP_HASH160, scripthash, self.OP_EQUAL])
         address = self._base58_address(scripthash, self._get_prefix(testnet, "p2sh"))
-        return ScriptPubKeyResult(scriptpubkey=script, address=address, script_type="p2sh")
+        return ScriptPubKeyResult(scriptpubkey=scriptpubkey, address=address, script_type="p2sh")
 
     def p2wpkh(self, pubkey: bytes, testnet: bool = False) -> ScriptPubKeyResult:
         """

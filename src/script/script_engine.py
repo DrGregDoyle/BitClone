@@ -43,6 +43,9 @@ class ScriptEngine(OpcodeMixin):
         # Flag for TapScript engine
         self.taproot = taproot
 
+        # Flag for P2SH scriptPubKey
+        self.is_p2sh = False
+
         # Load DB
         self.db = db
 
@@ -362,6 +365,10 @@ class ScriptEngine(OpcodeMixin):
         if_stack = []
         execution_enabled = True
         valid_script = True
+
+        # P2SH tracking | scripubkey = OP_HASH160 + OP_PUSHBYTES_20 + 20 bytes + OP_EQUAL
+        if script[-23:-25] == b'\xa9\x14' and script[-3:-1] == b'\x87':
+            self.is_p2sh = True
 
         flow_opcodes = {0x63, 0x64, 0x67, 0x68}  # IF, NOTIF, ELSE, ENDIF
 
@@ -871,6 +878,7 @@ class ScriptEngine(OpcodeMixin):
         OP_HASH160 | 0xa9
         The input is hashed twice: first with SHA-256 and then with RIPEMD-160.
         """
+        # TODO: Handle P2SH scripts here
         hashed_item = hash160(self.stack.pop())
         self.stack.push(hashed_item)
 

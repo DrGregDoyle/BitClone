@@ -17,11 +17,11 @@ class ScriptSigEngine:
         """
         Pay to public key | OP_PUSHBYTES + DER-ENCODED SIGNATURE
         """
-        # if not self._verify_signature(signature):
-        #     raise ValueError("Signature is incorrectly formatted")
+        if not self._verify_signature(signature):
+            raise ValueError("Signature is incorrectly formatted")
 
         # Return script sig
-        return len(signature).to_bytes(1, "little") + signature
+        return to_little_bytes(len(signature), 1) + signature
 
     def p2pkh(self, signature: bytes, pubkey: bytes):
         """
@@ -57,8 +57,8 @@ class ScriptSigEngine:
         """
         Pay to script hash: Can only use the two-script scriptsig
         """
-        op_pushbytes_locking = len(locking_script).to_bytes(1, "little")
-        op_pushbytes_redeem = len(redeem_script).to_bytes(1, "little")
+        op_pushbytes_locking = to_little_bytes(len(locking_script), 1)
+        op_pushbytes_redeem = to_little_bytes(len(redeem_script), 1)
         scriptsig = self.OP_0 + op_pushbytes_locking + locking_script + op_pushbytes_redeem + redeem_script
         return scriptsig
 
@@ -66,8 +66,10 @@ class ScriptSigEngine:
         """
         We verify the signature is properly DER-encoded
         """
+        der_encoding = signature[:-1]
+        sighash_num = signature[-1]
         try:
-            decode_der_signature(signature)
+            decode_der_signature(der_encoding)
             return True
         except ValueError:
             return False
