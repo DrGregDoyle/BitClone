@@ -53,14 +53,25 @@ class ScriptSigEngine:
             scriptsig += to_little_bytes(len(sig), 1) + sig
         return scriptsig
 
-    def p2sh(self, locking_script: bytes, redeem_script: bytes):
+    def p2sh(self, items: list[bytes], redeem_script: bytes) -> bytes:
         """
-        Pay to script hash: Can only use the two-script scriptsig
+        Generic P2SH scriptsig: pushes all 'items' (args for redeem script), then pushes redeem script bytes.
+        Handles multisig case with leading OP_0.
         """
-        op_pushbytes_locking = to_little_bytes(len(locking_script), 1)
-        op_pushbytes_redeem = to_little_bytes(len(redeem_script), 1)
-        scriptsig = self.OP_0 + op_pushbytes_locking + locking_script + op_pushbytes_redeem + redeem_script
-        return scriptsig
+        parts = []
+
+        # If it's a multisig script, we expect a dummy OP_0 (i.e., b'')
+        if items and items[0] == b'\x00':
+            parts.append(b'\x00')  # OP_0
+            items = items[1:]  # Don't mutate original list
+
+        # Push args
+        parts.extend([self._pushdata(item) for item in items])
+
+        # Push redeem script
+        parts.append(self._pushdata(redeem_script))
+
+        return b''.join(parts)
 
     def _verify_signature(self, signature: bytes) -> bool:
         """
@@ -73,3 +84,17 @@ class ScriptSigEngine:
             return True
         except ValueError:
             return False
+
+    def _pushdata(self, item: bytes) -> bytes:
+        """
+        For a given item, return the corresponding OP_CODES + Data for a datapush
+        """
+        length = len(item)
+        if length <= 75:
+            return length.to_bytes(1, "little") + item
+        elif length <= 255:
+            return b'\x4c' + length.to_bytes(1, "little") + item
+        elif length <= 65535:
+            return b'\x4d' + length.to_bytes(2, "little") + item
+        else:
+            return b'\x4e' + length.to_bytes(4, "little") + item

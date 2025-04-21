@@ -6,7 +6,6 @@ Fixed to run on secp256k1 elliptic curve.
 """
 
 import secrets
-from logging import DEBUG
 
 from src.crypto import secp256k1
 from src.logger import get_logger
@@ -56,9 +55,6 @@ def ecdsa(private_key: int, message_hash: bytes):
             k = int.from_bytes(secrets.token_bytes(32), "big")
             if 1 <= k < n:
                 break
-        # k = secrets.randbelow(n)
-        # if k == 0:
-        #     continue  # Ensure k is non-zero and invertible
 
         # 4) Calculate the curve point (x, y) = k * generator
         x, y = curve.multiply_generator(k)
@@ -79,20 +75,6 @@ def ecdsa(private_key: int, message_hash: bytes):
     # 6) Get low_s
     low_s = n - s
     s = min(low_s, s)
-
-    # -- DEBUG: Verify signature
-    if logger.level == DEBUG:
-        logger.debug("Verifying ECDSA")
-        public_key = curve.multiply_generator(private_key)
-        signed = verify_ecdsa(signature=(r, s), message_hash=message_hash, public_key=public_key)
-        assert signed, logger.error("Failed to verify ECDSA")
-        logger.debug("ECDSA has been successfully verified.")
-        logger.debug("\n" + "=" * 256)
-        logger.debug("Verifying Low s")
-        logger.debug(f"S: {s}")
-        logger.debug(f"Order -S: {n - s}")
-        assert s < n - s, logger.error(f"Failed to return low s.")
-        logger.debug(f"Return low S has been successfully verified.")
 
     # 7) Return the signature (r,s)
     return r, s

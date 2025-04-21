@@ -164,7 +164,7 @@ class ScriptPubKeyEngine:
         Given the provided script, we hash160 it and return the corresponding scriptpubkey
         """
         scripthash = hash160(script)
-        scriptpubkey = self._assemble_script([self.OP_HASH160, scripthash, self.OP_EQUAL])
+        scriptpubkey = self._assemble_script([self.OP_HASH160, self.OP_PUSHBYTES_20, scripthash, self.OP_EQUAL])
         address = self._base58_address(scripthash, self._get_prefix(testnet, "p2sh"))
         return ScriptPubKeyResult(scriptpubkey=scriptpubkey, address=address, script_type="p2sh")
 

@@ -43,9 +43,6 @@ class ScriptEngine(OpcodeMixin):
         # Flag for TapScript engine
         self.taproot = taproot
 
-        # Flag for P2SH scriptPubKey
-        self.is_p2sh = False
-
         # Load DB
         self.db = db
 
@@ -340,12 +337,14 @@ class ScriptEngine(OpcodeMixin):
 
     # -- EVAL
 
-    def eval_script(self, script: bytes | str, tx: Transaction = None, input_index: int = None) -> bool:
+    def eval_script(self, script: bytes | str, tx: Transaction = None, input_index: int = None, clear_stacks: bool =
+    True) -> bool:
         """
         Evaluate a Bitcoin script and return success/failure.
         """
         # Empty stacks
-        self._clear_stacks()
+        if clear_stacks:
+            self._clear_stacks()
 
         # Byte encode script if str
         if isinstance(script, str):
@@ -365,10 +364,6 @@ class ScriptEngine(OpcodeMixin):
         if_stack = []
         execution_enabled = True
         valid_script = True
-
-        # P2SH tracking | scripubkey = OP_HASH160 + OP_PUSHBYTES_20 + 20 bytes + OP_EQUAL
-        if script[-23:-25] == b'\xa9\x14' and script[-3:-1] == b'\x87':
-            self.is_p2sh = True
 
         flow_opcodes = {0x63, 0x64, 0x67, 0x68}  # IF, NOTIF, ELSE, ENDIF
 
@@ -427,6 +422,49 @@ class ScriptEngine(OpcodeMixin):
             valid_script = self._dispatch_opcode(opcode)
 
         return self._validate_stack() if valid_script else False
+
+    def validate_utxo(self, script_sig: bytes, script_pubkey: bytes, tx: Transaction, input_index: int = 0) -> bool:
+        """
+        Validates input scriptSig + scriptPubKey (and redeemScript if P2SH).
+        """
+        self._clear_stacks()
+
+        # --- Step 1: Evaluate scriptSig
+        self.eval_script(script_sig, tx, input_index)
+        logger.debug("Stack has evaluated scriptsig")
+
+        # --- Step 2: Check for P2SH
+        is_p2sh = (
+                len(script_pubkey) == 23 and
+                script_pubkey[0] == 0xa9 and  # OP_HASH160
+                script_pubkey[1] == 0x14 and  # PUSH 20 bytes
+                script_pubkey[-1] == 0x87  # OP_EQUAL
+        )
+
+        if not is_p2sh:
+            # Evaluate scriptPubKey using resulting stack from scriptSig
+            return self.eval_script(script_pubkey, tx, input_index, clear_stacks=False)
+
+        # --- Step 3: Handle P2SH
+        if self.stack.height == 0:
+            logger.debug("P2SH redeem script missing")
+            return False
+
+        redeem_script = self.stack.pop()
+        # Push redeem_script to be hashed and compared by scriptPubKey
+        self.stack.push(redeem_script)
+
+        # Evaluate the P2SH scriptPubKey (e.g., OP_HASH160 <20B> OP_EQUAL)
+        self.eval_script(script_pubkey, tx, input_index, clear_stacks=False)
+
+        # Pop top element and verify OP_EQUAL
+        op_equal = self.stack.pop()
+        if not op_equal == b'\x01':
+            logger.debug("P2SH ScriptPubKey failed HASH160 verification")
+            return False
+
+        # Step 4: Evaluate the redeem script using *current stack*
+        return self.eval_script(redeem_script, tx, input_index, clear_stacks=False)
 
     # -- OPCODE FUNCTIONS
     def _op_1negate(self):
