@@ -187,7 +187,7 @@ class WitnessItem(Serializable):
 
     def __init__(self, item: bytes):
         self.item = item
-        self.size = write_compact_size(len(self.item))
+        self.size = len(self.item)
 
     @classmethod
     def from_bytes(cls, byte_stream):
@@ -204,11 +204,11 @@ class WitnessItem(Serializable):
         return cls(item)
 
     def to_bytes(self) -> bytes:
-        return self.size + self.item
+        return write_compact_size(self.size) + self.item
 
     def to_dict(self) -> dict:
         return {
-            "size": self.size.hex(),
+            "size": write_compact_size(self.size).hex(),
             "item": self.item.hex()
         }
 
@@ -226,7 +226,7 @@ class Witness(Serializable):
         if items is None:
             items = []
         self.items = items
-        self.stackitems = write_compact_size(len(self.items))
+        self.stackitems = len(self.items)  # write_compact_size(len(self.items))
 
     @classmethod
     def from_bytes(cls, byte_stream):
@@ -261,7 +261,7 @@ class Witness(Serializable):
         items_bytes = b""
         for item in self.items:
             items_bytes += item.to_bytes()
-        return self.stackitems + items_bytes
+        return write_compact_size(self.stackitems) + items_bytes
 
     def to_dict(self) -> dict:
         """
@@ -271,7 +271,7 @@ class Witness(Serializable):
             dict: A dictionary representation of the Witness.
         """
         witness_dict = {
-            "stackitems": self.stackitems.hex()
+            "stackitems": write_compact_size(self.stackitems).hex()
         }
         for x in range(len(self.items)):
             witness_dict.update({
@@ -315,7 +315,7 @@ class Transaction(Serializable):
     This means we will enable the "segwit" boolean, which specifies whether a Transaction contains
 
     """
-    __slots__ = ('version', 'inputs', 'outputs', 'locktime', 'witnesses', 'input_count', 'output_count', 'is_segwit',
+    __slots__ = ('version', 'inputs', 'outputs', 'locktime', 'witnesses', 'input_count', 'output_count', 'segwit',
                  '_cached_non_witness_bytes', '_cached_wtxid_bytes', 'sighash')
 
     def __init__(self, inputs=None, outputs=None, witnesses=None, locktime: int = 0, version: int = None,
@@ -331,10 +331,10 @@ class Transaction(Serializable):
         self.output_count = write_compact_size(len(self.outputs))
 
         # Get segwit bool
-        self.is_segwit = segwit
+        self.segwit = segwit
 
         # Check or fill witnesses
-        if self.is_segwit:
+        if self.segwit:
             # Check witnesses
             if self.witnesses and len(self.witnesses) != len(self.inputs):
                 raise ValueError("Given number of witness objects doesn't agree with number of inputs")
@@ -375,9 +375,9 @@ class Transaction(Serializable):
             flag = stream.read(1)
             if flag != b'\x01':
                 raise ValueError("Invalid SegWit flag.")
-            is_segwit = True
+            segwit = True
         else:
-            is_segwit = False
+            segwit = False
             stream.seek(-1, io.SEEK_CUR)  # Rewind the marker byte
 
         # Read inputs
@@ -394,7 +394,7 @@ class Transaction(Serializable):
 
         # Read witnesses if SegWit
         witnesses = []
-        if is_segwit:
+        if segwit:
             for _ in range(num_inputs):
                 witnesses.append(Witness.from_bytes(stream))
 
@@ -404,14 +404,14 @@ class Transaction(Serializable):
         locktime = from_little_bytes(locktime_data)
         print(f"FROM BYTES: LOCKTIME BYTES: {locktime}")
 
-        return cls(inputs, outputs, witnesses, locktime, version, is_segwit)
+        return cls(inputs, outputs, witnesses, locktime, version, segwit)
 
     @property
     def wu(self):
         """
         Returns weight measurement of the tx data
         """
-        if self.is_segwit:
+        if self.segwit:
             input_length = 0
             output_length = 0
             witness_length = 0
@@ -455,14 +455,14 @@ class Transaction(Serializable):
         """
         # Version and Marker/Flag (if segwit)
         version_bytes = to_little_bytes(self.version, self.VERSION_BYTES)
-        marker_flag_bytes = b'\x00\x01' if self.is_segwit else b''  # Marker + Flag = 0001
+        marker_flag_bytes = b'\x00\x01' if self.segwit else b''  # Marker + Flag = 0001
 
         # Inputs, outputs and witness
         inputs_bytes = self.input_count + b''.join(i.to_bytes() for i in self.inputs) if self.inputs else \
             self.input_count + b''
         outputs_bytes = self.output_count + b''.join(o.to_bytes() for o in self.outputs) if self.outputs else \
             self.output_count + b''
-        witnesses_bytes = b''.join(w.to_bytes() for w in self.witnesses) if self.is_segwit else b''
+        witnesses_bytes = b''.join(w.to_bytes() for w in self.witnesses) if self.segwit else b''
 
         # Locktime and return
         locktime_bytes = to_little_bytes(self.locktime, self.LOCKTIME_BYTES)
@@ -482,7 +482,7 @@ class Transaction(Serializable):
         }
 
         # 2. If SegWit, add "marker" and "flag"
-        if self.is_segwit:
+        if self.segwit:
             tx_dict["marker"] = "00"
             tx_dict["flag"] = "01"
 
@@ -493,7 +493,7 @@ class Transaction(Serializable):
         tx_dict["outputs"] = [i.to_dict() for i in self.outputs]
 
         # 4. If SegWit, add witness
-        if self.is_segwit:
+        if self.segwit:
             tx_dict["witnesses"] = [w.to_dict() for w in self.witnesses]
 
         # 5. Add locktime and return

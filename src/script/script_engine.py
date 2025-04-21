@@ -16,8 +16,10 @@ from src.data import check_hex, decode_der_signature, write_compact_size, get_pu
 from src.db import BitCloneDatabase, DB_PATH
 from src.logger import get_logger
 from src.script.op_codes import OPCODES
+from src.script.script_pubkey import ScriptPubKeyEngine
 from src.script.sighash import SigHash
 from src.script.stack import BTCStack, OpcodeMixin, BTCNum
+from src.script.tx_engine import TxEngine
 from src.tx import Transaction, UTXO
 
 logger = get_logger(__name__)
@@ -192,12 +194,19 @@ class ScriptEngine(OpcodeMixin):
             else:
                 raise ValueError("Invalid opcode in Taproot context")
         else:
+            segwit = tx.segwit
             if opcode == 0xac:  # OP_CHECKSIG
-                self._handle_legacy_checksig(tx, input_index)
+                if segwit:
+                    self._handle_segwit_checksig(tx, input_index)
+                else:
+                    self._handle_legacy_checksig(tx, input_index)
             elif opcode == 0xad:  # OP_CHECKSIGVERIFY
-                self._handle_legacy_checksig(tx, input_index)
-                self._op_verify()
-                # return self._op_verify_result(result)
+                if segwit:
+                    self._handle_segwit_checksig(tx, input_index)
+                    self._op_verify()
+                else:
+                    self._handle_legacy_checksig(tx, input_index)
+                    self._op_verify()
             elif opcode == 0xae:  # OP_CHECKSIGALL
                 self._handle_multisig(tx, input_index)
             else:
@@ -293,6 +302,50 @@ class ScriptEngine(OpcodeMixin):
         # Verify ECDSA
         valid_signature = verify_ecdsa(sig_tuple, message_hash, pubkey_point)
         self._push_bool(valid_signature)
+
+    def _handle_segwit_checksig(self, tx: Transaction, input_index: int):
+        """
+        Handles OP_CHECKSIG for P2WPKH inputs using BIP-143 sighash.
+        Assumes the witness stack is already on the main stack.
+        """
+
+        # Pop pubkey and signature from stack
+        pubkey, signature = self.stack.pop_n(2)
+        der_sig = signature[:-1]
+        hash_type = signature[-1]
+        sig_tuple = decode_der_signature(der_sig)
+
+        # Lookup UTXO to get the amount
+        utxo_tuple = self.db.get_utxo(tx.inputs[input_index].txid, tx.inputs[input_index].vout)
+        if not utxo_tuple:
+            raise ValueError("UTXO not found during segwit checksig")
+        utxo = UTXO(*utxo_tuple)
+
+        # Verify the pubkey hash matches what's in the scriptPubKey
+        script_pubkey = utxo.script_pubkey
+        pubkey_hash = script_pubkey[2:]
+        if hash160(pubkey) != pubkey_hash:
+            raise ValueError("Pubkey hash mismatch in SegWit checksig")
+
+        # Build scriptCode (standard P2PKH template with this pubkey)
+        script_code = ScriptPubKeyEngine().p2pkh(pubkey).scriptpubkey
+
+        # Compute the message_hash
+        sighash = SigHash(hash_type)
+        tx_engine = TxEngine(self.db)
+        preimage = tx_engine.segwit_preimage(tx, input_index, utxo.amount, sighash)
+        message_hash = hash256(preimage)
+
+        # Check curve
+        pubkey_point = get_public_key_point(pubkey)
+        if not self.curve.is_point_on_curve(pubkey_point):
+            raise ValueError("Pubkey not on curve in SegWit checksig")
+
+        # Verify signature
+        is_valid = verify_ecdsa(sig_tuple, message_hash, pubkey_point)
+        if not is_valid:
+            logger.debug(f"FAILED ECDSA SIGNATURE")
+        self._push_bool(is_valid)
 
     def _verify_sig(self, sig: bytes, pubkey: bytes, tx: Transaction, input_index: int) -> bool:
         try:
@@ -427,7 +480,41 @@ class ScriptEngine(OpcodeMixin):
         """
         Validates input scriptSig + scriptPubKey (and redeemScript if P2SH).
         """
-        self._clear_stacks()
+
+        # --- Check for p2wpkh
+        if script_sig == b'' or script_sig is None:
+            logger.debug("Handling P2WPKH input")
+
+            if not tx.segwit:
+                logger.error("SegWit flag not set on transaction")
+                return False
+
+            # Extract pubkey hash from scriptPubKey
+            pubkey_hash = script_pubkey[2:]
+
+            # Extract witness items
+            witness = tx.witnesses[input_index]
+            if witness.stackitems != 2:
+                logger.debug("Invalid witness item count for P2WPKH")
+                return False
+
+            sig = witness.items[0].item  # Witness.WitnessItem.item
+            pubkey = witness.items[1].item
+
+            # Check that pubkey hashes to expected value
+            if hash160(pubkey) != pubkey_hash:
+                logger.debug("P2WPKH pubkey hash mismatch")
+                return False
+
+            # Push witness items to stack
+            self._clear_stacks()
+            self.stack.push(sig)
+            self.stack.push(pubkey)
+
+            # Reconstruct implied script (standard P2PKH)
+            pubkey_engine = ScriptPubKeyEngine()
+            script_code = pubkey_engine.p2pkh(pubkey).scriptpubkey
+            return self.eval_script(script_code, tx, input_index, clear_stacks=False)
 
         # --- Step 1: Evaluate scriptSig
         self.eval_script(script_sig, tx, input_index)

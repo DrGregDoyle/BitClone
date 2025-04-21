@@ -7,7 +7,6 @@ from typing import Optional
 from src.crypto import secp256k1, sha256, hash160, tagged_hash_function, HashType
 from src.data import encode_base58check, encode_bech32
 from src.logger import get_logger
-from src.script.script_engine import ScriptParser
 
 logger = get_logger(__name__)
 
@@ -39,7 +38,6 @@ class ScriptPubKeyEngine:
 
     def __init__(self):
         self.curve = secp256k1()
-        self.parser = ScriptParser()
 
     # -- Helper Functions
     def _get_pubkey_info(self, pubkey: bytes) -> tuple[bytes, bool]:

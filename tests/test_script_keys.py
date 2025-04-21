@@ -301,3 +301,34 @@ def test_p2sh_p2ms(curve, test_db, script_engine, tx_engine, scriptsig_engine, p
     asm = parser.parse_script(full_script)
     print(f"P2SH(P2MS) ASM: {asm}")
     assert script_engine.validate_utxo(scriptsig, p2sh_scriptpubkey, final_tx), "P2SH(P2MS) failed"
+
+
+def test_p2wpkh(curve, test_db, script_engine, tx_engine, scriptsig_engine, pubkey_engine, parser):
+    """
+    Tests P2WPKH
+    """
+    script_engine._clear_stacks()
+    test_db._clear_db()
+    # 1. Generate keypair
+    privkey, compressed_pubkey = generate_keypair(curve)
+
+    # 2. Get P2WPKH scriptpubkey
+    p2wpkh_scriptpubkey = pubkey_engine.p2wpkh(compressed_pubkey).scriptpubkey
+
+    # 3. Create UTXO
+    utxo = make_utxo(p2wpkh_scriptpubkey)
+    test_db.add_utxo(utxo)
+
+    # 4. Create a tx
+    tx = build_tx(utxo, b'\x6a')
+    tx.segwit = True
+
+    # 5. Get witness inserted into tx
+    final_tx = tx_engine.get_segwit_sig(privkey, tx, utxo.amount, 0)
+    witness = final_tx.witnesses[0]
+    print(f"WITNESS: {witness.to_json()}")
+
+    # 6. Evaluate
+    print(f"P2WPKH SCRIPTPUBKEY: {parser.parse_script(p2wpkh_scriptpubkey)}")
+    assert script_engine.validate_utxo(b'', p2wpkh_scriptpubkey, final_tx, 0), "P2WPKH Failed assertion"
+    # script_engine.validate_utxo(b'', p2wpkh_scriptpubkey, final_tx, 0)
