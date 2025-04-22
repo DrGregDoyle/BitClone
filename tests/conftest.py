@@ -5,7 +5,7 @@ import pytest
 
 from src.crypto import secp256k1
 from src.db import BitCloneDatabase
-from src.script import ScriptEngine, TxEngine, ScriptPubKeyEngine, ScriptSigEngine, ScriptParser
+from src.script import ScriptEngine, ScriptPubKeyEngine, ScriptSigEngine, ScriptParser, SignatureEngine
 
 
 @pytest.fixture(scope="module")
@@ -23,7 +23,7 @@ def script_engine(test_db):
 
 @pytest.fixture
 def tx_engine(test_db):
-    return TxEngine(db=test_db)
+    return SignatureEngine(db=test_db)
 
 
 @pytest.fixture

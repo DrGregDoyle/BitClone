@@ -16,9 +16,9 @@ from src.tx import Transaction, Input, WitnessItem, Witness, UTXO
 logger = get_logger(__name__)
 
 
-class TxEngine:
+class SignatureEngine:
     """
-    A class used to construct transactions
+    A class used to sign inputs.
     """
     PUBLICKEY_BYTES = 32
 
