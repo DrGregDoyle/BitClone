@@ -331,4 +331,3 @@ def test_p2wpkh(curve, test_db, script_engine, tx_engine, scriptsig_engine, pubk
     # 6. Evaluate
     print(f"P2WPKH SCRIPTPUBKEY: {parser.parse_script(p2wpkh_scriptpubkey)}")
     assert script_engine.validate_utxo(b'', p2wpkh_scriptpubkey, final_tx, 0), "P2WPKH Failed assertion"
-    # script_engine.validate_utxo(b'', p2wpkh_scriptpubkey, final_tx, 0)

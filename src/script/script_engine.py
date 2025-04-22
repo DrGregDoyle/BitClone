@@ -327,9 +327,6 @@ class ScriptEngine(OpcodeMixin):
         if hash160(pubkey) != pubkey_hash:
             raise ValueError("Pubkey hash mismatch in SegWit checksig")
 
-        # Build scriptCode (standard P2PKH template with this pubkey)
-        script_code = ScriptPubKeyEngine().p2pkh(pubkey).scriptpubkey
-
         # Compute the message_hash
         sighash = SigHash(hash_type)
         tx_engine = TxEngine(self.db)

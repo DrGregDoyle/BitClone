@@ -186,9 +186,14 @@ class TxEngine:
         utxo_row = self.db.get_utxo(temp_input.txid, temp_input.vout)
         utxo = UTXO(*utxo_row)
         scriptcode_pubkey = utxo.script_pubkey
-        print(f"SEGWIT UTXO SCRIPTPUBKEY: {scriptcode_pubkey.hex()}")
+        # print(f"SEGWIT UTXO SCRIPTPUBKEY: {scriptcode_pubkey.hex()}")
 
-        scriptcode = bytes.fromhex("1976a914") + scriptcode_pubkey + bytes.fromhex("88ac")
+        # scriptcode = OP_PUSHBYTES_25 OP_DUP OP_HASH160 OP_PUSHBYTES_20 <pubkeyhash> OP_EQUALVERIFY OP_CHECKSIG
+        if scriptcode_pubkey[0] != 0x00 or scriptcode_pubkey[1] != 0x14:
+            raise ValueError("ScriptPubKey is not a P2WPKH format")
+
+        pubkeyhash = scriptcode_pubkey[2:]
+        scriptcode = b'\x19\x76\xa9\x14' + pubkeyhash + b'\x88\xac'  # 0x19 = length 25
 
         # amount
         amount = to_little_bytes(amount, Transaction.AMOUNT_BYTES)
