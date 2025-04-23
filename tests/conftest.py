@@ -44,3 +44,7 @@ def parser():
 @pytest.fixture
 def curve():
     return secp256k1()
+
+# @pytest.fixture
+# def validator():
+#     return ScriptValidator(test_db)

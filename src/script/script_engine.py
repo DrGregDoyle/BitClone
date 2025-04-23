@@ -16,7 +16,6 @@ from src.data import check_hex, decode_der_signature, write_compact_size, get_pu
 from src.db import BitCloneDatabase, DB_PATH
 from src.logger import get_logger
 from src.script.op_codes import OPCODES
-from src.script.script_pubkey import ScriptPubKeyEngine
 from src.script.sighash import SigHash
 from src.script.signature_engine import SignatureEngine
 from src.script.stack import BTCStack, OpcodeMixin, BTCNum
@@ -129,7 +128,7 @@ class ScriptEngine(OpcodeMixin):
     def _op_log(self, log_string: str):
         self.ops_log.append(log_string)
 
-    def _clear_stacks(self):
+    def clear_stacks(self):
         """
         Will remove all elements from main and alt stack, plus the OP log.
         """
@@ -394,7 +393,7 @@ class ScriptEngine(OpcodeMixin):
         """
         # Empty stacks
         if clear_stacks:
-            self._clear_stacks()
+            self.clear_stacks()
 
         # Byte encode script if str
         if isinstance(script, str):
@@ -472,83 +471,6 @@ class ScriptEngine(OpcodeMixin):
             valid_script = self._dispatch_opcode(opcode)
 
         return self._validate_stack() if valid_script else False
-
-    def validate_utxo(self, script_sig: bytes, script_pubkey: bytes, tx: Transaction, input_index: int = 0) -> bool:
-        """
-        Validates input scriptSig + scriptPubKey (and redeemScript if P2SH).
-        """
-
-        # --- Check for p2wpkh
-        if script_sig == b'' or script_sig is None:
-            logger.debug("Handling P2WPKH input")
-
-            if not tx.segwit:
-                logger.error("SegWit flag not set on transaction")
-                return False
-
-            # Extract pubkey hash from scriptPubKey
-            pubkey_hash = script_pubkey[2:]
-
-            # Extract witness items
-            witness = tx.witnesses[input_index]
-            if witness.stackitems != 2:
-                logger.debug("Invalid witness item count for P2WPKH")
-                return False
-
-            sig = witness.items[0].item  # Witness.WitnessItem.item
-            pubkey = witness.items[1].item
-
-            # Check that pubkey hashes to expected value
-            if hash160(pubkey) != pubkey_hash:
-                logger.debug("P2WPKH pubkey hash mismatch")
-                return False
-
-            # Push witness items to stack
-            self._clear_stacks()
-            self.stack.push(sig)
-            self.stack.push(pubkey)
-
-            # Reconstruct implied script (standard P2PKH)
-            pubkey_engine = ScriptPubKeyEngine()
-            script_code = pubkey_engine.p2pkh(pubkey).scriptpubkey
-            return self.eval_script(script_code, tx, input_index, clear_stacks=False)
-
-        # --- Step 1: Evaluate scriptSig
-        self.eval_script(script_sig, tx, input_index)
-        logger.debug("Stack has evaluated scriptsig")
-
-        # --- Step 2: Check for P2SH
-        is_p2sh = (
-                len(script_pubkey) == 23 and
-                script_pubkey[0] == 0xa9 and  # OP_HASH160
-                script_pubkey[1] == 0x14 and  # PUSH 20 bytes
-                script_pubkey[-1] == 0x87  # OP_EQUAL
-        )
-
-        if not is_p2sh:
-            # Evaluate scriptPubKey using resulting stack from scriptSig
-            return self.eval_script(script_pubkey, tx, input_index, clear_stacks=False)
-
-        # --- Step 3: Handle P2SH
-        if self.stack.height == 0:
-            logger.debug("P2SH redeem script missing")
-            return False
-
-        redeem_script = self.stack.pop()
-        # Push redeem_script to be hashed and compared by scriptPubKey
-        self.stack.push(redeem_script)
-
-        # Evaluate the P2SH scriptPubKey (e.g., OP_HASH160 <20B> OP_EQUAL)
-        self.eval_script(script_pubkey, tx, input_index, clear_stacks=False)
-
-        # Pop top element and verify OP_EQUAL
-        op_equal = self.stack.pop()
-        if not op_equal == b'\x01':
-            logger.debug("P2SH ScriptPubKey failed HASH160 verification")
-            return False
-
-        # Step 4: Evaluate the redeem script using *current stack*
-        return self.eval_script(redeem_script, tx, input_index, clear_stacks=False)
 
     # -- OPCODE FUNCTIONS
     def _op_1negate(self):
