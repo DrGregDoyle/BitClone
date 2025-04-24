@@ -1,10 +1,10 @@
 """
-The ScriptSigEngine class
+The ScriptBuilder class
 """
 from src.data import decode_der_signature, to_little_bytes
 
 
-class ScriptSigEngine:
+class ScriptBuilder:
     # --- COMMON OP_CODES
     OP_0 = b'\x00'
     OP_PUSHBYTES_33 = b'\x21'

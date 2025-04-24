@@ -7,7 +7,7 @@ from src.db import BitCloneDatabase
 from src.logger import get_logger
 from src.script.script_engine import ScriptEngine
 from src.script.script_pubkey import ScriptPubKeyEngine
-from src.tx import Transaction
+from src.tx import Transaction, UTXO
 
 logger = get_logger(__name__)
 
@@ -17,14 +17,26 @@ class ScriptValidator:
     Validates UTXOs
     """
 
-    def __init__(self, utxos: BitCloneDatabase):
-        self.utxos = utxos
-        self.script_engine = ScriptEngine(utxos)
+    def __init__(self, db: BitCloneDatabase):
+        self.db = db
+        self.script_engine = ScriptEngine(db)
 
-    def validate_utxo(self, script_sig: bytes, script_pubkey: bytes, tx: Transaction, input_index: int = 0) -> bool:
+    def validate_utxo(self, tx: Transaction, input_index: int = 0) -> bool:
         """
         Validates input scriptSig + scriptPubKey (and redeemScript if P2SH).
         """
+        # --- Get UTXO
+        _input = tx.inputs[input_index]
+        utxo_tuple = self.db.get_utxo(_input.txid, _input.vout)
+        if utxo_tuple is None:
+            return False
+        utxo = UTXO(*utxo_tuple)
+
+        # --- Get ScriptSig
+        script_sig = tx.inputs[input_index].script_sig
+
+        # --- Get ScriptPubKey
+        script_pubkey = utxo.script_pubkey
 
         # --- Check for p2wpkh
         if script_sig == b'' or script_sig is None:
@@ -97,3 +109,6 @@ class ScriptValidator:
 
         # Step 4: Evaluate the redeem script using *current stack*
         return self.script_engine.eval_script(redeem_script, tx, input_index, clear_stacks=False)
+
+    def _validate_p2wpk(self, script_sig: bytes, script_pubkey: bytes, tx: Transaction, input_index: int, utxo: UTXO):
+        pass

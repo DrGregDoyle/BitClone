@@ -45,16 +45,8 @@ class SignatureEngine:
         # Create copy to not modify original
         tx_copy = Transaction.from_bytes(tx.to_bytes())
 
-        # Testing helper
-        # def test_state(log_state: str, test_tx: Transaction = tx_copy):
-        #     logger.debug(log_state)
-        #     logger.debug(test_tx.to_json())
-
-        # test_state("TX COPY")  # Initial copy state before modifications
-
         # Step 1: Remove existing script_sigs
         tx_copy = self._remove_scriptsig(tx_copy)
-        # test_state("REMOVE SCRIPTSIG")
 
         # Step 2: Insert the script_pubkey from the referenced UTXO into the input's script_sig
         ref_input = tx_copy.inputs[input_index]
@@ -66,33 +58,21 @@ class SignatureEngine:
         r_txid, r_vout, r_amount, r_script_pubkey, r_spent = ref_utxo
         ref_input.script_sig = bytes(r_script_pubkey)
         ref_input.script_sig_size = write_compact_size(len(ref_input.script_sig))
-        # test_state("ADD SCRIPT SIG (script_pubkey as placeholder)")
-
-        # print(f"TX ENGINE TX BEFORE HASHING: {tx_copy.to_json()}")
 
         # Step 3: Get sighash tx data for hashing
         tx_sighash_data = tx_copy.to_bytes() + sighash.for_hashing()
-        # logger.debug("SIGHASH TX DATA")
-        # logger.debug(f"TYPE: {type(tx_sighash_data)}")
-        # logger.debug(f"{tx_sighash_data.hex()}")
 
         # Step 4: Hash the tx_sighash_data
         hashed_tx_data = hash256(tx_sighash_data)
-        # logger.debug(f"HASHED TX DATA")
-        # logger.debug(f"TYPE: {type(hashed_tx_data)}")
-        # logger.debug(f"{hashed_tx_data.hex()}")
 
         # Step 5: Sign the hashed_tx_data using ECDSA (uses low-s value)
         (r, s) = ecdsa(private_key, hashed_tx_data)
-        # logger.debug(f"ECDSA TUPLE")
-        # logger.debug(f"(R,S) = {(r, s)}")
 
         # Step 6: DER encode the signature
         serialized_signature = encode_der_signature(r, s)
 
         # Step 7: Append sighash byte and return for use in script sig
         serialized_signature = serialized_signature + sighash.to_byte()
-        # logger.debug(f"SIGNATURE: {serialized_signature.hex()}")
         return serialized_signature
 
     def get_segwit_sig(self, private_key: int, tx: Transaction, input_amount: int, input_index=0, nonce: int = 0,
@@ -126,7 +106,6 @@ class SignatureEngine:
         # 1. Get preimage hash
         preimage = self.segwit_preimage(tx, input_index, input_amount, sighash)
         preimage_hash = hash256(preimage)
-        print(f"TX ENGINE PREIMAGE HASH: {preimage_hash.hex()}")
 
         # 2. Sign the preimage hash
         r, s = ecdsa(private_key, preimage_hash)
@@ -141,7 +120,6 @@ class SignatureEngine:
         item1 = WitnessItem(serialized_sig)
         item2 = WitnessItem(compress_public_key(private_key))
         ref_witness = Witness([item1, item2])
-        print(f"REF WITNESS: {ref_witness.to_json()}")
 
         # Add Witness to witness position in tx
         if not tx.witnesses:
@@ -186,7 +164,6 @@ class SignatureEngine:
         utxo_row = self.db.get_utxo(temp_input.txid, temp_input.vout)
         utxo = UTXO(*utxo_row)
         scriptcode_pubkey = utxo.script_pubkey
-        # print(f"SEGWIT UTXO SCRIPTPUBKEY: {scriptcode_pubkey.hex()}")
 
         # scriptcode = OP_PUSHBYTES_25 OP_DUP OP_HASH160 OP_PUSHBYTES_20 <pubkeyhash> OP_EQUALVERIFY OP_CHECKSIG
         if scriptcode_pubkey[0] != 0x00 or scriptcode_pubkey[1] != 0x14:

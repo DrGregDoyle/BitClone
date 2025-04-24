@@ -5,7 +5,7 @@ Engines for Script Execution
     -ScriptParser
     -ScriptEngine
     -ScriptPubKeyEngine
-    -ScriptSigEngine
+    -ScriptBuilder
 """
 import operator
 from io import BytesIO
@@ -16,6 +16,7 @@ from src.data import check_hex, decode_der_signature, write_compact_size, get_pu
 from src.db import BitCloneDatabase, DB_PATH
 from src.logger import get_logger
 from src.script.op_codes import OPCODES
+# from src.script.script_validator import ScriptValidator
 from src.script.sighash import SigHash
 from src.script.signature_engine import SignatureEngine
 from src.script.stack import BTCStack, OpcodeMixin, BTCNum
@@ -44,7 +45,9 @@ class ScriptEngine(OpcodeMixin):
         # Flag for TapScript engine
         self.taproot = taproot
 
-        # Load DB
+        # Validator
+        # self.validator = ScriptValidator(db)
+        # # Load DB
         self.db = db
 
     # -- OPCODE HANLDERS
@@ -268,7 +271,7 @@ class ScriptEngine(OpcodeMixin):
 
         # Get input utxo
         tx_input = tx_copy.inputs[input_index]
-        utxo_tuple = self.db.get_utxo(tx_input.txid, tx_input.vout)
+        utxo_tuple = self.db.get_utxo(tx_input.txid, tx_input.vout)  # TODO: Validator get_utxo function here
         utxo = UTXO(utxo_tuple[0], utxo_tuple[1], utxo_tuple[2], utxo_tuple[3], bool(utxo_tuple[4]))
         subscript = utxo.script_pubkey
 
