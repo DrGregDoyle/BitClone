@@ -127,14 +127,19 @@ def test_p2pk(curve, test_db, script_engine, tx_engine, scriptsig_engine, pubkey
     asm = parser.parse_script(final_script)
     print(f"P2PK ASM: {asm}")
     assert validator.validate_utxo(final_tx, 0)
-    assert script_engine.eval_script(final_script, final_tx, input_index=0), "p2pk scriptSig + scriptpubkey failed"
+    assert script_engine.eval_script(
+        script=final_script,
+        tx=final_tx,
+        input_index=0,
+        utxo=p2pk_utxo), "p2pk scriptSig + scriptpubkey failed"
 
     # 7. Failure case: tampered signature
     bad_sig = mutate_signature(p2pk_signature, mode="s", curve_order=curve.order)
     bad_scriptsig = scriptsig_engine.p2pk(bad_sig)
     bad_tx = add_scriptsig(p2pk_tx, bad_scriptsig)
     bad_script = bad_scriptsig + p2pk_scriptpubkey
-    assert not script_engine.eval_script(bad_script, bad_tx, input_index=0), "p2pk tampered signature passed"
+    assert not script_engine.eval_script(bad_script, bad_tx, utxo=p2pk_utxo,
+                                         input_index=0), "p2pk tampered signature passed"
 
 
 def test_p2pkh(curve, test_db, script_engine, tx_engine, scriptsig_engine, pubkey_engine, parser):
@@ -176,7 +181,8 @@ def test_p2pkh(curve, test_db, script_engine, tx_engine, scriptsig_engine, pubke
     asm = parser.parse_script(final_script)
     print(f"P2PKH ASM: {asm}")
     assert validator.validate_utxo(final_tx, 0), "p2pkh scriptSig + scriptpubkey failed"
-    assert script_engine.eval_script(final_script, final_tx, input_index=0), "p2pkh scriptSig + scriptpubkey failed"
+    assert script_engine.eval_script(final_script, final_tx, utxo=p2pkh_utxo, input_index=0), "p2pkh scriptSig + " \
+                                                                                              "scriptpubkey failed"
 
 
 def test_p2ms(curve, test_db, script_engine, tx_engine, scriptsig_engine, pubkey_engine, parser):

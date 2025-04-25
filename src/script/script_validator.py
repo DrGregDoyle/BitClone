@@ -71,10 +71,10 @@ class ScriptValidator:
             # Reconstruct implied script (standard P2PKH)
             pubkey_engine = ScriptPubKeyEngine()
             script_code = pubkey_engine.p2pkh(pubkey).scriptpubkey
-            return self.script_engine.eval_script(script_code, tx, input_index, clear_stacks=False)
+            return self.script_engine.eval_script(script_code, tx, input_index, utxo=utxo, clear_stacks=False)
 
         # --- Step 1: Evaluate scriptSig
-        self.script_engine.eval_script(script_sig, tx, input_index)
+        self.script_engine.eval_script(script_sig, tx, input_index, utxo=utxo)
         logger.debug("Stack has evaluated scriptsig")
 
         # --- Step 2: Check for P2SH
@@ -87,7 +87,7 @@ class ScriptValidator:
 
         if not is_p2sh:
             # Evaluate scriptPubKey using resulting stack from scriptSig
-            return self.script_engine.eval_script(script_pubkey, tx, input_index, clear_stacks=False)
+            return self.script_engine.eval_script(script_pubkey, tx, input_index, utxo=utxo, clear_stacks=False)
 
         # --- Step 3: Handle P2SH
         if self.script_engine.stack.height == 0:
@@ -99,7 +99,7 @@ class ScriptValidator:
         self.script_engine.stack.push(redeem_script)
 
         # Evaluate the P2SH scriptPubKey (e.g., OP_HASH160 <20B> OP_EQUAL)
-        self.script_engine.eval_script(script_pubkey, tx, input_index, clear_stacks=False)
+        self.script_engine.eval_script(script_pubkey, tx, input_index, utxo=utxo, clear_stacks=False)
 
         # Pop top element and verify OP_EQUAL
         op_equal = self.script_engine.stack.pop()
@@ -108,7 +108,7 @@ class ScriptValidator:
             return False
 
         # Step 4: Evaluate the redeem script using *current stack*
-        return self.script_engine.eval_script(redeem_script, tx, input_index, clear_stacks=False)
+        return self.script_engine.eval_script(redeem_script, tx, input_index, utxo=utxo, clear_stacks=False)
 
     def _validate_p2wpk(self, script_sig: bytes, script_pubkey: bytes, tx: Transaction, input_index: int, utxo: UTXO):
         pass
