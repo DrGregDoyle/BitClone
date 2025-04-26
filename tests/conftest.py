@@ -17,13 +17,13 @@ def test_db(tmp_path_factory):
 
 
 @pytest.fixture
-def script_engine(test_db):
-    return ScriptEngine(db=test_db)
+def script_engine():
+    return ScriptEngine()
 
 
 @pytest.fixture
-def tx_engine(test_db):
-    return SignatureEngine(db=test_db)
+def sig_engine():
+    return SignatureEngine()
 
 
 @pytest.fixture
@@ -44,7 +44,3 @@ def parser():
 @pytest.fixture
 def curve():
     return secp256k1()
-
-# @pytest.fixture
-# def validator():
-#     return ScriptValidator(test_db)

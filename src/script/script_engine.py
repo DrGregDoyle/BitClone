@@ -11,12 +11,10 @@ import operator
 from io import BytesIO
 from typing import Callable, Dict, Optional
 
-from src.crypto import secp256k1, ripemd160, sha1, sha256, hash160, hash256, verify_ecdsa
-from src.data import check_hex, decode_der_signature, write_compact_size, get_public_key_point
-from src.db import BitCloneDatabase, DB_PATH
+from src.crypto import secp256k1, ripemd160, sha1, sha256, hash160, hash256
+from src.data import check_hex
 from src.logger import get_logger
 from src.script.op_codes import OPCODES
-from src.script.sighash import SigHash
 from src.script.signature_engine import SignatureEngine
 from src.script.stack import BTCStack, OpcodeMixin, BTCNum
 from src.tx import Transaction, UTXO
@@ -29,7 +27,7 @@ class ScriptEngine(OpcodeMixin):
     Evalute Script
     """
 
-    def __init__(self, db: BitCloneDatabase = DB_PATH, taproot: bool = False):
+    def __init__(self, taproot: bool = False):
         """
         Setup stack and operation handlers
         """
@@ -48,11 +46,11 @@ class ScriptEngine(OpcodeMixin):
         self._tx = None
         self._input_index = None
         self._utxo = None
-        self._script_code = None
+        # self._script_pubkey = None
         self._amount = None
 
-        # Todo: Remove reference to db
-        self.db = db
+        # SigEngine for OP_CHECKSIG and related functionality
+        self.sig_engine = SignatureEngine()
 
     # -- OPCODE HANLDERS
 
@@ -204,13 +202,11 @@ class ScriptEngine(OpcodeMixin):
             else:
                 raise ValueError("Invalid opcode in Taproot context")
         else:
-            segwit = self._tx.segwit
-            if opcode == 0xac:  # OP_CHECKSIG
-                self._handle_segwit_checksig() if segwit else self._handle_legacy_checksig()
-            elif opcode == 0xad:  # OP_CHECKSIGVERIFY
-                self._handle_segwit_checksig() if segwit else self._handle_legacy_checksig()
-                self._op_verify()
-            elif opcode == 0xae:  # OP_CHECKSIGALL
+            if opcode in (0xac, 0xad):  # OP_CHECKSIG, OP_CHECKSIGVERIFY
+                self._handle_opchecksig()
+                if opcode == 0xad:
+                    self._op_verify()
+            elif opcode == 0xae:  # OP_CHECKSIGALL (multisig)
                 self._handle_multisig()
             else:
                 raise ValueError(f"Unexpected signature opcode: {hex(opcode)}")
@@ -218,7 +214,20 @@ class ScriptEngine(OpcodeMixin):
     def _handle_checksigadd(self):
         pass
 
-    def _handle_multisig(self, tx: Transaction = None, input_index: int = 0):
+    def _handle_opchecksig(self):
+        """
+        Handles the OP_CHECKSIG for both legacy and segwit txs
+        """
+        # Pop pubkey and signature from stack
+        pubkey, signature = self.stack.pop_n(2)
+
+        # Verify sig
+        is_valid = self._verify_sig(signature, pubkey)
+
+        # Push result
+        self._push_bool(is_valid)
+
+    def _handle_multisig(self):
         """
         Implements OP_CHECKMULTISIG logic.
         """
@@ -255,125 +264,40 @@ class ScriptEngine(OpcodeMixin):
         else:
             self._op_false()
 
-    def _handle_legacy_checksig(self):
-        # Pop pubkey and signature, in that order
-        pubkey, signature = self.stack.pop_n(2)
-
-        # Get signature tuple
-        der_sig = signature[:-1]
-        hash_type = signature[-1]
-        sig_tuple = decode_der_signature(der_sig)
-
-        # copy tx
-        tx_copy = Transaction.from_bytes(self._tx.to_bytes())
-
-        # Get input utxo
-        tx_input = tx_copy.inputs[self._input_index]
-        utxo_tuple = self.db.get_utxo(tx_input.txid, tx_input.vout)  # TODO: Validator get_utxo function here
-        utxo = UTXO(utxo_tuple[0], utxo_tuple[1], utxo_tuple[2], utxo_tuple[3], bool(utxo_tuple[4]))
-        subscript = utxo.script_pubkey
-
-        # scriptsigs for all inputs in tx_copy set to empty scripts
-        for x in range(len(tx_copy.inputs)):
-            temp_input = tx_copy.inputs[x]
-            temp_input.script_sig = bytes()  # Empty Script
-            temp_input.script_sig_size = write_compact_size(0)  # Null byte length for encoding
-            tx_copy.inputs[x] = temp_input
-
-        # Change input script sig to scriptpubkey from utxo
-        tx_input.script_sig = subscript
-        tx_input.script_sig_size = write_compact_size(len(subscript))
-
-        print(f"OP_CHECKSIG TX BEFORE HASHING: {tx_copy.to_json()}")
-
-        # Get data to hash
-        sighash_type = SigHash(hash_type)
-        data = tx_copy.to_bytes() + sighash_type.for_hashing()  # Returns 4 byte for hash
-        message_hash = hash256(data)
-        print(f"OP_CHECKSIG MESSAGE HASH: {message_hash.hex()}")
-
-        # Get public key point
-        pubkey_point = get_public_key_point(pubkey)
-
-        # Verify point is on curve
-        if not self.curve.is_point_on_curve(pubkey_point):
-            raise ValueError(f"OP_CHECKSIG FAILED TO GET POINT ON CURVE")
-
-        # Verify ECDSA
-        valid_signature = verify_ecdsa(sig_tuple, message_hash, pubkey_point)
-        self._push_bool(valid_signature)
-
-    def _handle_segwit_checksig(self):
+    def _verify_sig(self, signature: bytes, pubkey: bytes):
         """
-        Handles OP_CHECKSIG for P2WPKH inputs using BIP-143 sighash.
-        Assumes the witness stack is already on the main stack.
+        Verifies a signature against a pubkey using the transaction context.
+        Handles both legacy and segwit sighash methods.
         """
-        # Pop pubkey and signature from stack
-        pubkey, signature = self.stack.pop_n(2)
+        # Decode signature and sighash
         der_sig = signature[:-1]
-        hash_type = signature[-1]
-        sig_tuple = decode_der_signature(der_sig)
+        sighash_flag = signature[-1]
 
-        # Verify the pubkey hash matches what's in the scriptPubKey
-        script_pubkey = self._utxo.script_pubkey
-        pubkey_hash = script_pubkey[2:]
-        if hash160(pubkey) != pubkey_hash:
-            raise ValueError("Pubkey hash mismatch in SegWit checksig")
+        # Compute message hash
+        if self._tx.segwit:
+            # Segwit path
+            if self._amount is None:
+                raise ValueError("Segwit checksig missing amount value")
 
-        # Compute the message_hash
-        sighash = SigHash(hash_type)
-        tx_engine = SignatureEngine(self.db)
-        preimage = tx_engine.segwit_preimage(self._tx, self._input_index, self._utxo.amount, sighash)
-        message_hash = hash256(preimage)
+            message_hash = self.sig_engine.get_segwit_sighash(
+                tx=self._tx,
+                input_index=self._input_index,
+                script_pubkey=self._utxo.script_pubkey,
+                amount=self._amount,
+                sighash_flag=sighash_flag
+            )
 
-        # Check curve
-        pubkey_point = get_public_key_point(pubkey)
-        if not self.curve.is_point_on_curve(pubkey_point):
-            raise ValueError("Pubkey not on curve in SegWit checksig")
+        else:
+            # Legacy path
+            message_hash = self.sig_engine.get_legacy_sighash(
+                tx=self._tx,
+                input_index=self._input_index,
+                script_pubkey=self._utxo.script_pubkey,
+                sighash_flag=sighash_flag
+            )
 
         # Verify signature
-        is_valid = verify_ecdsa(sig_tuple, message_hash, pubkey_point)
-        if not is_valid:
-            logger.debug(f"FAILED ECDSA SIGNATURE")
-        self._push_bool(is_valid)
-
-    def _verify_sig(self, sig: bytes, pubkey: bytes) -> bool:
-        try:
-            sig_val = sig[:-1]  # DER part
-            sighash_flag = sig[-1]
-            message_hash = self._get_sighash(sighash_flag)
-            pub_point = get_public_key_point(pubkey)
-            r, s = decode_der_signature(sig_val)
-            return verify_ecdsa((r, s), message_hash, pub_point)
-        except ValueError as e:
-            logger.debug(f"Verify multisig failed with error: {e}")
-            return False
-
-    def _get_sighash(self, sighash_flag: int) -> bytes:
-        """
-        Constructs the sighash digest for legacy transactions (non-SegWit).
-
-        This is the digest that is signed or verified for a given input.
-        """
-        # Step 1: Copy tx to avoid mutation
-        tx_copy = Transaction.from_bytes(self._tx.to_bytes())
-
-        # Step 2: Clear all scriptSigs
-        for txin in tx_copy.inputs:
-            txin.script_sig = b''
-            txin.script_sig_size = write_compact_size(0)
-
-        # Step 3: Insert scriptPubKey from UTXO at the input being signed
-        script_pubkey = self._utxo.script_pubkey
-        tx_copy.inputs[self._input_index].script_sig = script_pubkey
-        tx_copy.inputs[self._input_index].script_sig_size = write_compact_size(len(script_pubkey))
-
-        # Step 4: Append 4-byte sighash flag (little-endian)
-        sighash_bytes = sighash_flag.to_bytes(4, "little")
-        serialized = tx_copy.to_bytes() + sighash_bytes
-
-        # Step 5: Return double SHA256
-        return hash256(serialized)
+        return self.sig_engine.verify_sig(der_sig, pubkey, message_hash)
 
     # -- EVAL
 
@@ -383,6 +307,7 @@ class ScriptEngine(OpcodeMixin):
             tx: Transaction = None,
             input_index: int = None,
             utxo: Optional[UTXO] = None,
+            amount: Optional[int] = None,
             clear_stacks: bool = True
     ) -> bool:
         """
@@ -396,6 +321,7 @@ class ScriptEngine(OpcodeMixin):
         self._tx = tx
         self._input_index = input_index
         self._utxo = utxo
+        self._amount = amount
 
         # Byte encode script if str
         if isinstance(script, str):

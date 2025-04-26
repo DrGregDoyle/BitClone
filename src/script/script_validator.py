@@ -19,7 +19,7 @@ class ScriptValidator:
 
     def __init__(self, db: BitCloneDatabase):
         self.db = db
-        self.script_engine = ScriptEngine(db)
+        self.script_engine = ScriptEngine()
 
     def validate_utxo(self, tx: Transaction, input_index: int = 0) -> bool:
         """
@@ -71,7 +71,8 @@ class ScriptValidator:
             # Reconstruct implied script (standard P2PKH)
             pubkey_engine = ScriptPubKeyEngine()
             script_code = pubkey_engine.p2pkh(pubkey).scriptpubkey
-            return self.script_engine.eval_script(script_code, tx, input_index, utxo=utxo, clear_stacks=False)
+            return self.script_engine.eval_script(script_code, tx, input_index, utxo=utxo, amount=utxo.amount,
+                                                  clear_stacks=False)
 
         # --- Step 1: Evaluate scriptSig
         self.script_engine.eval_script(script_sig, tx, input_index, utxo=utxo)
