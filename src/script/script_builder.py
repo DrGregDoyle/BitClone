@@ -2,6 +2,7 @@
 The ScriptBuilder class
 """
 from src.data import decode_der_signature, to_little_bytes
+from src.script.sighash import SigHash
 
 
 class ScriptBuilder:
@@ -81,6 +82,7 @@ class ScriptBuilder:
         sighash_num = signature[-1]
         try:
             decode_der_signature(der_encoding)
+            sighash = SigHash(sighash_num)
             return True
         except ValueError:
             return False

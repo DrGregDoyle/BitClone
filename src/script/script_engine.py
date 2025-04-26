@@ -16,13 +16,13 @@ from src.data import check_hex
 from src.logger import get_logger
 from src.script.op_codes import OPCODES
 from src.script.signature_engine import SignatureEngine
-from src.script.stack import BTCStack, OpcodeMixin, BTCNum
+from src.script.stack import BTCStack, BTCNum
 from src.tx import Transaction, UTXO
 
 logger = get_logger(__name__)
 
 
-class ScriptEngine(OpcodeMixin):
+class ScriptEngine:
     """
     Evalute Script
     """
@@ -225,7 +225,7 @@ class ScriptEngine(OpcodeMixin):
         is_valid = self._verify_sig(signature, pubkey)
 
         # Push result
-        self._push_bool(is_valid)
+        self.stack.push_bool(is_valid)
 
     def _handle_multisig(self):
         """
@@ -233,9 +233,9 @@ class ScriptEngine(OpcodeMixin):
         """
 
         # Step 1: Extract values
-        sig_count = self._pop_num().value  # e.g. 2
+        sig_count = self.stack.pop_num().value  # e.g. 2
         pubkeys = self.stack.pop_n(sig_count)  # pubkey_N .. pubkey_1
-        pub_count = self._pop_num().value  # e.g. 3
+        pub_count = self.stack.pop_num().value  # e.g. 3
         sigs = self.stack.pop_n(pub_count)  # sig_M .. sig_1
         empty_byte = self.stack.pop()
 
@@ -372,7 +372,7 @@ class ScriptEngine(OpcodeMixin):
 
             # 0x00 -- OP_0, OP_FALSE
             if opcode == 0x00:
-                self._push_bool(False)
+                self.stack.push_bool(False)
                 continue
 
             # 0x01 -- 0x4b - OP_PUSHBYTES
@@ -401,12 +401,26 @@ class ScriptEngine(OpcodeMixin):
         return self._validate_stack() if valid_script else False
 
     # -- OPCODE FUNCTIONS
+    def _op_false(self):
+        """
+        OP_0, OP_FALSE | 0x00
+        Push empty byte array to stack
+        """
+        self.stack.op_false()
+
     def _op_1negate(self):
         """
         OP_1NEGATE | 0x4f
         Push -1 onto the stack
         """
         self.stack.push(BTCNum(-1).bytes)
+
+    def _op_true(self):
+        """
+        OP_1, OP_TRUE | 0x51
+        Push 1 to the stack
+        """
+        self.stack.op_true()
 
     def _op_nop(self):
         """
@@ -550,7 +564,7 @@ class ScriptEngine(OpcodeMixin):
         OP_PICK | 0x79
         The item n back in the stack is copied to the top.
         """
-        n = self._pop_num()  # n is BTCNum object
+        n = self.stack.pop_num()  # n is BTCNum object
 
         # Check height
         if self.stack.height <= n.value:
@@ -564,7 +578,7 @@ class ScriptEngine(OpcodeMixin):
         OP_ROLL | 0x7a
         The item n back in the stack is moved to the top.
         """
-        n = self._pop_num()  # n is BTCNum object
+        n = self.stack.pop_num()  # n is BTCNum object
         self.stack.roll(n.value)
 
     def _op_rot(self):
@@ -655,7 +669,7 @@ class ScriptEngine(OpcodeMixin):
         Returns 1 if the inputs are exactly equal, 0 otherwise.
         """
         items = self.stack.pop_n(2)
-        self._push_bool(items[0] == items[1])
+        self.stack.push_bool(items[0] == items[1])
 
     def _op_equal_verify(self):
         """
@@ -670,28 +684,28 @@ class ScriptEngine(OpcodeMixin):
         OP_1ADD | 0x8b
         1 is added to the input.
         """
-        self.stack.push((self._pop_num() + 1).bytes)
+        self.stack.push((self.stack.pop_num() + 1).bytes)
 
     def _op_1sub(self):
         """
         OP_1SUB | 0x8c
         1 is subtracted from the input.
         """
-        self.stack.push((self._pop_num() - 1).bytes)
+        self.stack.push((self.stack.pop_num() - 1).bytes)
 
     def _op_negate(self):
         """
         OP_NEGATE | 0x8f
         The sign of the input is flipped.
         """
-        self.stack.push((-self._pop_num()).bytes)
+        self.stack.push((-self.stack.pop_num()).bytes)
 
     def _op_abs(self):
         """
         OP_ABS |  0x90
         The input is made positive.
         """
-        stack_num = self._pop_num()
+        stack_num = self.stack.pop_num()
         self.stack.push(abs(stack_num).bytes)
 
     def _op_not(self):
@@ -700,7 +714,7 @@ class ScriptEngine(OpcodeMixin):
         If the input is 0 or 1, it is flipped. Otherwise the output will be 0.
         """
         item = self.stack.pop()
-        self._push_bool(item == b'')
+        self.stack.push_bool(item == b'')
 
     def _op_0notequal(self):
         """
@@ -708,21 +722,21 @@ class ScriptEngine(OpcodeMixin):
         Returns 0 if the input is 0. 1 otherwise.
         """
         item = self.stack.pop()
-        self._push_bool(item != b'')
+        self.stack.push_bool(item != b'')
 
     def _op_add(self):
         """
         OP_ADD |  0x93
         a is added to b.
         """
-        self._binary_op(operator.add)
+        self.stack.binary_op(operator.add)
 
     def _op_sub(self):
         """
         OP_SUB |  0x94
         b is subtracted from a.
         """
-        a, b = self._pop_nums(2)
+        a, b = self.stack.pop_nums(2)
         self.stack.push((b - a).bytes)
 
     def _op_booland(self):
@@ -731,7 +745,7 @@ class ScriptEngine(OpcodeMixin):
         If both a and b are not 0, the output is 1. Otherwise 0.
         """
         a, b = self.stack.pop_n(2)
-        self._push_bool(a != b'' and b != b'')
+        self.stack.push_bool(a != b'' and b != b'')
 
     def _op_boolor(self):
         """
@@ -739,15 +753,15 @@ class ScriptEngine(OpcodeMixin):
         If a or b is not 0, the output is 1. Otherwise 0.
         """
         a, b = self.stack.pop_n(2)
-        self._push_bool(a != b'' or b != b'')
+        self.stack.push_bool(a != b'' or b != b'')
 
     def _op_numeq(self):
         """
         OP_NUMEQUAL | 0x9c
         Returns 1 if the numbers are equal, 0 otherwise.
         """
-        a, b = self._pop_nums(2)
-        self._push_bool(a == b)
+        a, b = self.stack.pop_nums(2)
+        self.stack.push_bool(a == b)
 
     def _op_numeq_verify(self):
         """
@@ -762,47 +776,47 @@ class ScriptEngine(OpcodeMixin):
         OP_NUMNOTEQUAL | 0x9e
         Returns 1 if the numbers are not equal, 0 otherwise.
         """
-        a, b = self._pop_nums(2)
-        self._push_bool(a != b)
+        a, b = self.stack.pop_nums(2)
+        self.stack.push_bool(a != b)
 
     def _op_lt(self):
         """
         OP_LESSTHAN | 0x9f
         Returns 1 if a is less than b, 0 otherwise.
         """
-        a, b = self._pop_nums(2)
-        self._push_bool(a < b)
+        a, b = self.stack.pop_nums(2)
+        self.stack.push_bool(a < b)
 
     def _op_gt(self):
         """
         OP_GREATERTHAN | 0xa0
         Returns 1 if a is greater than b, 0 otherwise.
         """
-        a, b = self._pop_nums(2)
-        self._push_bool(a > b)
+        a, b = self.stack.pop_nums(2)
+        self.stack.push_bool(a > b)
 
     def _op_leq(self):
         """
         OP_LESSTHANOREQUAL | 0xa1
         Returns 1 if a is less than or equal to b, 0 otherwise.
         """
-        a, b = self._pop_nums(2)
-        self._push_bool(a <= b)
+        a, b = self.stack.pop_nums(2)
+        self.stack.push_bool(a <= b)
 
     def _op_geq(self):
         """
         OP_GREATERTHANOREQUAL | 0xa2
         Returns 1 if a is greater than or equal to b, 0 otherwise.
         """
-        a, b = self._pop_nums(2)
-        self._push_bool(a >= b)
+        a, b = self.stack.pop_nums(2)
+        self.stack.push_bool(a >= b)
 
     def _op_min(self):
         """
         OP_MIN | 0xa3
         Returns the smaller of a and b.
         """
-        a, b = self._pop_nums(2)
+        a, b = self.stack.pop_nums(2)
         self.stack.push(min(a, b).bytes)
 
     def _op_max(self):
@@ -810,7 +824,7 @@ class ScriptEngine(OpcodeMixin):
         OP_MAX | 0xa4
         Returns the larger of a and b.
         """
-        a, b = self._pop_nums(2)
+        a, b = self.stack.pop_nums(2)
         self.stack.push(max(a, b).bytes)
 
     def _op_within(self):
@@ -818,8 +832,8 @@ class ScriptEngine(OpcodeMixin):
         OP_WITHIN | 0xa5
         Returns 1 if x is within the specified range (left-inclusive), 0 otherwise.
         """
-        _max, _min, num = self._pop_nums(3)
-        self._push_bool(_min <= num < _max)
+        _max, _min, num = self.stack.pop_nums(3)
+        self.stack.push_bool(_min <= num < _max)
 
     def _op_ripemd160(self):
         """

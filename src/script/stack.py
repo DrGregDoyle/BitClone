@@ -353,6 +353,33 @@ class BTCStack(Generic[T]):
         return f"BTCStack({items})"
 
     # Bitcoin script specific stack operations
+    def push_bool(self, condition: bool):
+        """Push OP_TRUE or OP_FALSE based on the condition."""
+        self.op_true() if condition else self.op_false()
+
+    def op_true(self):
+        """Push OP_TRUE (1) onto the stack."""
+        self.push(BTCNum(1).bytes)
+
+    def op_false(self):
+        """Push OP_FALSE (empty bytes) onto the stack."""
+        self.push(b'')
+
+    def pop_num(self) -> BTCNum:
+        """Pop top of stack and return as BTCNum."""
+        return BTCNum.from_bytes(self.stack.popleft())
+
+    def pop_nums(self, count: int) -> tuple[BTCNum, ...]:
+        """Pop 'count' items from stack and return as BTCNum tuple."""
+        items = self.pop_n(count)
+        return tuple(BTCNum.from_bytes(item) for item in items)
+
+    def binary_op(self, op_func):
+        """Apply a binary arithmetic operation on top two stack items as BTCNums."""
+        a, b = self.pop_nums(2)
+        result = op_func(a, b)
+        self.push(result.bytes)
+
     def dup(self) -> None:
         """
         Duplicate the top stack item.
@@ -436,48 +463,3 @@ class BTCStack(Generic[T]):
     def nip(self):
         items = self.pop_n(2)
         self.push(items[0])
-
-
-class OpcodeMixin:
-    """
-    Mixin providing reusable helpers for opcode operations.
-    Intended to be inherited by ScriptEngine or any script execution class.
-    """
-    stack = BTCStack()
-
-    def _binary_op(self, op_func):
-        """Apply a binary arithmetic operation on top two stack items as BTCNums."""
-        a, b = self._pop_nums(2)
-        result = op_func(a, b)
-        self.stack.push(result.bytes)
-
-    def _cmp_op(self, cmp_func):
-        """Apply a comparison operation on top two BTCNum stack items."""
-        a, b = self._pop_nums(2)
-        self._op_true() if cmp_func(a, b) else self._op_false()
-
-    def _bool_op(self, bool_func):
-        """Apply a boolean operation to raw byte stack items."""
-        a, b = self.stack.pop_n(2)
-        self._op_true() if bool_func(a, b) else self._op_false()
-
-    def _push_bool(self, condition: bool):
-        """Push OP_TRUE or OP_FALSE based on the condition."""
-        self._op_true() if condition else self._op_false()
-
-    def _op_true(self):
-        """Push OP_TRUE (1) onto the stack."""
-        self.stack.push(BTCNum(1).bytes)
-
-    def _op_false(self):
-        """Push OP_FALSE (empty bytes) onto the stack."""
-        self.stack.push(b'')
-
-    def _pop_num(self) -> BTCNum:
-        """Pop top of stack and return as BTCNum."""
-        return BTCNum.from_bytes(self.stack.pop())
-
-    def _pop_nums(self, count: int) -> tuple[BTCNum, ...]:
-        """Pop 'count' items from stack and return as BTCNum tuple."""
-        items = self.stack.pop_n(count)
-        return tuple(BTCNum.from_bytes(item) for item in items)
