@@ -56,7 +56,7 @@ class SignatureEngine:
         # 4. Return message hash
         return hash256(data)
 
-    def get_segwit_sighash(self, tx: Transaction, input_index: int, script_pubkey: bytes, amount: int, sighash_flag:
+    def get_segwit_sighash(self, tx: Transaction, input_index: int, script_code: bytes, amount: int, sighash_flag:
     int) -> bytes:
         """
         We obtrain the segwit pre-image using the following formula:
@@ -83,13 +83,6 @@ class SignatureEngine:
         temp_input = tx.inputs[input_index]
         tx_input = encode_outpoint(temp_input)
 
-        # scriptcode = OP_PUSHBYTES_25 OP_DUP OP_HASH160 OP_PUSHBYTES_20 <pubkeyhash> OP_EQUALVERIFY OP_CHECKSIG
-        if script_pubkey[0] != 0x00 or script_pubkey[1] != 0x14:
-            raise ValueError("ScriptPubKey is not a P2WPKH format")
-
-        pubkeyhash = script_pubkey[2:]
-        scriptcode = b'\x19\x76\xa9\x14' + pubkeyhash + b'\x88\xac'  # 0x19 = length 25
-
         # amount
         amount = to_little_bytes(amount, Transaction.AMOUNT_BYTES)
 
@@ -107,7 +100,7 @@ class SignatureEngine:
         sighash = SigHash(sighash_flag)
 
         # construct message and return message hash
-        data = (version + hashed_inputs + hashed_sequences + tx_input + scriptcode + amount + sequence +
+        data = (version + hashed_inputs + hashed_sequences + tx_input + script_code + amount + sequence +
                 hashed_outputs + locktime + sighash.for_hashing())
         return hash256(data)
 

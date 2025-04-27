@@ -5,6 +5,7 @@ Tests for verifying that various script_sig + script_pub_keys will evaluate to T
 from random import randint
 from secrets import randbits
 
+from src.crypto import sha256, hash160
 from src.data import compress_public_key, write_compact_size, decode_der_signature, encode_der_signature
 from src.logger import get_logger
 from src.script import ScriptValidator
@@ -377,7 +378,9 @@ def test_p2wpkh(curve, test_db, script_engine, sig_engine, scriptsig_engine, pub
     tx.segwit = True
 
     # 5. Get segwit signature
-    segwit_sighash = sig_engine.get_segwit_sighash(tx, 0, p2wpkh_scriptpubkey, utxo.amount, 1)
+    pubkeyhash = hash160(compressed_pubkey)
+    script_code = b'\x76\xa9\x14' + pubkeyhash + b'\x88\xac'
+    segwit_sighash = sig_engine.get_segwit_sighash(tx, 0, script_code, utxo.amount, 1)
     segwit_sig = sig_engine.sign_message(privkey, segwit_sighash, 1)
 
     # 6. Create Witness object and insert into tx
@@ -387,3 +390,51 @@ def test_p2wpkh(curve, test_db, script_engine, sig_engine, scriptsig_engine, pub
     # 7. Validate
     print(f"P2WPKH SCRIPTPUBKEY: {parser.parse_script(p2wpkh_scriptpubkey)}")
     assert validator.validate_utxo(tx, 0), "P2WPKH Failed assertion"
+
+
+def test_p2wsh_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_engine, parser):
+    """
+    Tests P2WSH (Pay to Witness Script Hash):
+    - Create redeem script (e.g., simple p2pk)
+    - Build P2WSH scriptPubKey
+    - Create UTXO
+    - Create tx spending it
+    - Build witness: [sig, pubkey, redeem_script]
+    - Validate
+    """
+    script_engine.clear_stacks()
+    test_db._clear_db()
+
+    # 1. Generate keypair
+    privkey, compressed_pubkey = generate_keypair(curve)
+
+    # 2. Create a redeem script (simple p2pk)
+    redeem_script = pubkey_engine.p2pk(compressed_pubkey).scriptpubkey
+
+    # 3. Create p2wsh scriptpubkey
+    redeem_script_hash = sha256(redeem_script)
+    p2wsh_scriptpubkey = b'\x00' + b'\x20' + redeem_script_hash  # OP_0 PUSH_32
+
+    # 4. Create UTXO
+    utxo = make_utxo(p2wsh_scriptpubkey)
+    test_db.add_utxo(utxo)
+    validator = ScriptValidator(test_db)
+
+    # 5. Create transaction
+    tx = build_tx(utxo, b'\x6a')
+    tx.segwit = True
+
+    # 6. Get segwit sighash (scriptCode is redeem script)
+    segwit_sighash = sig_engine.get_segwit_sighash(tx, 0, redeem_script, utxo.amount, 1)
+    segwit_sig = sig_engine.sign_message(privkey, segwit_sighash, 1)
+
+    # 7. Build witness: [signature] | p2pk
+    witness_items = [WitnessItem(segwit_sig), WitnessItem(redeem_script)]
+    witness = Witness(witness_items)
+    tx.witnesses = [witness]
+
+    # 8. Validate
+    print(f"P2WSH SCRIPTPUBKEY: {parser.parse_script(p2wsh_scriptpubkey)}")
+    print(f"P2WSH REDEEM SCRIPT: {parser.parse_script(redeem_script)}")
+
+    assert validator.validate_utxo(tx, 0), "P2WSH Failed assertion"

@@ -2,7 +2,7 @@
 Class for the ScriptEvaluator: High-level API: validates UTXO spends using scriptSig, scriptPubKey, and possibly witness
 """
 
-from src.crypto import hash160
+from src.crypto import hash160, sha256
 from src.db import BitCloneDatabase
 from src.logger import get_logger
 from src.script.script_engine import ScriptEngine
@@ -32,47 +32,102 @@ class ScriptValidator:
             return False
         utxo = UTXO(*utxo_tuple)
 
-        # --- Get ScriptSig
+        # --- Get ScriptSig and ScriptPubKey
         script_sig = tx.inputs[input_index].script_sig
-
-        # --- Get ScriptPubKey
         script_pubkey = utxo.script_pubkey
 
-        # --- Check for p2wpkh
-        if script_sig == b'' or script_sig is None:
-            logger.debug("Handling P2WPKH input")
+        # --- Classify scriptpubkey
+        is_p2wpkh = (
+                len(script_pubkey) == 22 and
+                script_pubkey[0] == 0x00 and
+                script_pubkey[1] == 0x14
+        )
+        is_p2wsh = (
+                len(script_pubkey) == 34 and
+                script_pubkey[0] == 0x00 and
+                script_pubkey[1] == 0x20
+        )
 
+        # Handle SegWit inputs
+        if script_sig == b'' or script_sig is None:
             if not tx.segwit:
                 logger.error("SegWit flag not set on transaction")
                 return False
 
-            # Extract pubkey hash from scriptPubKey
-            pubkey_hash = script_pubkey[2:]
+            # --- P2WSH
+            if is_p2wsh:
+                logger.debug("Handling P2WSH input")
+                witness = tx.witnesses[input_index]
+                if witness.stackitems < 1:
+                    logger.error("P2WSH witness stack is empty")
+                    return False
 
-            # Extract witness items
-            witness = tx.witnesses[input_index]
-            if witness.stackitems != 2:
-                logger.debug("Invalid witness item count for P2WPKH")
+                # Last item = redeem script
+                redeem_script = witness.items[-1].item
+                redeem_script_hash = sha256(redeem_script)
+
+                # Validate redeem script hash
+                if redeem_script_hash != script_pubkey[2:]:
+                    logger.error("P2WSH redeem script hash mismatch")
+                    return False
+
+                # Set up witness stack
+                self.script_engine.clear_stacks()
+
+                # Push witness items (except redeem script) in order
+                for item in witness.items[:-1]:
+                    self.script_engine.stack.push(item.item)
+
+                return self.script_engine.eval_script(
+                    script=redeem_script,
+                    tx=tx,
+                    input_index=input_index,
+                    utxo=utxo,
+                    amount=utxo.amount,
+                    script_code=redeem_script,
+                    clear_stacks=False
+                )
+
+            # --- P2WPKH
+            elif is_p2wpkh:
+                logger.debug("Handling P2WPKH input")
+
+                pubkey_hash = script_pubkey[2:]
+                witness = tx.witnesses[input_index]
+                if witness.stackitems != 2:
+                    logger.error("P2WPKH witness stack should have exactly 2 items")
+                    return False
+
+                sig = witness.items[0].item
+                pubkey = witness.items[1].item
+
+                # Validate pubkey hash
+                if hash160(pubkey) != pubkey_hash:
+                    logger.error("P2WPKH pubkey hash mismatch")
+                    return False
+
+                # Build implied P2PKH script
+                pubkey_engine = ScriptPubKeyEngine()
+                script_code = pubkey_engine.p2pkh(pubkey).scriptpubkey
+
+                self.script_engine.clear_stacks()
+                self.script_engine.stack.push(sig)
+                self.script_engine.stack.push(pubkey)
+
+                return self.script_engine.eval_script(
+                    script=script_code,
+                    tx=tx,
+                    input_index=input_index,
+                    utxo=utxo,
+                    amount=utxo.amount,
+                    script_code=script_code,
+                    clear_stacks=False
+                )
+
+
+            else:
+                logger.error("Unknown SegWit input type")
                 return False
-
-            sig = witness.items[0].item  # Witness.WitnessItem.item
-            pubkey = witness.items[1].item
-
-            # Check that pubkey hashes to expected value
-            if hash160(pubkey) != pubkey_hash:
-                logger.debug("P2WPKH pubkey hash mismatch")
-                return False
-
-            # Push witness items to stack
-            self.script_engine.clear_stacks()
-            self.script_engine.stack.push(sig)
-            self.script_engine.stack.push(pubkey)
-
-            # Reconstruct implied script (standard P2PKH)
-            pubkey_engine = ScriptPubKeyEngine()
-            script_code = pubkey_engine.p2pkh(pubkey).scriptpubkey
-            return self.script_engine.eval_script(script_code, tx, input_index, utxo=utxo, amount=utxo.amount,
-                                                  clear_stacks=False)
 
         # --- Step 1: Evaluate scriptSig
         self.script_engine.eval_script(script_sig, tx, input_index, utxo=utxo)
@@ -110,6 +165,3 @@ class ScriptValidator:
 
         # Step 4: Evaluate the redeem script using *current stack*
         return self.script_engine.eval_script(redeem_script, tx, input_index, utxo=utxo, clear_stacks=False)
-
-    def _validate_p2wpk(self, script_sig: bytes, script_pubkey: bytes, tx: Transaction, input_index: int, utxo: UTXO):
-        pass

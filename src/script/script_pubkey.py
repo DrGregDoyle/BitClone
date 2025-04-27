@@ -186,7 +186,7 @@ class ScriptPubKeyEngine:
         Accepts a full redeem script and returns a P2WSH scriptPubKey and address.
         """
         scripthash = sha256(script)
-        scriptpubkey = self._assemble_script([self.OP_0, self.OP_PUSHBYTES_20, scripthash])
+        scriptpubkey = self._assemble_script([self.OP_0, self.OP_PUSHBYTES_32, scripthash])
 
         # Address: bech32 with witness version 0
         hrp = "tb" if testnet else "bc"

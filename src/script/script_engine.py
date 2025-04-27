@@ -282,7 +282,7 @@ class ScriptEngine:
             message_hash = self.sig_engine.get_segwit_sighash(
                 tx=self._tx,
                 input_index=self._input_index,
-                script_pubkey=self._utxo.script_pubkey,
+                script_code=self._script_code,
                 amount=self._amount,
                 sighash_flag=sighash_flag
             )
@@ -308,6 +308,7 @@ class ScriptEngine:
             input_index: int = None,
             utxo: Optional[UTXO] = None,
             amount: Optional[int] = None,
+            script_code: Optional[bytes] = None,
             clear_stacks: bool = True
     ) -> bool:
         """
@@ -322,6 +323,7 @@ class ScriptEngine:
         self._input_index = input_index
         self._utxo = utxo
         self._amount = amount
+        self._script_code = script_code
 
         # Byte encode script if str
         if isinstance(script, str):
