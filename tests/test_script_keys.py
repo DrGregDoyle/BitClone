@@ -438,3 +438,85 @@ def test_p2wsh_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_engine,
     print(f"P2WSH REDEEM SCRIPT: {parser.parse_script(redeem_script)}")
 
     assert validator.validate_utxo(tx, 0), "P2WSH Failed assertion"
+
+
+def test_p2wsh_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_engine, parser):
+    """
+    Test P2WSH where the redeem script is a P2PKH.
+    """
+    script_engine.clear_stacks()
+    test_db._clear_db()
+
+    # 1. Generate keypair
+    privkey, compressed_pubkey = generate_keypair(curve)
+
+    # 2. Create redeem script (P2PKH)
+    redeem_script = pubkey_engine.p2pkh(compressed_pubkey).scriptpubkey
+
+    # 3. Create P2WSH scriptpubkey
+    p2wsh_scriptpubkey = pubkey_engine.p2wsh(redeem_script).scriptpubkey
+
+    # 4. Create UTXO
+    utxo = make_utxo(p2wsh_scriptpubkey)
+    test_db.add_utxo(utxo)
+    validator = ScriptValidator(test_db)
+
+    # 5. Create transaction
+    tx = build_tx(utxo, b'\x6a')
+    tx.segwit = True
+
+    # 6. Get segwit sighash (scriptCode = redeem script)
+    segwit_sighash = sig_engine.get_segwit_sighash(tx, 0, redeem_script, utxo.amount, 1)
+    segwit_sig = sig_engine.sign_message(privkey, segwit_sighash, 1)
+
+    # 7. Build witness stack: [signature, pubkey, redeem_script]
+    witness_items = [WitnessItem(segwit_sig), WitnessItem(compressed_pubkey), WitnessItem(redeem_script)]
+    tx.witnesses = [Witness(witness_items)]
+
+    # 8. Validate
+    print(f"P2WSH(P2PKH) SCRIPTPUBKEY: {parser.parse_script(p2wsh_scriptpubkey)}")
+    print(f"P2WSH(P2PKH) REDEEM SCRIPT: {parser.parse_script(redeem_script)}")
+    assert validator.validate_utxo(tx, 0), "P2WSH(P2PKH) Failed assertion"
+
+
+def test_p2wsh_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_engine, parser):
+    """
+    Test P2WSH where the redeem script is a 2-of-3 multisig.
+    """
+    script_engine.clear_stacks()
+    test_db._clear_db()
+
+    # 1. Generate 3 keypairs
+    keys = [generate_keypair(curve) for _ in range(3)]
+    privkeys = [k[0] for k in keys]
+    pubkeys = [k[1] for k in keys]
+
+    # 2. Create redeem script (2-of-3 multisig)
+    multisig_result = pubkey_engine.p2ms(pubkeys, signum=2)
+    redeem_script = multisig_result.scriptpubkey
+
+    # 3. Create P2WSH scriptpubkey
+    p2wsh_scriptpubkey = pubkey_engine.p2wsh(redeem_script).scriptpubkey
+
+    # 4. Create UTXO
+    utxo = make_utxo(p2wsh_scriptpubkey)
+    test_db.add_utxo(utxo)
+    validator = ScriptValidator(test_db)
+
+    # 5. Create transaction
+    tx = build_tx(utxo, b'\x6a')
+    tx.segwit = True
+
+    # 6. Get segwit sighash
+    segwit_sighash = sig_engine.get_segwit_sighash(tx, 0, redeem_script, utxo.amount, 1)
+    sig1 = sig_engine.sign_message(privkeys[0], segwit_sighash, 1)
+    sig2 = sig_engine.sign_message(privkeys[1], segwit_sighash, 1)
+
+    # 7. Build witness: [dummy OP_0, sig1, sig2, redeem_script]
+    witness_items = [WitnessItem(b''), WitnessItem(sig1), WitnessItem(sig2), WitnessItem(redeem_script)]
+    tx.witnesses = [Witness(witness_items)]
+
+    # 8. Validate
+    print(f"P2WSH(P2MS) SCRIPTPUBKEY: {parser.parse_script(p2wsh_scriptpubkey)}")
+    print(f"P2WSH(P2MS) REDEEM SCRIPT: {parser.parse_script(redeem_script)}")
+    assert validator.validate_utxo(tx, 0), "P2WSH(P2MS) Failed assertion"
