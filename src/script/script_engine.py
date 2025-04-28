@@ -46,7 +46,7 @@ class ScriptEngine:
         self._tx = None
         self._input_index = None
         self._utxo = None
-        # self._script_pubkey = None
+        self._script_code = None
         self._amount = None
 
         # SigEngine for OP_CHECKSIG and related functionality
