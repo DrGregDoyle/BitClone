@@ -69,19 +69,19 @@ class ScriptPubKey:
         self.asm = self._parser.parse_script(self.script)
 
     # --- CUSTOM
-    @classmethod
-    def from_script(cls, script: bytes, testnet: bool = False) -> "ScriptPubKey":
-        obj = cls.__new__(cls)
-        obj.script_type = cls.detect_type_from_script(script)
-        if obj.script_type == ScriptType.CUSTOM:
-            obj.testnet = testnet
-            obj.script = script
-            obj._parser = ScriptParser()
-            obj.address = ""  # or attempt to detect one if possible
-            obj.asm = obj._parser.parse_script(script)
-            return obj
-        else:
-            return cls(obj.script_type, script)
+    # @classmethod
+    # def from_script(cls, script: bytes, testnet: bool = False) -> "ScriptPubKey":
+    #     obj = cls.__new__(cls)
+    #     obj.script_type = cls.detect_type_from_script(script)
+    #     if obj.script_type == ScriptType.CUSTOM:
+    #         obj.testnet = testnet
+    #         obj.script = script
+    #         obj._parser = ScriptParser()
+    #         obj.address = ""  # or attempt to detect one if possible
+    #         obj.asm = obj._parser.parse_script(script)
+    #         return obj
+    #     else:
+    #         return cls(obj.script_type, script)
 
     # --- HELPERS
     def detect_type_from_script(self, script: bytes) -> ScriptType | None:
@@ -325,6 +325,40 @@ class ScriptPubKey:
         """
         import json
         return json.dumps(self.to_dict(), indent=2)
+
+
+class ScriptPubKeyFactory:
+    @staticmethod
+    def p2pk(pubkey: bytes, testnet: bool = False) -> ScriptPubKey:
+        return ScriptPubKey(ScriptType.P2PK, pubkey, testnet=testnet)
+
+    @staticmethod
+    def p2pkh(pubkey: bytes, testnet: bool = False) -> ScriptPubKey:
+        return ScriptPubKey(ScriptType.P2PKH, pubkey, testnet=testnet)
+
+    @staticmethod
+    def p2ms(pubkeys: list[bytes], signum: int = None, testnet: bool = False) -> ScriptPubKey:
+        return ScriptPubKey(ScriptType.P2MS, pubkeys, signum, testnet=testnet)
+
+    @staticmethod
+    def p2sh(redeem_script: bytes, testnet: bool = False) -> ScriptPubKey:
+        return ScriptPubKey(ScriptType.P2SH, redeem_script, testnet=testnet)
+
+    @staticmethod
+    def p2wpkh(pubkey: bytes, testnet: bool = False) -> ScriptPubKey:
+        return ScriptPubKey(ScriptType.P2WPKH, pubkey, testnet=testnet)
+
+    @staticmethod
+    def p2wsh(redeem_script: bytes, testnet: bool = False) -> ScriptPubKey:
+        return ScriptPubKey(ScriptType.P2WSH, redeem_script, testnet=testnet)
+
+    @staticmethod
+    def p2tr(pubkey: bytes, merkle_root: bytes = b"", testnet: bool = False) -> ScriptPubKey:
+        return ScriptPubKey(ScriptType.P2TR, pubkey, merkle_root, testnet=testnet)
+
+    # @staticmethod
+    # def custom(script: bytes, testnet: bool = False) -> ScriptPubKey:
+    #     return ScriptPubKey.from_script(script, testnet=testnet)
 
 
 # --- TESTING

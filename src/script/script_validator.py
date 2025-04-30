@@ -6,7 +6,7 @@ from src.crypto import hash160, sha256
 from src.db import BitCloneDatabase
 from src.logger import get_logger
 from src.script.script_engine import ScriptEngine
-from src.script.script_pubkey import ScriptPubKeyEngine
+from src.script.scriptpubkey_factory import ScriptPubKeyFactory
 from src.tx import Transaction, UTXO
 
 logger = get_logger(__name__)
@@ -107,20 +107,21 @@ class ScriptValidator:
                     return False
 
                 # Build implied P2PKH script
-                pubkey_engine = ScriptPubKeyEngine()
-                script_code = pubkey_engine.p2pkh(pubkey).scriptpubkey
+                p2pkh_scriptpubkey = ScriptPubKeyFactory.p2pkh(pubkey)
+                # pubkey_engine = ScriptPubKeyEngine()
+                # script_code = pubkey_engine.p2pkh(pubkey).scriptpubkey
 
                 self.script_engine.clear_stacks()
                 self.script_engine.stack.push(sig)
                 self.script_engine.stack.push(pubkey)
 
                 return self.script_engine.eval_script(
-                    script=script_code,
+                    script=p2pkh_scriptpubkey.script,
                     tx=tx,
                     input_index=input_index,
                     utxo=utxo,
                     amount=utxo.amount,
-                    script_code=script_code,
+                    script_code=p2pkh_scriptpubkey.script,
                     clear_stacks=False
                 )
 

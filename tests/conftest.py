@@ -5,7 +5,7 @@ import pytest
 
 from src.crypto import secp256k1
 from src.db import BitCloneDatabase
-from src.script import ScriptEngine, ScriptPubKeyEngine, ScriptBuilder, ScriptParser, SignatureEngine
+from src.script import ScriptEngine, ScriptBuilder, ScriptParser, SignatureEngine, ScriptPubKeyFactory
 
 
 @pytest.fixture(scope="module")
@@ -26,9 +26,9 @@ def sig_engine():
     return SignatureEngine()
 
 
-@pytest.fixture
-def pubkey_engine():
-    return ScriptPubKeyEngine()
+# @pytest.fixture
+# def pubkey_engine():
+#     return ScriptPubKeyEngine()
 
 
 @pytest.fixture
@@ -44,3 +44,8 @@ def parser():
 @pytest.fixture
 def curve():
     return secp256k1()
+
+
+@pytest.fixture
+def pubkey_factory():
+    return ScriptPubKeyFactory()

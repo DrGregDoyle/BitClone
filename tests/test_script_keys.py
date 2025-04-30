@@ -5,7 +5,7 @@ Tests for verifying that various script_sig + script_pub_keys will evaluate to T
 from random import randint
 from secrets import randbits
 
-from src.crypto import sha256, hash160
+from src.crypto import hash160
 from src.data import compress_public_key, write_compact_size, decode_der_signature, encode_der_signature
 from src.logger import get_logger
 from src.script import ScriptValidator
@@ -96,7 +96,7 @@ def add_scriptsig(tx: Transaction, script_sig: bytes, input_index: int = 0) -> T
 
 
 # -- TESTS
-def test_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_engine, parser):
+def test_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_factory, parser):
     """
     Minimal flow for P2PK test:
         - Generate keypair
@@ -112,16 +112,16 @@ def test_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubke
     private_key, compressed_pubkey = generate_keypair(curve)
 
     # 2. Get P2PK scriptPubKey
-    p2pk_scriptpubkey = pubkey_engine.p2pk(pubkey=compressed_pubkey).scriptpubkey
+    p2pk_scriptpubkey = pubkey_factory.p2pk(compressed_pubkey)
 
     # 3. Create UTXO with that scriptPubKey
-    p2pk_utxo = make_utxo(p2pk_scriptpubkey)
+    p2pk_utxo = make_utxo(p2pk_scriptpubkey.script)
     test_db.add_utxo(p2pk_utxo)
     validator = ScriptValidator(test_db)
 
     # 4. Create transaction and sign it
     p2pk_tx = build_tx(p2pk_utxo, b'\x6a')  # OP_RETURN output
-    legacy_sighash = sig_engine.get_legacy_sighash(p2pk_tx, 0, p2pk_scriptpubkey, 1)
+    legacy_sighash = sig_engine.get_legacy_sighash(p2pk_tx, 0, p2pk_scriptpubkey.script, 1)
     p2pk_signature = sig_engine.sign_message(private_key, legacy_sighash, 1)
 
     # 5. Build scriptSig and attach to tx
@@ -132,7 +132,7 @@ def test_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubke
     final_tx.inputs[0].txid = bytes.fromhex("f" * 64)
 
     # 7. Validate
-    final_script = p2pk_scriptsig + p2pk_scriptpubkey
+    final_script = p2pk_scriptsig + p2pk_scriptpubkey.script
     asm = parser.parse_script(final_script)
     print(f"P2PK ASM: {asm}")
     assert validator.validate_utxo(final_tx, 0)
@@ -146,12 +146,12 @@ def test_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubke
     bad_sig = mutate_signature(p2pk_signature, mode="s", curve_order=curve.order)
     bad_scriptsig = scriptsig_engine.p2pk(bad_sig)
     bad_tx = add_scriptsig(p2pk_tx, bad_scriptsig)
-    bad_script = bad_scriptsig + p2pk_scriptpubkey
+    bad_script = bad_scriptsig + p2pk_scriptpubkey.script
     assert not script_engine.eval_script(bad_script, bad_tx, utxo=p2pk_utxo,
                                          input_index=0), "p2pk tampered signature passed"
 
 
-def test_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_engine, parser):
+def test_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_factory, parser):
     """
     Minimal flow for p2pkh test:
         -Generate pubkey
@@ -167,16 +167,16 @@ def test_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubk
     private_key, compressed_pubkey = generate_keypair(curve)
 
     # 2. Get p2pkh scriptpubkey
-    p2pkh_scriptpubkey = pubkey_engine.p2pkh(compressed_pubkey).scriptpubkey
+    p2pkh_scriptpubkey = pubkey_factory.p2pkh(compressed_pubkey)
 
     # 4. Create UTXO with that pubkey
-    p2pkh_utxo = make_utxo(p2pkh_scriptpubkey)
+    p2pkh_utxo = make_utxo(p2pkh_scriptpubkey.script)
     test_db.add_utxo(p2pkh_utxo)
     validator = ScriptValidator(test_db)
 
     # 5. Create tx with that utxo and sign it
     p2pkh_tx = build_tx(p2pkh_utxo, b'\x6a')  # OP_RETURN
-    legacy_sighash = sig_engine.get_legacy_sighash(p2pkh_tx, 0, p2pkh_scriptpubkey, 1)
+    legacy_sighash = sig_engine.get_legacy_sighash(p2pkh_tx, 0, p2pkh_scriptpubkey.script, 1)
     p2pkh_signature = sig_engine.sign_message(private_key, legacy_sighash, 1)
 
     # 6. Build scriptsig and put it in the input
@@ -187,7 +187,7 @@ def test_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubk
     final_tx.inputs[0].txid = bytes.fromhex("f" * 64)
 
     # 8. Validate
-    final_script = p2pkh_scriptsig + p2pkh_scriptpubkey
+    final_script = p2pkh_scriptsig + p2pkh_scriptpubkey.script
     asm = parser.parse_script(final_script)
     print(f"P2PKH ASM: {asm}")
     assert validator.validate_utxo(final_tx, 0), "p2pkh scriptSig + scriptpubkey failed"
@@ -195,7 +195,7 @@ def test_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubk
                                                                                               "scriptpubkey failed"
 
 
-def test_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_engine, parser):
+def test_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_factory, parser):
     """
     Flow for a P2MS test:
         - Generate 3 keypairs
@@ -213,17 +213,17 @@ def test_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubke
     pubkeys = [k[1] for k in keys]  # compressed pubkeys
 
     # 2. Create 2-of-3 multisig script
-    multisig_result = pubkey_engine.p2ms(pubkeys, signum=2)
-    p2ms_scriptpubkey = multisig_result.scriptpubkey
+    p2ms_scriptpubkey = pubkey_factory.p2ms(pubkeys, 2)  # pubkey_engine.p2ms(pubkeys, signum=2)
+    # p2ms_scriptpubkey = multisig_result.scriptpubkey
 
     # 3. Create UTXO and tx
-    multisig_utxo = make_utxo(p2ms_scriptpubkey)
+    multisig_utxo = make_utxo(p2ms_scriptpubkey.script)
     test_db.add_utxo(multisig_utxo)
     multisig_tx = build_tx(multisig_utxo, b'\x6a')
     validator = ScriptValidator(test_db)
 
     # 4. Sign with first two keys
-    legacy_sighash = sig_engine.get_legacy_sighash(multisig_tx, 0, p2ms_scriptpubkey, 1)
+    legacy_sighash = sig_engine.get_legacy_sighash(multisig_tx, 0, p2ms_scriptpubkey.script, 1)
     sig1 = sig_engine.sign_message(privkeys[0], legacy_sighash, 1)
     sig2 = sig_engine.sign_message(privkeys[1], legacy_sighash, 1)
 
@@ -235,81 +235,81 @@ def test_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubke
     final_tx.inputs[0].txid = bytes.fromhex("f" * 64)
 
     # 7. Validate
-    final_script = multisig_scriptsig + p2ms_scriptpubkey
+    final_script = multisig_scriptsig + p2ms_scriptpubkey.script
     asm = parser.parse_script(final_script)
     logger.debug(f"P2MS ASM: {asm}")
     assert validator.validate_utxo(final_tx, 0), "p2ms 2-of-3 failed"
 
 
-def test_p2sh_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_engine, parser):
+def test_p2sh_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_factory, parser):
     script_engine.clear_stacks()
     test_db._clear_db()
     # 1. Generate key
     privkey, pubkey = generate_keypair(curve)
 
     # 2. Create redeem script
-    redeem_script = pubkey_engine.p2pk(pubkey).scriptpubkey
-    p2sh_scriptpubkey = pubkey_engine.p2sh(redeem_script).scriptpubkey
+    redeem_scriptpubkey = pubkey_factory.p2pk(pubkey)
+    p2sh_scriptpubkey = pubkey_factory.p2sh(redeem_script=redeem_scriptpubkey.script)
 
     # 3. Create UTXO
-    utxo = make_utxo(p2sh_scriptpubkey)
+    utxo = make_utxo(p2sh_scriptpubkey.script)
     test_db.add_utxo(utxo)
     validator = ScriptValidator(test_db)
 
     # 4. Create tx and sign
     tx = build_tx(utxo, b'\x6a')
-    legacy_sighash = sig_engine.get_legacy_sighash(tx, 0, p2sh_scriptpubkey, 1)
+    legacy_sighash = sig_engine.get_legacy_sighash(tx, 0, p2sh_scriptpubkey.script, 1)
     sig = sig_engine.sign_message(privkey, legacy_sighash, 1)
 
     # 5. Build scriptsig
-    scriptsig = scriptsig_engine.p2sh([sig], redeem_script)
+    scriptsig = scriptsig_engine.p2sh([sig], redeem_scriptpubkey.script)
     final_tx = add_scriptsig(tx, scriptsig)
 
     # 6. Modify input to reference utxo in db
     final_tx.inputs[0].txid = bytes.fromhex("f" * 64)
 
     # 7. Validate
-    full_script = scriptsig + p2sh_scriptpubkey
+    full_script = scriptsig + p2sh_scriptpubkey.script
     asm = parser.parse_script(full_script)
     print(f"P2SH(P2PK) ASM: {asm}")
     assert validator.validate_utxo(final_tx, 0), "P2SH(P2PK) failed"
 
 
-def test_p2sh_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_engine, parser):
+def test_p2sh_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_factory, parser):
     script_engine.clear_stacks()
     test_db._clear_db()
     # 1. Generate key
     privkey, pubkey = generate_keypair(curve)
 
     # 2. Create redeem script
-    redeem_script = pubkey_engine.p2pkh(pubkey).scriptpubkey
-    p2sh_scriptpubkey = pubkey_engine.p2sh(redeem_script).scriptpubkey
+    redeem_scriptpubkey = pubkey_factory.p2pkh(pubkey)
+    p2sh_scriptpubkey = pubkey_factory.p2sh(redeem_scriptpubkey.script)
 
     # 3. Create UTXO
-    utxo = make_utxo(p2sh_scriptpubkey)
+    utxo = make_utxo(p2sh_scriptpubkey.script)
     test_db.add_utxo(utxo)
     validator = ScriptValidator(test_db)
 
     # 4. Create tx and sign
     tx = build_tx(utxo, b'\x6a')
-    legacy_sighash = sig_engine.get_legacy_sighash(tx, 0, p2sh_scriptpubkey, 1)
+    legacy_sighash = sig_engine.get_legacy_sighash(tx, 0, p2sh_scriptpubkey.script, 1)
     sig = sig_engine.sign_message(privkey, legacy_sighash, 1)
 
     # 5. Build scriptsig
-    scriptsig = scriptsig_engine.p2sh([sig, pubkey], redeem_script)
+    scriptsig = scriptsig_engine.p2sh([sig, pubkey], redeem_scriptpubkey.script)
     final_tx = add_scriptsig(tx, scriptsig)
 
     # 6. Modify input to reference utxo in db
     final_tx.inputs[0].txid = bytes.fromhex("f" * 64)
 
     # 7. Validate
-    full_script = scriptsig + p2sh_scriptpubkey
+    full_script = scriptsig + p2sh_scriptpubkey.script
     asm = parser.parse_script(full_script)
     print(f"P2SH(P2PKH) ASM: {asm}")
     assert validator.validate_utxo(final_tx, 0), "P2SH(P2PK) failed"
 
 
-def test_p2sh_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_engine, parser):
+def test_p2sh_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_factory, parser):
     """
     Test P2SH-wrapped 2-of-3 multisig:
         - Create redeem script: OP_2 <pub1> <pub2> <pub3> OP_3 OP_CHECKMULTISIG
@@ -325,12 +325,12 @@ def test_p2sh_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_engine, 
     pubkeys = [k[1] for k in keys]
 
     # 2. Create 2-of-3 redeem script and wrap it
-    multisig_result = pubkey_engine.p2ms(pubkeys, signum=2)
-    redeem_script = multisig_result.scriptpubkey
-    p2sh_scriptpubkey = pubkey_engine.p2sh(redeem_script).scriptpubkey
+    redeem_scriptpubkey = pubkey_factory.p2ms(pubkeys, signum=2)
+    p2sh_scriptpubkey = pubkey_factory.p2sh(
+        redeem_scriptpubkey.script)  # pubkey_engine.p2sh(redeem_script).scriptpubkey
 
     # 3. Create UTXO
-    utxo = make_utxo(p2sh_scriptpubkey)
+    utxo = make_utxo(p2sh_scriptpubkey.script)
     test_db.add_utxo(utxo)
     validator = ScriptValidator(test_db)
 
@@ -338,25 +338,25 @@ def test_p2sh_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_engine, 
     tx = build_tx(utxo, b'\x6a')
 
     # 5. Get signatures for 2 keys
-    legacy_sighash = sig_engine.get_legacy_sighash(tx, 0, p2sh_scriptpubkey, 1)
+    legacy_sighash = sig_engine.get_legacy_sighash(tx, 0, p2sh_scriptpubkey.script, 1)
     sig1 = sig_engine.sign_message(privkeys[0], legacy_sighash, 1)
     sig2 = sig_engine.sign_message(privkeys[1], legacy_sighash, 1)
 
     # 6. Build scriptSig: OP_0 <sig1> <sig2> <redeem_script>
-    scriptsig = scriptsig_engine.p2sh([b'\x00', sig1, sig2], redeem_script)
+    scriptsig = scriptsig_engine.p2sh([b'\x00', sig1, sig2], redeem_scriptpubkey.script)
     final_tx = add_scriptsig(tx, scriptsig)
 
     # 7. Modify input to reference utxo in db
     final_tx.inputs[0].txid = bytes.fromhex("f" * 64)
 
     # 8. Validate
-    full_script = scriptsig + p2sh_scriptpubkey
+    full_script = scriptsig + p2sh_scriptpubkey.script
     asm = parser.parse_script(full_script)
     print(f"P2SH(P2MS) ASM: {asm}")
     assert validator.validate_utxo(final_tx, 0), "P2SH(P2MS) failed"
 
 
-def test_p2wpkh(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_engine, parser):
+def test_p2wpkh(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_factory, parser):
     """
     Tests P2WPKH
     """
@@ -366,10 +366,10 @@ def test_p2wpkh(curve, test_db, script_engine, sig_engine, scriptsig_engine, pub
     privkey, compressed_pubkey = generate_keypair(curve)
 
     # 2. Get P2WPKH scriptpubkey
-    p2wpkh_scriptpubkey = pubkey_engine.p2wpkh(compressed_pubkey).scriptpubkey
+    p2wpkh_scriptpubkey = pubkey_factory.p2wpkh(compressed_pubkey)
 
     # 3. Create UTXO
-    utxo = make_utxo(p2wpkh_scriptpubkey)
+    utxo = make_utxo(p2wpkh_scriptpubkey.script)
     test_db.add_utxo(utxo)
     validator = ScriptValidator(test_db)
 
@@ -388,11 +388,11 @@ def test_p2wpkh(curve, test_db, script_engine, sig_engine, scriptsig_engine, pub
     tx.witnesses = [witness]
 
     # 7. Validate
-    print(f"P2WPKH SCRIPTPUBKEY: {parser.parse_script(p2wpkh_scriptpubkey)}")
+    print(f"P2WPKH SCRIPTPUBKEY: {parser.parse_script(p2wpkh_scriptpubkey.script)}")
     assert validator.validate_utxo(tx, 0), "P2WPKH Failed assertion"
 
 
-def test_p2wsh_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_engine, parser):
+def test_p2wsh_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_factory, parser):
     """
     Tests P2WSH (Pay to Witness Script Hash):
     - Create redeem script (e.g., simple p2pk)
@@ -409,14 +409,13 @@ def test_p2wsh_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_engine,
     privkey, compressed_pubkey = generate_keypair(curve)
 
     # 2. Create a redeem script (simple p2pk)
-    redeem_script = pubkey_engine.p2pk(compressed_pubkey).scriptpubkey
+    redeem_scriptpubkey = pubkey_factory.p2pk(compressed_pubkey)
 
     # 3. Create p2wsh scriptpubkey
-    redeem_script_hash = sha256(redeem_script)
-    p2wsh_scriptpubkey = b'\x00' + b'\x20' + redeem_script_hash  # OP_0 PUSH_32
+    p2wsh_scriptpubkey = pubkey_factory.p2wsh(redeem_scriptpubkey.script)
 
     # 4. Create UTXO
-    utxo = make_utxo(p2wsh_scriptpubkey)
+    utxo = make_utxo(p2wsh_scriptpubkey.script)
     test_db.add_utxo(utxo)
     validator = ScriptValidator(test_db)
 
@@ -425,22 +424,22 @@ def test_p2wsh_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_engine,
     tx.segwit = True
 
     # 6. Get segwit sighash (scriptCode is redeem script)
-    segwit_sighash = sig_engine.get_segwit_sighash(tx, 0, redeem_script, utxo.amount, 1)
+    segwit_sighash = sig_engine.get_segwit_sighash(tx, 0, redeem_scriptpubkey.script, utxo.amount, 1)
     segwit_sig = sig_engine.sign_message(privkey, segwit_sighash, 1)
 
     # 7. Build witness: [signature] | p2pk
-    witness_items = [WitnessItem(segwit_sig), WitnessItem(redeem_script)]
+    witness_items = [WitnessItem(segwit_sig), WitnessItem(redeem_scriptpubkey.script)]
     witness = Witness(witness_items)
     tx.witnesses = [witness]
 
     # 8. Validate
-    print(f"P2WSH SCRIPTPUBKEY: {parser.parse_script(p2wsh_scriptpubkey)}")
-    print(f"P2WSH REDEEM SCRIPT: {parser.parse_script(redeem_script)}")
+    print(f"P2WSH SCRIPTPUBKEY: {parser.parse_script(p2wsh_scriptpubkey.script)}")
+    print(f"P2WSH REDEEM SCRIPT: {parser.parse_script(redeem_scriptpubkey.script)}")
 
     assert validator.validate_utxo(tx, 0), "P2WSH Failed assertion"
 
 
-def test_p2wsh_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_engine, parser):
+def test_p2wsh_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_factory, parser):
     """
     Test P2WSH where the redeem script is a P2PKH.
     """
@@ -451,13 +450,13 @@ def test_p2wsh_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_engine
     privkey, compressed_pubkey = generate_keypair(curve)
 
     # 2. Create redeem script (P2PKH)
-    redeem_script = pubkey_engine.p2pkh(compressed_pubkey).scriptpubkey
+    redeem_scriptpubkey = pubkey_factory.p2pkh(compressed_pubkey)
 
     # 3. Create P2WSH scriptpubkey
-    p2wsh_scriptpubkey = pubkey_engine.p2wsh(redeem_script).scriptpubkey
+    p2wsh_scriptpubkey = pubkey_factory.p2wsh(redeem_scriptpubkey.script)
 
     # 4. Create UTXO
-    utxo = make_utxo(p2wsh_scriptpubkey)
+    utxo = make_utxo(p2wsh_scriptpubkey.script)
     test_db.add_utxo(utxo)
     validator = ScriptValidator(test_db)
 
@@ -466,20 +465,20 @@ def test_p2wsh_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_engine
     tx.segwit = True
 
     # 6. Get segwit sighash (scriptCode = redeem script)
-    segwit_sighash = sig_engine.get_segwit_sighash(tx, 0, redeem_script, utxo.amount, 1)
+    segwit_sighash = sig_engine.get_segwit_sighash(tx, 0, redeem_scriptpubkey.script, utxo.amount, 1)
     segwit_sig = sig_engine.sign_message(privkey, segwit_sighash, 1)
 
     # 7. Build witness stack: [signature, pubkey, redeem_script]
-    witness_items = [WitnessItem(segwit_sig), WitnessItem(compressed_pubkey), WitnessItem(redeem_script)]
+    witness_items = [WitnessItem(segwit_sig), WitnessItem(compressed_pubkey), WitnessItem(redeem_scriptpubkey.script)]
     tx.witnesses = [Witness(witness_items)]
 
     # 8. Validate
-    print(f"P2WSH(P2PKH) SCRIPTPUBKEY: {parser.parse_script(p2wsh_scriptpubkey)}")
-    print(f"P2WSH(P2PKH) REDEEM SCRIPT: {parser.parse_script(redeem_script)}")
+    print(f"P2WSH(P2PKH) SCRIPTPUBKEY: {parser.parse_script(p2wsh_scriptpubkey.script)}")
+    print(f"P2WSH(P2PKH) REDEEM SCRIPT: {parser.parse_script(redeem_scriptpubkey.script)}")
     assert validator.validate_utxo(tx, 0), "P2WSH(P2PKH) Failed assertion"
 
 
-def test_p2wsh_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_engine, parser):
+def test_p2wsh_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_engine, pubkey_factory, parser):
     """
     Test P2WSH where the redeem script is a 2-of-3 multisig.
     """
@@ -492,14 +491,13 @@ def test_p2wsh_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_engine,
     pubkeys = [k[1] for k in keys]
 
     # 2. Create redeem script (2-of-3 multisig)
-    multisig_result = pubkey_engine.p2ms(pubkeys, signum=2)
-    redeem_script = multisig_result.scriptpubkey
+    redeem_scriptpubkey = pubkey_factory.p2ms(pubkeys, signum=2)
 
     # 3. Create P2WSH scriptpubkey
-    p2wsh_scriptpubkey = pubkey_engine.p2wsh(redeem_script).scriptpubkey
+    p2wsh_scriptpubkey = pubkey_factory.p2wsh(redeem_scriptpubkey.script)
 
     # 4. Create UTXO
-    utxo = make_utxo(p2wsh_scriptpubkey)
+    utxo = make_utxo(p2wsh_scriptpubkey.script)
     test_db.add_utxo(utxo)
     validator = ScriptValidator(test_db)
 
@@ -508,15 +506,15 @@ def test_p2wsh_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_engine,
     tx.segwit = True
 
     # 6. Get segwit sighash
-    segwit_sighash = sig_engine.get_segwit_sighash(tx, 0, redeem_script, utxo.amount, 1)
+    segwit_sighash = sig_engine.get_segwit_sighash(tx, 0, redeem_scriptpubkey.script, utxo.amount, 1)
     sig1 = sig_engine.sign_message(privkeys[0], segwit_sighash, 1)
     sig2 = sig_engine.sign_message(privkeys[1], segwit_sighash, 1)
 
     # 7. Build witness: [dummy OP_0, sig1, sig2, redeem_script]
-    witness_items = [WitnessItem(b''), WitnessItem(sig1), WitnessItem(sig2), WitnessItem(redeem_script)]
+    witness_items = [WitnessItem(b''), WitnessItem(sig1), WitnessItem(sig2), WitnessItem(redeem_scriptpubkey.script)]
     tx.witnesses = [Witness(witness_items)]
 
     # 8. Validate
-    print(f"P2WSH(P2MS) SCRIPTPUBKEY: {parser.parse_script(p2wsh_scriptpubkey)}")
-    print(f"P2WSH(P2MS) REDEEM SCRIPT: {parser.parse_script(redeem_script)}")
+    print(f"P2WSH(P2MS) SCRIPTPUBKEY: {parser.parse_script(p2wsh_scriptpubkey.script)}")
+    print(f"P2WSH(P2MS) REDEEM SCRIPT: {parser.parse_script(redeem_scriptpubkey.script)}")
     assert validator.validate_utxo(tx, 0), "P2WSH(P2MS) Failed assertion"
