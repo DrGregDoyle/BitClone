@@ -1,25 +1,14 @@
 """
 The ScriptPubKey class that provides factory methods for different script types.
 """
-from enum import Enum
 
 from src.crypto import secp256k1, sha256, hash160, tagged_hash_function, HashType
 from src.data import encode_base58check, encode_bech32
 from src.logger import get_logger
 from src.script.script_parser import ScriptParser
+from src.script.script_type import ScriptType
 
 logger = get_logger(__name__)
-
-
-class ScriptType(Enum):
-    P2PK = "P2PK"
-    P2PKH = "P2PKH"
-    P2MS = "P2MS"
-    P2SH = "P2SH"
-    P2WPKH = "P2WPKH"
-    P2WSH = "P2WSH"
-    P2TR = "P2TR"
-    CUSTOM = "CUSTOM"
 
 
 class ScriptPubKey:
@@ -56,7 +45,8 @@ class ScriptPubKey:
             ScriptType.P2SH: self._handle_p2sh,
             ScriptType.P2WPKH: self._handle_p2wpkh,
             ScriptType.P2WSH: self._handle_p2wsh,
-            ScriptType.P2TR: self._handle_p2tr
+            ScriptType.P2TR: self._handle_p2tr,
+            ScriptType.CUSTOM: self._handle_custom
         }
 
         handler = handlers.get(self.script_type)
@@ -69,19 +59,20 @@ class ScriptPubKey:
         self.asm = self._parser.parse_script(self.script)
 
     # --- CUSTOM
-    # @classmethod
-    # def from_script(cls, script: bytes, testnet: bool = False) -> "ScriptPubKey":
-    #     obj = cls.__new__(cls)
-    #     obj.script_type = cls.detect_type_from_script(script)
-    #     if obj.script_type == ScriptType.CUSTOM:
-    #         obj.testnet = testnet
-    #         obj.script = script
-    #         obj._parser = ScriptParser()
-    #         obj.address = ""  # or attempt to detect one if possible
-    #         obj.asm = obj._parser.parse_script(script)
-    #         return obj
-    #     else:
-    #         return cls(obj.script_type, script)
+    @classmethod
+    def from_script(cls, script: bytes, testnet: bool = False) -> "ScriptPubKey":
+        script_type = cls.detect_type_from_script(script)
+        if script_type:
+            return cls(script_type, script, testnet)
+        else:
+            obj = cls.__new__(cls)
+            obj._parser = ScriptParser()
+            obj.script_type = ScriptType.CUSTOM
+            obj.testnet = testnet
+            obj.script = script
+            obj.address = None
+            obj.asm = obj._parser.parse_script(script)
+            return obj
 
     # --- HELPERS
     def detect_type_from_script(self, script: bytes) -> ScriptType | None:
@@ -305,6 +296,9 @@ class ScriptPubKey:
         p2tr_address = encode_bech32(taproot, hrp, witver=1)
 
         return p2tr_script, p2tr_address
+
+    def _handle_custom(self, script: bytes):
+        return script, None
 
     def to_dict(self):
         """
