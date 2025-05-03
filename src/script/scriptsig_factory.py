@@ -74,7 +74,7 @@ class ScriptSig:
         """
         return self._pushdata(sig) + self._pushdata(pubkey)
 
-    def _handle_p2ms(self, signatures: list):
+    def _handle_p2ms(self, signatures: list[bytes]):
         """
         P2MS | OP_0 + #signatures * (OP_PUSHBYTES + SIGNATURE)
         """
