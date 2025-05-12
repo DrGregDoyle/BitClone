@@ -535,36 +535,29 @@ def test_p2tr_keypath(curve, test_db, script_engine, sig_engine, scriptsig_facto
 
     # 1. Generate keypair
     privkey, pubkey = generate_keypair(curve)  # pubkey = compressed (33 bytes)
+    xonly_pubkey = pubkey[1:]
 
-    # 2. Tweak
-    print(f"PRIVKEY: {privkey}")
-    print(f"PUBKEY: {pubkey.hex()}")
-    print(f"X-ONLY PUBKEY: {pubkey[1:].hex()}")
-    tweaked_pubkey = taproot.tweak_pubkey(pubkey[1:])  # x-only pubkey, no merkle root
-    tweak = taproot.taptweak(pubkey[1:])
+    # 2. Tweak keypair
+    tweak = taproot.taptweak(xonly_pubkey)
+    tweaked_pubkey = taproot.tweak_pubkey(xonly_pubkey)
     tweaked_privkey = taproot.tweak_privkey(privkey, tweak)
-    tweaked_privkey_int = int.from_bytes(tweaked_privkey, "big")
-    # tweaked_pubkey = pubkey[1:]   # Using pubkey itself passes validation
 
-    # 3. Create P2TR scriptPubKey
+    # 3. Create UTXO and tx
     p2tr_scriptpubkey = pubkey_factory.p2tr(tweaked_pubkey)
-    print(f"P2TR SCRIPTPUBKEY: {p2tr_scriptpubkey.to_json()}")
     utxo = make_utxo(p2tr_scriptpubkey.script)
     test_db.add_utxo(utxo)
-    validator = ScriptValidator(test_db)
 
-    # 4. Create tx and sign (keypath spend)
     tx = build_tx(utxo, b'\x6a')
     tx.segwit = True
-    sighash = sig_engine.get_taproot_sighash(tx, 0, [utxo])
-    schnorr_sig = sig_engine.schnorr_signature(tweaked_privkey_int, sighash, b'')
-    print(f"SIGHASH: {sighash.hex()}")
-    print(f"SCHNORR SIG: {schnorr_sig.hex()}")
+    tx.inputs[0].txid = utxo.txid  # Link input to known UTXO
 
-    # 6. Add witness
+    # 4. Sign and build witness
+    sighash = sig_engine.get_taproot_sighash(tx, 0, [utxo])
+    schnorr_sig = sig_engine.schnorr_signature(int.from_bytes(tweaked_privkey, "big"), sighash, b'')
     tx.witnesses = [Witness([WitnessItem(schnorr_sig)])]
 
-    # 7. Validate
+    # 5. Validate
+    validator = ScriptValidator(test_db)
     print(f"P2TR SCRIPTPUBKEY: {parser.parse_script(p2tr_scriptpubkey.script)}")
     assert validator.validate_utxo(tx, 0), "P2TR keypath spend failed"
 
