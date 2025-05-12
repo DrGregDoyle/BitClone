@@ -2,7 +2,7 @@
 The ScriptPubKey class that provides factory methods for different script types.
 """
 
-from src.crypto import secp256k1, sha256, hash160, tagged_hash_function, HashType
+from src.crypto import secp256k1, sha256, hash160
 from src.data import encode_base58check, encode_bech32
 from src.logger import get_logger
 from src.script.script_parser import ScriptParser
@@ -153,29 +153,6 @@ class ScriptPubKey:
         prefix = self._get_prefix()
         return encode_base58check(prefix + payload)
 
-    def _tweak_key(self, pubkey: bytes, merkle_root: bytes):
-        """
-        Returns tweaked pubkey based on given pubkey and merkle_root
-        """
-        x = int.from_bytes(pubkey, "big")
-        y = self.curve.find_y_from_x(x)
-
-        # Ensure even y
-        if y % 2 != 0:
-            y = self.curve.p - y
-
-        # Verify (x,y)
-        if not self.curve.is_point_on_curve((x, y)):
-            raise ValueError("Public key point not on curve")
-
-        # Calculate tweak
-        tweak_data = pubkey + merkle_root
-        tweak = tagged_hash_function(tweak_data, b"TapTweak", HashType.SHA256)
-        tweak_int = int.from_bytes(tweak, "big")
-        tweak_point = self.curve.multiply_generator(tweak_int)
-        tweakedpubkey = self.curve.add_points(tweak_point, (x, y))
-        return tweakedpubkey[0].to_bytes(32, "big")  # x-only
-
     # --- HANDLERS
     def _handle_p2pk(self, pubkey: bytes):
         """
@@ -280,20 +257,19 @@ class ScriptPubKey:
 
         return p2wsh_script, p2wsh_address
 
-    def _handle_p2tr(self, pubkey: bytes, merkle_root: bytes):
+    def _handle_p2tr(self, tweaked_pubkey: bytes):
         """
         P2TR | OP_1 + OP_PUSHBYTES_32 + taproot
         Accepts a 32-byte x-only public key (already tweaked).
         """
-        if len(pubkey) != 32:
+        if len(tweaked_pubkey) != 32:
             raise ValueError("Taproot public key must be exactly 32 bytes (x-only format)")
 
-        taproot = self._tweak_key(pubkey, merkle_root)
-        p2tr_script = self.OP_1 + self.OP_PUSHBYTES_32 + taproot
+        p2tr_script = self.OP_1 + self.OP_PUSHBYTES_32 + tweaked_pubkey
 
         # Address encoding with Bech32m
         hrp = 'tb' if self.testnet else 'bc'
-        p2tr_address = encode_bech32(taproot, hrp, witver=1)
+        p2tr_address = encode_bech32(tweaked_pubkey, hrp, witver=1)
 
         return p2tr_script, p2tr_address
 
@@ -347,12 +323,8 @@ class ScriptPubKeyFactory:
         return ScriptPubKey(ScriptType.P2WSH, redeem_script, testnet=testnet)
 
     @staticmethod
-    def p2tr(pubkey: bytes, merkle_root: bytes = b"", testnet: bool = False) -> ScriptPubKey:
-        return ScriptPubKey(ScriptType.P2TR, pubkey, merkle_root, testnet=testnet)
-
-    # @staticmethod
-    # def custom(script: bytes, testnet: bool = False) -> ScriptPubKey:
-    #     return ScriptPubKey.from_script(script, testnet=testnet)
+    def p2tr(tweaked_pubkey: bytes, testnet: bool = False) -> ScriptPubKey:
+        return ScriptPubKey(ScriptType.P2TR, tweaked_pubkey, testnet=testnet)
 
 
 # --- TESTING

@@ -7,6 +7,7 @@ from src.db import BitCloneDatabase
 from src.logger import get_logger
 from src.script.script_engine import ScriptEngine
 from src.script.scriptpubkey_factory import ScriptPubKeyFactory
+from src.script.signature_engine import SignatureEngine
 from src.tx import Transaction, UTXO
 
 logger = get_logger(__name__)
@@ -20,6 +21,7 @@ class ScriptValidator:
     def __init__(self, db: BitCloneDatabase):
         self.db = db
         self.script_engine = ScriptEngine()
+        self.signature_engine = SignatureEngine()
 
     def validate_utxo(self, tx: Transaction, input_index: int = 0) -> bool:
         """
@@ -46,6 +48,11 @@ class ScriptValidator:
                 len(script_pubkey) == 34 and
                 script_pubkey[0] == 0x00 and
                 script_pubkey[1] == 0x20
+        )
+        is_p2tr = (
+                len(script_pubkey) == 34 and
+                script_pubkey[0] == 0x51 and  # OP_1
+                script_pubkey[1] == 0x20  # OP_PUSH32
         )
 
         # Handle SegWit inputs
@@ -125,6 +132,41 @@ class ScriptValidator:
                     clear_stacks=False
                 )
 
+            # --- P2TR
+            elif is_p2tr:
+                logger.debug("Handling P2TR input")
+
+                witness = tx.witnesses[input_index]
+                if witness.stackitems != 1:
+                    logger.error("P2TR key-path witness must contain exactly 1 item (the schnorr signature)")
+                    return False
+
+                schnorr_sig = witness.items[0].item
+                tweaked_pubkey = script_pubkey[2:]  # x-only pubkey
+                print(f"RECOVERED TWEAKED PUBKEY: {tweaked_pubkey.hex()}")
+                tweaked_pubkey_int = int.from_bytes(tweaked_pubkey, "big")
+                print(f"RECOVERED TWEAKED PUBKEY int: {tweaked_pubkey_int}")
+
+                # -- Compute sighash message (Taproot key-path)
+                sighash = self.signature_engine.get_taproot_sighash(
+                    tx=tx,
+                    input_index=input_index,
+                    utxos=[utxo]
+                )
+                print(f"RECOVERED SIGHASH: {sighash.hex()}")
+
+                # -- Verify signature
+                valid = self.signature_engine.verify_schnorr_signature(
+                    public_key_x=tweaked_pubkey_int,
+                    message=sighash,
+                    signature=schnorr_sig
+                )
+
+                if not valid:
+                    logger.error("P2TR Schnorr signature invalid")
+                    return False
+
+                return True
 
             else:
                 logger.error("Unknown SegWit input type")

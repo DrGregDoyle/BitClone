@@ -7,6 +7,7 @@ from src.script.stack import BTCNum
 
 
 class SigHash(IntEnum):
+    DEFAULT = 0
     ALL = 1
     NONE = 2
     SINGLE = 3
@@ -18,12 +19,22 @@ class SigHash(IntEnum):
         """
         Encodes the sighash integer using Bitcoin numeric encoding (BTCNum).
         """
-        btc_num = BTCNum(int(self.value))
-        return btc_num.bytes
+        if self.value != 0:
+            btc_num = BTCNum(int(self.value))
+            return btc_num.bytes
+        return b'\x00'  # SIGHASH_DEFAULT
 
     def for_hashing(self):
         """
         Encodes the sighash integer using BTCNum encoding and padded to 4 bytes
         """
-        btc_num = BTCNum(int(self.value)).padded(4)
-        return btc_num
+        if self.value != 0:
+            btc_num = BTCNum(int(self.value)).padded(4)
+            return btc_num
+        return bytes.fromhex("00" * 4)
+
+
+if __name__ == "__main__":
+    sighash_default = SigHash(0)
+    print(sighash_default.to_byte().hex())
+    print(sighash_default.for_hashing().hex())

@@ -54,7 +54,6 @@ def schnorr_signature(private_key: int, message: bytes, auxiliary_bits: bytes):
 
     # Return 64 byte signature
     return r.to_bytes(32, "big") + s.to_bytes(32, "big")
-    # return format(r, "064x") + format(s, "064x")  # 64 hex chars = 32 bytes
 
 
 def verify_schnorr_signature(public_key_x: int, message: bytes, signature: bytes) -> bool:

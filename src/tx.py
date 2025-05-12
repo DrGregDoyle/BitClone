@@ -306,6 +306,13 @@ class UTXO:
             "spent": self.spent
         }
 
+    def to_output_bytes(self) -> bytes:
+        """
+        Returns amount + scriptpubkey_size + scriptpubkey, suitable for use in Output.from_bytes() constructor
+        """
+        return to_little_bytes(self.amount, Output.AMOUNT_BYTES) + write_compact_size(
+            len(self.script_pubkey)) + self.script_pubkey
+
 
 class Transaction(Serializable):
     """
@@ -318,8 +325,8 @@ class Transaction(Serializable):
     __slots__ = ('version', 'inputs', 'outputs', 'locktime', 'witnesses', 'input_count', 'output_count', 'segwit',
                  '_cached_non_witness_bytes', '_cached_wtxid_bytes', 'sighash')
 
-    def __init__(self, inputs=None, outputs=None, witnesses=None, locktime: int = 0, version: int = None,
-                 segwit: bool = True):
+    def __init__(self, inputs: list[Input] = None, outputs: list[Output] = None, witnesses: list[Witness] = None,
+                 locktime: int = 0, version: int = None, segwit: bool = True):
         self.version = version or self.VERSION
         self.inputs = inputs or []
         self.outputs = outputs or []
