@@ -1,7 +1,7 @@
 """
 Used for encoding and decoding
 """
-from src.crypto import secp256k1
+from src.crypto import generator_exponent, find_y_from_x, PRIME, get_y_pt_from_x
 
 PUBKEY_BYTELENGTH = 32
 
@@ -18,7 +18,7 @@ def compress_public_key(*args) -> bytes:
     if len(args) == 1:
         # Private key
         if isinstance(args[0], int):
-            x, y = secp256k1().multiply_generator(args[0])
+            x, y = generator_exponent(args[0])
         # Tuple
         elif isinstance(args[0], tuple):
             x, y = args[0]
@@ -50,11 +50,10 @@ def decompress_public_key(compressed_key: bytes) -> tuple:
     x = int.from_bytes(compressed_key[1:], byteorder='big')
 
     # Get one possible value of y
-    curve = secp256k1()
-    y1 = curve.find_y_from_x(x)
+    y1 = find_y_from_x(x)
 
     # Get other possible value of y
-    y2 = curve.p - y1
+    y2 = PRIME - y1
 
     # Check parity of y_candidate. If it doesn't match prefix, use the other root.
     #  - prefix 0x02 => y should be even
@@ -74,25 +73,18 @@ def get_public_key_point(pubkey: bytes) -> tuple[int, int]:
         - 64 bytes (x||y): raw coordinates
         - 65 bytes (uncompressed): 1-byte prefix + 32-byte x + 32-byte y
     """
-    curve = secp256k1()
     length = len(pubkey)
 
     if length == 32:
         x = int.from_bytes(pubkey, "big")
-        y = curve.find_y_from_x(x)
-        if y % 2 != 0:
-            y = curve.p - y
-        return x, y
+        return get_y_pt_from_x(x)  # Will have even y-coord by default
 
     elif length == 33:
         prefix = pubkey[0]
         if prefix not in (0x02, 0x03):
             raise ValueError("Invalid prefix for compressed pubkey")
         x = int.from_bytes(pubkey[1:], "big")
-        y = curve.find_y_from_x(x)
-        if y % 2 != prefix % 2:
-            y = curve.p - y
-        return x, y
+        return get_y_pt_from_x(x, prefix)
 
     elif length == 64:
         x = int.from_bytes(pubkey[:32], "big")

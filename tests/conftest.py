@@ -3,7 +3,7 @@ Fixtures for test suites
 """
 import pytest
 
-from src.crypto import secp256k1
+from src.crypto.ecc import secp256k1
 from src.db import BitCloneDatabase
 from src.script import ScriptEngine, ScriptSigFactory, ScriptParser, SignatureEngine, ScriptPubKeyFactory
 
@@ -32,7 +32,7 @@ def parser():
 
 
 @pytest.fixture
-def curve():
+def curve():  # MUST STAY HERE TO AVOID CIRCULAR IMPORTS
     return secp256k1()
 
 

@@ -5,7 +5,7 @@ Tests for verifying that various script_sig + script_pub_keys will evaluate to T
 from random import randint
 from secrets import randbits
 
-from src.crypto import hash160, Taproot
+from src.crypto import hash160, Taproot, ORDER, generator_exponent
 from src.data import compress_public_key, write_compact_size, decode_der_signature, encode_der_signature, ScriptTree
 from src.logger import get_logger
 from src.script import ScriptValidator
@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 
 
 # -- HELPERS
-def mutate_signature(signature: bytes, mode: str = "s", curve_order: int = None) -> bytes:
+def mutate_signature(signature: bytes, mode: str = "s") -> bytes:
     """
     Safely mutates a Bitcoin ECDSA signature (DER + sighash byte) for failure testing.
 
@@ -40,15 +40,12 @@ def mutate_signature(signature: bytes, mode: str = "s", curve_order: int = None)
         new_sighash = sighash_byte ^ 0x01  # flip one bit
         return der_sig + bytes([new_sighash])
 
-    if curve_order is None:
-        raise ValueError("curve_order required for r/s mutation")
-
     r, s = decode_der_signature(der_sig)
 
     if mode == "r":
-        r = (r + randint(1, 5)) % curve_order or 1
+        r = (r + randint(1, 5)) % ORDER or 1
     elif mode == "s":
-        s = (s + randint(1, 5)) % curve_order or 1
+        s = (s + randint(1, 5)) % ORDER or 1
     else:
         raise ValueError(f"Unknown mode: {mode}")
 
@@ -56,11 +53,11 @@ def mutate_signature(signature: bytes, mode: str = "s", curve_order: int = None)
     return new_der + bytes([sighash_byte])
 
 
-def generate_keypair(curve):
+def generate_keypair():
     private_key = 0
-    while not (1 <= private_key < curve.order):
+    while not (1 <= private_key < ORDER):
         private_key = randbits(256)
-    pubkey_point = curve.multiply_generator(private_key)
+    pubkey_point = generator_exponent(private_key)
     compressed_pubkey = compress_public_key(pubkey_point)
     return private_key, compressed_pubkey
 
@@ -96,7 +93,7 @@ def add_scriptsig(tx: Transaction, script_sig: bytes, input_index: int = 0) -> T
 
 
 # -- TESTS
-def test_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
+def test_p2pk(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
     Minimal flow for P2PK test:
         - Generate keypair
@@ -109,7 +106,7 @@ def test_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubk
     script_engine.clear_stacks()
     test_db._clear_db()
     # 1. Generate keypair
-    private_key, compressed_pubkey = generate_keypair(curve)
+    private_key, compressed_pubkey = generate_keypair()
 
     # 2. Get P2PK scriptPubKey
     p2pk_scriptpubkey = pubkey_factory.p2pk(compressed_pubkey)
@@ -143,7 +140,7 @@ def test_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubk
         utxo=p2pk_utxo), "p2pk scriptSig + scriptpubkey failed"
 
     # 7. Failure case: tampered signature
-    bad_sig = mutate_signature(p2pk_signature, mode="s", curve_order=curve.order)
+    bad_sig = mutate_signature(p2pk_signature, mode="s")
     bad_scriptsig = scriptsig_factory.p2pk(bad_sig)
     bad_tx = add_scriptsig(p2pk_tx, bad_scriptsig.script)
     bad_script = bad_scriptsig.script + p2pk_scriptpubkey.script
@@ -151,7 +148,7 @@ def test_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubk
                                          input_index=0), "p2pk tampered signature passed"
 
 
-def test_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
+def test_p2pkh(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
     Minimal flow for p2pkh test:
         -Generate pubkey
@@ -164,7 +161,7 @@ def test_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_factory, pub
     script_engine.clear_stacks()
     test_db._clear_db()
     # 1. Generate keypair
-    private_key, compressed_pubkey = generate_keypair(curve)
+    private_key, compressed_pubkey = generate_keypair()
 
     # 2. Get p2pkh scriptpubkey
     p2pkh_scriptpubkey = pubkey_factory.p2pkh(compressed_pubkey)
@@ -195,7 +192,7 @@ def test_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_factory, pub
                                                                                               "scriptpubkey failed"
 
 
-def test_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
+def test_p2ms(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
     Flow for a P2MS test:
         - Generate 3 keypairs
@@ -208,7 +205,7 @@ def test_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubk
     script_engine.clear_stacks()
     test_db._clear_db()
     # 1. Generate 3 keypairs
-    keys = [generate_keypair(curve) for _ in range(3)]
+    keys = [generate_keypair() for _ in range(3)]
     privkeys = [k[0] for k in keys]
     pubkeys = [k[1] for k in keys]  # compressed pubkeys
 
@@ -240,11 +237,11 @@ def test_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubk
     assert validator.validate_utxo(final_tx, 0), "p2ms 2-of-3 failed"
 
 
-def test_p2sh_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
+def test_p2sh_p2pk(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     script_engine.clear_stacks()
     test_db._clear_db()
     # 1. Generate key
-    privkey, pubkey = generate_keypair(curve)
+    privkey, pubkey = generate_keypair()
 
     # 2. Create redeem script
     redeem_scriptpubkey = pubkey_factory.p2pk(pubkey)
@@ -274,11 +271,11 @@ def test_p2sh_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_factory,
     assert validator.validate_utxo(final_tx, 0), "P2SH(P2PK) failed"
 
 
-def test_p2sh_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
+def test_p2sh_p2pkh(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     script_engine.clear_stacks()
     test_db._clear_db()
     # 1. Generate key
-    privkey, pubkey = generate_keypair(curve)
+    privkey, pubkey = generate_keypair()
 
     # 2. Create redeem script
     redeem_scriptpubkey = pubkey_factory.p2pkh(pubkey)
@@ -308,7 +305,7 @@ def test_p2sh_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_factory
     assert validator.validate_utxo(final_tx, 0), "P2SH(P2PK) failed"
 
 
-def test_p2sh_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
+def test_p2sh_p2ms(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
     Test P2SH-wrapped 2-of-3 multisig:
         - Create redeem script: OP_2 <pub1> <pub2> <pub3> OP_3 OP_CHECKMULTISIG
@@ -319,7 +316,7 @@ def test_p2sh_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_factory,
     script_engine.clear_stacks()
     test_db._clear_db()
     # 1. Generate 3 keypairs
-    keys = [generate_keypair(curve) for _ in range(3)]
+    keys = [generate_keypair() for _ in range(3)]
     privkeys = [k[0] for k in keys]
     pubkeys = [k[1] for k in keys]
 
@@ -355,14 +352,14 @@ def test_p2sh_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_factory,
     assert validator.validate_utxo(final_tx, 0), "P2SH(P2MS) failed"
 
 
-def test_p2wpkh(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
+def test_p2wpkh(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
     Tests P2WPKH
     """
     script_engine.clear_stacks()
     test_db._clear_db()
     # 1. Generate keypair
-    privkey, compressed_pubkey = generate_keypair(curve)
+    privkey, compressed_pubkey = generate_keypair()
 
     # 2. Get P2WPKH scriptpubkey
     p2wpkh_scriptpubkey = pubkey_factory.p2wpkh(compressed_pubkey)
@@ -391,7 +388,7 @@ def test_p2wpkh(curve, test_db, script_engine, sig_engine, scriptsig_factory, pu
     assert validator.validate_utxo(tx, 0), "P2WPKH Failed assertion"
 
 
-def test_p2wsh_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
+def test_p2wsh_p2pk(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
     Tests P2WSH (Pay to Witness Script Hash):
     - Create redeem script (e.g., simple p2pk)
@@ -405,7 +402,7 @@ def test_p2wsh_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_factory
     test_db._clear_db()
 
     # 1. Generate keypair
-    privkey, compressed_pubkey = generate_keypair(curve)
+    privkey, compressed_pubkey = generate_keypair()
 
     # 2. Create a redeem script (simple p2pk)
     redeem_scriptpubkey = pubkey_factory.p2pk(compressed_pubkey)
@@ -438,7 +435,7 @@ def test_p2wsh_p2pk(curve, test_db, script_engine, sig_engine, scriptsig_factory
     assert validator.validate_utxo(tx, 0), "P2WSH Failed assertion"
 
 
-def test_p2wsh_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
+def test_p2wsh_p2pkh(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
     Test P2WSH where the redeem script is a P2PKH.
     """
@@ -446,7 +443,7 @@ def test_p2wsh_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_factor
     test_db._clear_db()
 
     # 1. Generate keypair
-    privkey, compressed_pubkey = generate_keypair(curve)
+    privkey, compressed_pubkey = generate_keypair()
 
     # 2. Create redeem script (P2PKH)
     redeem_scriptpubkey = pubkey_factory.p2pkh(compressed_pubkey)
@@ -477,7 +474,7 @@ def test_p2wsh_p2pkh(curve, test_db, script_engine, sig_engine, scriptsig_factor
     assert validator.validate_utxo(tx, 0), "P2WSH(P2PKH) Failed assertion"
 
 
-def test_p2wsh_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
+def test_p2wsh_p2ms(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
     Test P2WSH where the redeem script is a 2-of-3 multisig.
     """
@@ -485,7 +482,7 @@ def test_p2wsh_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_factory
     test_db._clear_db()
 
     # 1. Generate 3 keypairs
-    keys = [generate_keypair(curve) for _ in range(3)]
+    keys = [generate_keypair() for _ in range(3)]
     privkeys = [k[0] for k in keys]
     pubkeys = [k[1] for k in keys]
 
@@ -519,7 +516,7 @@ def test_p2wsh_p2ms(curve, test_db, script_engine, sig_engine, scriptsig_factory
     assert validator.validate_utxo(tx, 0), "P2WSH(P2MS) Failed assertion"
 
 
-def test_p2tr_keypath(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
+def test_p2tr_keypath(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
     Taproot key path spending:
         - Generate internal key
@@ -534,7 +531,7 @@ def test_p2tr_keypath(curve, test_db, script_engine, sig_engine, scriptsig_facto
     taproot = Taproot()
 
     # 1. Generate keypair
-    privkey, pubkey = generate_keypair(curve)  # pubkey = compressed (33 bytes)
+    privkey, pubkey = generate_keypair()  # pubkey = compressed (33 bytes)
     xonly_pubkey = pubkey[1:]
 
     # 2. Tweak keypair
@@ -562,7 +559,7 @@ def test_p2tr_keypath(curve, test_db, script_engine, sig_engine, scriptsig_facto
     assert validator.validate_utxo(tx, 0), "P2TR keypath spend failed"
 
 
-def test_p2tr_scriptpath_simple(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
+def test_p2tr_scriptpath_simple(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
     Taproot script path spending:
         - Create internal key + leaf script (e.g., P2PK)
@@ -578,7 +575,7 @@ def test_p2tr_scriptpath_simple(curve, test_db, script_engine, sig_engine, scrip
     taproot = Taproot()
 
     # 1. Keypair and internal pubkey
-    privkey, pubkey = generate_keypair(curve)
+    privkey, pubkey = generate_keypair()
     xonly_pubkey = pubkey[1:]  # drop prefix byte
 
     # 2. Leaf script: simple OP_3 OP_EQUAL
@@ -622,7 +619,7 @@ def test_p2tr_scriptpath_simple(curve, test_db, script_engine, sig_engine, scrip
     assert validator.validate_utxo(tx, 0), "P2TR scriptpath spend failed"
 
 
-def test_p2tr_scriptpath_sig(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
+def test_p2tr_scriptpath_sig(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
     Taproot script path spending:
         - Create internal key + leaf script (e.g., P2PK)
@@ -642,7 +639,7 @@ def test_p2tr_scriptpath_sig(curve, test_db, script_engine, sig_engine, scriptsi
     taproot = Taproot()
 
     # 1. Keypair and internal pubkey
-    privkey, pubkey = generate_keypair(curve)
+    privkey, pubkey = generate_keypair()
     # xonly_pubkey = pubkey[1:]  # drop prefix byte
     xonly_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
 
@@ -658,7 +655,7 @@ def test_p2tr_scriptpath_sig(curve, test_db, script_engine, sig_engine, scriptsi
     print(f"TWEAKED PUBKEY: {tweaked_pubkey.hex()}")
 
 
-def test_p2tr_scriptpath_tree(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
+def test_p2tr_scriptpath_tree(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
     Taproot script path spending:
         - Create internal key + leaf script (e.g., P2PK)

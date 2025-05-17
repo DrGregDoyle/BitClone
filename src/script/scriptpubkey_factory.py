@@ -2,7 +2,7 @@
 The ScriptPubKey class that provides factory methods for different script types.
 """
 
-from src.crypto import secp256k1, sha256, hash160
+from src.crypto import sha256, hash160
 from src.data import encode_base58check, encode_bech32
 from src.logger import get_logger
 from src.script.script_parser import ScriptParser
@@ -32,7 +32,6 @@ class ScriptPubKey:
     def __init__(self, script_type: ScriptType, *args, testnet: bool = False):
         # Internals
         self._parser = ScriptParser()
-        self.curve = secp256k1()
 
         self.script_type = script_type
         self.testnet = testnet
@@ -326,22 +325,21 @@ class ScriptPubKeyFactory:
     def p2tr(tweaked_pubkey: bytes, testnet: bool = False) -> ScriptPubKey:
         return ScriptPubKey(ScriptType.P2TR, tweaked_pubkey, testnet=testnet)
 
-
 # --- TESTING
-if __name__ == "__main__":
-    from secrets import randbits
-    from src.data import compress_public_key
-
-    # Example: Generate P2PK script
-    curve = secp256k1()
-    priv_key = randbits(256) % curve.p
-    pk_pt = curve.multiply_generator(priv_key)
-    _pubkey = compress_public_key(pk_pt)
-
-    # Create P2PK script using the factory method
-    _p2pk_script = ScriptPubKey(ScriptType.P2PK, _pubkey)
-    print(_p2pk_script.to_json())
-
-    # Create P2PKH script
-    _p2pkh_script = ScriptPubKey(ScriptType.P2PKH, _pubkey)
-    print(_p2pkh_script.to_json())
+# if __name__ == "__main__":
+#     from secrets import randbits
+#     from src.data import compress_public_key
+#
+#     # Example: Generate P2PK script
+#     curve = secp256k1()
+#     priv_key = randbits(256) % curve.p
+#     pk_pt = curve.multiply_generator(priv_key)
+#     _pubkey = compress_public_key(pk_pt)
+#
+#     # Create P2PK script using the factory method
+#     _p2pk_script = ScriptPubKey(ScriptType.P2PK, _pubkey)
+#     print(_p2pk_script.to_json())
+#
+#     # Create P2PKH script
+#     _p2pkh_script = ScriptPubKey(ScriptType.P2PKH, _pubkey)
+#     print(_p2pkh_script.to_json())

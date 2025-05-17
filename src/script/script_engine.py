@@ -11,7 +11,7 @@ import operator
 from io import BytesIO
 from typing import Callable, Dict, Optional
 
-from src.crypto import secp256k1, ripemd160, sha1, sha256, hash160, hash256
+from src.crypto import ripemd160, sha1, sha256, hash160, hash256
 from src.data import check_hex
 from src.logger import get_logger
 from src.script.op_codes import OPCODES
@@ -32,7 +32,6 @@ class ScriptEngine:
         Setup stack and operation handlers
         """
         self.op_codes = OPCODES
-        self.curve = secp256k1()
         self.stack = BTCStack()
         self.altstack = BTCStack()
         self.ops_log = []  # List of ASM instructions when evaluating script

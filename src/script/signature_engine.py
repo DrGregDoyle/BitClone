@@ -6,7 +6,8 @@ NOTES:
     - Hence a legacy, segwit or taproot signature will be used depending ont the type of output referenced.
 """
 
-from src.crypto import hash256, ecdsa, verify_ecdsa, sha256, secp256k1, tagged_hash_function, HashType
+from src.crypto import hash256, ecdsa, verify_ecdsa, sha256, tagged_hash_function, HashType, ORDER, \
+    generator_exponent, PRIME, get_y_pt_from_x, scalar_multiplication, add_points
 from src.data import write_compact_size, encode_der_signature, to_little_bytes, get_public_key_point, \
     decode_der_signature
 from src.logger import get_logger
@@ -229,8 +230,7 @@ class SignatureEngine:
     ### === SCHNORR === ###
     def schnorr_signature(self, private_key: int, message: bytes, auxiliary_bits: bytes):
         # Curve setup
-        curve = secp256k1()
-        n = curve.order
+        n = ORDER
         hashtype = HashType.SHA256
 
         # Check that private key is < n
@@ -238,7 +238,7 @@ class SignatureEngine:
             raise ValueError("Given private key must be less than number of rational points on the curve")
 
         # Calculate public key - Negate private_key if necessary
-        x, y = curve.multiply_generator(private_key)
+        x, y = generator_exponent(private_key)
         if y % 2 != 0:
             private_key = n - private_key
 
@@ -255,7 +255,7 @@ class SignatureEngine:
         private_nonce = int.from_bytes(private_nonce_bytes, byteorder="big") % n
 
         # Calculate public nonce - Negate private_nonce if necessary
-        px, py = curve.multiply_generator(private_nonce)
+        px, py = generator_exponent(private_nonce)
         if py % 2 != 0:
             private_nonce = n - private_nonce
 
@@ -281,9 +281,8 @@ class SignatureEngine:
             raise ValueError("Given signature is not 64 bytes.")
 
         # Curve Setup
-        curve = secp256k1()
-        n = curve.order
-        p = curve.p
+        n = ORDER
+        p = PRIME
         hashtype = HashType.SHA256
 
         # Convenience
@@ -294,14 +293,7 @@ class SignatureEngine:
             raise ValueError("Given x coordinate doesn't satisfy value restrictions")
 
         # Calculate even y point
-        y = curve.find_y_from_x(x)
-        if y % 2 != 0:
-            y = p - y
-        public_key = (x, y)
-
-        # Check point on curve
-        if not curve.is_point_on_curve(public_key):
-            raise ValueError("Public Key not on curve for schnorr signature")
+        public_key = get_y_pt_from_x(x)
 
         # Extract signature parts
         r, s = signature[:32], signature[32:]
@@ -328,7 +320,7 @@ class SignatureEngine:
         challenge = int.from_bytes(challenge_bytes, byteorder="big") % n
 
         # Verify the signature
-        point1 = curve.multiply_generator(num_s)
-        point2 = curve.scalar_multiplication((n - challenge), public_key)
-        point3 = curve.add_points(point1, point2)
+        point1 = generator_exponent(num_s)
+        point2 = scalar_multiplication((n - challenge), public_key)
+        point3 = add_points(point1, point2)
         return point3[0] == num_r

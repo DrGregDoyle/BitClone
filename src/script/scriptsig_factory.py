@@ -1,7 +1,6 @@
 """
 The ScriptSig class that provides factory methods for different script types.
 """
-from src.crypto import secp256k1
 from src.logger import get_logger
 from src.script.script_parser import ScriptParser
 from src.script.script_type import ScriptType
@@ -18,7 +17,6 @@ class ScriptSig:
     def __init__(self, script_type: ScriptType, *args, testnet: bool = False):
         # Internals
         self._parser = ScriptParser()
-        self.curve = secp256k1()
 
         self.script_type = script_type
         self.testnet = testnet
