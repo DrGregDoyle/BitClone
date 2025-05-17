@@ -66,7 +66,8 @@ class Taproot:
         pubkey_pt = self._get_pubkey_pt(xonly_pubkey)
 
         # Get tweak point
-        tweak_pt = self.curve.multiply_generator(int.from_bytes(tweak, "big"))
+        tweak_int = int.from_bytes(tweak, "big") % self.curve.order
+        tweak_pt = self.curve.multiply_generator(tweak_int)
 
         # Return sum of points
         return self.curve.add_points(pubkey_pt, tweak_pt)

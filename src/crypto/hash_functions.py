@@ -9,7 +9,6 @@ from typing import Callable
 import unicodedata
 
 
-# noinspection PyArgumentList
 class HashType(Enum):
     SHA1 = auto()
     SHA256 = auto()
@@ -43,6 +42,18 @@ def tagged_hash_function(encoded_data: bytes, tag: bytes, function_type: HashTyp
 
     # Return  HASH(hashed_tag + hashed_tag + encoded_data)
     return hash_function(hashed_tag + hashed_tag + encoded_data, function_type=function_type)
+
+
+def tap_tweak(data: bytes, hash_type: HashType = HashType.SHA256):
+    return tagged_hash_function(data, b'TapTweak', hash_type)
+
+
+def tap_leaf(data: bytes, hash_type: HashType = HashType.SHA256):
+    return tagged_hash_function(data, b'TapLeaf', hash_type)
+
+
+def tap_branch(data: bytes, hash_type: HashType = HashType.SHA256):
+    return tagged_hash_function(data, b'TapBranch', hash_type)
 
 
 # HASHLIB
