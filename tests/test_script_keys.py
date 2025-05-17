@@ -6,7 +6,7 @@ from random import randint
 from secrets import randbits
 
 from src.crypto import hash160, Taproot
-from src.data import compress_public_key, write_compact_size, decode_der_signature, encode_der_signature
+from src.data import compress_public_key, write_compact_size, decode_der_signature, encode_der_signature, ScriptTree
 from src.logger import get_logger
 from src.script import ScriptValidator
 from src.tx import UTXO, Transaction, Input, Output, Witness, WitnessItem
@@ -538,7 +538,7 @@ def test_p2tr_keypath(curve, test_db, script_engine, sig_engine, scriptsig_facto
     xonly_pubkey = pubkey[1:]
 
     # 2. Tweak keypair
-    tweak = taproot.taptweak(xonly_pubkey)
+    tweak = taproot.tweak_data(xonly_pubkey)
     tweaked_pubkey = taproot.tweak_pubkey(xonly_pubkey)
     tweaked_privkey = taproot.tweak_privkey(privkey, tweak)
 
@@ -561,52 +561,214 @@ def test_p2tr_keypath(curve, test_db, script_engine, sig_engine, scriptsig_facto
     print(f"P2TR SCRIPTPUBKEY: {parser.parse_script(p2tr_scriptpubkey.script)}")
     assert validator.validate_utxo(tx, 0), "P2TR keypath spend failed"
 
-# def test_p2tr_scriptpath(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
-#     """
-#     Taproot script path spending:
-#         - Create leaf script (e.g. P2PK)
-#         - Construct TapLeaf and tweak internal key
-#         - Generate control block
-#         - Build witness: [sig, leaf_script, control_block]
-#         - Validate
-#     """
-#     script_engine.clear_stacks()
-#     test_db._clear_db()
-#
-#     # 1. Keypair and pubkey
-#     privkey, pubkey = generate_keypair(curve)
-#     xonly_pubkey = pubkey[1:]
-#
-#     # 2. Leaf script (P2PK style)
-#     leaf_script = b'\x21' + pubkey + b'\xac'  # PUSH33 <pubkey> CHECKSIG
-#
-#     # 3. Leaf hash (TapLeaf version 0xC0 || compact_size(script) || script)
-#     leaf_version = b'\xc0'
-#     leaf_hash = sig_engine.tagged_hash("TapLeaf", leaf_version + write_compact_size(len(leaf_script)) + leaf_script)
-#
-#     # 4. Tweak internal key
-#     tweak = sig_engine.tagged_hash("TapTweak", xonly_pubkey + leaf_hash)
-#     tweaked_pubkey = curve.xonly_tweak_add(xonly_pubkey, tweak)
-#
-#     # 5. Create scriptPubKey
-#     p2tr_scriptpubkey = pubkey_factory.p2tr(tweaked_pubkey)
-#     utxo = make_utxo(p2tr_scriptpubkey.script)
-#     test_db.add_utxo(utxo)
-#     validator = ScriptValidator(test_db)
-#
-#     # 6. Create tx and sighash
-#     tx = build_tx(utxo, b'\x6a')
-#     tx.segwit = True
-#     sighash = sig_engine.get_taproot_scriptpath_sighash(tx, 0, utxo.amount, leaf_script, leaf_version)
-#     schnorr_sig = sig_engine.sign_schnorr(privkey, sighash)
-#
-#     # 7. Control block (1 byte version + xonly internal key)
-#     control_block = b'\xc0' + xonly_pubkey
-#
-#     # 8. Build witness
-#     witness_items = [WitnessItem(schnorr_sig), WitnessItem(leaf_script), WitnessItem(control_block)]
-#     tx.witnesses = [Witness(witness_items)]
-#
-#     # 9. Validate
-#     print(f"P2TR(SCRIPT) SCRIPTPUBKEY: {parser.parse_script(p2tr_scriptpubkey.script)}")
-#     assert validator.validate_utxo(tx, 0), "P2TR scriptpath spend failed"
+
+def test_p2tr_scriptpath_simple(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
+    """
+    Taproot script path spending:
+        - Create internal key + leaf script (e.g., P2PK)
+        - Compute TapLeaf hash
+        - Tweak internal key using leaf hash
+        - Build control block (version + internal key)
+        - Create transaction, build sighash, and sign
+        - Build witness: [sig, leaf_script, control_block]
+        - Validate
+    """
+    script_engine.clear_stacks()
+    test_db._clear_db()
+    taproot = Taproot()
+
+    # 1. Keypair and internal pubkey
+    privkey, pubkey = generate_keypair(curve)
+    xonly_pubkey = pubkey[1:]  # drop prefix byte
+    print(f"TAPROOT XONLY PUBKEY: {xonly_pubkey.hex()}")
+
+    # 2. Leaf script: simple OP_3 OP_EQUAL
+    leaf_script = b'\x53\x87'
+
+    # 3. Create script tree
+    script_tree = ScriptTree([leaf_script])
+    merkle_root = script_tree.root
+    print(f"SCRIPT TREE MERKLE ROOT: {merkle_root.hex()}")
+
+    # 4. Tweak
+    print(f"TWEAK DATA: {(xonly_pubkey + merkle_root).hex()}")
+    tweak = taproot.tweak_data(xonly_pubkey + merkle_root)
+    print(f"TAPROOT TWEAK: {tweak.hex()}")
+    tweaked_pubkey = taproot.tweak_pubkey(xonly_pubkey, merkle_root)
+    print(f"TWEAKED PUBKEY: {tweaked_pubkey.hex()}")
+    print(f"TAPROOT TWEAKED PUBKEY POINT: {taproot.tweak_pubkey_point(xonly_pubkey, tweak)}")
+
+    # 5. Create P2TR scriptPubKey and UTXO
+    p2tr_scriptpubkey = pubkey_factory.p2tr(tweaked_pubkey)
+    utxo = make_utxo(p2tr_scriptpubkey.script)
+    test_db.add_utxo(utxo)
+    validator = ScriptValidator(test_db)
+
+    # 6. Create transaction
+    tx = build_tx(utxo, b'\x6a')  # OP_RETURN output
+    tx.segwit = True
+    tx.inputs[0].txid = utxo.txid
+
+    # 7. Construct script path spend
+    unlock_script = b'\x03'  # script input | 0x03 gets pushed to stack
+    tweaked_pubkey_pt = taproot.tweak_pubkey_point(xonly_pubkey, tweak)
+    parity = tweaked_pubkey_pt[1] % 2
+    control_byte = (script_tree.version + parity).to_bytes(1, "big")
+    merkle_path = b''  # No merkle path when only 1 leaf
+    control_block = control_byte + xonly_pubkey + merkle_path
+
+    # 8. Construct extension for script path spend
+    # leaf_hash = taproot.
+
+    # 9 Create witness and add to tx
+    scriptpath_witness = Witness(
+        [WitnessItem(unlock_script), WitnessItem(leaf_script), WitnessItem(control_block)]
+    )
+    tx.witnesses = [scriptpath_witness]
+
+    # 9. Validate
+    print(f"P2TR(SCRIPT) SCRIPTPUBKEY: {parser.parse_script(p2tr_scriptpubkey.script)}")
+    print("===" * 30)
+    assert validator.validate_utxo(tx, 0), "P2TR scriptpath spend failed"
+
+
+def test_p2tr_scriptpath_sig(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
+    """
+    Taproot script path spending:
+        - Create internal key + leaf script (e.g., P2PK)
+        - Compute TapLeaf hash
+        - Tweak internal key using leaf hash
+        - Build control block (version + internal key)
+        - Create transaction, build sighash, and sign
+        - Build witness: [sig, leaf_script, control_block]
+        - Validate
+    """
+    script_engine.clear_stacks()
+    test_db._clear_db()
+    taproot = Taproot()
+
+    # # 1. Keypair and internal pubkey
+    # privkey, pubkey = generate_keypair(curve)
+    # xonly_pubkey = pubkey[1:]  # drop prefix byte
+    #
+    # # 2. Leaf script: simple P2PK = PUSH33 <pubkey> CHECKSIG
+    # leaf_script = b'\x21' + pubkey + b'\xac'
+    #
+    # # 3. TapLeaf hash
+    # leaf_version = b'\xc0'
+    # leaf_preimage = leaf_version + write_compact_size(len(leaf_script)) + leaf_script
+    # leaf_hash = sig_engine.tagged_hash("TapLeaf", leaf_preimage)
+    #
+    # # 4. Tweak internal key using leaf_hash
+    # tweak = sig_engine.tagged_hash("TapTweak", xonly_pubkey + leaf_hash)
+    # tweaked_pubkey = curve.xonly_tweak_add(xonly_pubkey, tweak)
+    #
+    # # 5. Create P2TR scriptPubKey and UTXO
+    # p2tr_scriptpubkey = pubkey_factory.p2tr(tweaked_pubkey)
+    # utxo = make_utxo(p2tr_scriptpubkey.script)
+    # test_db.add_utxo(utxo)
+    # validator = ScriptValidator(test_db)
+    #
+    # # 6. Create transaction
+    # tx = build_tx(utxo, b'\x6a')  # OP_RETURN output
+    # tx.segwit = True
+    # tx.inputs[0].txid = utxo.txid
+    #
+    # # 7. Compute sighash for script-path spend
+    # sighash = sig_engine.get_taproot_scriptpath_sighash(
+    #     tx=tx,
+    #     input_index=0,
+    #     utxo_amount=utxo.amount,
+    #     leaf_script=leaf_script,
+    #     leaf_version=leaf_version
+    # )
+    #
+    # # 8. Sign message with original privkey (not tweaked)
+    # schnorr_sig = sig_engine.sign_schnorr(privkey, sighash)
+    #
+    # # 9. Build control block: version byte + internal key (no Merkle path)
+    # control_block = leaf_version + xonly_pubkey
+    #
+    # # 10. Build witness: [sig, leaf_script, control_block]
+    # witness_items = [
+    #     WitnessItem(schnorr_sig),
+    #     WitnessItem(leaf_script),
+    #     WitnessItem(control_block)
+    # ]
+    # tx.witnesses = [Witness(witness_items)]
+    #
+    # # 11. Validate
+    # print(f"P2TR(SCRIPT) SCRIPTPUBKEY: {parser.parse_script(p2tr_scriptpubkey.script)}")
+    # assert validator.validate_utxo(tx, 0), "P2TR scriptpath spend failed"
+    pass
+
+
+def test_p2tr_scriptpath_tree(curve, test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
+    """
+    Taproot script path spending:
+        - Create internal key + leaf script (e.g., P2PK)
+        - Compute TapLeaf hash
+        - Tweak internal key using leaf hash
+        - Build control block (version + internal key)
+        - Create transaction, build sighash, and sign
+        - Build witness: [sig, leaf_script, control_block]
+        - Validate
+    """
+    script_engine.clear_stacks()
+    test_db._clear_db()
+    taproot = Taproot()
+
+    # # 1. Keypair and internal pubkey
+    # privkey, pubkey = generate_keypair(curve)
+    # xonly_pubkey = pubkey[1:]  # drop prefix byte
+    #
+    # # 2. Leaf script: simple P2PK = PUSH33 <pubkey> CHECKSIG
+    # leaf_script = b'\x21' + pubkey + b'\xac'
+    #
+    # # 3. TapLeaf hash
+    # leaf_version = b'\xc0'
+    # leaf_preimage = leaf_version + write_compact_size(len(leaf_script)) + leaf_script
+    # leaf_hash = sig_engine.tagged_hash("TapLeaf", leaf_preimage)
+    #
+    # # 4. Tweak internal key using leaf_hash
+    # tweak = sig_engine.tagged_hash("TapTweak", xonly_pubkey + leaf_hash)
+    # tweaked_pubkey = curve.xonly_tweak_add(xonly_pubkey, tweak)
+    #
+    # # 5. Create P2TR scriptPubKey and UTXO
+    # p2tr_scriptpubkey = pubkey_factory.p2tr(tweaked_pubkey)
+    # utxo = make_utxo(p2tr_scriptpubkey.script)
+    # test_db.add_utxo(utxo)
+    # validator = ScriptValidator(test_db)
+    #
+    # # 6. Create transaction
+    # tx = build_tx(utxo, b'\x6a')  # OP_RETURN output
+    # tx.segwit = True
+    # tx.inputs[0].txid = utxo.txid
+    #
+    # # 7. Compute sighash for script-path spend
+    # sighash = sig_engine.get_taproot_scriptpath_sighash(
+    #     tx=tx,
+    #     input_index=0,
+    #     utxo_amount=utxo.amount,
+    #     leaf_script=leaf_script,
+    #     leaf_version=leaf_version
+    # )
+    #
+    # # 8. Sign message with original privkey (not tweaked)
+    # schnorr_sig = sig_engine.sign_schnorr(privkey, sighash)
+    #
+    # # 9. Build control block: version byte + internal key (no Merkle path)
+    # control_block = leaf_version + xonly_pubkey
+    #
+    # # 10. Build witness: [sig, leaf_script, control_block]
+    # witness_items = [
+    #     WitnessItem(schnorr_sig),
+    #     WitnessItem(leaf_script),
+    #     WitnessItem(control_block)
+    # ]
+    # tx.witnesses = [Witness(witness_items)]
+    #
+    # # 11. Validate
+    # print(f"P2TR(SCRIPT) SCRIPTPUBKEY: {parser.parse_script(p2tr_scriptpubkey.script)}")
+    # assert validator.validate_utxo(tx, 0), "P2TR scriptpath spend failed"
+    pass

@@ -226,7 +226,7 @@ class Witness(Serializable):
         if items is None:
             items = []
         self.items = items
-        self.stackitems = len(self.items)  # write_compact_size(len(self.items))
+        self.stackitems = len(self.items)  # int value as instance variable
 
     @classmethod
     def from_bytes(cls, byte_stream):

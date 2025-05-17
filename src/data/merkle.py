@@ -205,6 +205,27 @@ class ScriptTree:
 
         return nodes
 
+    @staticmethod
+    def eval_merkle_path(leaf_hash: bytes, merkle_path: bytes) -> bytes:
+        """
+        Computes the Merkle root given a leaf hash and its associated merkle path.
+        The merkle_path must be a multiple of 32 bytes.
+        """
+        path_length = len(merkle_path)
+        if path_length % 32 != 0:
+            raise ValueError("Merkle path must be a multiple of 32 bytes")
+
+        current_hash = leaf_hash
+
+        for i in range(0, path_length, 32):
+            node = merkle_path[i:i + 32]
+
+            # Lexicographic order
+            pair = current_hash + node if current_hash < node else node + current_hash
+            current_hash = tagged_hash_function(pair, b"TapBranch", HashType.SHA256)
+
+        return current_hash
+
 
 # -- TESTING
 if __name__ == "__main__":

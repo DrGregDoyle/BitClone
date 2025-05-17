@@ -27,7 +27,7 @@ class ScriptEngine:
     Evalute Script
     """
 
-    def __init__(self, taproot: bool = False):
+    def __init__(self, tapscript: bool = False):
         """
         Setup stack and operation handlers
         """
@@ -40,7 +40,7 @@ class ScriptEngine:
         self.op_handlers = self._initialize_op_handlers()
 
         # Flag for TapScript engine
-        self.taproot = taproot
+        self.tapscript = tapscript
 
         # Save context for opcode handlers
         self._tx = None
@@ -196,7 +196,7 @@ class ScriptEngine:
         if self._tx is None or self._utxo is None:  # or self._input_index is None
             raise ValueError(f"Called {OPCODES[opcode]} without tx and/or input_index and/or utxo")
 
-        if self.taproot:
+        if self.tapscript:
             if opcode == 0xba:
                 self._handle_checksigadd()
             else:
@@ -298,6 +298,9 @@ class ScriptEngine:
 
         # Verify signature
         return self.sig_engine.verify_sig(der_sig, pubkey, message_hash)
+
+    def _verify_schnorr_sig(self):
+        return True
 
     # -- EVAL
 
@@ -893,7 +896,7 @@ class ScriptEngine:
         end) are hashed. The signature used by OP_CHECKSIG must be a valid signature for this
         hash and public key.
 
-        NOTE: If taproot = true we use Schnorr signatures instead of ECDSA
+        NOTE: If tapscript = true we use Schnorr signatures instead of ECDSA
         """
         pass
 
@@ -914,7 +917,7 @@ class ScriptEngine:
         ECDSA match. The process is repeated until all signatures have been checked or not enough public keys remain
         to produce a successful result.
 
-        NOTE: If Taproot = True, this OP_CODE is disabled
+        NOTE: If tapscript = True, this OP_CODE is disabled
         """
         pass
 
@@ -923,7 +926,7 @@ class ScriptEngine:
         OP_CHECKMULTISIGVERIFY |  0xaf
         Same as OP_CHECKMULTISIG, but OP_VERIFY is executed afterward.
 
-        NOTE: If Taproot = True, this OP_CODE is disabled
+        NOTE: If tapscript = True, this OP_CODE is disabled
         """
         pass
 
@@ -1001,7 +1004,7 @@ class ScriptEngine:
     def _op_checksigadd(self):
         """
         OP_CHECKSIGADD | 0xba
-        Used in Taproot. Replaces OP_CHECKMULTISIG and OP_CHECKMULTISIGVERIFY
+        Used in tapscript. Replaces OP_CHECKMULTISIG and OP_CHECKMULTISIGVERIFY
         """
         pass
 

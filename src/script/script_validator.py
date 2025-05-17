@@ -2,7 +2,8 @@
 Class for the ScriptEvaluator: High-level API: validates UTXO spends using scriptSig, scriptPubKey, and possibly witness
 """
 
-from src.crypto import hash160, sha256
+from src.crypto import hash160, sha256, tagged_hash_function, HashType
+from src.data import write_compact_size, ScriptTree
 from src.db import BitCloneDatabase
 from src.logger import get_logger
 from src.script.script_engine import ScriptEngine
@@ -137,40 +138,101 @@ class ScriptValidator:
                 logger.debug("Handling P2TR input")
 
                 witness = tx.witnesses[input_index]
-                if witness.stackitems != 1:
-                    logger.error("P2TR key-path witness must contain exactly 1 item (the schnorr signature)")
-                    return False
 
-                schnorr_sig = witness.items[0].item
-                tweaked_pubkey = script_pubkey[2:]  # x-only pubkey
-                print(f"RECOVERED TWEAKED PUBKEY: {tweaked_pubkey.hex()}")
-                tweaked_pubkey_int = int.from_bytes(tweaked_pubkey, "big")
-                print(f"RECOVERED TWEAKED PUBKEY int: {tweaked_pubkey_int}")
+                # Determine keypath vs script path
+                if witness.stackitems == 1:
+                    # Key path
+                    logger.debug("Handling keypath input")
 
-                # -- Compute sighash message (Taproot key-path)
-                sighash = self.signature_engine.get_taproot_sighash(
-                    tx=tx,
-                    input_index=input_index,
-                    utxos=[utxo]
-                )
-                print(f"RECOVERED SIGHASH: {sighash.hex()}")
+                    schnorr_sig = witness.items[0].item
+                    tweaked_pubkey = script_pubkey[2:]  # x-only pubkey
+                    tweaked_pubkey_int = int.from_bytes(tweaked_pubkey, "big")
 
-                # -- Verify signature
-                valid = self.signature_engine.verify_schnorr_signature(
-                    public_key_x=tweaked_pubkey_int,
-                    message=sighash,
-                    signature=schnorr_sig
-                )
+                    # -- Compute sighash message (Taproot key-path)
+                    sighash = self.signature_engine.get_taproot_sighash(
+                        tx=tx,
+                        input_index=input_index,
+                        utxos=[utxo]
+                    )
+                    print(f"RECOVERED SIGHASH: {sighash.hex()}")
 
-                if not valid:
-                    logger.error("P2TR Schnorr signature invalid")
-                    return False
+                    # -- Return verify signature
+                    return self.signature_engine.verify_schnorr_signature(
+                        public_key_x=tweaked_pubkey_int,
+                        message=sighash,
+                        signature=schnorr_sig
+                    )
+                else:
+                    # Script path
+                    logger.debug("Handling Taproot script-path input")
+                    # taproot = Taproot()
 
-                return True
+                    # Parse witness
+                    witness_items = witness.items
 
-            else:
-                logger.error("Unknown SegWit input type")
-                return False
+                    if witness.stackitems < 2:
+                        logger.error("Script-path witness must contain at least leaf_script and control_block")
+                        return False
+
+                    leaf_script = witness_items[-2].item
+                    control_block = witness_items[-1].item
+                    script_inputs = [item.item for item in witness_items[:-2]]
+
+                    # Parse control block
+                    control_byte = control_block[0]
+                    leaf_version = control_byte & 0xfe  # bitwise & operator, 0xfe = 0x1111 1110.
+                    parity = control_byte & 0x01  # bitwise & operator, 0x01 = 0x0000 0001
+                    internal_key = control_block[1:33]  # xonly_pubkey
+                    print(f"INTERNAL KEY: {internal_key.hex()}")
+                    merkle_path = control_block[33:]  # No merkle path for a single leaft
+                    print(f"MERKLE PATH: {merkle_path.hex()}")
+
+                    # Compute leaf hash
+                    leaf_data = leaf_version.to_bytes(1, "big") + write_compact_size(len(leaf_script)) + leaf_script
+                    leaf_hash = tagged_hash_function(leaf_data, b'TapLeaf', HashType.SHA256)
+
+                    # Compute merkle root
+                    merkle_root = ScriptTree.eval_merkle_path(leaf_hash, merkle_path)
+                    print(f"MERKLE ROOT: {merkle_root.hex()}")
+
+                    # Compute tweak
+                    taptweak_input = internal_key + merkle_root
+                    print(f"TWEAK DATA: {taptweak_input.hex()}")
+                    tweak = tagged_hash_function(taptweak_input, b"TapTweak", HashType.SHA256)
+                    print(f"TWEAK: {tweak.hex()}")
+
+                    # # Recompute tweaked pubkey
+                    # curve = self.script_engine.curve
+                    # x = int.from_bytes(internal_key, "big")
+                    # y = curve.find_y_from_x(x)
+                    # if y % 2 != parity:
+                    #     y = curve.p - y
+                    # internal_point = (x, y)
+                    # print(f"COMPUTED TWEAKED PUBKEY POINT: {internal_point}")
+                    #
+                    # tweak_point = curve.multiply_generator(int.from_bytes(tweak, "big"))
+                    # print(f"TWEAK POINT: {tweak_point}")
+                    # tweaked_point = curve.add_points(internal_point, tweak_point)
+                    # print(f"TWEAKED PUBKEY POINT: {tweaked_point}")
+                    # computed_x = tweaked_point[0].to_bytes(32, "big")
+                    # print(f"")
+
+                    # if computed_x != script_pubkey[2:]:
+                    #     logger.error("Taproot script-path: tweaked pubkey mismatch")
+                    #     return False
+
+                    # Creeate tapscript engine and push inputs
+                    tapscript_engine = ScriptEngine(tapscript=True)
+                    for i in script_inputs:
+                        tapscript_engine.stack.push(i)
+
+                    return tapscript_engine.eval_script(
+                        script=leaf_script,
+                        tx=tx,
+                        input_index=input_index,
+                        utxo=utxo,
+                        clear_stacks=False
+                    )
 
         # --- Step 1: Evaluate scriptSig
         self.script_engine.eval_script(script_sig, tx, input_index, utxo=utxo)
