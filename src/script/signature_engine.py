@@ -25,6 +25,7 @@ class SignatureEngine:
     A class used to sign inputs, and construct message hashes for signing
     """
     PUBLICKEY_BYTES = 32
+    BIP340_ARRAY = bytes.fromhex("0000000000000000000000000000000000000000000000000000000000000000")
     ANYONECANPAY_HASHES = [
         SigHash.ALL_ANYONECANPAY,
         SigHash.NONE_ANYONECANPAY,
@@ -44,6 +45,12 @@ class SignatureEngine:
 
     def _handle_extension(self):
         pass
+
+    def _serialize_script(self, script: bytes) -> bytes:
+        """
+        Returns the compact size encoding of len(script) + script
+        """
+        return write_compact_size(len(script)) + script
 
     # --- SigHash construction
     def get_legacy_sighash(self, tx: Transaction, input_index: int, script_pubkey: bytes, sighash_flag: int) -> bytes:
@@ -142,7 +149,7 @@ class SignatureEngine:
         hashed_amounts = sha256(amounts)
 
         # sha256(scriptpubkeys)
-        scriptpubkeys = b''.join([utxo.script_pubkey for utxo in utxos])
+        scriptpubkeys = b''.join([self._serialize_script(utxo.script_pubkey) for utxo in utxos])
         hashed_scriptpubkeys = sha256(scriptpubkeys)
 
         # sha256(sequences)
@@ -154,7 +161,7 @@ class SignatureEngine:
         hashed_outputs = sha256(outputs)
 
         # spend_type
-        spend_type_num = (1 if extension else 0) | (2 if annex_present else 0)  # | is the bitwise OR operator
+        spend_type_num = (2 if extension else 0) + (1 if annex_present else 0)
         spend_type = to_little_bytes(spend_type_num, 1)
 
         # input values
@@ -193,6 +200,16 @@ class SignatureEngine:
         else:
             comsig_message += spend_type + txin_outpoint + txin_amount + txin_scriptpubkey + txin_sequence + hash_annex
 
+        # --- VALIDATION
+        # print(f"SHA PREVOUTS: {hashed_prevouts.hex()}")
+        # print(f"SHA AMOUNTS: {hashed_amounts.hex()}")
+        # print(f"SHA SEQUENCES: {hashed_sequences.hex()}")
+        # print(f"SHA SCRIPTPUBKEYS: {hashed_scriptpubkeys.hex()}")
+        # print("---" * 80)
+        # print(f"SHA OUTPUTS: {hashed_outputs.hex()}")
+        #
+        # print(f"COMSIG MESSAGE + EXTENSION: {(comsig_message + extension).hex()}")
+
         # Return taggedhash
         return tagged_hash_function(sighash_epoch + comsig_message + extension, b'TapSighash', HashType.SHA256)
 
@@ -228,7 +245,7 @@ class SignatureEngine:
         return verify_ecdsa(sig_tuple, message_hash, pubkey_point)
 
     ### === SCHNORR === ###
-    def schnorr_signature(self, private_key: int, message: bytes, auxiliary_bits: bytes):
+    def schnorr_signature(self, private_key: int, message: bytes, auxiliary_bits: bytes = BIP340_ARRAY) -> bytes:
         # Curve setup
         n = ORDER
         hashtype = HashType.SHA256
@@ -269,8 +286,8 @@ class SignatureEngine:
         r = px
         s = (private_nonce + challenge * private_key) % n
 
-        print(f"CONSTRUCTED R: {hex(r)[2:]}")
-        print(f"CONSTRUCTED S: {hex(s)[2:]}")
+        # print(f"CONSTRUCTED R: {hex(r)[2:]}")
+        # print(f"CONSTRUCTED S: {hex(s)[2:]}")
 
         # Return 64 byte signature
         return r.to_bytes(32, "big") + s.to_bytes(32, "big")

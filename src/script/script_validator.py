@@ -190,36 +190,22 @@ class ScriptValidator:
                     # Compute leaf hash
                     leaf_data = leaf_version.to_bytes(1, "big") + write_compact_size(len(leaf_script)) + leaf_script
                     leaf_hash = tagged_hash_function(leaf_data, b'TapLeaf', HashType.SHA256)
+                    print(f"LEAF DATA: {leaf_data.hex()}")
+                    print(f"LEAF HASH: {leaf_hash.hex()}")
 
                     # Compute merkle root
                     merkle_root = ScriptTree.eval_merkle_path(leaf_hash, merkle_path)
                     print(f"MERKLE ROOT: {merkle_root.hex()}")
+
+                    # Compute default extension
+                    extension = leaf_hash + b'\x00' + bytes.fromhex("ffffffff")
+                    print(f"EXTENSION: {extension.hex()}")
 
                     # Compute tweak
                     taptweak_input = internal_key + merkle_root
                     print(f"TWEAK DATA: {taptweak_input.hex()}")
                     tweak = tagged_hash_function(taptweak_input, b"TapTweak", HashType.SHA256)
                     print(f"TWEAK: {tweak.hex()}")
-
-                    # # Recompute tweaked pubkey
-                    # curve = self.script_engine.curve
-                    # x = int.from_bytes(internal_key, "big")
-                    # y = curve.find_y_from_x(x)
-                    # if y % 2 != parity:
-                    #     y = curve.p - y
-                    # internal_point = (x, y)
-                    # print(f"COMPUTED TWEAKED PUBKEY POINT: {internal_point}")
-                    #
-                    # tweak_point = curve.multiply_generator(int.from_bytes(tweak, "big"))
-                    # print(f"TWEAK POINT: {tweak_point}")
-                    # tweaked_point = curve.add_points(internal_point, tweak_point)
-                    # print(f"TWEAKED PUBKEY POINT: {tweaked_point}")
-                    # computed_x = tweaked_point[0].to_bytes(32, "big")
-                    # print(f"")
-
-                    # if computed_x != script_pubkey[2:]:
-                    #     logger.error("Taproot script-path: tweaked pubkey mismatch")
-                    #     return False
 
                     # Creeate tapscript engine and push inputs
                     tapscript_engine = ScriptEngine(tapscript=True)
@@ -231,6 +217,8 @@ class ScriptValidator:
                         tx=tx,
                         input_index=input_index,
                         utxo=utxo,
+                        amount=20000,
+                        script_code=extension,
                         clear_stacks=False
                     )
 

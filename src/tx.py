@@ -409,7 +409,6 @@ class Transaction(Serializable):
         locktime_data = stream.read(4)
         check_length(locktime_data, cls.LOCKTIME_BYTES, "locktime")
         locktime = from_little_bytes(locktime_data)
-        print(f"FROM BYTES: LOCKTIME BYTES: {locktime}")
 
         return cls(inputs, outputs, witnesses, locktime, version, segwit)
 

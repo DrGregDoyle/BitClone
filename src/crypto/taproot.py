@@ -2,7 +2,7 @@
 We create the utility class Taproot, for use in taproot signature schemes
 """
 from src.crypto.ecc import secp256k1
-from src.crypto.hash_functions import tagged_hash_function, HashType
+from src.crypto.hash_functions import tagged_hash_function, HashType, tap_tweak
 from src.data import write_compact_size
 from src.script.scriptpubkey_factory import ScriptPubKeyFactory
 
@@ -13,7 +13,22 @@ class Taproot:
     """
     PUBKEYBYTES = 32
     curve = secp256k1()
+    VERSION_INT = 192
     VERSION_BYTE = b'\xc0'
+
+    def get_tweak(self, data: bytes):
+        """
+        Returns TapTweak SHA256 hash of the given data
+        """
+        return tap_tweak(data)
+
+    def get_control_byte(self, xonly_pubkey: bytes) -> bytes:
+        """
+        Given the xonly pubkey, we return the VERSION_BYTE + PARITY_BIT as control_byte
+        """
+        pubkey_pt = self._get_pubkey_pt(xonly_pubkey)
+        parity = pubkey_pt[1] % 2
+        return (self.VERSION_INT + parity).to_bytes(1, "big")
 
     def eval_merkle_path(self, leaf_hash: bytes, merkle_path: bytes) -> bytes:
         """

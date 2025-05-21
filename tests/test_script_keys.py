@@ -8,7 +8,7 @@ from secrets import randbits
 from src.crypto import hash160, Taproot, ORDER, generator_exponent
 from src.data import compress_public_key, write_compact_size, decode_der_signature, encode_der_signature, ScriptTree
 from src.logger import get_logger
-from src.script import ScriptValidator
+from src.script import ScriptValidator, SigHash
 from src.tx import UTXO, Transaction, Input, Output, Witness, WitnessItem
 
 logger = get_logger(__name__)
@@ -62,20 +62,21 @@ def generate_keypair():
     return private_key, compressed_pubkey
 
 
-def make_utxo(pubkey_script: bytes, amount=50000):
+def make_utxo(pubkey_script: bytes, amount=50000, txid: bytes = None):
+    _txid = txid if txid is not None else bytes.fromhex("f" * 64)
     return UTXO(
-        txid=bytes.fromhex("f" * 64),
+        txid=_txid,
         vout=0,
         amount=amount,
         script_pubkey=pubkey_script
     )
 
 
-def build_tx(utxo: UTXO, output_script: bytes):
+def build_tx(utxo: UTXO, output_script: bytes, segwit: bool = False):
     return Transaction(
         inputs=[Input(utxo.txid, utxo.vout, b'', sequence=0xffffffff)],
         outputs=[Output(49000, output_script)],
-        segwit=False
+        segwit=segwit
     )
 
 
@@ -550,8 +551,12 @@ def test_p2tr_keypath(test_db, script_engine, sig_engine, scriptsig_factory, pub
 
     # 4. Sign and build witness
     sighash = sig_engine.get_taproot_sighash(tx, 0, [utxo])
-    schnorr_sig = sig_engine.schnorr_signature(int.from_bytes(tweaked_privkey, "big"), sighash, b'')
+    schnorr_sig = sig_engine.schnorr_signature(int.from_bytes(tweaked_privkey, "big"), sighash)
     tx.witnesses = [Witness([WitnessItem(schnorr_sig)])]
+
+    # Verify signature
+    assert sig_engine.verify_schnorr_signature(int.from_bytes(tweaked_pubkey, "big"), sighash, schnorr_sig), \
+        "Tweaked pubkey failed tweaked privkey Schnorr signature"
 
     # 5. Validate
     validator = ScriptValidator(test_db)
@@ -641,7 +646,14 @@ def test_p2tr_scriptpath_sig(test_db, script_engine, sig_engine, scriptsig_facto
     # 1. Keypair and internal pubkey
     privkey, pubkey = generate_keypair()
     # xonly_pubkey = pubkey[1:]  # drop prefix byte
-    xonly_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
+    privkey = int.from_bytes(bytes.fromhex("9b8de5d7f20a8ebb026a82babac3aa47a008debbfde5348962b2c46520bd5189"), "big")
+    xonly_pubkey = bytes.fromhex("6d4ddc0e47d2e8f82cbe2fc2d0d749e7bd3338112cecdc76d8f831ae6620dbe0")
+    internal_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
+
+    tx = Transaction.from_bytes(
+        bytes.fromhex(
+            "020000000001013cfe8b95d22502698fd98837f83d8d4be31ee3eddd9d1ab1a95654c64604c4d10000000000ffffffff01983a0000000000001600140de745dc58d8e62e6f47bde30cd5804a82016f9e0000000000")
+    )
 
     # 2. Leaf script:  OP_PUSHBYTES_32 6d4ddc0e47d2e8f82cbe2fc2d0d749e7bd3338112cecdc76d8f831ae6620dbe0 OP_CHECKSIG
     leaf_script = bytes.fromhex("206d4ddc0e47d2e8f82cbe2fc2d0d749e7bd3338112cecdc76d8f831ae6620dbe0ac")
@@ -649,10 +661,65 @@ def test_p2tr_scriptpath_sig(test_db, script_engine, sig_engine, scriptsig_facto
     merkle_root = script_tree.root
 
     # 3. Tweak public key
-    tweak = taproot.tweak_data(xonly_pubkey + merkle_root)
+    tweak = taproot.tweak_data(internal_pubkey + merkle_root)
+    tweaked_pubkey = taproot.tweak_pubkey(internal_pubkey, merkle_root)
+
+    # 4. ScriptPubKey and utxo
+    p2tr_scriptpubkey = pubkey_factory.p2tr(tweaked_pubkey)
+    utxo = make_utxo(p2tr_scriptpubkey.script, amount=20000, txid=tx.inputs[0].txid)
+    test_db.add_utxo(utxo)
+
+    # 5. Control block
+    control_byte = taproot.get_control_byte(tweaked_pubkey)
+    control_block = control_byte + internal_pubkey
+    # control_block = control_byte + xonly_pubkey
+
+    # 7. Calculate extension
+    leaf_hash = taproot.get_leaf_hash(leaf_script)
+
+    extension = leaf_hash + b'\x00' + bytes.fromhex("ffffffff")
+
+    print(f"TX BEFORE GETTING TEST SIGHASH: {tx.to_json()}")
+
+    # 8. Signature
+    sighash = sig_engine.get_taproot_sighash(tx, 0, [utxo], extension, hash_type=SigHash.ALL)
+    taproot_sig = sig_engine.schnorr_signature(privkey, sighash)
+    assert sig_engine.verify_schnorr_signature(int.from_bytes(xonly_pubkey, "big"), sighash, taproot_sig), \
+        "Tweaked pubkey failed schnorr signature"
+
+    # Add sighash byte to signature
+    taproot_sig += SigHash.ALL.to_byte()
+
+    # 9. Create witness
+    witness = Witness(
+        [WitnessItem(taproot_sig), WitnessItem(leaf_script), WitnessItem(control_block)]
+    )
+    tx.witnesses = [witness]
+
+    # -- TESTING
+    print("\n" + ("---" * 80))
+    print(f"P2TR(SCRIPT) SCRIPTPUBKEY: {parser.parse_script(p2tr_scriptpubkey.script)}")
+    print(f"LEAF SCRIPT: {parser.parse_script(leaf_script)}")
+    print(f"XONLY PUBKEY: {xonly_pubkey.hex()}")
     print(f"TWEAK: {tweak.hex()}")
-    tweaked_pubkey = taproot.tweak_pubkey(xonly_pubkey, merkle_root)
     print(f"TWEAKED PUBKEY: {tweaked_pubkey.hex()}")
+    print(f"MERKLE ROOT: {merkle_root.hex()}")
+    print(f"PRIVATE KEY: {privkey.to_bytes(32, 'big').hex()}")
+    print(f"LEAF HASH: {leaf_hash.hex()}")
+    print(f"LEAF DATA: {taproot.get_leaf(leaf_script).hex()}")
+    print(f"CONTROL BLOCK: {control_block.hex()}")
+    print(f"SIGHASH: {sighash.hex()}")
+    print(f"SIGNATURE: {taproot_sig.hex()}")
+    print(f"EXTENSION: {extension.hex()}")
+    print(f"---" * 80)
+
+    # 10. Modify tx to grab the created utxo
+    tx.inputs[0].txid = utxo.txid
+    tx.segwit = True
+
+    # 11. Validate
+    validator = ScriptValidator(test_db)
+    assert validator.validate_utxo(tx, 0), "P2TR scriptpath spend failed"
 
 
 def test_p2tr_scriptpath_tree(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):

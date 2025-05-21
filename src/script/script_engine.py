@@ -15,7 +15,7 @@ from src.crypto import ripemd160, sha1, sha256, hash160, hash256
 from src.data import check_hex
 from src.logger import get_logger
 from src.script.op_codes import OPCODES
-from src.script.signature_engine import SignatureEngine
+from src.script.signature_engine import SignatureEngine, SigHash
 from src.script.stack import BTCStack, BTCNum
 from src.tx import Transaction, UTXO
 
@@ -198,6 +198,8 @@ class ScriptEngine:
         if self.tapscript:
             if opcode == 0xba:
                 self._handle_checksigadd()
+            elif opcode == 0xac:
+                self._handle_opchecksig()
             else:
                 raise ValueError("Invalid opcode in Taproot context")
         else:
@@ -220,11 +222,26 @@ class ScriptEngine:
         # Pop pubkey and signature from stack
         pubkey, signature = self.stack.pop_n(2)
 
+        # --- TESTING
+
+        print("---" * 80)
+        print(f"CHECKSIG PUBKEY: {pubkey.hex()}")
+        print(f"SIGNATURE: {signature.hex()}")
+        print(f"===" * 60)
+
         # Verify sig
-        is_valid = self._verify_sig(signature, pubkey)
+        if not self.tapscript:
+            is_valid = self._verify_sig(signature, pubkey)
+        else:
+            is_valid = self._verify_schnorr_sig(signature, pubkey)
 
         # Push result
         self.stack.push_bool(is_valid)
+
+    def _handle_tapchecksig(self):
+        """
+        Handles OP_CHECKSIG for Taproot signatures
+        """
 
     def _handle_multisig(self):
         """
@@ -298,8 +315,31 @@ class ScriptEngine:
         # Verify signature
         return self.sig_engine.verify_sig(der_sig, pubkey, message_hash)
 
-    def _verify_schnorr_sig(self):
-        return True
+    def _verify_schnorr_sig(self, signature: bytes, xonly_pubkey: bytes):
+        """
+        Verifies a signature against a pubkey using the transaction context.
+        Handles both legacy and segwit sighash methods.
+        """
+        # Decode signature and sighash
+        sig = signature[:-1]
+        sighash_flag = signature[-1]
+
+        print(f"64 byte signature: {sig.hex()}")
+        print(f"SIGHASH FLAG: {sighash_flag}")
+        print(f"SIGHASH TYPE: {SigHash(sighash_flag)}")
+        print(f"TX BEFORE GETTING SIGHASH: {self._tx.to_json()}")
+
+        taproot_sighash = self.sig_engine.get_taproot_sighash(
+            tx=self._tx,
+            input_index=self._input_index,
+            utxos=[self._utxo],
+            extension=self._script_code,
+            hash_type=SigHash(sighash_flag)
+        )
+
+        print(f"TAPSCRIPT SIGHASH: {taproot_sighash.hex()}")
+
+        return self.sig_engine.verify_schnorr_signature(int.from_bytes(xonly_pubkey, "big"), taproot_sighash, sig)
 
     # -- EVAL
 
