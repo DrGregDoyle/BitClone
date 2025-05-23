@@ -779,6 +779,93 @@ def test_p2tr_scriptpath_sig(test_db, script_engine, sig_engine, scriptsig_facto
     assert validator.validate_utxo(tx, 0), "P2TR scriptpath spend failed"
 
 
+def test_p2tr_scriptpath_tree_example(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
+    """
+    Taproot script path spending:
+        - Create internal key + leaf script (e.g., P2PK)
+        - Compute TapLeaf hash
+        - Tweak internal key using leaf hash
+        - Build control block (version + internal key)
+        - Create transaction, build sighash, and sign
+        - Build witness: [sig, leaf_script, control_block]
+        - Validate
+    """
+    script_engine.clear_stacks()
+    test_db._clear_db()
+    taproot = Taproot()
+
+    # 1. Get public key
+    internal_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
+
+    # 2. Get leaf data
+    leaf1_script = bytes.fromhex("5187")
+    leaf1_hash = taproot.get_leaf_hash(leaf1_script)
+
+    leaf2_script = bytes.fromhex("5287")
+    leaf2_hash = taproot.get_leaf_hash(leaf2_script)
+
+    leaf3_script = bytes.fromhex("5387")
+    leaf3_hash = taproot.get_leaf_hash(leaf3_script)
+
+    leaf4_script = bytes.fromhex("5487")
+    leaf4_hash = taproot.get_leaf_hash(leaf4_script)
+
+    leaf5_script = bytes.fromhex("5587")
+    leaf5_hash = taproot.get_leaf_hash(leaf5_script)
+
+    # 3. Create script tree
+    script_tree = ScriptTree([leaf1_script, leaf2_script, leaf3_script, leaf4_script, leaf5_script], linear=True)
+    merkle_root = script_tree.root
+
+    # 4. Tweak pubkey
+    tweak = taproot.tweak_data(internal_pubkey + merkle_root)
+    tweaked_pubkey = taproot.tweak_pubkey(internal_pubkey, merkle_root)
+
+    # 5. Get scriptpubkey
+    p2tr_scriptpubkey = pubkey_factory.p2tr(tweaked_pubkey)
+    utxo = make_utxo(p2tr_scriptpubkey.script)
+    test_db.add_utxo(utxo)
+
+    # 6. Spend leaf # 3
+    script_inputs = bytes.fromhex("03")
+    script = leaf3_script
+    spend_script = bytes.fromhex("5387")
+    control_byte = bytes.fromhex("c0")
+
+    # 7. Get merkle path
+    branch_1 = taproot.tap_branch(leaf1_hash, leaf2_hash)
+    merkle_path = branch_1 + leaf4_hash + leaf5_hash
+
+    # 8. Get control block
+    control_block = control_byte + internal_pubkey + merkle_path
+
+    # 9. Construct tx
+    tx = Transaction.from_bytes(bytes.fromhex(
+        "02000000000101d7c0aa93d852c70ed440c5295242c2ac06f41c3a2a174b5a5b112cebdf0f7bec0000000000ffffffff014c1d0000000000001600140de745dc58d8e62e6f47bde30cd5804a82016f9e0000000000"))
+    tx.segwit = True
+    tx.inputs[0].txid = utxo.txid
+
+    # 10. Create witness
+    witness = Witness([
+        WitnessItem(script_inputs), WitnessItem(script), WitnessItem(control_block)
+    ])
+    tx.witnesses = [witness]
+
+    # --- TESTING
+    print("===" * 50)
+    print(f"MERKLE ROOT: {merkle_root.hex()}")
+    print(f"TWEAK: {tweak.hex()}")
+    print(f"TWEAKED PUBKEY: {tweaked_pubkey.hex()}")
+    print(f"SCRIPTPUBKEY: {p2tr_scriptpubkey.script.hex()}")
+    print(f"TX: {tx.to_json()}")
+    print("===" * 50)
+
+    # 9. Validate
+    print(f"P2TR(SCRIPT) SCRIPTPUBKEY: {parser.parse_script(p2tr_scriptpubkey.script)}")
+    validator = ScriptValidator(test_db)
+    assert validator.validate_utxo(tx, 0), "P2TR scriptpath spend failed"
+
+
 def test_p2tr_scriptpath_tree(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
     Taproot script path spending:
@@ -794,57 +881,10 @@ def test_p2tr_scriptpath_tree(test_db, script_engine, sig_engine, scriptsig_fact
     test_db._clear_db()
     taproot = Taproot()
 
-    # # 1. Keypair and internal pubkey
-    # privkey, pubkey = generate_keypair(curve)
-    # xonly_pubkey = pubkey[1:]  # drop prefix byte
-    #
-    # # 2. Leaf script: simple P2PK = PUSH33 <pubkey> CHECKSIG
-    # leaf_script = b'\x21' + pubkey + b'\xac'
-    #
-    # # 3. TapLeaf hash
-    # leaf_version = b'\xc0'
-    # leaf_preimage = leaf_version + write_compact_size(len(leaf_script)) + leaf_script
-    # leaf_hash = sig_engine.tagged_hash("TapLeaf", leaf_preimage)
-    #
-    # # 4. Tweak internal key using leaf_hash
-    # tweak = sig_engine.tagged_hash("TapTweak", xonly_pubkey + leaf_hash)
-    # tweaked_pubkey = curve.xonly_tweak_add(xonly_pubkey, tweak)
-    #
-    # # 5. Create P2TR scriptPubKey and UTXO
-    # p2tr_scriptpubkey = pubkey_factory.p2tr(tweaked_pubkey)
-    # utxo = make_utxo(p2tr_scriptpubkey.script)
-    # test_db.add_utxo(utxo)
-    # validator = ScriptValidator(test_db)
-    #
-    # # 6. Create transaction
-    # tx = build_tx(utxo, b'\x6a')  # OP_RETURN output
-    # tx.segwit = True
-    # tx.inputs[0].txid = utxo.txid
-    #
-    # # 7. Compute sighash for script-path spend
-    # sighash = sig_engine.get_taproot_scriptpath_sighash(
-    #     tx=tx,
-    #     input_index=0,
-    #     utxo_amount=utxo.amount,
-    #     leaf_script=leaf_script,
-    #     leaf_version=leaf_version
-    # )
-    #
-    # # 8. Sign message with original privkey (not tweaked)
-    # schnorr_sig = sig_engine.sign_schnorr(privkey, sighash)
-    #
-    # # 9. Build control block: version byte + internal key (no Merkle path)
-    # control_block = leaf_version + xonly_pubkey
-    #
-    # # 10. Build witness: [sig, leaf_script, control_block]
-    # witness_items = [
-    #     WitnessItem(schnorr_sig),
-    #     WitnessItem(leaf_script),
-    #     WitnessItem(control_block)
-    # ]
-    # tx.witnesses = [Witness(witness_items)]
-    #
-    # # 11. Validate
-    # print(f"P2TR(SCRIPT) SCRIPTPUBKEY: {parser.parse_script(p2tr_scriptpubkey.script)}")
-    # assert validator.validate_utxo(tx, 0), "P2TR scriptpath spend failed"
-    pass
+    # 1. Get keypairs
+    master_privkey, master_pubkey = generate_keypair(xonly=True)  # Keypair for the Script Path
+    leaf_keys = [generate_keypair(xonly=True) for _ in range(5)]  # Keys for the leaves of the tree
+
+    # 2. Create leaf data
+    leaf_scripts = [b'\x20' + pubkey + b'\xac' for (_, pubkey) in leaf_keys]  # PUSHBYTES_20 + PUBKEY + CHECKSIG
+    leaf_hashes = [taproot.get_leaf_hash(leaf_script) for leaf_script in leaf_scripts]

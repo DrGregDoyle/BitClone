@@ -226,6 +226,9 @@ class ScriptTree:
 
         return current_hash
 
+    def get_merkle_path(self, leaf_script: bytes):
+        pass
+
 
 # -- TESTING
 if __name__ == "__main__":

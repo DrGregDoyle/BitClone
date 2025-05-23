@@ -16,6 +16,10 @@ class Taproot:
     VERSION_INT = 192
     VERSION_BYTE = b'\xc0'
 
+    def tap_branch(self, leaf1: bytes, leaf2: bytes):
+        data = leaf1 + leaf2 if leaf1 < leaf2 else leaf2 + leaf1
+        return tagged_hash_function(data, b"TapBranch", HashType.SHA256)
+
     def get_tweak(self, data: bytes):
         """
         Returns TapTweak SHA256 hash of the given data
