@@ -148,15 +148,11 @@ class ScriptTree:
     """
     A Merkle Tree class for the taproot
     """
+    VERSION = 0xc0  # 192
+    VERSION_BYTE = b'\xc0'
 
     def __init__(self, script_list: list[bytes], version: int = 0xc0, linear: bool = False):
-        """
-        Initializes the ScriptTree with optional custom group structure.
 
-        :param script_list: List of scripts to include in the tree
-        :param version: Tapleaf version byte (default 0xc0)
-        :param group_structure: List of integers representing the number of scripts to group at each level.
-        """
         self.version = version
         self.script_list = script_list
         self.leaves = self._get_leaves(script_list)
@@ -165,14 +161,20 @@ class ScriptTree:
         self.tree = self._get_tree()
         self.root = self.tree[0]
 
+    def _encode_script(self, script):
+        """
+        Returns VERSION_BYTE + CompactSize(len(script)) + script
+        """
+        return self.VERSION_BYTE + write_compact_size(len(script)) + script
+
     def _get_leaves(self, script_list: list[bytes]):
-        leaves = []
-        version_bytes = self.version.to_bytes(1, "little")
-        for s in script_list:
-            encoded = version_bytes + write_compact_size(len(s)) + s
-            tapleaf = tagged_hash_function(encoded, b"TapLeaf", HashType.SHA256)
-            leaves.append(tapleaf)
-        return leaves
+        """
+        We return the list of lexicographically sorted leaf hashes of the given leaf scripts
+        """
+
+        encoded_scripts = [self._encode_script(s) for s in script_list]
+        hashed_scrips = [tagged_hash_function(es, b"TapLeaf", HashType.SHA256) for es in encoded_scripts]
+        return sorted(hashed_scrips)
 
     def _get_tree(self):
         if not self.leaves:

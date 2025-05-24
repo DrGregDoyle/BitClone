@@ -217,7 +217,7 @@ class ScriptValidator:
                         tx=tx,
                         input_index=input_index,
                         utxo=utxo,
-                        amount=20000,
+                        amount=utxo.amount,
                         script_code=extension,
                         clear_stacks=False
                     )

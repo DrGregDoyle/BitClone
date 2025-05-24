@@ -2,9 +2,49 @@
 We create the utility class Taproot, for use in taproot signature schemes
 """
 from src.crypto.ecc import secp256k1
-from src.crypto.hash_functions import tagged_hash_function, HashType, tap_tweak
+from src.crypto.hash_functions import tagged_hash_function, HashType
 from src.data import write_compact_size
-from src.script.scriptpubkey_factory import ScriptPubKeyFactory
+
+
+# class Taproot:
+#     """
+#     Utility class for P2TR signatures and scripts
+#     """
+#     VERSION_BYTE = b'\xc0'
+#     XONLY_PUBKEY_BYTES = 32
+#     HASHTYPE = HashType.SHA256
+#     curve = secp256k1()
+#
+#     # --- Helpers
+#
+#     def _verify_pubkey(self, xonly_pubkey: bytes) -> bool:
+#         """
+#         Verifies pubkey is 32 bytes and a coordinate on the curve
+#         """
+#         # Check byte length
+#         if len(xonly_pubkey) != self.XONLY_PUBKEY_BYTES:
+#             return False
+#
+#         # Verify point on curve
+#         x = int.from_bytes(xonly_pubkey, "big")
+#         return self.curve.is_x_on_curve(x)
+#
+
+#
+#     def _encode_leaf(self, leaf: bytes):
+#         """
+#         Returns encoding for TapLeaf hash
+#         """
+#         return self.VERSION_BYTE + write_compact_size(len(leaf)) + leaf
+#
+#     # --- Hashing
+
+#
+#     def tap_leaf(self, leaf_script: bytes):
+#         """
+#         Returns the TapLeaf hash of the encoded leaf
+#         """
+#         return tagged_hash_function(self._encode_leaf(leaf_script), b'TapLeaf', self.HASHTYPE)
 
 
 class Taproot:
@@ -12,9 +52,36 @@ class Taproot:
     A utility class for use in P2TR signatures
     """
     PUBKEYBYTES = 32
+    HASHTYPE = HashType.SHA256
     curve = secp256k1()
     VERSION_INT = 192
     VERSION_BYTE = b'\xc0'
+
+    def _get_curve_pt(self, xonly_pubkey: bytes):
+        """
+        Returns a point on the curve for the xonly_pubkey
+        """
+        x = int.from_bytes(xonly_pubkey, "big")
+        try:
+            y = self.curve.find_y_from_x(x)  # Will return ValueError if x not on curve
+        except ValueError as e:
+            raise e
+        return x, y
+
+    def _get_pubkey_pt(self, xonly_pubkey: bytes):
+        """
+        Given an x-coordinate, we return an integer tuple with even y-coordinate
+        """
+        x, y = self._get_curve_pt(xonly_pubkey)
+        if y % 2 != 0:
+            y = self.curve.p - y
+        return x, y
+
+    def tap_tweak(self, data: bytes):
+        """
+        Returns the TapTweak hash of the given data
+        """
+        return tagged_hash_function(data, b'TapTweak', self.HASHTYPE)
 
     def tap_branch(self, leaf1: bytes, leaf2: bytes):
         data = leaf1 + leaf2 if leaf1 < leaf2 else leaf2 + leaf1
@@ -24,7 +91,7 @@ class Taproot:
         """
         Returns TapTweak SHA256 hash of the given data
         """
-        return tap_tweak(data)
+        return self.tap_tweak(data)
 
     def get_control_byte(self, xonly_pubkey: bytes) -> bytes:
         """
@@ -101,36 +168,27 @@ class Taproot:
         tweaked_privkey = (privkey + int.from_bytes(tweak, "big")) % self.curve.order
         return tweaked_privkey.to_bytes((tweaked_privkey.bit_length() + 7) // 8, "big")
 
-    def _get_curve_pt(self, xonly_pubkey: bytes):
-        """
-        Returns a point on the curve for the xonly_pubkey
-        """
-        x = int.from_bytes(xonly_pubkey, "big")
-        try:
-            y = self.curve.find_y_from_x(x)
-        except ValueError as e:
-            raise e
-        return x, y
-
-    def _get_pubkey_pt(self, xonly_pubkey: bytes):
-        """
-        Given an x-coordinate, we return an integer tuple with even y-coordinate
-        """
-        x, y = self._get_curve_pt(xonly_pubkey)
-        if y % 2 != 0:
-            y = self.curve.p - y
-        return x, y
-
 
 # --- TESTING
 if __name__ == "__main__":
-    # init
-    taproot = Taproot()
-    spfactory = ScriptPubKeyFactory()
+    hash_list = [
+        bytes.fromhex("6b13becdaf0eee497e2f304adcfa1c0c9e84561c9989b7f2b5fc39f5f90a60f6"),
+        bytes.fromhex("ed5af8352e2a54cce8d3ea326beb7907efa850bdfe3711cef9060c7bb5bcf59e"),
+        bytes.fromhex("160bd30406f8d5333be044e6d2d14624470495da8a3f91242ce338599b233931"),
+        bytes.fromhex("bf2c4bf1ca72f7b8538e9df9bdfd3ba4c305ad11587f12bbfafa00d58ad6051d"),
+        bytes.fromhex("54962df196af2827a86f4bde3cf7d7c1a9dcb6e17f660badefbc892309bb145f")
+    ]
+    sorted_list = sorted(hash_list)
+    print(f"HASHLIST: {[h.hex() for h in hash_list]}")
+    print(f"SORTED LIST: {[s.hex() for s in sorted_list]}")
 
-    # Construct
-    leaf_hash = bytes.fromhex("160bd30406f8d5333be044e6d2d14624470495da8a3f91242ce338599b233931")
-    merkle_path = bytes.fromhex(
-        "1324300a84045033ec539f60c70d582c48b9acf04150da091694d83171b44ec9bf2c4bf1ca72f7b8538e9df9bdfd3ba4c305ad11587f12bbfafa00d58ad6051d54962df196af2827a86f4bde3cf7d7c1a9dcb6e17f660badefbc892309bb145f")
-    merkle_root = taproot.eval_merkle_path(leaf_hash, merkle_path)
-    print(f"MERKLE ROOT: {merkle_root.hex()}")
+    # init
+    # taproot = Taproot()
+    # spfactory = ScriptPubKeyFactory()
+    #
+    # # Construct
+    # leaf_hash = bytes.fromhex("160bd30406f8d5333be044e6d2d14624470495da8a3f91242ce338599b233931")
+    # merkle_path = bytes.fromhex(
+    #     "1324300a84045033ec539f60c70d582c48b9acf04150da091694d83171b44ec9bf2c4bf1ca72f7b8538e9df9bdfd3ba4c305ad11587f12bbfafa00d58ad6051d54962df196af2827a86f4bde3cf7d7c1a9dcb6e17f660badefbc892309bb145f")
+    # merkle_root = taproot.eval_merkle_path(leaf_hash, merkle_path)
+    # print(f"MERKLE ROOT: {merkle_root.hex()}")

@@ -713,6 +713,7 @@ def test_p2tr_scriptpath_sig_example(test_db, script_engine, sig_engine, scripts
 
     # 11. Validate
     validator = ScriptValidator(test_db)
+    print(f"P2TR(SCRIPT) SCRIPTPUBKEY: {parser.parse_script(p2tr_scriptpubkey.script)}")
     assert validator.validate_utxo(tx, 0), "P2TR scriptpath spend failed"
 
 
@@ -743,8 +744,8 @@ def test_p2tr_scriptpath_sig(test_db, script_engine, sig_engine, scriptsig_facto
     # 3. Tweak pubkey, create scriptpubkey and utxo
     tweaked_pubkey = taproot.tweak_pubkey(path_pubkey, merkle_root)
     tweaked_privkey = taproot.tweak_privkey(path_privkey, taproot.tweak_data(path_pubkey + merkle_root))
-    pt2r_scriptpubkey = pubkey_factory.p2tr(tweaked_pubkey)
-    utxo = make_utxo(pt2r_scriptpubkey.script)
+    p2tr_scriptpubkey = pubkey_factory.p2tr(tweaked_pubkey)
+    utxo = make_utxo(p2tr_scriptpubkey.script)
     test_db.add_utxo(utxo)
 
     # 4. Create tx and control block
@@ -776,6 +777,7 @@ def test_p2tr_scriptpath_sig(test_db, script_engine, sig_engine, scriptsig_facto
 
     # 10. Validate
     validator = ScriptValidator(test_db)
+    print(f"P2TR(SCRIPT) SCRIPTPUBKEY: {parser.parse_script(p2tr_scriptpubkey.script)}")
     assert validator.validate_utxo(tx, 0), "P2TR scriptpath spend failed"
 
 
@@ -868,23 +870,95 @@ def test_p2tr_scriptpath_tree_example(test_db, script_engine, sig_engine, script
 
 def test_p2tr_scriptpath_tree(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
-    Taproot script path spending:
-        - Create internal key + leaf script (e.g., P2PK)
-        - Compute TapLeaf hash
-        - Tweak internal key using leaf hash
-        - Build control block (version + internal key)
-        - Create transaction, build sighash, and sign
-        - Build witness: [sig, leaf_script, control_block]
-        - Validate
+    We test spending the 3rd leaf in an unbalanced tree (aka: linear).
+
+    # ┌────────┐ ┌────────┐
+    # │ leaf 1 │ │ leaf 2 │
+    # └───┬────┘ └───┬────┘
+    #     └────┬─────┘
+    #      X───┴────┐ ┌────────┐
+    #      │branch 1│ │ leaf 3 │ <- spending
+    #      └───┬────┘ └─────┬──┘
+    #          └─────┬──────┘
+    #            ┌───┴────┐ X────────┐
+    #            │branch 2│ │ leaf 4 │
+    #            └───┬────┘ └────┬───┘
+    #                └────┬──────┘
+    #                 ┌───┴────┐ X────────┐
+    #                 │branch 3│ │ leaf 5 │
+    #                 └───┬────┘ └────┬───┘
+    #                     └─────┬─────┘
+    #                       ┌───┴────┐
+    #                       │branch 4│
+    #                       └────────┘
+
     """
     script_engine.clear_stacks()
     test_db._clear_db()
     taproot = Taproot()
 
-    # 1. Get keypairs
-    master_privkey, master_pubkey = generate_keypair(xonly=True)  # Keypair for the Script Path
+    # 1. Internal key and 5 leaf keys
+    internal_privkey, internal_pubkey = generate_keypair(xonly=True)  # Keypair for the Script Path
     leaf_keys = [generate_keypair(xonly=True) for _ in range(5)]  # Keys for the leaves of the tree
 
-    # 2. Create leaf data
-    leaf_scripts = [b'\x20' + pubkey + b'\xac' for (_, pubkey) in leaf_keys]  # PUSHBYTES_20 + PUBKEY + CHECKSIG
-    leaf_hashes = [taproot.get_leaf_hash(leaf_script) for leaf_script in leaf_scripts]
+    # 2. Leaf scripts = OP_PUSHBYTES_32 <xonly_pubkey> OP_CHECKSIG
+    leaf_scripts = [b'\x20' + pubkey + b'\xac' for (_, pubkey) in leaf_keys]
+
+    # 3. Build a linear script tree and get its root
+    script_tree = ScriptTree(leaf_scripts, linear=True)
+    merkle_root = script_tree.root
+    leaf_hashes = script_tree.leaves
+
+    # 4. Tweak internal pubkey with merkle root
+    tweak = taproot.tweak_data(internal_pubkey + merkle_root)
+    tweaked_pubkey = taproot.tweak_pubkey(internal_pubkey, merkle_root)
+
+    # 5. Create P2TR output and UTXO
+    p2tr_scriptpubkey = pubkey_factory.p2tr(tweaked_pubkey)
+    utxo = make_utxo(p2tr_scriptpubkey.script)
+    test_db.add_utxo(utxo)
+    validator = ScriptValidator(test_db)
+
+    # 6. Build segwit transaction spending that UTXO
+    tx = build_tx(utxo, b'\x6a', segwit=True)
+    tx.inputs[0].txid = utxo.txid
+
+    # 7. Compute merkle path for the third leaf (index 2)
+    #    In a linear tree: path = H(leaf0,leaf1) || leaf4 || leaf5
+    branch = taproot.tap_branch(leaf_hashes[0], leaf_hashes[1])
+    merkle_path = branch + leaf_hashes[3] + leaf_hashes[4]
+    assert taproot.eval_merkle_path(leaf_hashes[2], merkle_path) == merkle_root, "Merkle path failed"
+
+    # # 8. Build control block: [control_byte||internal_key||merkle_path]
+    # control_byte = taproot.get_control_byte(tweaked_pubkey)
+    # control_block = control_byte + internal_pubkey + merkle_path
+    #
+    # # 9. Calculate extension for 3rd leaf (index 2)
+    # leaf_hash = leaf_hashes[2]
+    # extension = leaf_hash + b'\x00' + bytes.fromhex("ffffffff")
+    #
+    # # 10. Use private key from leaf for signature
+    # sighash = sig_engine.get_taproot_sighash(tx, 0, [utxo], extension, hash_type=SigHash.ALL)
+    # taproot_sig = sig_engine.schnorr_signature(leaf_keys[2][0], sighash)
+    # assert sig_engine.verify_schnorr_signature(int.from_bytes(leaf_keys[2][1], "big"), sighash, taproot_sig), \
+    #     "Failed to verify schnorr signature for leaf keys"
+    #
+    # # 11. Add sighash byte to signature
+    # taproot_sig += SigHash.ALL.to_byte()
+    #
+    # # 12. Create witness and add to tx
+    # witness = Witness([WitnessItem(taproot_sig), WitnessItem(leaf_scripts[2]), WitnessItem(control_block)])
+    # tx.witnesses = [witness]
+    #
+    # print("===" * 50)
+    # print(f"MERKLE ROOT: {merkle_root.hex()}")
+    # print(f"TWEAK: {tweak.hex()}")
+    # print(f"TWEAKED PUBKEY: {tweaked_pubkey.hex()}")
+    # print(f"SCRIPTPUBKEY: {p2tr_scriptpubkey.script.hex()}")
+    # print(f"TX: {tx.to_json()}")
+    # print(f"INTERNAL PUBKEY: {internal_pubkey.hex()}")
+    # print("===" * 50)
+    #
+    # # 13. Validate
+    # print(f"P2TR(SCRIPT) SCRIPTPUBKEY: {parser.parse_script(p2tr_scriptpubkey.script)}")
+    # assert validator.validate_utxo(tx, 0), "P2TR scriptpath spend failed"
