@@ -169,7 +169,7 @@ class ScriptTree:
 
     def _get_leaves(self, script_list: list[bytes]):
         """
-        We return the list of lexicographically sorted leaf hashes of the given leaf scripts
+        We return the
         """
 
         encoded_scripts = [self._encode_script(s) for s in script_list]
