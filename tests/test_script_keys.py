@@ -6,9 +6,9 @@ from random import randint
 from secrets import randbits
 
 from src.crypto import hash160, Taproot, ORDER, generator_exponent
-from src.data import compress_public_key, write_compact_size, decode_der_signature, encode_der_signature, ScriptTree
+from src.data import compress_public_key, write_compact_size, decode_der_signature, encode_der_signature
 from src.logger import get_logger
-from src.script import ScriptValidator, SigHash
+from src.script import ScriptValidator, SigHash, ScriptTree, Branch
 from src.tx import UTXO, Transaction, Input, Output, Witness, WitnessItem
 
 logger = get_logger(__name__)
@@ -607,9 +607,7 @@ def test_p2tr_scriptpath_simple(test_db, script_engine, sig_engine, scriptsig_fa
 
     # 7. Construct script path spend
     unlock_script = b'\x03'  # script input | 0x03 gets pushed to stack
-    tweaked_pubkey_pt = taproot.tweak_pubkey_point(xonly_pubkey, tweak)
-    parity = tweaked_pubkey_pt[1] % 2
-    control_byte = (script_tree.version + parity).to_bytes(1, "big")
+    control_byte = taproot.get_control_byte(xonly_pubkey)
     merkle_path = b''  # No merkle path when only 1 leaf
     control_block = control_byte + xonly_pubkey + merkle_path
 
@@ -816,7 +814,7 @@ def test_p2tr_scriptpath_tree_example(test_db, script_engine, sig_engine, script
     leaf5_hash = taproot.get_leaf_hash(leaf5_script)
 
     # 3. Create script tree
-    script_tree = ScriptTree([leaf1_script, leaf2_script, leaf3_script, leaf4_script, leaf5_script], linear=True)
+    script_tree = ScriptTree([leaf1_script, leaf2_script, leaf3_script, leaf4_script, leaf5_script], balanced=False)
     merkle_root = script_tree.root
 
     # 4. Tweak pubkey
@@ -905,7 +903,7 @@ def test_p2tr_scriptpath_tree(test_db, script_engine, sig_engine, scriptsig_fact
     leaf_scripts = [b'\x20' + pubkey + b'\xac' for (_, pubkey) in leaf_keys]
 
     # 3. Build a linear script tree and get its root
-    script_tree = ScriptTree(leaf_scripts, linear=True)
+    script_tree = ScriptTree(leaf_scripts, balanced=False)
     merkle_root = script_tree.root
     leaf_hashes = script_tree.leaves
 
@@ -925,40 +923,40 @@ def test_p2tr_scriptpath_tree(test_db, script_engine, sig_engine, scriptsig_fact
 
     # 7. Compute merkle path for the third leaf (index 2)
     #    In a linear tree: path = H(leaf0,leaf1) || leaf4 || leaf5
-    branch = taproot.tap_branch(leaf_hashes[0], leaf_hashes[1])
-    merkle_path = branch + leaf_hashes[3] + leaf_hashes[4]
-    assert taproot.eval_merkle_path(leaf_hashes[2], merkle_path) == merkle_root, "Merkle path failed"
+    branch = Branch(leaf_hashes[0], leaf_hashes[1])
+    merkle_path = branch.branch_hash + leaf_hashes[3].leaf_hash + leaf_hashes[4].leaf_hash
+    assert taproot.eval_merkle_path(leaf_hashes[2].leaf_hash, merkle_path) == merkle_root, "Merkle path failed"
 
-    # # 8. Build control block: [control_byte||internal_key||merkle_path]
-    # control_byte = taproot.get_control_byte(tweaked_pubkey)
-    # control_block = control_byte + internal_pubkey + merkle_path
-    #
-    # # 9. Calculate extension for 3rd leaf (index 2)
-    # leaf_hash = leaf_hashes[2]
-    # extension = leaf_hash + b'\x00' + bytes.fromhex("ffffffff")
-    #
-    # # 10. Use private key from leaf for signature
-    # sighash = sig_engine.get_taproot_sighash(tx, 0, [utxo], extension, hash_type=SigHash.ALL)
-    # taproot_sig = sig_engine.schnorr_signature(leaf_keys[2][0], sighash)
-    # assert sig_engine.verify_schnorr_signature(int.from_bytes(leaf_keys[2][1], "big"), sighash, taproot_sig), \
-    #     "Failed to verify schnorr signature for leaf keys"
-    #
-    # # 11. Add sighash byte to signature
-    # taproot_sig += SigHash.ALL.to_byte()
-    #
-    # # 12. Create witness and add to tx
-    # witness = Witness([WitnessItem(taproot_sig), WitnessItem(leaf_scripts[2]), WitnessItem(control_block)])
-    # tx.witnesses = [witness]
-    #
-    # print("===" * 50)
-    # print(f"MERKLE ROOT: {merkle_root.hex()}")
-    # print(f"TWEAK: {tweak.hex()}")
-    # print(f"TWEAKED PUBKEY: {tweaked_pubkey.hex()}")
-    # print(f"SCRIPTPUBKEY: {p2tr_scriptpubkey.script.hex()}")
-    # print(f"TX: {tx.to_json()}")
-    # print(f"INTERNAL PUBKEY: {internal_pubkey.hex()}")
-    # print("===" * 50)
-    #
-    # # 13. Validate
-    # print(f"P2TR(SCRIPT) SCRIPTPUBKEY: {parser.parse_script(p2tr_scriptpubkey.script)}")
-    # assert validator.validate_utxo(tx, 0), "P2TR scriptpath spend failed"
+    # 8. Build control block: [control_byte||internal_key||merkle_path]
+    control_byte = taproot.get_control_byte(tweaked_pubkey)
+    control_block = control_byte + internal_pubkey + merkle_path
+
+    # 9. Calculate extension for 3rd leaf (index 2)
+    leaf_hash = leaf_hashes[2].leaf_hash
+    extension = leaf_hash + b'\x00' + bytes.fromhex("ffffffff")
+
+    # 10. Use private key from leaf for signature
+    sighash = sig_engine.get_taproot_sighash(tx, 0, [utxo], extension, hash_type=SigHash.ALL)
+    taproot_sig = sig_engine.schnorr_signature(leaf_keys[2][0], sighash)
+    assert sig_engine.verify_schnorr_signature(int.from_bytes(leaf_keys[2][1], "big"), sighash, taproot_sig), \
+        "Failed to verify schnorr signature for leaf keys"
+
+    # 11. Add sighash byte to signature
+    taproot_sig += SigHash.ALL.to_byte()
+
+    # 12. Create witness and add to tx
+    witness = Witness([WitnessItem(taproot_sig), WitnessItem(leaf_scripts[2]), WitnessItem(control_block)])
+    tx.witnesses = [witness]
+
+    print("===" * 50)
+    print(f"MERKLE ROOT: {merkle_root.hex()}")
+    print(f"TWEAK: {tweak.hex()}")
+    print(f"TWEAKED PUBKEY: {tweaked_pubkey.hex()}")
+    print(f"SCRIPTPUBKEY: {p2tr_scriptpubkey.script.hex()}")
+    print(f"TX: {tx.to_json()}")
+    print(f"INTERNAL PUBKEY: {internal_pubkey.hex()}")
+    print("===" * 50)
+
+    # 13. Validate
+    print(f"P2TR(SCRIPT) SCRIPTPUBKEY: {parser.parse_script(p2tr_scriptpubkey.script)}")
+    assert validator.validate_utxo(tx, 0), "P2TR scriptpath spend failed"

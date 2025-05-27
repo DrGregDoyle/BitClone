@@ -77,12 +77,12 @@ class ScriptTree:
         else:
             return self._build_unbalanced_tree(leaves)
 
-    def _build_balanced_tree(self, leaves: list[bytes]):
+    def _build_balanced_tree(self, leaves: list[Leaf]):
         """
         Build balanced tree - standard Merkle Tree construction
         """
         if len(leaves) == 1:
-            return leaves[0]
+            return leaves[0].leaf_hash
 
         level = leaves[:]
         while len(level) > 1:
@@ -98,7 +98,7 @@ class ScriptTree:
                 self.branches.append(branch)
                 next_level.append(branch)
             level = next_level
-        return level[0]  # root
+        return level[0].branch_hash  # root
 
     def _build_unbalanced_tree(self, leaves: list[bytes]):
         """
@@ -106,6 +106,10 @@ class ScriptTree:
         the next branch. The final branch is the merkle root
 
         """
+        # Check for single leaf
+        if len(leaves) == 1:
+            return leaves[0].leaf_hash
+
         # Repeat until list is empty
         current_branch = None
         while len(leaves) > 0:
@@ -118,107 +122,107 @@ class ScriptTree:
             self.branches.append(current_branch)
         return current_branch.branch_hash
 
-    def get_merkle_path(self, leaf_script: bytes) -> list[bytes]:
-        """
-        Given a leaf script, return the merkle path (list of sibling hashes) needed to reconstruct the root.
-        Returns empty list if leaf_script is not found in the tree.
-        """
-        # Find the target leaf
-        target_leaf = None
-        target_index = None
-        for i, leaf in enumerate(self.leaves):
-            if leaf.leaf_script == leaf_script:
-                target_leaf = leaf
-                target_index = i
-                break
-
-        if target_leaf is None:
-            return []  # Leaf not found
-
-        if len(self.leaves) == 1:
-            return []  # Single leaf tree has empty path
-
-        if self.balanced:
-            return self._get_balanced_merkle_path(target_index)
-        else:
-            return self._get_unbalanced_merkle_path(target_index)
-
-    def _get_balanced_merkle_path(self, target_index: int) -> list[bytes]:
-        """Get merkle path for balanced tree construction"""
-        path = []
-        current_index = target_index
-        level_size = len(self.leaves)
-
-        # Work our way up the tree level by level
-        while level_size > 1:
-            # Find sibling index
-            if current_index % 2 == 0:
-                # Left node, sibling is to the right
-                sibling_index = current_index + 1
-                if sibling_index >= level_size:
-                    # Odd number of nodes, sibling is itself (duplicated)
-                    sibling_index = current_index
-            else:
-                # Right node, sibling is to the left
-                sibling_index = current_index - 1
-
-            # Find the sibling hash at this level
-            if level_size == len(self.leaves):
-                # First level - use leaf hashes
-                sibling_hash = self.leaves[sibling_index].leaf_hash
-            else:
-                # Higher levels - find corresponding branch hash
-                # This is complex for balanced trees, so we'll use a simpler approach
-                # by reconstructing the path from the stored branches
-                pass
-
-            path.append(sibling_hash)
-            current_index //= 2
-            level_size = (level_size + 1) // 2
-
-        # For simplicity in balanced trees, we'll use branch traversal
-        return self._traverse_for_path(target_index)
-
-    def _traverse_for_path(self, target_index: int) -> list[bytes]:
-        """Traverse stored branches to find path - works for both balanced and unbalanced"""
-        path = []
-        target_hash = self.leaves[target_index].leaf_hash
-
-        # For each branch, check if our target is involved
-        for branch in self.branches:
-            # Check if target_hash is one of the inputs to this branch
-            if self._hash_in_branch_ancestry(target_hash, branch):
-                # Find the sibling hash
-                if branch.left != target_hash:
-                    path.append(branch.left)
-                    target_hash = branch.branch_hash
-                elif branch.right != target_hash:
-                    path.append(branch.right)
-                    target_hash = branch.branch_hash
-
-        return path
-
-    def _get_unbalanced_merkle_path(self, target_index: int) -> list[bytes]:
-        """Get merkle path for unbalanced tree construction"""
-        path = []
-
-        if target_index == 0:
-            # First leaf - path includes second leaf, then all subsequent branch hashes
-            if len(self.leaves) > 1:
-                path.append(self.leaves[1].leaf_hash)
-                # Add remaining branches that don't include our target
-                for i in range(1, len(self.branches)):
-                    path.append(self.leaves[i + 1].leaf_hash)
-        else:
-            # Other leaves - path includes the branch hash from previous combinations
-            # This is simpler to compute by traversing the stored branches
-            return self._traverse_for_path(target_index)
-
-        return path
-
-    def _hash_in_branch_ancestry(self, target_hash: bytes, branch: Branch) -> bool:
-        """Check if a hash is used in constructing this branch"""
-        return target_hash == branch.left or target_hash == branch.right
+    # def get_merkle_path(self, leaf_script: bytes) -> list[bytes]:
+    #     """
+    #     Given a leaf script, return the merkle path (list of sibling hashes) needed to reconstruct the root.
+    #     Returns empty list if leaf_script is not found in the tree.
+    #     """
+    #     # Find the target leaf
+    #     target_leaf = None
+    #     target_index = None
+    #     for i, leaf in enumerate(self.leaves):
+    #         if leaf.leaf_script == leaf_script:
+    #             target_leaf = leaf
+    #             target_index = i
+    #             break
+    #
+    #     if target_leaf is None:
+    #         return []  # Leaf not found
+    #
+    #     if len(self.leaves) == 1:
+    #         return []  # Single leaf tree has empty path
+    #
+    #     if self.balanced:
+    #         return self._get_balanced_merkle_path(target_index)
+    #     else:
+    #         return self._get_unbalanced_merkle_path(target_index)
+    #
+    # def _get_balanced_merkle_path(self, target_index: int) -> list[bytes]:
+    #     """Get merkle path for balanced tree construction"""
+    #     path = []
+    #     current_index = target_index
+    #     level_size = len(self.leaves)
+    #
+    #     # Work our way up the tree level by level
+    #     while level_size > 1:
+    #         # Find sibling index
+    #         if current_index % 2 == 0:
+    #             # Left node, sibling is to the right
+    #             sibling_index = current_index + 1
+    #             if sibling_index >= level_size:
+    #                 # Odd number of nodes, sibling is itself (duplicated)
+    #                 sibling_index = current_index
+    #         else:
+    #             # Right node, sibling is to the left
+    #             sibling_index = current_index - 1
+    #
+    #         # Find the sibling hash at this level
+    #         if level_size == len(self.leaves):
+    #             # First level - use leaf hashes
+    #             sibling_hash = self.leaves[sibling_index].leaf_hash
+    #         else:
+    #             # Higher levels - find corresponding branch hash
+    #             # This is complex for balanced trees, so we'll use a simpler approach
+    #             # by reconstructing the path from the stored branches
+    #             pass
+    #
+    #         path.append(sibling_hash)
+    #         current_index //= 2
+    #         level_size = (level_size + 1) // 2
+    #
+    #     # For simplicity in balanced trees, we'll use branch traversal
+    #     return self._traverse_for_path(target_index)
+    #
+    # def _traverse_for_path(self, target_index: int) -> list[bytes]:
+    #     """Traverse stored branches to find path - works for both balanced and unbalanced"""
+    #     path = []
+    #     target_hash = self.leaves[target_index].leaf_hash
+    #
+    #     # For each branch, check if our target is involved
+    #     for branch in self.branches:
+    #         # Check if target_hash is one of the inputs to this branch
+    #         if self._hash_in_branch_ancestry(target_hash, branch):
+    #             # Find the sibling hash
+    #             if branch.left != target_hash:
+    #                 path.append(branch.left)
+    #                 target_hash = branch.branch_hash
+    #             elif branch.right != target_hash:
+    #                 path.append(branch.right)
+    #                 target_hash = branch.branch_hash
+    #
+    #     return path
+    #
+    # def _get_unbalanced_merkle_path(self, target_index: int) -> list[bytes]:
+    #     """Get merkle path for unbalanced tree construction"""
+    #     path = []
+    #
+    #     if target_index == 0:
+    #         # First leaf - path includes second leaf, then all subsequent branch hashes
+    #         if len(self.leaves) > 1:
+    #             path.append(self.leaves[1].leaf_hash)
+    #             # Add remaining branches that don't include our target
+    #             for i in range(1, len(self.branches)):
+    #                 path.append(self.leaves[i + 1].leaf_hash)
+    #     else:
+    #         # Other leaves - path includes the branch hash from previous combinations
+    #         # This is simpler to compute by traversing the stored branches
+    #         return self._traverse_for_path(target_index)
+    #
+    #     return path
+    #
+    # def _hash_in_branch_ancestry(self, target_hash: bytes, branch: Branch) -> bool:
+    #     """Check if a hash is used in constructing this branch"""
+    #     return target_hash == branch.left or target_hash == branch.right
 
     @staticmethod
     def eval_merkle_path(leaf_script: bytes, merkle_path: bytes) -> bytes:

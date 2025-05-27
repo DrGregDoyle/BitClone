@@ -5,6 +5,7 @@ script folder used to house all files dealing with Bitcoin Script language and e
 from src.script.op_codes import OPCODES
 from src.script.script_engine import ScriptEngine
 from src.script.script_parser import ScriptParser
+from src.script.script_tree import ScriptTree, Leaf, Branch
 from src.script.script_type import ScriptType
 from src.script.script_validator import ScriptValidator
 from src.script.scriptpubkey_factory import ScriptType, ScriptPubKey, ScriptPubKeyFactory
