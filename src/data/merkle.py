@@ -6,8 +6,7 @@ We then have two children: BlackTree and TaprootTree; Markle trees designed for 
 import json
 import math
 
-from src.crypto import hash256, tagged_hash_function, HashType
-from src.data import write_compact_size
+from src.crypto import hash256
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -142,106 +141,3 @@ class MerkleTree:
 
     def __repr__(self):
         return json.dumps(self.hex_tree, indent=2)
-
-
-class ScriptTree:
-    """
-    A Merkle Tree class for the taproot
-    """
-    VERSION = 0xc0  # 192
-    VERSION_BYTE = b'\xc0'
-
-    def __init__(self, script_list: list[bytes], version: int = 0xc0, linear: bool = False):
-
-        self.version = version
-        self.script_list = script_list
-        self.leaves = self._get_leaves(script_list)
-        self.linear = linear
-
-        self.tree = self._get_tree()
-        self.root = self.tree[0]
-
-    def _encode_script(self, script):
-        """
-        Returns VERSION_BYTE + CompactSize(len(script)) + script
-        """
-        return self.VERSION_BYTE + write_compact_size(len(script)) + script
-
-    def _get_leaves(self, script_list: list[bytes]):
-        """
-        We return the
-        """
-
-        encoded_scripts = [self._encode_script(s) for s in script_list]
-        hashed_scrips = [tagged_hash_function(es, b"TapLeaf", HashType.SHA256) for es in encoded_scripts]
-        return sorted(hashed_scrips)
-
-    def _get_tree(self):
-        if not self.leaves:
-            raise ValueError("No leaves to construct Taproot Merkle tree.")
-
-        nodes = self.leaves[:]
-
-        if self.linear:
-            # Linear tree: combine first two lexicographically, then chain remaining
-            while len(nodes) > 1:
-                if len(nodes) == 2:
-                    a, b = sorted([nodes.pop(0), nodes.pop(0)])
-                else:
-                    a = nodes.pop(0)
-                    b = nodes.pop(0)
-                parent = tagged_hash_function(a + b, b"TapBranch", HashType.SHA256)
-                nodes.insert(0, parent)
-        else:
-            # Balanced tree: standard pairwise construction with lexicographic pairing
-            nodes = sorted(nodes)
-            while len(nodes) > 1:
-                next_level = []
-                for i in range(0, len(nodes) - 1, 2):
-                    a, b = sorted([nodes[i], nodes[i + 1]])
-                    parent = tagged_hash_function(a + b, b"TapBranch", HashType.SHA256)
-                    next_level.append(parent)
-                if len(nodes) % 2 == 1:
-                    next_level.append(nodes[-1])
-                nodes = next_level
-
-        return nodes
-
-    @staticmethod
-    def eval_merkle_path(leaf_hash: bytes, merkle_path: bytes) -> bytes:
-        """
-        Computes the Merkle root given a leaf hash and its associated merkle path.
-        The merkle_path must be a multiple of 32 bytes.
-        """
-        path_length = len(merkle_path)
-        if path_length % 32 != 0:
-            raise ValueError("Merkle path must be a multiple of 32 bytes")
-
-        current_hash = leaf_hash
-
-        for i in range(0, path_length, 32):
-            node = merkle_path[i:i + 32]
-
-            # Lexicographic order
-            pair = current_hash + node if current_hash < node else node + current_hash
-            current_hash = tagged_hash_function(pair, b"TapBranch", HashType.SHA256)
-
-        return current_hash
-
-    def get_merkle_path(self, leaf_script: bytes):
-        pass
-
-
-# -- TESTING
-if __name__ == "__main__":
-    hash_list = [
-        bytes.fromhex("5187"),
-        bytes.fromhex("5287"),
-        bytes.fromhex("5387"),
-        bytes.fromhex("5487"),
-        bytes.fromhex("5587")
-    ]
-    test_tree = ScriptTree(script_list=hash_list, linear=True)
-    print(test_tree.root.hex())
-    for x in range(len(test_tree.leaves)):
-        print(f"LEAF: {x + 1}, HASH: {test_tree.leaves[x].hex()}")
