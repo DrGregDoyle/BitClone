@@ -100,7 +100,7 @@ class ScriptTree:
             level = next_level
         return level[0].branch_hash  # root
 
-    def _build_unbalanced_tree(self, leaves: list[bytes]):
+    def _build_unbalanced_tree(self, leaves: list[Leaf]):
         """
         Build unbalanced tree - first two leaves make up branch 1, then every subsequent leaf + previous branch makes
         the next branch. The final branch is the merkle root
@@ -130,21 +130,81 @@ class ScriptTree:
         if leaf_script not in self.scripts:
             raise ValueError(f"Given leaf script not in scripts list: {leaf_script}")
 
-        # Create leaf
-        leaf = Leaf(leaf_script)
+        # Get leaf hash
+        leaf_hash = Leaf(leaf_script).leaf_hash
 
         # Handled based on balanced
         if self.balanced:
-            return self._get_balanced_merkle_path(leaf)
+            return self._get_balanced_merkle_path(leaf_hash)
         else:
-            return self._get_unbalanced_merkle_path(leaf.leaf_hash)
+            return self._get_unbalanced_merkle_path(leaf_hash)
 
-    def _get_balanced_merkle_path(self, leaf: Leaf):
-        pass
+    def _get_balanced_merkle_path(self, leaf_hash: bytes):
+        target_hash = leaf_hash
+        merkle_path = b''
 
-    def _get_unbalanced_merkle_path(self, leaf: Leaf):
-        # Find the leaf hash index
-        hash_index = self.leaves.index(leaf)
+        # Start with the leaves level
+        current_level = [leaf_obj.leaf_hash for leaf_obj in self.leaves]
+
+        while len(current_level) > 1:
+            # Find target hash in current level
+            if target_hash not in current_level:
+                raise ValueError("Target hash not found in current level")
+
+            index = current_level.index(target_hash)
+
+            # Find sibling
+            sibling_index = index + 1 if index % 2 == 0 else index - 1
+
+            # Handle odd number of nodes (duplicate last node)
+            if sibling_index >= len(current_level):
+                sibling_hash = current_level[index]  # Duplicate self
+            else:
+                sibling_hash = current_level[sibling_index]
+
+            # Add sibling to merkle path
+            merkle_path += sibling_hash
+
+            # Build next level
+            next_level = []
+            for i in range(0, len(current_level), 2):
+                left = current_level[i]
+                right = current_level[i + 1] if i + 1 < len(current_level) else current_level[i]
+
+                # Create branch with lexicographic sorting (as Branch class does)
+                branch = Branch(left, right)
+                next_level.append(branch.branch_hash)
+
+            # Update target_hash for next iteration
+            target_hash = Branch(target_hash, sibling_hash).branch_hash
+            current_level = next_level
+
+        return merkle_path
+
+    def _get_unbalanced_merkle_path(self, leaf_hash: bytes):
+        # Find the leaf hash index using next() with enumerate
+        try:
+            hash_index = next(i for i, leaf_obj in enumerate(self.leaves) if leaf_obj.leaf_hash == leaf_hash)
+        except StopIteration:
+            raise ValueError("Leaf hash not found")
+
+        # Create merkle_path
+        if hash_index <= 1:
+            # Get the other leaf from the first pair
+            other_index = 1 - hash_index  # Will be 0 if hash_index is 1 and vice versa
+            initial_hash = self.leaves[other_index].leaf_hash
+            merkle_path = initial_hash + b''.join(b.branch_hash for b in self.branches)
+        else:
+            # Combine branch and leaf hashes in one comprehension
+            branch_hashes = (self.branches[x].branch_hash for x in range(hash_index - 1))
+            leaf_hashes = (self.leaves[y].leaf_hash for y in range(hash_index + 1, len(self.leaves)))
+            merkle_path = b''.join(branch_hashes) + b''.join(leaf_hashes)
+
+        # Verify (optional - you might want to remove this in production for performance)
+        if self.eval_merkle_path(self.leaves[hash_index].leaf_script, merkle_path) != self.root:
+            raise ValueError("Created merkle path failed to calculate merkle root.")
+
+        return merkle_path
 
     @staticmethod
     def eval_merkle_path(leaf_script: bytes, merkle_path: bytes) -> bytes:
@@ -169,3 +229,36 @@ class ScriptTree:
             current_hash = temp_branch.branch_hash
 
         return current_hash
+
+
+# --- TESTING
+if __name__ == "__main__":
+    leaf_script1 = bytes.fromhex("5187")
+    leaf_script2 = bytes.fromhex("5287")
+    leaf_script3 = bytes.fromhex("5387")
+    leaf_script4 = bytes.fromhex("5487")
+    leaf_script5 = bytes.fromhex("5587")
+
+    leaves = [leaf_script1, leaf_script2, leaf_script3, leaf_script4, leaf_script5]
+
+    test_tree = ScriptTree(leaves, balanced=False)
+    test_merkle_path = test_tree.get_merkle_path(leaf_script3)
+
+    balanced_tree = ScriptTree(leaves, balanced=True)
+    test_balanced_merklepath = balanced_tree.get_merkle_path(leaf_script3)
+
+    # Unbalanced test tree from learnmeabitcoin.com
+    print("=== UNBALANCED TREE ===")
+    print(f"MERKLE ROOT: {test_tree.root.hex()}")
+    print(f"MERKLE PATH: {test_merkle_path.hex()}")
+    print(f"LEAF HASHES: {[l.leaf_hash.hex() for l in test_tree.leaves]}")
+    print(f"BRANCHES: {[b.branch_hash.hex() for b in test_tree.branches]}")
+    print("===" * 80)
+
+    # Balanced tree
+    print("=== BALANCED TREE ===")
+    print(f"MERKLE ROOT: {balanced_tree.root.hex()}")
+    print(f"MERKLE PATH: {test_balanced_merklepath.hex()}")
+    print(f"LEAF HASHES: {[l.leaf_hash.hex() for l in balanced_tree.leaves]}")
+    print(f"BRANCHES: {[b.branch_hash.hex() for b in balanced_tree.branches]}")
+    print("===" * 80)
