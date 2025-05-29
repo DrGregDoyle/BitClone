@@ -3,7 +3,7 @@ Helper functions for the mathematics of elliptic curves
 """
 
 
-def legendre_symbol(r: int, p: int):
+def legendre_symbol(r: int, p: int) -> int:
     """
     Returns (r | p) = {
         0 if r % p == 0
@@ -11,7 +11,7 @@ def legendre_symbol(r: int, p: int):
         -1 if r % p != 0 and r is a quadratic non-residue mod p
     }
     We use Euler's criterion which states:
-        (r | p) = r^((p-1)/1) (mod p)
+        (r | p) = r^((p-1)/2) (mod p)
     """
     if r % p == 0:
         return 0
@@ -27,14 +27,14 @@ def is_quadratic_residue(n: int, p: int) -> bool:
     return True if legendre_symbol(n, p) != -1 else False
 
 
-def tonelli_shanks(n: int, p: int):
+def tonelli_shanks(n: int, p: int) -> int | None:
     """
-    If n is a quadratic residue mod p, then we return an integer r such that r^2 = n (mod p).
+    Assuming n is a quadratic residue mod p, we return an integer r such that r^2 = n (mod p).
     """
 
     # Verify n is a quadratic residue
     if not is_quadratic_residue(n, p):
-        return None
+        raise ValueError("Tonelli Shanks called on quadratic non-residue")
 
     # Trivial case
     if n % p == 0:

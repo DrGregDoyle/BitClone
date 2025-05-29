@@ -9,8 +9,6 @@ import secrets
 
 from src.crypto.ecc_math import tonelli_shanks, legendre_symbol
 
-MAX_PRIME = pow(2, 19) - 1  # 7th Mersenne Prime
-
 
 class EllipticCurve:
 

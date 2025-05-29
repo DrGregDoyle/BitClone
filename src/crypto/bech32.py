@@ -23,6 +23,8 @@
 from enum import Enum
 from typing import List, Optional, Tuple
 
+__all__ = ["convertbits", "bech32_encode", "bech32_decode", "Encoding"]
+
 
 class Encoding(Enum):
     """Enumeration type to list the various supported encodings."""

@@ -7,7 +7,7 @@ NOTES:
 """
 
 from src.crypto import hash256, ecdsa, verify_ecdsa, sha256, tagged_hash_function, HashType, ORDER, \
-    generator_exponent, PRIME, get_y_pt_from_x, scalar_multiplication, add_points
+    generator_exponent, PRIME, get_pt_from_x, scalar_multiplication, add_points
 from src.data import write_compact_size, encode_der_signature, to_little_bytes, get_public_key_point, \
     decode_der_signature
 from src.logger import get_logger
@@ -297,7 +297,7 @@ class SignatureEngine:
             raise ValueError("Given x coordinate doesn't satisfy value restrictions")
 
         # Calculate even y point
-        public_key = get_y_pt_from_x(x)
+        public_key = get_pt_from_x(x)
 
         # Extract signature parts
         r, s = signature[:32], signature[32:]

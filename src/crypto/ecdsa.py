@@ -7,10 +7,12 @@ Fixed to run on secp256k1 elliptic curve.
 
 import secrets
 
-from src.crypto import secp256k1
+from src.crypto.curve_utils import ORDER, generator_exponent, scalar_multiplication, add_points
 from src.logger import get_logger
 
 logger = get_logger(__name__)
+
+__all__ = ["ecdsa", "verify_ecdsa"]
 
 
 def ecdsa(private_key: int, message_hash: bytes):
@@ -41,8 +43,8 @@ def ecdsa(private_key: int, message_hash: bytes):
 
     """
     # 1) Create elliptic curve object and assign n
-    curve = secp256k1()
-    n = curve.order
+    # curve = secp256k1()
+    n = ORDER  # curve.order
 
     # 2) Take the first n bits of the message using a binary mask
     z = int.from_bytes(message_hash, byteorder='big') & ((1 << n.bit_length()) - 1)
@@ -57,7 +59,7 @@ def ecdsa(private_key: int, message_hash: bytes):
                 break
 
         # 4) Calculate the curve point (x, y) = k * generator
-        x, y = curve.multiply_generator(k)
+        x, y = generator_exponent(k)  # curve.multiply_generator(k)
 
         # 5) Compute r and s
         r = x % n
@@ -110,8 +112,9 @@ def verify_ecdsa(signature: tuple, message_hash: bytes, public_key: tuple) -> bo
     5) If r = x (mod n), the signature is valid.
     """
     # Get elliptic curve and order
-    curve = secp256k1()
-    n = curve.order
+    # curve = secp256k1()
+    # n = curve.order
+    n = ORDER
 
     # Get signature values
     r, s = signature
@@ -133,9 +136,9 @@ def verify_ecdsa(signature: tuple, message_hash: bytes, public_key: tuple) -> bo
     u2 = (r * s_inv) % n
 
     # 4) Calculate the point
-    p1 = curve.multiply_generator(u1)
-    p2 = curve.scalar_multiplication(u2, public_key)
-    point = curve.add_points(p1, p2)
+    p1 = generator_exponent(u1)  # curve.multiply_generator(u1)
+    p2 = scalar_multiplication(u2, public_key)  # curve.scalar_multiplication(u2, public_key)
+    point = add_points(p1, p2)  # curve.add_points(p1, p2)
 
     # 5) Check if r matches x (mod n), and handle point at infinity
     if point is None:

@@ -3,18 +3,15 @@ The generate signature has a verification method in it, so we need only sign a t
 """
 from secrets import randbits, token_bytes
 
-from src.crypto import secp256k1, ecdsa, verify_ecdsa
+from src.crypto import ecdsa, verify_ecdsa, generator_exponent
 
 BIT_LENGTH = 256
 
 
 def test_ecdsa():
-    # Standard curve
-    curve = secp256k1()
-
     # Random 256-bit private key
     private_key = randbits(BIT_LENGTH)
-    public_key = curve.multiply_generator(private_key)
+    public_key = generator_exponent(private_key)
 
     # Message = 32 random bytes
     message = token_bytes(32)

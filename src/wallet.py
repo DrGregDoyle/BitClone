@@ -7,7 +7,7 @@ HD Wallet
 import abc
 from secrets import randbits
 
-from src.crypto import secp256k1, sha256, pbkdf2, hmac_sha512, hash160
+from src.crypto import sha256, pbkdf2, hmac_sha512, hash160, generator_exponent, ORDER, add_points
 from src.data import compress_public_key, decompress_public_key, encode_base58check, encode_bech32, WORDLIST
 from src.logger import get_logger
 
@@ -118,7 +118,6 @@ class ExtendedKey(abc.ABC):
     Abstract base class for HD extended keys (xprv/xpub).
     Holds common BIP32 metadata: chain code, depth, parent fingerprint, child number, version bytes.
     """
-    CURVE = secp256k1()
     HARDENED_INDEX = 0x80000000
 
     # Mainnet Version bytes
@@ -276,7 +275,7 @@ class XPrv(ExtendedKey):
         Return the compressed public key derived from the stored private key.
         """
         return compress_public_key(
-            self.CURVE.multiply_generator(int.from_bytes(self.private_key, "big"))
+            generator_exponent(int.from_bytes(self.private_key, "big"))
         )
 
     def to_xpub(self) -> "XPub":
@@ -316,10 +315,10 @@ class XPrv(ExtendedKey):
         # 5. Get new private key as integer
         temp_int = int.from_bytes(temp, byteorder="big")
         privkey_int = int.from_bytes(self.private_key, byteorder="big")
-        new_privkey_int = (privkey_int + temp_int) % self.CURVE.order
+        new_privkey_int = (privkey_int + temp_int) % ORDER
 
         # 6. Validate results
-        if temp_int >= self.CURVE.order or new_privkey_int == 0:
+        if temp_int >= ORDER or new_privkey_int == 0:
             raise ValueError("Invalid child derivation.")
 
         # 7. Get new private key as bytes object
@@ -398,11 +397,8 @@ class XPub(ExtendedKey):
 
         # 5. Get new public key through elliptic curve pt addition
         temp_int = int.from_bytes(temp, byteorder="big")
-        temp_pt = self.CURVE.multiply_generator(temp_int)
-        new_pubkey_pt = self.CURVE.add_points(
-            point1=self.public_key_point,
-            point2=temp_pt
-        )
+        temp_pt = generator_exponent(temp_int)
+        new_pubkey_pt = add_points(self.public_key_point, temp_pt)
 
         # 6. Compress new public key
         new_public_key = compress_public_key(new_pubkey_pt)
@@ -521,7 +517,7 @@ class HDWallet:
 
     def _p2wpkh_address(self, pubkey: bytes) -> str:
         """Pay-to-Witness-PubKeyHash: Bech32(0x00 + hash160(pubkey))"""
-        pubkeyhash = hash160(pubkey).hex()
+        pubkeyhash = hash160(pubkey)
         return encode_bech32(pubkeyhash)
 
     # def _p2pkh_address(self, pubkey: bytes) -> str:

@@ -4,7 +4,7 @@ Tests for verifying schnorr signatures
 
 from secrets import randbits
 
-from src.crypto import secp256k1, hash_function, HashType, schnorr_signature, verify_schnorr_signature
+from src.crypto import hash_function, HashType, schnorr_signature, verify_schnorr_signature, ORDER, generator_exponent
 
 BIT_LENGTH = 256
 HASHTYPE = HashType.SHA256
@@ -12,8 +12,8 @@ HASHTYPE = HashType.SHA256
 
 def test_schnorr():
     # Setup curve
-    curve = secp256k1()
-    n = curve.order
+    # curve = secp256k1()
+    n = ORDER
 
     def random_bytes():
         random_num = randbits(BIT_LENGTH)
@@ -21,7 +21,7 @@ def test_schnorr():
 
     # Random private_key
     privkey = randbits(BIT_LENGTH) % n
-    x, _ = curve.multiply_generator(privkey)
+    x, _ = generator_exponent(privkey)
 
     # Random auxiliary bytes
     aux_bytes = random_bytes()

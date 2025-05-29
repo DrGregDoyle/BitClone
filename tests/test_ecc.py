@@ -4,7 +4,7 @@ Testing the Point and EllipticCurve classes and methods
 import random
 import secrets
 
-from src.crypto import EllipticCurve, secp256k1
+from src.crypto.ecc import EllipticCurve, secp256k1
 
 
 def test_elliptic_curve_functions():

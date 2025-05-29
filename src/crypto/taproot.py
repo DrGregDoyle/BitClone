@@ -1,50 +1,9 @@
 """
 We create the utility class Taproot, for use in taproot signature schemes
 """
-from src.crypto.ecc import secp256k1
+from src.crypto.curve_utils import get_y_from_x, get_pt_from_x, generator_exponent, add_points, ORDER
 from src.crypto.hash_functions import tagged_hash_function, HashType
 from src.data import write_compact_size
-
-
-# class Taproot:
-#     """
-#     Utility class for P2TR signatures and scripts
-#     """
-#     VERSION_BYTE = b'\xc0'
-#     XONLY_PUBKEY_BYTES = 32
-#     HASHTYPE = HashType.SHA256
-#     curve = secp256k1()
-#
-#     # --- Helpers
-#
-#     def _verify_pubkey(self, xonly_pubkey: bytes) -> bool:
-#         """
-#         Verifies pubkey is 32 bytes and a coordinate on the curve
-#         """
-#         # Check byte length
-#         if len(xonly_pubkey) != self.XONLY_PUBKEY_BYTES:
-#             return False
-#
-#         # Verify point on curve
-#         x = int.from_bytes(xonly_pubkey, "big")
-#         return self.curve.is_x_on_curve(x)
-#
-
-#
-#     def _encode_leaf(self, leaf: bytes):
-#         """
-#         Returns encoding for TapLeaf hash
-#         """
-#         return self.VERSION_BYTE + write_compact_size(len(leaf)) + leaf
-#
-#     # --- Hashing
-
-#
-#     def tap_leaf(self, leaf_script: bytes):
-#         """
-#         Returns the TapLeaf hash of the encoded leaf
-#         """
-#         return tagged_hash_function(self._encode_leaf(leaf_script), b'TapLeaf', self.HASHTYPE)
 
 
 class Taproot:
@@ -53,7 +12,6 @@ class Taproot:
     """
     PUBKEYBYTES = 32
     HASHTYPE = HashType.SHA256
-    curve = secp256k1()
     VERSION_INT = 192
     VERSION_BYTE = b'\xc0'
 
@@ -63,7 +21,7 @@ class Taproot:
         """
         x = int.from_bytes(xonly_pubkey, "big")
         try:
-            y = self.curve.find_y_from_x(x)  # Will return ValueError if x not on curve
+            y = get_y_from_x(x)  # Will return ValueError if x not on curve
         except ValueError as e:
             raise e
         return x, y
@@ -72,10 +30,8 @@ class Taproot:
         """
         Given an x-coordinate, we return an integer tuple with even y-coordinate
         """
-        x, y = self._get_curve_pt(xonly_pubkey)
-        if y % 2 != 0:
-            y = self.curve.p - y
-        return x, y
+        x_int = int.from_bytes(xonly_pubkey, "big")
+        return get_pt_from_x(x_int)  # Returns even by default
 
     def tap_tweak(self, data: bytes):
         """
@@ -152,20 +108,20 @@ class Taproot:
         pubkey_pt = self._get_pubkey_pt(xonly_pubkey)
 
         # Get tweak point
-        tweak_int = int.from_bytes(tweak, "big") % self.curve.order
-        tweak_pt = self.curve.multiply_generator(tweak_int)
+        tweak_int = int.from_bytes(tweak, "big") % ORDER
+        tweak_pt = generator_exponent(tweak_int)
 
         # Return sum of points
-        return self.curve.add_points(pubkey_pt, tweak_pt)
+        return add_points(pubkey_pt, tweak_pt)
 
     def tweak_privkey(self, privkey: int, tweak: bytes):
         # Check pubkey
-        x, y = self.curve.multiply_generator(privkey)
+        x, y = generator_exponent(privkey)
         if y % 2 != 0:
-            privkey = self.curve.order - privkey
+            privkey = ORDER - privkey
 
         # Tweaked private key
-        tweaked_privkey = (privkey + int.from_bytes(tweak, "big")) % self.curve.order
+        tweaked_privkey = (privkey + int.from_bytes(tweak, "big")) % ORDER  # self.curve.order
         return tweaked_privkey.to_bytes((tweaked_privkey.bit_length() + 7) // 8, "big")
 
 

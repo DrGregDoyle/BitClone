@@ -119,6 +119,6 @@ def pbkdf2(mnemonic: list, passphrase='', iterations=2048, dklen=64) -> bytes:
 
 # --- TESTING
 if __name__ == "__main__":
-    data = bytes.fromhex("deadbeef")
-    leaf_hash = tagged_hash_function(data, b"TapLeaf", HashType.SHA256)
+    _data = bytes.fromhex("deadbeef")
+    leaf_hash = tagged_hash_function(_data, b"TapLeaf", HashType.SHA256)
     print(f"LEAF HASH: {leaf_hash.hex()}")
