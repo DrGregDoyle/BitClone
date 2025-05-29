@@ -32,9 +32,3 @@ class SigHash(IntEnum):
             btc_num = BTCNum(int(self.value)).padded(4)
             return btc_num
         return bytes.fromhex("00" * 4)
-
-
-if __name__ == "__main__":
-    sighash_default = SigHash(0)
-    print(sighash_default.to_byte().hex())
-    print(sighash_default.for_hashing().hex())

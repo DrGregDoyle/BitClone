@@ -324,22 +324,3 @@ class ScriptPubKeyFactory:
     @staticmethod
     def p2tr(tweaked_pubkey: bytes, testnet: bool = False) -> ScriptPubKey:
         return ScriptPubKey(ScriptType.P2TR, tweaked_pubkey, testnet=testnet)
-
-# --- TESTING
-# if __name__ == "__main__":
-#     from secrets import randbits
-#     from src.data import compress_public_key
-#
-#     # Example: Generate P2PK script
-#     curve = secp256k1()
-#     priv_key = randbits(256) % curve.p
-#     pk_pt = curve.multiply_generator(priv_key)
-#     _pubkey = compress_public_key(pk_pt)
-#
-#     # Create P2PK script using the factory method
-#     _p2pk_script = ScriptPubKey(ScriptType.P2PK, _pubkey)
-#     print(_p2pk_script.to_json())
-#
-#     # Create P2PKH script
-#     _p2pkh_script = ScriptPubKey(ScriptType.P2PKH, _pubkey)
-#     print(_p2pkh_script.to_json())

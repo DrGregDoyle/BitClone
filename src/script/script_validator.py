@@ -155,7 +155,6 @@ class ScriptValidator:
                         input_index=input_index,
                         utxos=[utxo]
                     )
-                    print(f"RECOVERED SIGHASH: {sighash.hex()}")
 
                     # -- Return verify signature
                     return self.signature_engine.verify_schnorr_signature(
@@ -184,29 +183,21 @@ class ScriptValidator:
                     leaf_version = control_byte & 0xfe  # bitwise & operator, 0xfe = 0x1111 1110.
                     parity = control_byte & 0x01  # bitwise & operator, 0x01 = 0x0000 0001
                     internal_key = control_block[1:33]  # xonly_pubkey
-                    print(f"INTERNAL KEY: {internal_key.hex()}")
                     merkle_path = control_block[33:]  # No merkle path for a single leaft
-                    print(f"MERKLE PATH: {merkle_path.hex()}")
 
                     # Compute leaf hash
                     leaf_data = leaf_version.to_bytes(1, "big") + write_compact_size(len(leaf_script)) + leaf_script
                     leaf_hash = tagged_hash_function(leaf_data, b'TapLeaf', HashType.SHA256)
-                    print(f"LEAF DATA: {leaf_data.hex()}")
-                    print(f"LEAF HASH: {leaf_hash.hex()}")
 
                     # Compute merkle root
                     merkle_root = ScriptTree.eval_merkle_path(leaf_hash, merkle_path)
-                    print(f"MERKLE ROOT: {merkle_root.hex()}")
 
                     # Compute default extension
                     extension = leaf_hash + b'\x00' + bytes.fromhex("ffffffff")
-                    print(f"EXTENSION: {extension.hex()}")
 
                     # Compute tweak
                     taptweak_input = internal_key + merkle_root
-                    print(f"TWEAK DATA: {taptweak_input.hex()}")
                     tweak = tagged_hash_function(taptweak_input, b"TapTweak", HashType.SHA256)
-                    print(f"TWEAK: {tweak.hex()}")
 
                     # Creeate tapscript engine and push inputs
                     tapscript_engine = ScriptEngine(tapscript=True)

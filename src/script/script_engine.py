@@ -168,13 +168,13 @@ class ScriptEngine:
     def _dispatch_opcode(self, opcode: int) -> bool:
         handler = self.op_handlers.get(opcode)
         if not handler:
-            print(f"Unknown opcode: {opcode:02x}")
+            logger.warning(f"Unknown opcode: {opcode:02x}")
             return False
         try:
             result = handler()
             return True if result is None else result
         except Exception as e:
-            print(f"Error executing opcode {opcode:02x}: {e}")
+            logger.error(f"Error executing opcode {opcode:02x}: {e}")
             return False
 
     def _read_opcode(self, stream: BytesIO) -> int:
@@ -221,13 +221,6 @@ class ScriptEngine:
         """
         # Pop pubkey and signature from stack
         pubkey, signature = self.stack.pop_n(2)
-
-        # --- TESTING
-
-        print("---" * 80)
-        print(f"CHECKSIG PUBKEY: {pubkey.hex()}")
-        print(f"SIGNATURE: {signature.hex()}")
-        print(f"===" * 60)
 
         # Verify sig
         if not self.tapscript:
@@ -324,11 +317,6 @@ class ScriptEngine:
         sig = signature[:-1]
         sighash_flag = signature[-1]
 
-        print(f"64 byte signature: {sig.hex()}")
-        print(f"SIGHASH FLAG: {sighash_flag}")
-        print(f"SIGHASH TYPE: {SigHash(sighash_flag)}")
-        print(f"TX BEFORE GETTING SIGHASH: {self._tx.to_json()}")
-
         taproot_sighash = self.sig_engine.get_taproot_sighash(
             tx=self._tx,
             input_index=self._input_index,
@@ -336,8 +324,6 @@ class ScriptEngine:
             extension=self._script_code,
             hash_type=SigHash(sighash_flag)
         )
-
-        print(f"TAPSCRIPT SIGHASH: {taproot_sighash.hex()}")
 
         return self.sig_engine.verify_schnorr_signature(int.from_bytes(xonly_pubkey, "big"), taproot_sighash, sig)
 

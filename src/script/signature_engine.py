@@ -200,16 +200,6 @@ class SignatureEngine:
         else:
             comsig_message += spend_type + txin_outpoint + txin_amount + txin_scriptpubkey + txin_sequence + hash_annex
 
-        # --- VALIDATION
-        # print(f"SHA PREVOUTS: {hashed_prevouts.hex()}")
-        # print(f"SHA AMOUNTS: {hashed_amounts.hex()}")
-        # print(f"SHA SEQUENCES: {hashed_sequences.hex()}")
-        # print(f"SHA SCRIPTPUBKEYS: {hashed_scriptpubkeys.hex()}")
-        # print("---" * 80)
-        # print(f"SHA OUTPUTS: {hashed_outputs.hex()}")
-        #
-        # print(f"COMSIG MESSAGE + EXTENSION: {(comsig_message + extension).hex()}")
-
         # Return taggedhash
         return tagged_hash_function(sighash_epoch + comsig_message + extension, b'TapSighash', HashType.SHA256)
 
@@ -285,9 +275,6 @@ class SignatureEngine:
         # Construct signature
         r = px
         s = (private_nonce + challenge * private_key) % n
-
-        # print(f"CONSTRUCTED R: {hex(r)[2:]}")
-        # print(f"CONSTRUCTED S: {hex(s)[2:]}")
 
         # Return 64 byte signature
         return r.to_bytes(32, "big") + s.to_bytes(32, "big")
