@@ -8,6 +8,9 @@ from typing import Callable
 
 import unicodedata
 
+__all__ = ["HashType", "tagged_hash_function", "sha1", "sha256", "hash256", "ripemd160", "hash160", "hmac_sha512",
+           "pbkdf2"]
+
 
 class HashType(Enum):
     SHA1 = auto()
@@ -36,24 +39,12 @@ def hash_function(encoded_data: bytes, function_type: HashType):
     return func(encoded_data)
 
 
-def tagged_hash_function(encoded_data: bytes, tag: bytes, function_type: HashType):
+def tagged_hash_function(encoded_data: bytes, tag: bytes, function_type: HashType = HashType.SHA256):
     # Get hash of tag
     hashed_tag = hash_function(tag, function_type=function_type)
 
     # Return  HASH(hashed_tag + hashed_tag + encoded_data)
     return hash_function(hashed_tag + hashed_tag + encoded_data, function_type=function_type)
-
-
-def tap_tweak(data: bytes, hash_type: HashType = HashType.SHA256):
-    return tagged_hash_function(data, b'TapTweak', hash_type)
-
-
-def tap_leaf(data: bytes, hash_type: HashType = HashType.SHA256):
-    return tagged_hash_function(data, b'TapLeaf', hash_type)
-
-
-def tap_branch(data: bytes, hash_type: HashType = HashType.SHA256):
-    return tagged_hash_function(data, b'TapBranch', hash_type)
 
 
 # HASHLIB

@@ -5,6 +5,8 @@ from src.crypto.curve_utils import get_y_from_x, get_pt_from_x, generator_expone
 from src.crypto.hash_functions import tagged_hash_function, HashType
 from src.data import write_compact_size
 
+__all__ = ["Taproot"]
+
 
 class Taproot:
     """

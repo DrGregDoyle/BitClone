@@ -4,12 +4,12 @@ Methods for Schnorr signatures
 
 from src.crypto.curve_utils import ORDER, PRIME, generator_exponent, scalar_multiplication, add_points, \
     get_pt_from_x
-from src.crypto.hash_functions import tagged_hash_function, HashType
+from src.crypto.hash_functions import tagged_hash_function
 from src.logger import get_logger
 
 logger = get_logger(__name__)
 
-HASHTYPE = HashType.SHA256
+__all__ = ["schnorr_signature", "verify_schnorr_signature"]
 
 
 def schnorr_signature(private_key: int, message: bytes, auxiliary_bits: bytes):
@@ -23,15 +23,14 @@ def schnorr_signature(private_key: int, message: bytes, auxiliary_bits: bytes):
         private_key = ORDER - private_key
 
     # Create private nonce
-    aux_rand_hash = tagged_hash_function(encoded_data=auxiliary_bits, tag=b"BIP0340/aux", function_type=HASHTYPE)
+    aux_rand_hash = tagged_hash_function(encoded_data=auxiliary_bits, tag=b"BIP0340/aux")
 
     # XOR private key with aux_rand_hash
     nonce_input_value = private_key ^ int.from_bytes(aux_rand_hash, byteorder="big")
 
     # Create final private nonce
     nonce_input_bytes = nonce_input_value.to_bytes(32, "big") + x.to_bytes(32, "big") + message
-    private_nonce_bytes = tagged_hash_function(encoded_data=nonce_input_bytes, tag=b"BIP0340/nonce",
-                                               function_type=HASHTYPE)
+    private_nonce_bytes = tagged_hash_function(encoded_data=nonce_input_bytes, tag=b"BIP0340/nonce")
     private_nonce = int.from_bytes(private_nonce_bytes, byteorder="big") % ORDER
 
     # Calculate public nonce - Negate private_nonce if necessary
@@ -41,8 +40,7 @@ def schnorr_signature(private_key: int, message: bytes, auxiliary_bits: bytes):
 
     # Calculate the challenge
     challenge_input_bytes = px.to_bytes(32, "big") + x.to_bytes(32, "big") + message
-    challenge_bytes = tagged_hash_function(encoded_data=challenge_input_bytes, tag=b"BIP0340/challenge",
-                                           function_type=HASHTYPE)
+    challenge_bytes = tagged_hash_function(encoded_data=challenge_input_bytes, tag=b"BIP0340/challenge")
     challenge = int.from_bytes(challenge_bytes, byteorder="big") % ORDER
 
     # Construct signature
@@ -88,8 +86,7 @@ def verify_schnorr_signature(public_key_x: int, message: bytes, signature: bytes
     challenge_data = num_r.to_bytes(32, "big") + x.to_bytes(32, "big") + message
 
     # hex_to_bytes(r, hex(x), message.hex())
-    challenge_bytes = tagged_hash_function(encoded_data=challenge_data, tag=b"BIP0340/challenge",
-                                           function_type=HASHTYPE)
+    challenge_bytes = tagged_hash_function(encoded_data=challenge_data, tag=b"BIP0340/challenge")
     challenge = int.from_bytes(challenge_bytes, byteorder="big") % ORDER
 
     # Verify the signature
