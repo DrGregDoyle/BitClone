@@ -5,6 +5,10 @@ import re
 import struct
 from io import BytesIO
 
+__all__ = ["check_hex", "read_compact_size", "write_compact_size", "byte_format", "to_little_bytes",
+           "from_little_bytes", "target_to_bits", "bits_to_target", "target_to_bits_from_hex",
+           "bits_to_target_from_hex", "check_length", "bits_to_target_int"]
+
 
 def check_hex(hex_string: str) -> str:
     """

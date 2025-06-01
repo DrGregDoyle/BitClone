@@ -3,7 +3,6 @@ Methods for encoding and decoding
 """
 
 import re
-from typing import Tuple
 
 from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature, decode_dss_signature
 
@@ -11,6 +10,9 @@ from src.crypto import hash256, convertbits, bech32_encode, bech32_decode, Encod
 from src.logger import get_logger
 
 logger = get_logger(__name__)
+
+__all__ = ["encode_base58", "decode_base58", "encode_base58check", "decode_base58check", "encode_bech32",
+           "decode_bech32", "encode_der_signature", "decode_der_signature"]
 
 # --- BASE58 ENCODING --- #
 BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
@@ -75,7 +77,7 @@ def encode_base58check(data: bytes) -> str:
     return encode_base58(data + checksum)
 
 
-def decode_base58check(data: str) -> Tuple[bytes, bytes]:
+def decode_base58check(data: str) -> tuple[bytes, bytes]:
     """
     Given a string of base58Check chars, we decode it and return data and checksum.
     Raise ValueError if checksum fails

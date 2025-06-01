@@ -5,6 +5,8 @@ from src.crypto import generator_exponent, get_y_from_x, PRIME, get_pt_from_x
 
 PUBKEY_BYTELENGTH = 32
 
+__all__ = ["compress_public_key", "decompress_public_key", "get_public_key_point"]
+
 
 # --- ECC PUBLIC/PRIVATE KEY ENCODING --- #
 
@@ -38,7 +40,7 @@ def compress_public_key(*args) -> bytes:
     return prefix + x_bytes
 
 
-def decompress_public_key(compressed_key: bytes) -> tuple:
+def decompress_public_key(compressed_key: bytes) -> tuple[int, int]:
     if len(compressed_key) != 33:
         raise ValueError("Invalid compressed public key length (must be 33 bytes).")
 
