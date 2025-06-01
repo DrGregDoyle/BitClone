@@ -16,8 +16,7 @@ from src.tx import Transaction, Input, UTXO
 
 logger = get_logger(__name__)
 
-
-# HASHTYPE = HashType.SHA256
+__all__ = ["SignatureEngine"]
 
 
 class SignatureEngine:

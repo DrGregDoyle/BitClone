@@ -8,6 +8,8 @@ from src.script.scriptpubkey_factory import ScriptPubKey
 
 logger = get_logger(__name__)
 
+__all__ = ["ScriptSigFactory"]
+
 
 # --- SCRIPT SIG CLASS --- #
 class ScriptSig:

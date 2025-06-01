@@ -5,6 +5,8 @@ from io import BytesIO
 
 from src.script import OPCODES
 
+__all__ = ["ScriptParser"]
+
 
 class ScriptParser:
 

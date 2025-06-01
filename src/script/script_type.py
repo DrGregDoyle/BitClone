@@ -1,5 +1,7 @@
 from enum import Enum
 
+__all__ = ["ScriptType"]
+
 
 class ScriptType(Enum):
     P2PK = "P2PK"

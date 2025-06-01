@@ -3,15 +3,16 @@ A class for Taproot merkle trees
 """
 from __future__ import annotations
 
-from src.crypto import tagged_hash_function, HashType
+from src.crypto import tagged_hash_function
 from src.data import write_compact_size
+
+__all__ = ["Leaf", "Branch", "ScriptTree"]
 
 # --- TAPROOT CONSTANTS
 VERSION_BYTE = b'\xc0'
 LEAF_TAG = b'TapLeaf'
 BRANCH_TAG = b'TapBranch'
 TWEAK_TAG = b'TapTweak'
-HASH_TYPE = HashType.SHA256
 HASH_SIZE = 32
 
 
@@ -22,7 +23,7 @@ class Leaf:
 
     def __init__(self, leaf_script: bytes):
         self.leaf_script = leaf_script
-        self.leaf_hash = tagged_hash_function(self._encode_data(leaf_script), LEAF_TAG, HASH_TYPE)
+        self.leaf_hash = tagged_hash_function(self._encode_data(leaf_script), LEAF_TAG)
 
     def _encode_data(self, leaf_script: bytes):
         return VERSION_BYTE + write_compact_size(len(leaf_script)) + leaf_script
@@ -52,7 +53,7 @@ class Branch:
 
         self.left = min(_hash1, _hash2)
         self.right = max(_hash1, _hash2)
-        self.branch_hash = tagged_hash_function(self.left + self.right, BRANCH_TAG, HASH_TYPE)
+        self.branch_hash = tagged_hash_function(self.left + self.right, BRANCH_TAG)
 
 
 class ScriptTree:

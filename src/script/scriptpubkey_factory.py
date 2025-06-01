@@ -10,6 +10,8 @@ from src.script.script_type import ScriptType
 
 logger = get_logger(__name__)
 
+__all__ = ["ScriptPubKey", "ScriptPubKeyFactory"]
+
 
 class ScriptPubKey:
     """

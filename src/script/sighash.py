@@ -5,6 +5,8 @@ from enum import IntEnum
 
 from src.script.stack import BTCNum
 
+__all__ = ["SigHash"]
+
 
 class SigHash(IntEnum):
     DEFAULT = 0

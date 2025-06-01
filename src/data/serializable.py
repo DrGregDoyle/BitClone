@@ -11,6 +11,8 @@ from src.data.data_handling import check_hex
 
 T = TypeVar('T', bound='Serializable')
 
+__all__ = ["Serializable"]
+
 
 class Serializable(ABC):
     """

@@ -4,9 +4,9 @@ Classes for BTCNum and BTCStack
 from collections import deque
 from typing import List, Optional, TypeVar, Generic
 
-from src.script.stackerr import StackError, EmptyStackError, StackIndexError, InsufficientElementsError
-
 T = TypeVar('T')  # Generic type for stack elements
+
+__all__ = ["BTCNum", "BTCStack"]
 
 
 class BTCNum:
@@ -463,3 +463,30 @@ class BTCStack(Generic[T]):
     def nip(self):
         items = self.pop_n(2)
         self.push(items[0])
+
+
+# --- Stack Errors --- #
+class StackError(Exception):
+    """Base exception for stack operations."""
+    pass
+
+
+class EmptyStackError(StackError):
+    """Raised when attempting to access or remove elements from an empty stack."""
+    pass
+
+
+class StackIndexError(StackError):
+    """Raised when attempting to access an invalid stack index."""
+    pass
+
+
+class InsufficientElementsError(StackError):
+    """Raised when an operation requires more elements than available."""
+
+    def __init__(self, message="Not enough elements on stack", required=None, available=None):
+        self.required = required
+        self.available = available
+        if required is not None and available is not None:
+            message = f"{message}. Required: {required}, Available: {available}"
+        super().__init__(message)

@@ -146,23 +146,4 @@ OP_ALIASES = {
 }
 
 
-def create_op_class():
-    class OP:
-        pass
 
-    # Primary mapping: OP.<NAME> = <byte>
-    for byteval, name in OPCODES.items():
-        attr_name = name.removeprefix("OP_")
-        setattr(OP, attr_name, bytes([byteval]))
-
-    # Add aliases (e.g., OP.TRUE = OP._1)
-    for alias, canonical in OP_ALIASES.items():
-        alias_name = alias.removeprefix("OP_")
-        target_name = canonical.removeprefix("OP_")
-        if hasattr(OP, target_name):
-            setattr(OP, alias_name, getattr(OP, target_name))
-
-    return OP
-
-
-OP = create_op_class()

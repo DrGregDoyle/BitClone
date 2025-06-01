@@ -14,6 +14,8 @@ from src.tx import Transaction, UTXO
 
 logger = get_logger(__name__)
 
+__all__ = ["ScriptValidator"]
+
 
 class ScriptValidator:
     """
