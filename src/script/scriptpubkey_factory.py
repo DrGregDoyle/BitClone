@@ -326,3 +326,10 @@ class ScriptPubKeyFactory:
     @staticmethod
     def p2tr(tweaked_pubkey: bytes, testnet: bool = False) -> ScriptPubKey:
         return ScriptPubKey(ScriptType.P2TR, tweaked_pubkey, testnet=testnet)
+
+
+# --- TESTING
+if __name__ == "__main__":
+    test_pubkey = ScriptPubKey.from_script(bytes.fromhex(
+        "41047eda6bd04fb27cab6e7c28c99b94977f073e912f25d1ff7165d9c95cd9bbe6da7e7ad7f2acb09e0ced91705f7616af53bee51a238b7dc527f2be0aa60469d140ac"))
+    print(f"TEST PUBKEY: {test_pubkey.to_json()}")

@@ -6,6 +6,7 @@ from pathlib import Path
 from src.block import Block
 from src.data import to_little_bytes
 from src.db import BitCloneDatabase, DB_PATH
+from src.script import ScriptValidator
 
 
 class Blockchain:
@@ -13,6 +14,9 @@ class Blockchain:
     def __init__(self, db_path: Path = DB_PATH):
         # Load DB
         self.db = BitCloneDatabase(db_path)
+
+        # Create script validator
+        self.validator = ScriptValidator(self.db)
 
         # Get block reward
         self.block_reward = 0
@@ -32,7 +36,6 @@ class Blockchain:
             merkle_root=new_block.merkle_tree.merkle_root,
             nonce=new_block.nonce
         )
-        self.height += 1
 
     def validate_block(self, block: Block) -> bool:
         """
@@ -40,6 +43,12 @@ class Blockchain:
             -All transactions pass validation
             
         """
+        # Validate all txs
+        for tx in block.txs:
+            for n in range(len(tx.inputs)):
+                valid_txin = self.validator.validate_utxo(tx, n)
+                if not valid_txin:
+                    return False
         return True
 
     def create_coinbase_tx(self, outputs: [list], script_sig: bytes = b''):
@@ -66,3 +75,4 @@ if __name__ == "__main__":
     random_block = get_random_block()
     test_chain.add_block(random_block)
     print(f"TEST CHAIN HEIGHT: {test_chain.height}")
+

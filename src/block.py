@@ -66,6 +66,9 @@ class BlockHeader(Serializable):
     def block_id_num(self):
         return int.from_bytes(self.block_id, byteorder="little")
 
+    def increment(self):
+        self.nonce += 1
+
 
 class Block(Serializable):
     """
@@ -80,7 +83,7 @@ class Block(Serializable):
     """
     __slots__ = ('prev_block', 'txs', 'tx_count', 'merkle_tree', 'timestamp', 'bits', 'nonce', 'version')
 
-    def __init__(self, prev_block: bytes, transactions: list, timestamp: int, bits: bytes, nonce: int,
+    def __init__(self, prev_block: bytes, transactions: list[Transaction], timestamp: int, bits: bytes, nonce: int,
                  version: int = None):
         # Get fixed header values
         self.prev_block = prev_block
@@ -155,22 +158,8 @@ class Block(Serializable):
         self.nonce += 1
 
 
-# -- TESTING
-
+# --- TESTING
 if __name__ == "__main__":
-    pass
-    # def get_random_block_header(tx_num: int = 3):
-    #     return BlockHeader(
-    #         version=randbits(32),
-    #         prev_block=token_bytes(32),
-    #         merkle_root=token_bytes(32),
-    #         timestamp=randbits(32),
-    #         bits=token_bytes(4),
-    #         nonce=randbits(32)
-    #     )
-    #
-    #
-    # random_header = get_random_block_header()
-    # print(f"RANDOM HEADER ID: {random_header.block_id.hex()}")
-    # random_header.increment()
-    # print(f"RANDOM HEADER NONCE +1: {random_header.block_id.hex()}")
+    test_header = BlockHeader.from_bytes(bytes.fromhex(
+        "01000000d4c87e278279e3d4ef8084eef377dbbea2152457d3502c6bb50c0000000000005c5a279737f23e3376595d5f4dfbaf88664421ce21820a00592c13780323aa83338bfe4d8521131a0412de7a"))
+    print(f"TEST HEADER: {test_header.to_json()}")

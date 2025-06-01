@@ -31,6 +31,11 @@ class ScriptValidator:
         """
         Validates input scriptSig + scriptPubKey (and redeemScript if P2SH).
         """
+        # Check input_index
+        if input_index >= len(tx.inputs):  # index starts at 0
+            logger.error("Input index out of bounds")
+            return False
+
         # --- Get UTXO
         _input = tx.inputs[input_index]
         utxo_tuple = self.db.get_utxo(_input.txid, _input.vout)

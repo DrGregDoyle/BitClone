@@ -442,9 +442,10 @@ class Transaction(Serializable):
         Return a list of UTXOs associated with the transaction
         """
         utxo_list = []
+        txid = self.txid()
         for p in self.outputs:
             output_index = self.outputs.index(p)
-            utxo_list.append(UTXO(self.txid(), output_index, p.amount, p.script_pubkey))
+            utxo_list.append(UTXO(txid, output_index, p.amount, p.script_pubkey))
         return utxo_list
 
     def to_bytes(self) -> bytes:
@@ -545,3 +546,7 @@ if __name__ == "__main__":
     print(f"EMPTY WITNESS: {w1.to_json()}")
     print(f"EMPTY WITNESS BYTES: {w1.to_bytes().hex()}")
     print(f"CONSTRUCTED WITNESS: {Witness.from_bytes(w1.to_bytes()).to_json()}")
+
+    test_tx = Transaction.from_bytes(bytes.fromhex(
+        "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0804233fa04e028b12ffffffff0130490b2a010000004341047eda6bd04fb27cab6e7c28c99b94977f073e912f25d1ff7165d9c95cd9bbe6da7e7ad7f2acb09e0ced91705f7616af53bee51a238b7dc527f2be0aa60469d140ac00000000"))
+    print(f"TEST TX: {test_tx.to_json()}")
