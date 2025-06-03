@@ -5,7 +5,7 @@ import io
 import struct
 
 from src.crypto import hash256
-from src.data import Serializable, write_compact_size, check_length, read_compact_size, MerkleTree
+from src.data import Serializable, check_length, read_compact_size, MerkleTree, write_compact_size
 from src.logger import get_logger
 from src.tx import Transaction
 
@@ -93,7 +93,7 @@ class Block(Serializable):
         self.version = version or self.VERSION
 
         # Get txs and merkle tree
-        self.tx_count = write_compact_size(len(transactions))
+        self.tx_count = len(transactions)
         self.txs = transactions
         self.merkle_tree = MerkleTree([tx.txid() for tx in self.txs])
 
@@ -142,14 +142,14 @@ class Block(Serializable):
             tx_serial += tx.to_bytes()
 
         # Return serialization
-        return self.header.to_bytes() + self.tx_count + tx_serial
+        return self.header.to_bytes() + write_compact_size(self.tx_count) + tx_serial
 
     def to_dict(self):
 
         block_dict = {
             "id": self.id[::-1].hex(),  # Reverse bytes for display
             "header": self.header.to_dict(),
-            "tx_count": self.tx_count.hex(),
+            "tx_count": write_compact_size(self.tx_count).hex(),
             "txs": [tx.to_dict() for tx in self.txs]
         }
         return block_dict
@@ -163,3 +163,7 @@ if __name__ == "__main__":
     test_header = BlockHeader.from_bytes(bytes.fromhex(
         "01000000d4c87e278279e3d4ef8084eef377dbbea2152457d3502c6bb50c0000000000005c5a279737f23e3376595d5f4dfbaf88664421ce21820a00592c13780323aa83338bfe4d8521131a0412de7a"))
     print(f"TEST HEADER: {test_header.to_json()}")
+
+    test_block = Block.from_bytes(bytes.fromhex(
+        "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c0101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff4d04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73ffffffff0100f2052a01000000434104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac00000000"))
+    print(f"GENESIS BLOCK: {test_block.to_json()}")

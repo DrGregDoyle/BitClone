@@ -323,7 +323,7 @@ class Transaction(Serializable):
 
     """
     __slots__ = ('version', 'inputs', 'outputs', 'locktime', 'witnesses', 'input_count', 'output_count', 'segwit',
-                 '_cached_non_witness_bytes', '_cached_wtxid_bytes', 'sighash')
+                 '_cached_non_witness_bytes', '_cached_wtxid_bytes', 'sighash', 'coinbase')
 
     def __init__(self, inputs: list[Input] = None, outputs: list[Output] = None, witnesses: list[Witness] = None,
                  locktime: int = 0, version: int = None, segwit: bool = True):
@@ -343,10 +343,11 @@ class Transaction(Serializable):
         # Check or fill witnesses
         if self.segwit:
             # Check witnesses
-            if self.witnesses and len(self.witnesses) != len(self.inputs):
-                raise ValueError("Given number of witness objects doesn't agree with number of inputs")
-            # No witnesses case
+            if self.witnesses:
+                if len(self.witnesses) != len(self.inputs):
+                    raise ValueError("Given number of witness objects doesn't agree with number of inputs")
             else:
+                # No witnesses case for segwit tx
                 self.witnesses = [Witness() for _ in range(len(self.inputs))]
 
         self._cached_non_witness_bytes = None  # Cache for txid computation
@@ -541,6 +542,33 @@ class Transaction(Serializable):
         return version_bytes + inputs_bytes + outputs_bytes + locktime_bytes
 
 
+class Coinbase(Transaction):
+    def __init__(self, script_sig: bytes = None, outputs: list[Output] = None, locktime: int = 0, version: int = None,
+                 segwit: bool = True):
+        inputs = [make_coinbase_input(script_sig)]
+        witnesses = [make_coinbase_witness()] if segwit else []
+
+        super().__init__(
+            inputs=inputs,
+            outputs=outputs,
+            witnesses=witnesses,
+            locktime=locktime,
+            version=version,
+            segwit=segwit
+        )
+        self.coinbase = True
+
+
+def make_coinbase_input(script_sig: bytes, sequence: int = 0xffffffff) -> Input:
+    txid = b'\x00' * 32
+    vout = 0xffffffff
+    return Input(txid, vout, script_sig, sequence)
+
+
+def make_coinbase_witness():
+    return Witness([WitnessItem(b'\x00' * 32)])
+
+
 if __name__ == "__main__":
     w1 = Witness()
     print(f"EMPTY WITNESS: {w1.to_json()}")
@@ -550,3 +578,6 @@ if __name__ == "__main__":
     test_tx = Transaction.from_bytes(bytes.fromhex(
         "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0804233fa04e028b12ffffffff0130490b2a010000004341047eda6bd04fb27cab6e7c28c99b94977f073e912f25d1ff7165d9c95cd9bbe6da7e7ad7f2acb09e0ced91705f7616af53bee51a238b7dc527f2be0aa60469d140ac00000000"))
     print(f"TEST TX: {test_tx.to_json()}")
+
+    test_coinbase = Coinbase(script_sig=bytes.fromhex("deadbeef"), outputs=[])
+    print(test_coinbase.to_json())

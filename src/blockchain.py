@@ -7,6 +7,7 @@ from src.block import Block
 from src.data import to_little_bytes
 from src.db import BitCloneDatabase, DB_PATH
 from src.script import ScriptValidator
+from src.tx import Input, Witness, WitnessItem, Output, Transaction
 
 
 class Blockchain:
@@ -51,10 +52,31 @@ class Blockchain:
                     return False
         return True
 
-    def create_coinbase_tx(self, outputs: [list], script_sig: bytes = b''):
+    def create_coinbase_tx(self, outputs: list[Output], script_sig: bytes = b'', segwit: bool = True):
+
+        # Coinbase elements
+        coinbase_input = self._create_coinbase_input(script_sig)
+        coinbase_witness = self._create_coinbase_witness()
+
+        # Tx based on segwit
+        if segwit:
+            coinbase_tx = Transaction([coinbase_input], outputs, [coinbase_witness])
+        else:
+            coinbase_tx = Transaction([coinbase_input], outputs)
+        return coinbase_tx
+
+    def _create_coinbase_input(self, scriptsig: bytes):
+        """
+        BIP 34 | Current height at start of script_sig
+        """
         coinbase_txid = b'\x00' * 32  # txid = all zeros
         cointbase_vout = 0xffffffff  # vout = max value
-        script_sig = to_little_bytes(self.height) + script_sig  # BIP 34 | Current height at start of script_sig
+        coinbase_scriptsig = to_little_bytes(self.height) + scriptsig  # BIP 34
+        coinbase_sequence = 0xffffffff  # sequence = max value
+        return Input(coinbase_txid, cointbase_vout, coinbase_scriptsig, coinbase_sequence)
+
+    def _create_coinbase_witness(self):
+        return Witness([WitnessItem(b'\x00' * 32)])
 
     @property
     def last_block(self):
@@ -75,4 +97,5 @@ if __name__ == "__main__":
     random_block = get_random_block()
     test_chain.add_block(random_block)
     print(f"TEST CHAIN HEIGHT: {test_chain.height}")
-
+    test_coinbase_tx = test_chain.create_coinbase_tx([], b'\x41')
+    print(f"COINBASE TX: {test_coinbase_tx.to_json()}")
