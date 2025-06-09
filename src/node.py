@@ -360,24 +360,32 @@ if __name__ == "__main__":
     greg_version = Version.from_bytes(greg_payload)
     print(f"GREG VERSION: {greg_version.to_json()}")
 
-    sock = node.connect_to_node()
+    decoded_version_bytes = bytes.fromhex(
+        "80110100090c000000000000bba2456800000000000000000000000000000000000000000000ffffc654ed0ac99f090c0000000000000000000000000000000000000000000000006aa695794768844e102f5361746f7368693a32382e302e302ffcbc0d0001")
+    decoded_version = Version.from_bytes(decoded_version_bytes)
+    print(f"LEARN ME A BITCOIN VERSION")
+    print(f"---" * 80)
+    print(decoded_version.to_json())
+    print(f"---" * 80)
 
-    if sock:
-        print(f"SUCCESS: CONNECTED TO {sock.getpeername()}")
-        print(f"SOCKET: {sock}")
-
-        # -- Handshake
-        greg_payload = node.get_version_payload(learnmeabitcoin_ip)
-        greg_header = node.get_version_header(payload=greg_payload)
-        node.send_message(sock, greg_header + greg_payload)
-
-        # Get version
-        node.receive_message(sock)
-
-        # Get verack
-        node.receive_message(sock)
-
-        # Send verack
-        node.send_message(sock, Node.VERACK)
-
-        sock.close()
+    # sock = node.connect_to_node()
+    #
+    # if sock:
+    #     print(f"SUCCESS: CONNECTED TO {sock.getpeername()}")
+    #     print(f"SOCKET: {sock}")
+    #
+    #     # -- Handshake
+    #     greg_payload = node.get_version_payload(learnmeabitcoin_ip)
+    #     greg_header = node.get_version_header(payload=greg_payload)
+    #     node.send_message(sock, greg_header + greg_payload)
+    #
+    #     # Get version
+    #     node.receive_message(sock)
+    #
+    #     # Get verack
+    #     node.receive_message(sock)
+    #
+    #     # Send verack
+    #     node.send_message(sock, Node.VERACK)
+    #
+    #     sock.close()

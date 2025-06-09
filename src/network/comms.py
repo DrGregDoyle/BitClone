@@ -5,12 +5,20 @@ import io
 import json
 
 from src.crypto import hash256
-from src.data import check_length
+from src.data import check_length, Serializable
 
 
-class Header:
+class Header(Serializable):
     """
     Header class used for sending messages in BitClone
+    -------------------------------------
+    |   Name    | Format    | Byte size |
+    -------------------------------------
+    |   Magic Bytes | bytes         | 4 |
+    | command       | ascii bytes   | 12|
+    | size          | little-endian | 4 |
+    | checksum      | bytes         | 4 |
+    -------------------------------------
     """
     # --- MAGIC BYTES
     MAINNET_MB = bytes.fromhex("f9beb4d9")
@@ -62,6 +70,17 @@ class Header:
 
         return cls(magic_bytes, command, size, checksum)
 
+    @classmethod
+    def from_payload(cls, payload: bytes, command: str = "version", magic_bytes: bytes = MAINNET_MB):
+        size = len(payload)
+        checksum = hash256(payload)[:4]
+        return cls(magic_bytes, command, size, checksum)
+
+    def to_bytes(self):
+        # Encode command as ASCII and pad/truncate to 12 bytes
+        command_bytes = self.command.encode("ascii").ljust(12, b'\x00')[:12]
+        return self.magic_bytes + command_bytes + self.size.to_bytes(4, "little") + self.checksum
+
     def to_dict(self):
         header_dict = {
             "magic_bytes": self.magic_bytes.hex(),
@@ -89,3 +108,9 @@ if __name__ == "__main__":
     _header = Header.from_bytes(test_header_bytes)
     print(_header.to_json())
     print(f"PAYLOAD PASSES CHECKSUM: {_header.verify_payload(test_payload_bytes)}")
+
+    _fp_header = Header.from_payload(test_payload_bytes)
+    print(f"FROM PAYLOAD HEDER: {_fp_header.to_json()}")
+
+    _tobytesfrom_header = Header.from_bytes(_header.to_bytes())
+    print(f"FROM BYTES TO BYTES HEADER: {_tobytesfrom_header.to_json()}")
