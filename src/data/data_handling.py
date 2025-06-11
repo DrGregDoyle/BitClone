@@ -7,7 +7,7 @@ from io import BytesIO
 
 __all__ = ["check_hex", "read_compact_size", "write_compact_size", "byte_format", "to_little_bytes",
            "from_little_bytes", "target_to_bits", "bits_to_target", "target_to_bits_from_hex",
-           "bits_to_target_from_hex", "check_length", "bits_to_target_int"]
+           "bits_to_target_from_hex", "check_length", "bits_to_target_int", "bytes_to_binary_string"]
 
 
 def check_hex(hex_string: str) -> str:
@@ -110,6 +110,10 @@ def byte_format(data: bytes, length: int):
         return data.rjust(diff, b'\x00')  # Pad with 0 bytes
     else:
         raise ValueError("data size greater than length")
+
+
+def bytes_to_binary_string(b: bytes):
+    return bin(int.from_bytes(b, 'big'))[2:].zfill(len(b) * 8)
 
 
 def check_length(data: bytes, length: int, value: str):

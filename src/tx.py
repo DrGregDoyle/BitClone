@@ -581,3 +581,7 @@ if __name__ == "__main__":
 
     test_coinbase = Coinbase(script_sig=bytes.fromhex("deadbeef"), outputs=[])
     print(test_coinbase.to_json())
+
+    tx_with_magic_bytes = bytes.fromhex(
+        "")
+    mb_tx = Transaction.from_bytes(tx_with_magic_bytes)
