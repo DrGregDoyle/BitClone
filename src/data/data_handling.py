@@ -1,37 +1,36 @@
 """
 Methods for handling data in BitClone
 """
-import re
 import struct
 from io import BytesIO
 
-__all__ = ["check_hex", "read_compact_size", "write_compact_size", "byte_format", "to_little_bytes",
-           "from_little_bytes", "target_to_bits", "bits_to_target", "target_to_bits_from_hex",
-           "bits_to_target_from_hex", "check_length", "bits_to_target_int", "bytes_to_binary_string"]
+__all__ = ["read_compact_size", "write_compact_size", "byte_format", "to_little_bytes",
+           "from_little_bytes", "target_to_bits", "bits_to_target", "check_length", "bits_to_target_int",
+           "bytes_to_binary_string"]
 
 
-def check_hex(hex_string: str) -> str:
-    """
-    Checks the validity of the hex string
-
-    Returns:
-        hex_string: formatter hex string
-
-    Raises:
-        ValueError: If hex_string is not of str type
-        ValueError: If the hex_string contains a character outside the hex alphabet.
-    """
-    # Type
-    if not isinstance(hex_string, str):
-        raise ValueError(f"Input not of str type. Type; {type(hex_string)}")
-
-    # Remove 0x prefix if present
-    hex_string = (hex_string[2:] if hex_string.startswith('0x') else hex_string).lower()
-
-    # Validate hex string
-    if len(hex_string) % 2 != 0 or not re.fullmatch(r'^[0-9a-f]+$', hex_string):
-        raise ValueError("Invalid hex format: must be an even-length hexadecimal string.")
-    return hex_string
+# def check_hex(hex_string: str) -> str:
+#     """
+#     Checks the validity of the hex string
+#
+#     Returns:
+#         hex_string: formatter hex string
+#
+#     Raises:
+#         ValueError: If hex_string is not of str type
+#         ValueError: If the hex_string contains a character outside the hex alphabet.
+#     """
+#     # Type
+#     if not isinstance(hex_string, str):
+#         raise ValueError(f"Input not of str type. Type; {type(hex_string)}")
+#
+#     # Remove 0x prefix if present
+#     hex_string = (hex_string[2:] if hex_string.startswith('0x') else hex_string).lower()
+#
+#     # Validate hex string
+#     if len(hex_string) % 2 != 0 or not re.fullmatch(r'^[0-9a-f]+$', hex_string):
+#         raise ValueError("Invalid hex format: must be an even-length hexadecimal string.")
+#     return hex_string
 
 
 def read_compact_size(stream: bytes | BytesIO):
@@ -136,10 +135,10 @@ def from_little_bytes(little_bytes: bytes) -> int:
     return int.from_bytes(little_bytes, "little")
 
 
-def target_to_bits_from_hex(target: str) -> str:
-    # Check str
-    check_hex(target)
-    return target_to_bits(bytes.fromhex(target)).hex()
+# def target_to_bits_from_hex(target: str) -> str:
+#     # Check str
+#     check_hex(target)
+#     return target_to_bits(bytes.fromhex(target)).hex()
 
 
 def target_to_bits(target: bytes) -> bytes:
@@ -176,9 +175,9 @@ def bits_to_target_int(bits: bytes) -> int:
     return target_int
 
 
-def bits_to_target_from_hex(bits: str) -> str:
-    check_hex(bits)
-    return bits_to_target(bytes.fromhex(bits)).hex()
+# def bits_to_target_from_hex(bits: str) -> str:
+#     check_hex(bits)
+#     return bits_to_target(bytes.fromhex(bits)).hex()
 
 
 # --- TESTING
