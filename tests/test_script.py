@@ -9,6 +9,10 @@ import pytest
 from src.script import ScriptEngine, BTCNum
 
 
+# TODO - Modify scripts to use bytes
+# TODO - Use common scripts for different scenarios for shorthand
+# TODO - Add tests for IF type conditional logic scripts
+
 @pytest.fixture
 def engine():
     return ScriptEngine()

@@ -8,4 +8,3 @@ from src.crypto.curve_utils import *
 from src.crypto.ecdsa import *
 from src.crypto.hash_functions import *
 from src.crypto.schnorr import *
-from src.crypto.taproot import *

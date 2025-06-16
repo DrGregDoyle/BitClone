@@ -12,7 +12,6 @@ from io import BytesIO
 from typing import Callable, Dict, Optional
 
 from src.crypto import ripemd160, sha1, sha256, hash160, hash256
-from src.data import check_hex
 from src.logger import get_logger
 from src.script.op_codes import OPCODES
 from src.script.signature_engine import SignatureEngine, SigHash
@@ -359,8 +358,7 @@ class ScriptEngine:
         if isinstance(script, str):
             # Check hex
             try:
-                hex_script = check_hex(script)
-                script = bytes.fromhex(hex_script)
+                script = bytes.fromhex(script)
             except ValueError as e:
                 raise ValueError(f"Error evaluating hex script: {e}")
 

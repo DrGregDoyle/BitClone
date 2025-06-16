@@ -179,3 +179,11 @@ class Version(Serializable):
 
     def to_json(self):
         return json.dumps(self.to_dict(), indent=2)
+
+
+# --- TESTING
+if __name__ == "__main__":
+    test_version_bytes = bytes.fromhex(
+        "80110100090c00000000000047564b6800000000000000000000000000000000000000000000ffffc654ed0ad049090c00000000000000000000000000000000000000000000000018e1ff1e44c4dd0c102f5361746f7368693a32382e302e302f7bbf0d0001")
+    test_version_obj = Version.from_bytes(test_version_bytes)
+    print(f"TEST VERSION: {test_version_obj.to_json()}")
