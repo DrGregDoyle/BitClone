@@ -5,8 +5,8 @@ DB class. Handles Txs, UTXOs and Blocks
 import sqlite3
 from pathlib import Path
 
+from src.data.utxo import UTXO
 from src.logger import get_logger
-from src.tx import UTXO
 
 logger = get_logger(__name__)
 

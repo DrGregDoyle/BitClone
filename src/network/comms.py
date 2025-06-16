@@ -17,7 +17,7 @@ from typing import Any
 
 from src.block import Block
 from src.crypto import hash256
-from src.data import check_length, Serializable
+from src.data import Serializable, get_stream, read_stream, read_little_int
 from src.network import Version
 from src.tx import Transaction
 
@@ -61,28 +61,20 @@ class Header(Serializable):
         -----------------------------------------
         """
         # Setup stream
-        if not isinstance(byte_stream, (bytes, io.BytesIO)):
-            raise ValueError(f"Expected byte data stream, received {type(byte_stream)}")
+        stream = get_stream(byte_stream)
 
-        stream = io.BytesIO(byte_stream) if isinstance(byte_stream, bytes) else byte_stream
-
-        # magic_bytes
-        magic_bytes = stream.read(4)
-        check_length(magic_bytes, 4, "magic_bytes")
+        # Magic bytes
+        magic_bytes = read_stream(stream, 4, "magic_bytes")
 
         # command
-        command_bytes = stream.read(12)
-        check_length(command_bytes, 12, "command")
+        command_bytes = read_stream(stream, 12, "command")
         command = command_bytes.decode("ascii").rstrip("\x00")
 
         # size
-        size_bytes = stream.read(4)
-        check_length(size_bytes, 4, "size")
-        size = int.from_bytes(size_bytes, "little")
+        size = read_little_int(stream, 4, "Header.size")
 
         # checksum
-        checksum = stream.read(4)
-        check_length(checksum, 4, "checksum")
+        checksum = read_stream(stream, 4, "checksum")
 
         return cls(magic_bytes, command, size, checksum)
 

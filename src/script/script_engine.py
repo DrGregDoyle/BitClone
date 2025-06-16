@@ -12,11 +12,12 @@ from io import BytesIO
 from typing import Callable, Dict, Optional
 
 from src.crypto import ripemd160, sha1, sha256, hash160, hash256
+from src.data.utxo import UTXO
 from src.logger import get_logger
 from src.script.op_codes import OPCODES
 from src.script.signature_engine import SignatureEngine, SigHash
 from src.script.stack import BTCStack, BTCNum
-from src.tx import Transaction, UTXO
+from src.tx import Transaction
 
 logger = get_logger(__name__)
 

@@ -7,10 +7,11 @@ from secrets import randbits
 
 from src.crypto import hash160, ORDER, generator_exponent
 from src.data import compress_public_key, write_compact_size, decode_der_signature, encode_der_signature
+from src.data.utxo import UTXO
 from src.logger import get_logger
 from src.script import ScriptValidator, SigHash, ScriptTree, Branch
 from src.taproot import Taproot
-from src.tx import UTXO, Transaction, Input, Output, Witness, WitnessItem
+from src.tx import Transaction, Input, Output, Witness, WitnessItem
 
 logger = get_logger(__name__)
 

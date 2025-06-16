@@ -2,10 +2,9 @@
 Methods for handling data in BitClone
 """
 import struct
-from io import BytesIO
 
-__all__ = ["read_compact_size", "write_compact_size", "byte_format", "to_little_bytes",
-           "from_little_bytes", "target_to_bits", "bits_to_target", "check_length", "bits_to_target_int",
+__all__ = ["write_compact_size", "byte_format", "to_little_bytes",
+           "from_little_bytes", "target_to_bits", "bits_to_target", "bits_to_target_int",
            "bytes_to_binary_string"]
 
 
@@ -31,51 +30,6 @@ __all__ = ["read_compact_size", "write_compact_size", "byte_format", "to_little_
 #     if len(hex_string) % 2 != 0 or not re.fullmatch(r'^[0-9a-f]+$', hex_string):
 #         raise ValueError("Invalid hex format: must be an even-length hexadecimal string.")
 #     return hex_string
-
-
-def read_compact_size(stream: bytes | BytesIO):
-    """
-    Reads a Bitcoin CompactSize (a.k.a. varint) from the given stream.
-
-    The stream can be either a file-like object (supporting .read())
-    or a bytes object.
-
-    Returns:
-        int: The integer value represented by the CompactSize encoding.
-    """
-    # Check type
-    if isinstance(stream, bytes):
-        stream = BytesIO(stream)
-    if not isinstance(stream, BytesIO):
-        raise ValueError(f"Expected byte data stream, received {type(stream)}")
-
-    prefix = stream.read(1)
-    if len(prefix) == 0:
-        raise ValueError("Insufficient data to read CompactSize prefix.")
-
-    prefix_val = prefix[0]
-
-    if prefix_val < 0xfd:
-        # Single-byte value
-        return prefix_val
-    elif prefix_val == 0xfd:
-        # Next 2 bytes as uint16 (little-endian)
-        raw = stream.read(2)
-        if len(raw) < 2:
-            raise ValueError("Insufficient data to read CompactSize (0xfd).")
-        return struct.unpack("<H", raw)[0]
-    elif prefix_val == 0xfe:
-        # Next 4 bytes as uint32 (little-endian)
-        raw = stream.read(4)
-        if len(raw) < 4:
-            raise ValueError("Insufficient data to read CompactSize (0xfe).")
-        return struct.unpack("<I", raw)[0]
-    else:
-        # prefix_val == 0xff -> Next 8 bytes as uint64 (little-endian)
-        raw = stream.read(8)
-        if len(raw) < 8:
-            raise ValueError("Insufficient data to read CompactSize (0xff).")
-        return struct.unpack("<Q", raw)[0]
 
 
 def write_compact_size(value: int) -> bytes:
@@ -115,9 +69,9 @@ def bytes_to_binary_string(b: bytes):
     return bin(int.from_bytes(b, 'big'))[2:].zfill(len(b) * 8)
 
 
-def check_length(data: bytes, length: int, value: str):
-    if len(data) != length:
-        raise ValueError(f"Insufficient data for {value}.")
+# def check_length(data: bytes, length: int, value: str):
+#     if len(data) != length:
+#         raise ValueError(f"Insufficient data for {value}.")
 
 
 def to_little_bytes(num: int, length: int = None):

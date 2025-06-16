@@ -1,13 +1,12 @@
 """
 Types of Messages used in Bitcoin
 """
-import io
 import ipaddress
 import json
 from datetime import datetime
 
-from src.data import Serializable, check_length, from_little_bytes, read_compact_size, to_little_bytes, \
-    write_compact_size, bytes_to_binary_string
+from src.data import Serializable, read_compact_size, to_little_bytes, \
+    write_compact_size, bytes_to_binary_string, get_stream, read_little_int, read_big_int, read_stream
 
 
 class Version(Serializable):
@@ -73,50 +72,25 @@ class Version(Serializable):
         | last block          | little                | 4         |
         -----------------------------------------------------------
         """
-        if not isinstance(byte_stream, (bytes, io.BytesIO)):
-            raise ValueError(f"Expected byte data stream, received {type(byte_stream)}")
-
-        stream = io.BytesIO(byte_stream) if isinstance(byte_stream, bytes) else byte_stream
-
-        # Helpers
-        def read_little_int(stream_size: int, data_type: str):
-            byte_read = stream.read(stream_size)
-            check_length(byte_read, stream_size, data_type)
-            return from_little_bytes(byte_read)
-
-        def read_big_int(stream_size: int, data_type: str):
-            byte_read = stream.read(stream_size)
-            check_length(byte_read, stream_size, data_type)
-            return int.from_bytes(byte_read, "big")
-
-        def read_little_bytes(stream_size: int, data_type: str):
-            byte_read = stream.read(stream_size)
-            check_length(byte_read, stream_size, data_type)
-            return byte_read[::-1]  # Big-endian
+        stream = get_stream(byte_stream)
 
         def read_ip(data_type: str):
-            ip_bytes = stream.read(16)
-            check_length(ip_bytes, 16, data_type)
+            ip_bytes = read_stream(stream, 16, data_type)
             return ipaddress.IPv6Address(ip_bytes)
 
-        def read_ascii(stream_size: int):
-            ua_bytes = stream.read(stream_size)
-            check_length(ua_bytes, stream_size, "user_agent")
-            return ua_bytes.decode("ascii")
-
-        protocol_version = read_little_int(4, "protocol_version")
-        services = read_little_bytes(8, "services")
-        timestamp = read_little_int(8, "unix_timestamp")
-        remote_services = read_little_bytes(8, "remote_services")
+        protocol_version = read_little_int(stream, 4, "protocol_version")
+        services = read_stream(stream, 8, "services")[::-1]  # little-endian bit-field
+        timestamp = read_little_int(stream, 8, "unix_timestamp")
+        remote_services = read_stream(stream, 8, "remote_services")[::-1]  # little-endian bit-field
         remote_ip = read_ip("remote_ip")
-        remote_port = read_big_int(2, "remote_port")
-        local_services = read_little_bytes(8, "local_services")
+        remote_port = read_big_int(stream, 2, "remote_port")
+        local_services = read_stream(stream, 8, "local_services")[::-1]  # little-endian bit-field
         local_ip = read_ip("local_ip")
-        local_port = read_big_int(2, "local_port")
-        nonce = read_little_int(8, "nonce")
+        local_port = read_big_int(stream, 2, "local_port")
+        nonce = read_little_int(stream, 8, "nonce")
         user_agent_size = read_compact_size(stream)
-        user_agent = read_ascii(user_agent_size)
-        last_block = read_little_int(4, "last_block")
+        user_agent = read_stream(stream, user_agent_size, "user_agent").decode("ascii")
+        last_block = read_little_int(stream, 4, "last_block")
 
         return cls(protocol_version, services, timestamp, remote_services, remote_ip, remote_port, local_services,
                    local_ip, local_port, nonce, user_agent, last_block)

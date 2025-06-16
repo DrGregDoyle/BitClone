@@ -1,11 +1,11 @@
 """
 Block and MerkleTree classes
 """
-import io
 import struct
 
 from src.crypto import hash256
-from src.data import Serializable, check_length, read_compact_size, MerkleTree, write_compact_size
+from src.data import Serializable, read_compact_size, MerkleTree, write_compact_size, get_stream, \
+    read_stream
 from src.logger import get_logger
 from src.tx import Transaction
 
@@ -99,18 +99,14 @@ class Block(Serializable):
 
     @classmethod
     def from_bytes(cls, byte_stream):
-        if not isinstance(byte_stream, (bytes, io.BytesIO)):
-            raise ValueError(f"Expected byte data stream, received {type(byte_stream)}")
-
-        stream = io.BytesIO(byte_stream) if isinstance(byte_stream, bytes) else byte_stream
+        stream = get_stream(byte_stream)
 
         # Get header
-        _header_bytes = stream.read(cls.HEADER_BYTES)
-        check_length(_header_bytes, cls.HEADER_BYTES, "header")
-        _header = BlockHeader.from_bytes(_header_bytes)
+        header_data = read_stream(stream, cls.HEADER_BYTES, "block_header")
+        header = BlockHeader.from_bytes(header_data)
 
         # Get txs | handle only header data
-        tx_count = read_compact_size(stream)
+        tx_count = read_compact_size(stream, "Block.tx_count")
         txs = []
         for _ in range(0, tx_count):
             temp_tx = Transaction.from_bytes(stream)
@@ -118,10 +114,10 @@ class Block(Serializable):
 
         # Verify merkle root
         temp_tree = MerkleTree([t.txid() for t in txs])
-        if temp_tree.merkle_root != _header.merkle_root:
+        if temp_tree.merkle_root != header.merkle_root:
             raise ValueError("Merkle Root mismatch when reconstructing block")
 
-        return cls(_header.prev_block, txs, _header.timestamp, _header.bits, _header.nonce, _header.version)
+        return cls(header.prev_block, txs, header.timestamp, header.bits, header.nonce, header.version)
 
     @property
     def header(self):

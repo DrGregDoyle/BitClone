@@ -10,12 +10,12 @@ B: unsigned char (1 byte)
 <Q: uint64 (little-endian)
 >Q: uint64 (big-endian)
 """
-import io
-from dataclasses import dataclass
+from io import SEEK_CUR, BytesIO
 
 from src.crypto.hash_functions import hash256
-from src.data import Serializable, write_compact_size, read_compact_size, byte_format, from_little_bytes, \
-    to_little_bytes, check_length
+from src.data import Serializable, write_compact_size, read_compact_size, byte_format, to_little_bytes, get_stream, \
+    read_stream, read_little_int
+from src.data import UTXO
 
 
 class Input(Serializable):
@@ -49,7 +49,7 @@ class Input(Serializable):
         self.script_sig_size = write_compact_size(len(self.script_sig))
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | io.BytesIO) -> 'Input':
+    def from_bytes(cls, byte_stream: bytes | BytesIO) -> 'Input':
         """
         Deserialize a transaction input from bytes.
 
@@ -62,29 +62,20 @@ class Input(Serializable):
         Raises:
             ValueError: If the byte_stream is invalid or incomplete.
         """
-        if not isinstance(byte_stream, (bytes, io.BytesIO)):
-            raise ValueError("byte_stream must be of type `bytes`.")
-
-        stream = io.BytesIO(byte_stream) if isinstance(byte_stream, bytes) else byte_stream
+        stream = get_stream(byte_stream)  # Get byte stream
 
         # Read fixed-size fields (txid and vout)
-        txid = stream.read(cls.TXID_BYTES)
-        check_length(txid, cls.TXID_BYTES, "txid")
-        vout = stream.read(cls.VOUT_BYTES)
-        check_length(vout, cls.VOUT_BYTES, "vout")
-        vout_int = int.from_bytes(vout, "little")
+        txid = read_stream(stream, cls.TXID_BYTES, "txid")
+        vout = read_little_int(stream, cls.VOUT_BYTES, "vout")
 
         # Read script_sig (variable size)
         script_sig_length = read_compact_size(stream)
-        script_sig = stream.read(script_sig_length)
-        check_length(script_sig, script_sig_length, "script_sig")
+        script_sig = read_stream(stream, script_sig_length, "script_sig")
 
         # Read sequence (4 bytes, little-endian)
-        sequence_data = stream.read(cls.SEQ_BYTES)
-        check_length(sequence_data, cls.SEQ_BYTES, "sequence")
-        sequence = from_little_bytes(sequence_data)
+        sequence = read_little_int(stream, cls.SEQ_BYTES, "sequence")
 
-        return cls(txid, vout_int, script_sig, sequence)
+        return cls(txid, vout, script_sig, sequence)
 
     def to_bytes(self) -> bytes:
         """
@@ -137,20 +128,14 @@ class Output(Serializable):
           1. Read 8-byte value
           2. Read scriptPubKey length (CompactSize), then scriptPubKey
         """
-        if not isinstance(byte_stream, (bytes, io.BytesIO)):
-            raise ValueError("byte_stream must be of type `bytes`.")
-
-        stream = io.BytesIO(byte_stream) if isinstance(byte_stream, bytes) else byte_stream
+        stream = get_stream(byte_stream)
 
         # Read fixed size fields (amount)
-        amount_data = stream.read(cls.AMOUNT_BYTES)
-        check_length(amount_data, cls.AMOUNT_BYTES, "amount")
-        amount = from_little_bytes(amount_data)
+        amount = read_little_int(stream, cls.AMOUNT_BYTES, "amount")
 
         # Read script_pubkey (variable size)
         script_pubkey_length = read_compact_size(stream)
-        script_pubkey = stream.read(script_pubkey_length)
-        check_length(script_pubkey, script_pubkey_length, "script_pubkey")
+        script_pubkey = read_stream(stream, script_pubkey_length, "script_pubkey")
 
         return cls(amount, script_pubkey)
 
@@ -191,15 +176,11 @@ class WitnessItem(Serializable):
 
     @classmethod
     def from_bytes(cls, byte_stream):
-        if not isinstance(byte_stream, (bytes, io.BytesIO)):
-            raise ValueError("byte_stream must be of type `bytes`.")
-
-        stream = io.BytesIO(byte_stream) if isinstance(byte_stream, bytes) else byte_stream
+        stream = get_stream(byte_stream)
 
         # Read compact size and item
         item_length = read_compact_size(stream)
-        item = stream.read(item_length)
-        check_length(item, item_length, "witness item")
+        item = read_stream(stream, item_length, "witness_item")
 
         return cls(item)
 
@@ -237,10 +218,7 @@ class Witness(Serializable):
           2. For each item, read a CompactSize length then read that many bytes
         """
         # Check type
-        if not isinstance(byte_stream, (bytes, io.BytesIO)):
-            raise ValueError(f"Expected byte data stream, received {type(byte_stream)}")
-
-        stream = io.BytesIO(byte_stream) if isinstance(byte_stream, bytes) else byte_stream
+        stream = get_stream(byte_stream)
 
         num_items = read_compact_size(stream)
         items = []
@@ -278,40 +256,6 @@ class Witness(Serializable):
                 x: self.items[x].to_dict()
             })
         return witness_dict
-
-
-@dataclass
-class UTXO:
-    txid: bytes  # Transaction ID that created this UTXO
-    vout: int  # Output index in the transaction
-    amount: int  # Amount in satoshis
-    script_pubkey: bytes  # Script that locks this output
-    spent: bool = False  # Indicates whether the UTXO has been spent (default is False)
-
-    @classmethod
-    def from_tuple(cls, data: tuple):
-        """
-        Creates UTXO from db entry
-        """
-        txid, vout, amount, script_pubkey, spent = data
-        return cls(txid, vout, amount, script_pubkey, bool(spent))
-
-    def to_dict(self) -> dict:
-        """Converts the UTXO to a dictionary."""
-        return {
-            "txid": self.txid.hex(),
-            "vout": self.vout,
-            "amount": self.amount,
-            "script_pubkey": self.script_pubkey.hex(),
-            "spent": self.spent
-        }
-
-    def to_output_bytes(self) -> bytes:
-        """
-        Returns amount + scriptpubkey_size + scriptpubkey, suitable for use in Output.from_bytes() constructor
-        """
-        return to_little_bytes(self.amount, Output.AMOUNT_BYTES) + write_compact_size(
-            len(self.script_pubkey)) + self.script_pubkey
 
 
 class Transaction(Serializable):
@@ -367,15 +311,10 @@ class Transaction(Serializable):
           5. If segwit, read witness data for each input
           6. Read 4-byte locktime
         """
-        if not isinstance(byte_stream, (bytes, io.BytesIO)):
-            raise ValueError(f"Expected byte data stream, received {type(byte_stream)}")
-
-        stream = io.BytesIO(byte_stream) if isinstance(byte_stream, bytes) else byte_stream
+        stream = get_stream(byte_stream)
 
         # Read version (4 bytes, little-endian)
-        version_data = stream.read(4)
-        check_length(version_data, cls.VERSION_BYTES, "version")
-        version = from_little_bytes(version_data)
+        version = read_little_int(stream, cls.VERSION_BYTES, "version")
 
         # Check for SegWit marker and flag
         marker = stream.read(1)
@@ -386,7 +325,7 @@ class Transaction(Serializable):
             segwit = True
         else:
             segwit = False
-            stream.seek(-1, io.SEEK_CUR)  # Rewind the marker byte
+            stream.seek(-1, SEEK_CUR)  # Rewind the marker byte
 
         # Read inputs
         num_inputs = read_compact_size(stream)
@@ -407,9 +346,7 @@ class Transaction(Serializable):
                 witnesses.append(Witness.from_bytes(stream))
 
         # Read locktime (4 bytes, little-endian)
-        locktime_data = stream.read(4)
-        check_length(locktime_data, cls.LOCKTIME_BYTES, "locktime")
-        locktime = from_little_bytes(locktime_data)
+        locktime = read_little_int(stream, cls.LOCKTIME_BYTES, "locktime")
 
         return cls(inputs, outputs, witnesses, locktime, version, segwit)
 
