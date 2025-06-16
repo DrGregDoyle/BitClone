@@ -4,32 +4,8 @@ Methods for handling data in BitClone
 import struct
 
 __all__ = ["write_compact_size", "byte_format", "to_little_bytes",
-           "from_little_bytes", "target_to_bits", "bits_to_target", "bits_to_target_int",
+           "target_to_bits", "bits_to_target", "bits_to_target_int",
            "bytes_to_binary_string"]
-
-
-# def check_hex(hex_string: str) -> str:
-#     """
-#     Checks the validity of the hex string
-#
-#     Returns:
-#         hex_string: formatter hex string
-#
-#     Raises:
-#         ValueError: If hex_string is not of str type
-#         ValueError: If the hex_string contains a character outside the hex alphabet.
-#     """
-#     # Type
-#     if not isinstance(hex_string, str):
-#         raise ValueError(f"Input not of str type. Type; {type(hex_string)}")
-#
-#     # Remove 0x prefix if present
-#     hex_string = (hex_string[2:] if hex_string.startswith('0x') else hex_string).lower()
-#
-#     # Validate hex string
-#     if len(hex_string) % 2 != 0 or not re.fullmatch(r'^[0-9a-f]+$', hex_string):
-#         raise ValueError("Invalid hex format: must be an even-length hexadecimal string.")
-#     return hex_string
 
 
 def write_compact_size(value: int) -> bytes:
@@ -69,30 +45,12 @@ def bytes_to_binary_string(b: bytes):
     return bin(int.from_bytes(b, 'big'))[2:].zfill(len(b) * 8)
 
 
-# def check_length(data: bytes, length: int, value: str):
-#     if len(data) != length:
-#         raise ValueError(f"Insufficient data for {value}.")
-
-
 def to_little_bytes(num: int, length: int = None):
     """
     Returns little-endian encoding of the given num. Will be of specified length if included
     """
     length = (num.bit_length() + 7) // 8 if length is None else length
     return num.to_bytes(length, "little")
-
-
-def from_little_bytes(little_bytes: bytes) -> int:
-    """
-    Returns integer from little-endian encoded bytes object
-    """
-    return int.from_bytes(little_bytes, "little")
-
-
-# def target_to_bits_from_hex(target: str) -> str:
-#     # Check str
-#     check_hex(target)
-#     return target_to_bits(bytes.fromhex(target)).hex()
 
 
 def target_to_bits(target: bytes) -> bytes:
@@ -128,23 +86,7 @@ def bits_to_target_int(bits: bytes) -> int:
     target_int = coeff * pow(2, 8 * (exp - 3))
     return target_int
 
-
-# def bits_to_target_from_hex(bits: str) -> str:
-#     check_hex(bits)
-#     return bits_to_target(bytes.fromhex(bits)).hex()
-
-
-# --- TESTING
-if __name__ == "__main__":
-    # target_hex = "00000000ffff0000000000000000000000000000000000000000000000000000"
-    # bits_hex = "1d00ffff"
-    #
-    # t_to_b = target_to_bits_from_hex(target_hex)
-    # b_to_t = bits_to_target_from_hex(bits_hex)
-    # print(f"TARGET TO BITS: {target_hex} --> {t_to_b}")
-    # print(f"BITS TO TARGET: {bits_hex} --> {b_to_t}")
-    # print(f"TARGET TO BITS EQUALS BITS HEX: {t_to_b == bits_hex}")
-    # print(f"BITS TO TARGET EQUALS TARGET HEX: {b_to_t == target_hex}")
-    zero_cs = write_compact_size(0)
-    print(f"ZERO COMPACT SIZE: {zero_cs}")
-    print(f"READ COMPACT SIZE: {read_compact_size(zero_cs)}")
+#
+# if __name__ == "__main__":
+#     format_test1 = byte_format(b'\x00', 4)
+#     print(format_test1.hex())

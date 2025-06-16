@@ -4,8 +4,6 @@ Helper functions for the Serialization.from_bytes() method(s)
 
 from io import BytesIO
 
-from src.data.data_handling import from_little_bytes
-
 __all__ = ["get_stream", "read_stream", "read_little_int", "read_big_int", "read_compact_size"]
 
 
@@ -34,7 +32,7 @@ def read_big_int(stream: BytesIO, length: int, data_type: str = "big-endian inte
     return int.from_bytes(data, "big")
 
 
-def read_compact_size(stream: BytesIO, data_type: str = "compact-size encoded data"):
+def read_compact_size(stream: BytesIO, data_type: str = "compact-size encoded data") -> int:
     """
     Returns the integer value associated with the compact-size encoding at the head of the data stream
     """
@@ -53,4 +51,4 @@ def read_compact_size(stream: BytesIO, data_type: str = "compact-size encoded da
     else:
         # prefix_val == 0xff -> Next 8 bytes as uint64 (little-endian)
         raw = read_stream(stream, 8, "0xff prefix value")
-    return from_little_bytes(raw)
+    return int.from_bytes(raw, "little")
