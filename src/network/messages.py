@@ -53,6 +53,20 @@ class Header:
         checksum = hash256(payload)
         return cls(magic_bytes, command, size, checksum)
 
+    def to_bytes(self) -> bytes:
+        """
+        Serialization of the header | 24 bytes
+        """
+        command_bytes = self.command.encode("ascii")
+        command_bytes = command_bytes.ljust(12, b'\x00')[:12]
+        header_bytes = (
+                self.magic_bytes
+                + command_bytes
+                + self.size.to_bytes(self.SIZE_BYTES, "little")
+                + self.checksum
+        )
+        return header_bytes
+
     def to_dict(self) -> dict:
         """
         Returns display dict with instance values
@@ -74,3 +88,5 @@ if __name__ == "__main__":
     test_header_bytes = bytes.fromhex("F9BEB4D976657273696F6E0000000000550000002C2F86F3")
     test_header = Header.from_bytes(test_header_bytes)
     print(f"TEST HEADER: {test_header.to_json()}")
+    header_from_bytes = Header.from_bytes(test_header.to_bytes())
+    print(f"HEADER FROM BYTES: {header_from_bytes.to_json()}")
