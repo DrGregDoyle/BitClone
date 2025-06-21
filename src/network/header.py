@@ -1,11 +1,21 @@
 """
 The Header and Payload classes
+ -----------
+ | Message |
+ -----------
+ | Heaeder |
+ | Payload |
+ -----------
 """
 import json
+import time
 from io import BytesIO
 
 from src.crypto import hash256
-from src.data import get_stream, read_stream, read_little_int
+from src.data import get_stream, read_stream, read_little_int, MAINNET
+
+
+# --- MAGIC BYTES --- #
 
 
 class Header:
@@ -19,11 +29,6 @@ class Header:
     |   Checksum    | bytes         | 4     |
     -----------------------------------------
     """
-    # MagicBytes
-    MB_MAINNET = bytes.fromhex("f9beb4d9")
-    MB_TESTNET = bytes.fromhex("0b110907")
-    MB_REGTEST = bytes.fromhex("fabfb5da")
-
     # Byte Sizes
     MB_BYTES = SIZE_BYTES = CHECKSUM_BYTES = 4
     COMMAND_BYTES = 12
@@ -32,7 +37,7 @@ class Header:
         self.magic_bytes = magic_bytes
         self.command = command
         self.size = size
-        self.checksum = checksum
+        self.checksum = checksum[:4]
 
     @classmethod
     def from_bytes(cls, byte_stream: bytes | BytesIO):
@@ -48,7 +53,7 @@ class Header:
         return cls(magic_bytes, command, size, checksum)
 
     @classmethod
-    def from_payload(cls, payload: bytes, command: str = "version", magic_bytes: bytes = MB_MAINNET):
+    def from_payload(cls, payload: bytes, command: str = "version", magic_bytes: bytes = MAINNET):
         size = len(payload)
         checksum = hash256(payload)
         return cls(magic_bytes, command, size, checksum)
@@ -83,8 +88,8 @@ class Header:
         return json.dumps(self.to_dict(), indent=2)
 
 
-# --- TESTING
 if __name__ == "__main__":
+    _dummy = time.time()
     test_header_bytes = bytes.fromhex("F9BEB4D976657273696F6E0000000000550000002C2F86F3")
     test_header = Header.from_bytes(test_header_bytes)
     print(f"TEST HEADER: {test_header.to_json()}")
