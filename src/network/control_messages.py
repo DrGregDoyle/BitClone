@@ -6,22 +6,18 @@ Control Messages:
     -FilterClear
     -FilerLoad
     -GetAddr
-    -Ping
-    -Pong
     -Reject
     -SendHeaders
-    -VerAck
-    -Version
 """
 from datetime import datetime
 from io import BytesIO
 
 from src.data import get_stream, read_little_int, read_stream, read_ip, read_big_int, read_compact_size, get_ipv6, \
     write_compact_size, MAINNET
-from src.network.payload import Payload
+from src.network.messages import ControlMessage
 
 
-class Version(Payload):
+class Version(ControlMessage):
     """
     -----------------------------------------------------------------
     |   Name            | Data type | Formatted         | Size      |
@@ -41,11 +37,17 @@ class Version(Payload):
     |   last block          | int   | little-endian     | 4         |
     -----------------------------------------------------------------
     """
+    # --- BYTE SIZES
+    PORT_BYTES = 2
+    VERSION_BYTES = LAST_BLOCK_BYTES = 4
+    SERVICE_BYTES = TIME_BYTES = NONCE_BYTES = 8
+    IP_BYTES = 16
 
     def __init__(self, version: int, services: bytes, timestamp: int, r_services: bytes, r_ip: str, r_port: int,
                  l_services: bytes, l_ip: str, l_port: int, nonce: int, user_agent: str, last_block: int,
                  magic_bytes: bytes = MAINNET):
         # Magic Bytes
+        super().__init__(magic_bytes)
         self.magic_bytes = magic_bytes
 
         # Raw Data
@@ -63,7 +65,7 @@ class Version(Payload):
         self.last_block = last_block
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO):
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
         # Setup stream
         stream = get_stream(byte_stream)
 
@@ -83,7 +85,7 @@ class Version(Payload):
         last_block = read_little_int(stream, cls.LAST_BLOCK_BYTES, "last_block")
 
         return cls(version, services, timestamp, r_services, r_ip, r_port, l_services, l_ip, l_port, nonce, user_agent,
-                   last_block)
+                   last_block, magic_bytes)
 
     @property
     def command(self) -> str:
@@ -120,10 +122,7 @@ class Version(Payload):
 
         return byte_string
 
-    def to_dict(self):
-        """
-        The display dict for the instance variables
-        """
+    def _payload_dict(self) -> dict:
         version_dict = {
             "protocol_version": self.protocol_version,
             "services": self.services.hex(),
@@ -141,15 +140,91 @@ class Version(Payload):
         return version_dict
 
 
+class VerAck(ControlMessage):
+
+    @property
+    def command(self) -> str:
+        return "verack"
+
+    def payload(self):
+        return b''
+
+
+class Ping(ControlMessage):
+    """
+    -------------------------------------------------
+    |   Name    | Data type | format        | size  |
+    -------------------------------------------------
+    |   Nonce   | int       | little-endian | 8     |
+    -------------------------------------------------
+    """
+    NONCE_BYTES = 8
+
+    def __init__(self, nonce: int, magic_bytes: bytes = MAINNET):
+        super().__init__(magic_bytes)
+        self.nonce = nonce
+        self.magic_bytes = magic_bytes
+
+    @classmethod
+    def from_bytes(cls, bytes_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+        stream = get_stream(bytes_stream)
+        nonce = read_little_int(stream, cls.NONCE_BYTES, "nonce")
+        return cls(nonce, magic_bytes)
+
+    @property
+    def command(self):
+        return "ping"
+
+    def payload(self):
+        return self.nonce.to_bytes(self.NONCE_BYTES, "little")
+
+    def _payload_dict(self) -> dict:
+        return {"nonce": self.nonce}
+
+
+class Pong(ControlMessage):
+    """
+    -------------------------------------------------
+    |   Name    | Data type | format        | size  |
+    -------------------------------------------------
+    |   Nonce   | int       | little-endian | 8     |
+    -------------------------------------------------
+    """
+    NONCE_BYTES = 8
+
+    def __init__(self, nonce: int, magic_bytes: bytes = MAINNET):
+        super().__init__(magic_bytes)
+        self.nonce = nonce
+        self.magic_bytes = magic_bytes
+
+    @classmethod
+    def from_bytes(cls, bytes_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+        stream = get_stream(bytes_stream)
+        nonce = read_little_int(stream, cls.NONCE_BYTES, "nonce")
+        return cls(nonce, magic_bytes)
+
+    @property
+    def command(self):
+        return "pong"
+
+    def payload(self):
+        return self.nonce.to_bytes(self.NONCE_BYTES, "little")
+
+    def _payload_dict(self) -> dict:
+        return {"nonce": self.nonce}
+
+
 if __name__ == "__main__":
+    from random import randint
+
     test_version_bytes = bytes.fromhex(
         "7E1101000000000000000000C515CF6100000000000000000000000000000000000000000000FFFF2E13894A208D000000000000000000000000000000000000FFFF7F000001208D00000000000000000000000000")
     test_version = Version.from_bytes(test_version_bytes)
     print(f"TEST VERSION: {test_version.to_json()}")
-    test_version_header = test_version.get_header()
-    print(f"TEST VERSION HEADER: {test_version_header.to_json()}")
-    header = test_version_header.to_bytes()
-    print(f"HEADER: {header.hex()}")
-    print(f"PAYLOAD: {test_version_bytes.hex()}")
-    message = test_version.get_message()
-    print(f"MESSAGE FROM TEST VERSION: {message.hex()}")
+
+    test_verack = VerAck()
+    print(f"VERACK: {test_verack.to_json()}")
+
+    random_ping = Ping(randint(250, 500))
+    print(f"RANDOM PING: {random_ping.to_json()}")
+    print(f"PONG: = {Pong(random_ping.nonce).to_json()}")

@@ -1,0 +1,3 @@
+"""
+Inventory Vector Data Type
+"""

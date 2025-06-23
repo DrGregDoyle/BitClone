@@ -4,8 +4,6 @@ The Node class for Bitcoin
 
 import socket
 
-from src.network.header import MessageFactory
-
 
 def open_socket(ip_address: str, port: int = 8333) -> socket.socket | None:
     try:
@@ -33,18 +31,17 @@ def close_socket(s: socket.socket):
         print(f"Failed to close socket: {s}")
         return False
 
-
-class Node:
-
-    def __init__(self):
-        self.mf = MessageFactory()
-
-
-if __name__ == "__main__":
-    remote_ip = "162.120.69.182"
-    mf = MessageFactory()
-    with open_socket(remote_ip) as test_sock:
-        my_version_payload = mf.get_version_payload(remote_ip)
-        my_version_header = mf.get_header_from_payload(my_version_payload.to_bytes(), "version")
-        my_version = my_version_header.to_bytes() + my_version_payload.to_bytes()
-    close_socket(test_sock)
+# class Node:
+#
+#     def __init__(self):
+#         self.mf = MessageFactory()
+#
+#
+# if __name__ == "__main__":
+#     remote_ip = "162.120.69.182"
+#     mf = MessageFactory()
+#     with open_socket(remote_ip) as test_sock:
+#         my_version_payload = mf.get_version_payload(remote_ip)
+#         my_version_header = mf.get_header_from_payload(my_version_payload.to_bytes(), "version")
+#         my_version = my_version_header.to_bytes() + my_version_payload.to_bytes()
+#     close_socket(test_sock)
