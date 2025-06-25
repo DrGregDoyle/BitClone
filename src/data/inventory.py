@@ -8,6 +8,8 @@ from io import BytesIO
 
 from src.data.byte_stream import get_stream, read_little_int, read_stream
 
+__all__ = ["InvType", "Inventory"]
+
 
 class InvType(Enum):
     ERROR = 0
