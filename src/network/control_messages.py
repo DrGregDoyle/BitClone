@@ -1,6 +1,5 @@
 """
 Control Messages:
-    -Addr
     -Alert
     -FeeFilter
     -FilterClear
@@ -9,8 +8,10 @@ Control Messages:
     -Reject
     -SendHeaders
 """
+import ipaddress
 from datetime import datetime
 from io import BytesIO
+from time import time as now
 
 from src.data import get_stream, read_little_int, read_stream, read_compact_size, write_compact_size, MAINNET, NetAddr
 from src.network.messages import ControlMessage
@@ -196,8 +197,54 @@ class Pong(ControlMessage):
         return {"nonce": self.nonce}
 
 
+class Addr(ControlMessage):
+
+    def __init__(self, addr_list: list[NetAddr], magic_bytes: bytes = MAINNET):
+        super().__init__()
+        self.addr_list = addr_list
+        self.count = len(addr_list)
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+        # Get stream
+        stream = get_stream(byte_stream)
+
+        # Get count
+        count = read_compact_size(stream, "addr_count")
+
+        # Get addrs
+        addr_list = []
+        for _ in range(count):
+            addr_list.append(NetAddr.from_bytes(stream))
+
+        return cls(addr_list, magic_bytes)
+
+    @property
+    def command(self) -> str:
+        return "addr"
+
+    def payload(self) -> bytes:
+        payload = write_compact_size(self.count)
+        for a in self.addr_list:
+            payload += a.to_bytes()
+        return payload
+
+    def _payload_dict(self) -> dict:
+        # Collect addresses first
+        addr_dict = {}
+        for x in range(self.count):
+            temp_addr = self.addr_list[x]
+            addr_dict.update({f"net_addr{x}": temp_addr.to_dict()})
+        payload_dict = {
+            "count": self.count,
+            "addr_list": addr_dict
+        }
+        return payload_dict
+
+
 if __name__ == "__main__":
     from random import randint
+    from secrets import token_bytes
 
     test_version_bytes = bytes.fromhex(
         "7E1101000000000000000000C515CF6100000000000000000000000000000000000000000000FFFF2E13894A208D000000000000000000000000000000000000FFFF7F000001208D00000000000000000000000000")
@@ -210,3 +257,21 @@ if __name__ == "__main__":
     random_ping = Ping(randint(250, 500))
     print(f"RANDOM PING: {random_ping.to_json()}")
     print(f"PONG: = {Pong(random_ping.nonce).to_json()}")
+
+
+    def random_netaddr() -> NetAddr:
+        # Random services
+        services = token_bytes(8)
+
+        # Random ip
+        ip_addr = str(ipaddress.IPv4Address(randint(0, 2 ** 32 - 1)))
+
+        # Random port
+        port = randint(0, 0xffff)
+
+        return NetAddr(int(now()), services, ip_addr, port)
+
+
+    net_addr_list = [random_netaddr() for _ in range(randint(1, 5))]
+    test_addr = Addr(net_addr_list)
+    print(f"TEST ADDR: {test_addr.to_json()}")
