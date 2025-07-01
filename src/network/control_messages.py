@@ -13,7 +13,8 @@ from datetime import datetime
 from io import BytesIO
 from time import time as now
 
-from src.data import get_stream, read_little_int, read_stream, read_compact_size, write_compact_size, MAINNET, NetAddr
+from src.data import get_stream, read_little_int, read_stream, read_compact_size, write_compact_size, MAINNET, \
+    NetAddr, RejectType
 from src.network.messages import ControlMessage
 
 
@@ -198,6 +199,14 @@ class Pong(ControlMessage):
 
 
 class Addr(ControlMessage):
+    """
+    -----------------------------------------------------
+    |   Name        | Data type | format        | size  |
+    -----------------------------------------------------
+    |   Count       |   int     | compact Size  | var   |
+    |   addr_list   |   list    | NetAddr       | var   |
+    -----------------------------------------------------
+    """
 
     def __init__(self, addr_list: list[NetAddr], magic_bytes: bytes = MAINNET):
         super().__init__()
@@ -242,6 +251,61 @@ class Addr(ControlMessage):
         return payload_dict
 
 
+class Reject(ControlMessage):
+    DATA_BYTES = 32
+
+    def __init__(self, message: str, ccode: RejectType | int, reason: str, data: bytes = b''):
+        super().__init__()
+        self.reject_message = message
+        self.ccode = RejectType(ccode) if isinstance(ccode, int) else ccode
+        self.reason = reason
+        self.data = data
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+        # Get stream
+        stream = get_stream(byte_stream)
+
+        # Read message
+        message_len = read_compact_size(stream, "reject_message_length")
+        encoded_message = read_stream(stream, message_len, "reject_message")
+        message = encoded_message.decode("ascii")
+
+        # Read reject type
+        ccode = read_little_int(stream, 1, "ccode")
+
+        # Read reason
+        reason_len = read_compact_size(stream, "reason_length")
+        encoded_reason = read_stream(stream, reason_len, "reason")
+        reason = encoded_reason.decode("ascii")
+
+        # Read data, if any
+        data = stream.read()
+
+        return cls(message, ccode, reason, data)
+
+    @property
+    def command(self) -> str:
+        return "reject"
+
+    def payload(self) -> bytes:
+        encoded_message = self.reject_message.encode("ascii")
+        encoded_reason = self.reason.encode("ascii")
+        payload = write_compact_size(
+            len(encoded_message)) + encoded_message + self.ccode.to_byte() + write_compact_size(
+            len(encoded_reason)) + encoded_reason + self.data
+        return payload
+
+    def _payload_dict(self) -> dict:
+        payload_dict = {
+            "rejected_message": self.reject_message,
+            "ccode": self.ccode.name,
+            "reason": self.reason,
+            "data": self.data.hex()
+        }
+        return payload_dict
+
+
 if __name__ == "__main__":
     from random import randint
     from secrets import token_bytes
@@ -275,3 +339,11 @@ if __name__ == "__main__":
     net_addr_list = [random_netaddr() for _ in range(randint(1, 5))]
     test_addr = Addr(net_addr_list)
     print(f"TEST ADDR: {test_addr.to_json()}")
+
+    # TEST REJECT MESSAGE
+    test_reject = Reject("tx", 0x10, "non-mandatory-script-verify-flag (Witness required)",
+                         bytes.fromhex("0e3e2357e806b6cdb1f70f5c5e3a3d6a89e1f4c9f7eb45c8e14a7c7c8e4a5e09"))
+
+    print(f"TEST REJECT: {test_reject.to_json()}")
+    rj_from_bytes = Reject.from_bytes(test_reject.payload())
+    print(f"REJECT FROM BYTES: {rj_from_bytes.to_json()}")

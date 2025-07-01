@@ -13,6 +13,7 @@ from src.data.magic_bytes import *
 from src.data.merkle import *
 from src.data.network_address import *
 from src.data.pubkey_utils import *
+from src.data.reject_type import *
 from src.data.serializable import *
 from src.data.utxo import UTXO
 from src.data.word_list import WORDLIST
