@@ -10,6 +10,8 @@ from time import time as now
 
 from src.data.byte_stream import get_stream, read_little_int, read_stream, read_big_int
 
+__all__ = ["NetAddr"]
+
 
 class NetAddr:
     """
@@ -29,11 +31,12 @@ class NetAddr:
     PORT_BYTES = 2
     TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-    def __init__(self, timestamp: int, services: bytes, ip_addr: str, port: int):
+    def __init__(self, timestamp: int, services: bytes, ip_addr: str, port: int, is_version: bool = False):
         self.timestamp = timestamp
         self.services = services
         self.ip_address = self._get_ipv6(ip_addr)
         self.port = port
+        self.is_version = is_version
 
     @classmethod
     def from_bytes(cls, byte_stream: bytes | BytesIO, is_version=False):
@@ -41,7 +44,7 @@ class NetAddr:
         stream = get_stream(byte_stream)
 
         # Check version message
-        if is_version:
+        if not is_version:
             timestamp = read_little_int(stream, cls.TIME_BYTES, "time")
         else:
             timestamp = int(now())
@@ -52,7 +55,7 @@ class NetAddr:
         ip_address = IP.IPv6Address(ip_bytes)
         port = read_big_int(stream, 2, "port")
 
-        return cls(timestamp, services, str(ip_address), port)
+        return cls(timestamp, services, str(ip_address), port, is_version)
 
     @property
     def display_ip(self) -> str:
@@ -64,7 +67,7 @@ class NetAddr:
 
     def to_bytes(self, is_version=False):
         # Add time if not version Address
-        payload = self.timestamp.to_bytes(self.TIME_BYTES, "little") if is_version else b''
+        payload = self.timestamp.to_bytes(self.TIME_BYTES, "little") if not is_version else b''
         payload += self.services + self.ip_address.packed + self.port.to_bytes(self.PORT_BYTES, "big")
         return payload
 
@@ -78,12 +81,15 @@ class NetAddr:
             raise ValueError(f"Given ip address not in IPv4/IPv6 format: {ip_addr}")
 
     def to_dict(self):
-        net_addr_dict = {
-            "time": self.display_time,
+        if not self.is_version:
+            net_addr_dict = {"time": self.display_time}
+        else:
+            net_addr_dict = {}
+        net_addr_dict.update({
             "services": self.services.hex(),
             "ip_address": self.display_ip,
             "port": self.port
-        }
+        })
         return net_addr_dict
 
     def to_json(self):
@@ -93,7 +99,7 @@ class NetAddr:
 # TESTING
 if __name__ == "__main__":
     test_addr_bytes = bytes.fromhex("010000000000000000000000000000000000FFFF0A000001208D")
-    test_addr = NetAddr.from_bytes(test_addr_bytes, is_version=False)
+    test_addr = NetAddr.from_bytes(test_addr_bytes, is_version=True)
     print(f"TEST ADDR: {test_addr.to_json()}")
     # test_addr = NetAddr(0, b'', "127.0.0.1", 0)
     # print(f"TEST ADDR TO JSON: {test_addr.to_json()}")

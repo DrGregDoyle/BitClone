@@ -12,8 +12,7 @@ Control Messages:
 from datetime import datetime
 from io import BytesIO
 
-from src.data import get_stream, read_little_int, read_stream, read_ip, read_big_int, read_compact_size, get_ipv6, \
-    write_compact_size, MAINNET
+from src.data import get_stream, read_little_int, read_stream, read_compact_size, write_compact_size, MAINNET, NetAddr
 from src.network.messages import ControlMessage
 
 
@@ -43,8 +42,10 @@ class Version(ControlMessage):
     SERVICE_BYTES = TIME_BYTES = NONCE_BYTES = 8
     IP_BYTES = 16
 
-    def __init__(self, version: int, services: bytes, timestamp: int, r_services: bytes, r_ip: str, r_port: int,
-                 l_services: bytes, l_ip: str, l_port: int, nonce: int, user_agent: str, last_block: int,
+    def __init__(self, version: int, services: bytes, timestamp: int, remote_addr: NetAddr, local_addr: NetAddr,
+                 nonce: int,
+                 user_agent: str,
+                 last_block: int,
                  magic_bytes: bytes = MAINNET):
         # Magic Bytes
         super().__init__(magic_bytes)
@@ -54,12 +55,8 @@ class Version(ControlMessage):
         self.protocol_version = version
         self.services = services
         self.timestamp = timestamp
-        self.remote_services = r_services
-        self.remote_ip = r_ip
-        self.remote_port = r_port
-        self.local_services = l_services
-        self.local_ip = l_ip
-        self.local_port = l_port
+        self.remote_net_addr = remote_addr
+        self.local_net_addr = local_addr
         self.nonce = nonce
         self.user_agent = user_agent
         self.last_block = last_block
@@ -69,23 +66,23 @@ class Version(ControlMessage):
         # Setup stream
         stream = get_stream(byte_stream)
 
-        # Read in data
+        # Read version, services and timestamp
         version = read_little_int(stream, cls.VERSION_BYTES, "protocol_version")
         services = read_stream(stream, cls.SERVICE_BYTES, "services")
         timestamp = read_little_int(stream, cls.TIME_BYTES, "time")
-        r_services = read_stream(stream, cls.SERVICE_BYTES, "remote_services")
-        r_ip = read_ip(stream, cls.IP_BYTES, "remote_ip")
-        r_port = read_big_int(stream, cls.PORT_BYTES, "remote_port")
-        l_services = read_stream(stream, cls.SERVICE_BYTES, "local_services")
-        l_ip = read_ip(stream, cls.IP_BYTES, "local_ip")
-        l_port = read_big_int(stream, cls.PORT_BYTES, "local_port")
+
+        # Read in remote and local NetAddr
+        remote_netaddr = NetAddr.from_bytes(stream, is_version=True)
+        local_netaddr = NetAddr.from_bytes(stream, is_version=True)
+
+        # Read in nonce, user agent and last block
         nonce = read_little_int(stream, cls.NONCE_BYTES, "nonce")
         user_agent_size = read_compact_size(stream, "user_agent_size")
         user_agent = read_stream(stream, user_agent_size, "user_agent").decode("ascii")
         last_block = read_little_int(stream, cls.LAST_BLOCK_BYTES, "last_block")
 
-        return cls(version, services, timestamp, r_services, r_ip, r_port, l_services, l_ip, l_port, nonce, user_agent,
-                   last_block, magic_bytes)
+        return cls(version, services, timestamp, remote_netaddr, local_netaddr, nonce, user_agent, last_block,
+                   magic_bytes)
 
     @property
     def command(self) -> str:
@@ -94,24 +91,13 @@ class Version(ControlMessage):
     def payload(self):
         byte_string = b''
 
-        # Get ip addresses
-        local_ipv6 = get_ipv6(self.local_ip)
-        remote_ipv6 = get_ipv6(self.remote_ip)
-
         # Protocol version, services, time
         byte_string += self.protocol_version.to_bytes(self.VERSION_BYTES, "little")
         byte_string += self.services[::-1]
         byte_string += self.timestamp.to_bytes(self.TIME_BYTES, "little")
 
-        # Remote services, ip and port
-        byte_string += self.remote_services[::-1]
-        byte_string += remote_ipv6.packed
-        byte_string += self.remote_port.to_bytes(self.PORT_BYTES, "big")
-
-        # Local services, ip and port
-        byte_string += self.local_services[::-1]
-        byte_string += local_ipv6.packed
-        byte_string += self.local_port.to_bytes(self.PORT_BYTES, "big")
+        # Remote and local netaddr
+        byte_string += self.remote_net_addr.to_bytes() + self.local_net_addr.to_bytes()
 
         # Nonce, user agent and last block
         byte_string += self.nonce.to_bytes(self.NONCE_BYTES, "little")
@@ -127,12 +113,8 @@ class Version(ControlMessage):
             "protocol_version": self.protocol_version,
             "services": self.services.hex(),
             "time": datetime.utcfromtimestamp(self.timestamp).strftime("%Y-%m-%d %H:%M:%S"),
-            "remote_services": self.remote_services.hex(),
-            "remote_ip": self.remote_ip,
-            "remote_port": self.remote_port,
-            "local_services": self.local_services.hex(),
-            "local_ip": self.local_ip,
-            "local_port": self.local_port,
+            "remote_netaddr": self.remote_net_addr.to_dict(),
+            "local_netaddr": self.local_net_addr.to_dict(),
             "nonce": self.nonce,
             "user_agent": self.user_agent,
             "last_block": self.last_block
