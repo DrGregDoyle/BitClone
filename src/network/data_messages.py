@@ -57,7 +57,7 @@ class InventoryMessage(DataMessage):
 """
 from io import BytesIO
 
-from src.data import MAINNET, Inventory, get_stream, read_compact_size, read_stream, write_compact_size
+from src.data import MAINNET, Inventory, get_stream, read_compact_size, read_stream, write_compact_size, read_little_int
 from src.network.messages import DataMessage
 
 
@@ -220,18 +220,82 @@ class NotFound(DataMessage):
         return payload_dict
 
 
+class GetBlocks(DataMessage):
+    """
+    -----------------------------------------------------------------
+    |   Name                    | data type |   format      | size  |
+    -----------------------------------------------------------------
+    |   Version                 |   int     | little-endian |   4   |
+    |   Hash count              |   int     | compact size  |   var |
+    |   Block locator hashes    |   list    | bytes         |   var |
+    |   hash_stop               |   bytes   | bytes         |   32  |
+    -----------------------------------------------------------------
+    """
+    HASH_BYTES = 32
+    VERSION_BYTES = 4
+
+    def __init__(self, version: int, locator_hashes: list[bytes], hash_stop: bytes = None):
+        super().__init__()
+        self.version = version
+        self.hash_count = len(locator_hashes)
+        self.locator_hashes = locator_hashes
+        self.hash_stop = bytes.fromhex("00" * 32) if hash_stop is None else hash_stop
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+        # Get stream
+        stream = get_stream(byte_stream)
+
+        # Get version
+        version = read_little_int(stream, cls.VERSION_BYTES, "version")
+
+        # Get locator hashes
+        hash_count = read_compact_size(stream, "hash_count")
+        hash_list = []
+        for x in range(hash_count):
+            temp_hash = read_stream(stream, cls.HASH_BYTES, "locator_hash")
+            hash_list.append(temp_hash)
+
+        # Get stop_hash
+        stop_hash = read_stream(stream, cls.HASH_BYTES, "stop_hash")
+
+        return cls(version, hash_list, stop_hash)
+
+    @property
+    def command(self) -> str:
+        return "getblocks"
+
+    def payload(self) -> bytes:
+        payload = self.version.to_bytes(self.VERSION_BYTES, "little")
+        payload += write_compact_size(self.hash_count)
+        payload += b''.join(self.locator_hashes)
+        payload += self.hash_stop
+        return payload
+
+    def _payload_dict(self) -> dict:
+        locator_dict = {}
+        for x in range(self.hash_count):
+            locator_dict.update({f"locator_hash_{x}": self.locator_hashes[x].hex()})
+        payload_dict = {
+            "version": self.version,
+            "hash_count": self.hash_count,
+            "locator_hashes": locator_dict,
+            "hash_stop": self.hash_stop.hex()
+        }
+        return payload_dict
+
+
 # --- TESTING
 from src.crypto import hash256
 from secrets import token_bytes
+from random import randint
 
 if __name__ == "__main__":
-    hash1 = hash256(token_bytes(8))
-    hash2 = hash256(token_bytes(8))
-    inv1 = Inventory(1, hash1)
-    inv2 = Inventory(2, hash2)
-    test_inv = Inv([inv1, inv2])
-    test_getdata = GetData([inv2, inv1])
-    test_notfound = GetData([inv1, inv2])
-    print(f"TEST INV: {test_inv.to_json()}")
-    print(f"TEST GETDATA: {test_getdata.to_json()}")
-    print(f"TEST NOTFOUND: {test_notfound.to_json()}")
+    random_version = int.from_bytes(token_bytes(4), "big")
+    random_hash_count = randint(1, 10)
+    random_locator_hash_list = [hash256(token_bytes(32)) for _ in range(random_hash_count)]
+
+    random_get_blocks = GetBlocks(random_version, random_locator_hash_list)
+    print(f"RANDOM GET BLOCKS: {random_get_blocks.to_json()}")
+
+

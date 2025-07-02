@@ -1,11 +1,9 @@
 """
 Control Messages:
-    -Alert
     -FeeFilter
     -FilterClear
     -FilerLoad
     -GetAddr
-    -Reject
     -SendHeaders
 """
 import ipaddress

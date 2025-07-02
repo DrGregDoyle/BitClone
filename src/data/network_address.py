@@ -98,11 +98,11 @@ class NetAddr:
 
 # TESTING
 if __name__ == "__main__":
-    test_addr_bytes = bytes.fromhex("010000000000000000000000000000000000FFFF0A000001208D")
-    test_addr = NetAddr.from_bytes(test_addr_bytes, is_version=True)
-    print(f"TEST ADDR: {test_addr.to_json()}")
-    # test_addr = NetAddr(0, b'', "127.0.0.1", 0)
-    # print(f"TEST ADDR TO JSON: {test_addr.to_json()}")
-    #
-    # test_addr2 = NetAddr(0, b'', '2001:db8::1', 0)
-    # print(f"TEST ADDR2 TO JSON: {test_addr2.to_json()}")
+    version_addr1 = bytes.fromhex("010000000000000000000000000000000000FFFF0A000001208D")
+    version_addr2 = bytes.fromhex("010000000000000000000000000000000000FFFF0A000002208D")
+
+    test_addr1 = NetAddr.from_bytes(version_addr1, is_version=True)
+    test_addr2 = NetAddr.from_bytes(version_addr2, is_version=True)
+    print(f"TEST ADDR1: {test_addr1.to_json()}")
+    print("===" * 80)
+    print(f"TEST ADDR2: {test_addr2.to_json()}")
