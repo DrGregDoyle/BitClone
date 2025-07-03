@@ -1,6 +1,5 @@
 """
 Data Messages:
-    -GetHeaders
     -Headers
     -MemPool
     -MerkleBlock
@@ -12,7 +11,7 @@ Data Messages:
 """
 from io import BytesIO
 
-from src.block import Block
+from src.block import Block, BlockHeader
 from src.data import MAINNET, Inventory, get_stream, read_compact_size, read_stream, write_compact_size, read_little_int
 from src.network.messages import DataMessage
 from src.tx import Transaction
@@ -85,10 +84,11 @@ class NotFound(InvDataParent):
         return "notfound"
 
 
-# ---  Remaining Data Messages --- #
+# ---  GetData Messages --- #
 
-class GetBlocks(DataMessage):
+class GetDataParent(DataMessage):
     """
+    The common structure for GetBlocks and GetHeaders
     -----------------------------------------------------------------
     |   Name                    | data type |   format      | size  |
     -----------------------------------------------------------------
@@ -132,7 +132,7 @@ class GetBlocks(DataMessage):
 
     @property
     def command(self) -> str:
-        return "getblocks"
+        return self.__class__.command
 
     def payload(self) -> bytes:
         payload = self.version.to_bytes(self.VERSION_BYTES, "little")
@@ -153,6 +153,21 @@ class GetBlocks(DataMessage):
         }
         return payload_dict
 
+
+class GetBlocks(GetDataParent):
+
+    @property
+    def command(self) -> str:
+        return "getblocks"
+
+
+class GetHeaders(GetDataParent):
+    @property
+    def command(self) -> str:
+        return "getheaders"
+
+
+# --- Object Messages --- #
 
 class BlockMessage(DataMessage):
     """
@@ -202,6 +217,59 @@ class TxMessage(DataMessage):
 
     def _payload_dict(self) -> dict:
         return self.tx.to_dict()
+
+
+class HeaderMessage(DataMessage):
+    """
+    The headers packet returns block headers in response to a getheaders packet.
+    -------------------------------------------------
+    |   Name    | data type |   format      | size  |
+    -------------------------------------------------
+    |   count   | int       | CompactSize   | var   |
+    |   headers | list      | BlockHeader   | 81x   |
+    -------------------------------------------------
+    """
+
+    def __init__(self, header_list: list[BlockHeader], magic_bytes: bytes = MAINNET):
+        super().__init__()
+        self.headers = header_list
+        self.count = len(self.headers)
+        self.magic_bytes = magic_bytes
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+        stream = get_stream(byte_stream)
+
+        # Get count
+        count = read_compact_size(stream, "headers_count")
+
+        # Get headers
+        header_list = []
+        for _ in range(count):
+            temp_header = BlockHeader.from_bytes(stream)
+            header_list.append(temp_header)
+
+        return cls(header_list, magic_bytes)
+
+    @property
+    def command(self) -> str:
+        return "headers"
+
+    def payload(self) -> bytes:
+        payload = write_compact_size(self.count)
+        for h in self.headers:
+            payload += h.to_bytes() + b'\x00'  # 80 byte header + 1 byte tx count set to 0
+        return payload
+
+    def _payload_dict(self) -> dict:
+        header_dict = {}
+        for x in range(self.count):
+            header_dict.update({f"header_{x}": self.headers[x].to_dict()})
+        payload_dict = {
+            "count": self.count,
+            "headers": header_dict
+        }
+        return payload_dict
 
 
 # --- TESTING
