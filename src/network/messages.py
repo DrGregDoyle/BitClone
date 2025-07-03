@@ -93,6 +93,15 @@ class DataMessage(ABC):
     def __init__(self, magic_bytes: bytes = MAINNET):
         self.magic_bytes = magic_bytes
 
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+        """
+        Create message instance from bytes.
+        Subclasses should override this method if they need to parse payload data.
+        Default implementation creates instance with just magic_bytes (for empty payloads).
+        """
+        return cls(magic_bytes)
+
     @property
     @abstractmethod
     def command(self) -> str:
@@ -147,11 +156,3 @@ class DataMessage(ABC):
         """
         return json.dumps(self.to_dict(), indent=2)
 
-    @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
-        """
-        Create message instance from bytes.
-        Subclasses should override this method if they need to parse payload data.
-        Default implementation creates instance with just magic_bytes (for empty payloads).
-        """
-        return cls(magic_bytes)
