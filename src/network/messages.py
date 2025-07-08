@@ -11,6 +11,8 @@ from src.network.header import Header
 __all__ = ["ControlMessage", "DataMessage"]
 
 
+# TODO: Change Control and Data message to inherit from Serializable
+
 class ControlMessage(ABC):
     """
     Base class for all Bitcoin protocol control messages.
@@ -155,4 +157,3 @@ class DataMessage(ABC):
         Return JSON representation of the message.
         """
         return json.dumps(self.to_dict(), indent=2)
-

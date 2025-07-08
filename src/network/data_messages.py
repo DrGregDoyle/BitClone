@@ -86,7 +86,7 @@ class NotFound(InvDataParent):
 
 # ---  GetData Messages --- #
 
-class GetDataParent(DataMessage):
+class GetBlockParent(DataMessage):
     """
     The common structure for GetBlocks and GetHeaders
     -----------------------------------------------------------------
@@ -132,7 +132,7 @@ class GetDataParent(DataMessage):
 
     @property
     def command(self) -> str:
-        return self.__class__.command
+        raise NotImplementedError(f"{self.__class__.__name__} must implement command")
 
     def payload(self) -> bytes:
         payload = self.version.to_bytes(self.VERSION_BYTES, "little")
@@ -154,14 +154,14 @@ class GetDataParent(DataMessage):
         return payload_dict
 
 
-class GetBlocks(GetDataParent):
+class GetBlocks(GetBlockParent):
 
     @property
     def command(self) -> str:
         return "getblocks"
 
 
-class GetHeaders(GetDataParent):
+class GetHeaders(GetBlockParent):
     @property
     def command(self) -> str:
         return "getheaders"
@@ -270,6 +270,9 @@ class HeaderMessage(DataMessage):
             "headers": header_dict
         }
         return payload_dict
+
+
+# --- BIP-0152 --- #
 
 
 # --- TESTING
