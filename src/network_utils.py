@@ -9,6 +9,8 @@ from src.data.byte_stream import get_stream, read_compact_size, read_little_int
 from src.data.data_handling import write_compact_size, to_little_bytes
 from src.tx import Transaction
 
+__all__ = ["PrefilledTransaction", "HeaderAndShortIDs"]
+
 
 class PrefilledTransaction:
 

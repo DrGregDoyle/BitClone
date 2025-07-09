@@ -9,6 +9,7 @@ NOTE: SQLITE supports signed 64-bit integers, hence the maximum random value for
 from secrets import token_bytes, randbits, randbelow
 
 from src.block import Block, BlockHeader
+from src.network_utils import PrefilledTransaction
 from src.tx import Input, Output, WitnessItem, Witness, Transaction
 
 
@@ -118,3 +119,17 @@ def get_random_block_header(tx_num: int = 3):
         bits=token_bytes(4),
         nonce=randbits(32)
     )
+
+
+def get_random_prefilled_tx(index: int = None, is_segwit: bool = True):
+    tx = get_random_tx(is_segwit=is_segwit)
+    index = randbelow(1000) if index is None else index
+    return PrefilledTransaction(tx=tx, index=index)
+
+
+def get_random_shortid(shortid_bytes: int = 6):
+    return token_bytes(shortid_bytes)
+
+
+def get_random_nonce(nonce_bytes: int = 8):
+    return int.from_bytes(token_bytes(nonce_bytes), "little")

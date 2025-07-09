@@ -278,6 +278,7 @@ class Transaction(Serializable):
         self.witnesses = witnesses if witnesses else []
 
         # Get input and output counts
+        # TODO: Modify input and output count to be integers rather than compact sizes
         self.input_count = write_compact_size(len(self.inputs))
         self.output_count = write_compact_size(len(self.outputs))
 
@@ -433,9 +434,10 @@ class Transaction(Serializable):
 
         # 3. Add inputs and outputs
         tx_dict["inputcount"] = self.input_count.hex()
-        tx_dict["inputs"] = [i.to_dict() for i in self.inputs]
+        tx_dict["inputs"] = {f"input_{x}": self.inputs[x].to_dict() for x in range(len(self.inputs))}
+        # tx_dict["inputs"] = [i.to_dict() for i in self.inputs]
         tx_dict["outputcount"] = self.output_count.hex()
-        tx_dict["outputs"] = [i.to_dict() for i in self.outputs]
+        # tx_dict["outputs"] = [i.to_dict() for i in self.outputs]
 
         # 4. If SegWit, add witness
         if self.segwit:
