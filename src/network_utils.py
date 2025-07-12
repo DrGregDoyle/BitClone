@@ -9,7 +9,7 @@ from src.data.byte_stream import get_stream, read_compact_size, read_little_int,
 from src.data.data_handling import write_compact_size, to_little_bytes
 from src.tx import Transaction
 
-__all__ = ["PrefilledTransaction", "HeaderAndShortIDs", "BlockTransactionsRequest"]
+__all__ = ["PrefilledTransaction", "HeaderAndShortIDs", "BlockTransactionsRequest", "BlockTransactions"]
 
 
 class PrefilledTransaction:
@@ -201,6 +201,63 @@ class BlockTransactionsRequest:
             "differentially encoded indexes": diff_encode_dict
         }
         return block_tx_req_dict
+
+    def to_json(self):
+        return json.dumps(self.to_dict(), indent=2)
+
+
+class BlockTransactions:
+    """
+    ---------------------------------------------------------------------------------
+    |   Name            |   Data type   |   byte format             |   byte size   |
+    ---------------------------------------------------------------------------------
+    |   block_hash      |   bytes       |   natural byte order      |   32          |
+    |   tx_length       |   int         |   Compactsize             |   varint      |
+    |   tx_list         |   list        |   tx.to_bytes()           |   var         |
+    ---------------------------------------------------------------------------------
+    """
+    BLOCKHASH_BYTES = 32
+
+    def __init__(self, block_hash: bytes, tx_list: list[Transaction]):
+        self.block_hash = block_hash
+        self.txs = tx_list
+        self.tx_length = len(self.txs)
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO):
+        # Get stream
+        stream = get_stream(byte_stream)
+
+        # Get hash
+        block_hash = read_stream(stream, cls.BLOCKHASH_BYTES, "block_hash")
+
+        # Get txs
+        tx_num = read_compact_size(stream, "tx_num")
+        tx_list = []
+        for _ in range(tx_num):
+            tx_list.append(
+                Transaction.from_bytes(stream)
+            )
+        return cls(block_hash, tx_list)
+
+    def to_bytes(self):
+        parts = [self.block_hash, write_compact_size(self.tx_length)]
+        for t in self.txs:
+            parts.append(t.to_bytes())
+        return b''.join(parts)
+
+    def to_dict(self):
+        tx_dict = {}
+        for x in range(self.tx_length):
+            tx_dict.update({
+                f"tx_{x}": self.txs[x].to_dict()
+            })
+        block_txs_dict = {
+            "block_hash": self.block_hash[::-1].hex(),  # Reverse bytes for display
+            "tx_length": self.tx_length,
+            "transactions": tx_dict
+        }
+        return block_txs_dict
 
     def to_json(self):
         return json.dumps(self.to_dict(), indent=2)

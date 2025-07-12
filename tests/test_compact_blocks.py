@@ -9,7 +9,7 @@ from src.data import write_compact_size
 from src.logger import get_logger
 from src.network_utils import *
 from tests.randbtc_generators import get_random_prefilled_tx, get_random_block_header, get_random_nonce, \
-    get_random_shortid
+    get_random_shortid, get_random_tx
 
 logger = get_logger(__name__)
 
@@ -58,3 +58,18 @@ def test_block_tx_request():
     # Verify to_bytes -> from_bytes
     assert recovered_block_tx_req.to_bytes() == random_block_tx_request.to_bytes(), \
         "to_bytes -> from_bytes construction failed for BlockTransactionRequest"
+
+
+def test_block_transactions():
+    random_hash = hash256(token_bytes(8))
+    random_tx_num = randint(3, 5)
+    tx_list = []
+    for _ in range(random_tx_num):
+        tx_list.append(get_random_tx())
+
+    random_block_tx = BlockTransactions(random_hash, tx_list)
+    recovered_block_tx = BlockTransactions.from_bytes(random_block_tx.to_bytes())
+
+    # Verify to_bytes -> from_bytes
+    assert random_block_tx.to_bytes() == recovered_block_tx.to_bytes(), \
+        "to_bytes -> from_bytes construction failed for BlockTransactions"
