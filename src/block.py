@@ -1,11 +1,12 @@
 """
 Block and MerkleTree classes
 """
-import struct
+
+from io import BytesIO
 
 from src.crypto import hash256
 from src.data import Serializable, read_compact_size, MerkleTree, write_compact_size, get_stream, \
-    read_stream
+    read_stream, to_little_bytes, read_little_int
 from src.logger import get_logger
 from src.tx import Transaction
 
@@ -13,10 +14,19 @@ logger = get_logger(__name__)
 
 
 class BlockHeader(Serializable):
-    """Represents the 80-byte Bitcoin Block Header"""
+    """
+    ---------------------------------------------------------------------
+    |   Name        |   data_type   |   format              |   size    |
+    ---------------------------------------------------------------------
+    |   Version     |   int         |   little-endian       |   4       |
+    |   prev_block  |   bytes       |   natural byte order  |   32      |
+    |   merkle_root |   bytes       |   natural byte order  |   32      |
+    |   time        |   int         |   little-endian       |   4       |
+    |   bits        |   bytes       |   little-endian       |   4       |
+    |   nonce       |   int         |   little-endian       |   4       |
+    ---------------------------------------------------------------------
+    """
     __slots__ = ('version', 'prev_block', 'merkle_root', 'timestamp', 'bits', 'nonce')
-
-    HEADER_FORMAT = "<L32s32sL4sL"  # Little-endian: uint32, 32 bytes, 32 bytes, uint32, 4 bytes, uint32
 
     def __init__(self, version: int, prev_block: bytes, merkle_root: bytes, timestamp: int, bits: bytes, nonce: int):
         self.version = version
@@ -27,24 +37,22 @@ class BlockHeader(Serializable):
         self.nonce = nonce
 
     def to_bytes(self):
-        """Serializes the block header into an 80-byte binary format."""
-        return struct.pack(
-            self.HEADER_FORMAT,
-            self.version,
-            self.prev_block,
-            self.merkle_root,
-            self.timestamp,
-            self.bits,
-            self.nonce,
-        )
+        return (to_little_bytes(self.version,
+                                self.VERSION_BYTES) + self.prev_block + self.merkle_root + to_little_bytes(
+            self.timestamp, self.TIME_BYTES) + self.bits + to_little_bytes(self.nonce, self.NONCE_BYTES))
 
     @classmethod
-    def from_bytes(cls, byte_stream):
-        """Deserializes an 80-byte block header."""
-        if len(byte_stream) != cls.HEADER_BYTES:
-            raise ValueError("Invalid block header size")
-        fields = struct.unpack(cls.HEADER_FORMAT, byte_stream)
-        return cls(*fields)
+    def from_bytes(cls, byte_stream: bytes | BytesIO):
+        stream = get_stream(byte_stream)
+
+        version = read_little_int(stream, cls.VERSION_BYTES, "version")
+        prev_block = read_stream(stream, cls.PREV_BLOCK_BYTES, "prev_block")
+        merkle_root = read_stream(stream, cls.MERKLEROOT_BYTES, "merkle_root")
+        timestamp = read_little_int(stream, cls.TIME_BYTES, "Unix epoch time")
+        bits = read_stream(stream, cls.BITS_BYTES, "bits")
+        nonce = read_little_int(stream, cls.NONCE_BYTES, "nonce")
+
+        return cls(version, prev_block, merkle_root, timestamp, bits, nonce)
 
     def to_dict(self):
         """Returns a dictionary representation of the block header."""

@@ -441,7 +441,8 @@ class Transaction(Serializable):
 
         # 4. If SegWit, add witness
         if self.segwit:
-            tx_dict["witnesses"] = [w.to_dict() for w in self.witnesses]
+            tx_dict["witnesses"] = {f"witness_{x}": self.witnesses[x].to_dict() for x in range(len(self.witnesses))}
+            # tx_dict["witnesses"] = [w.to_dict() for w in self.witnesses]
 
         # 5. Add locktime and return
         tx_dict["locktime"] = to_little_bytes(self.locktime, self.LOCKTIME_BYTES).hex()

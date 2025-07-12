@@ -55,7 +55,7 @@ class HeaderAndShortIDs:
     NONCE_BYTES = 8
     SHORTIDS_BYTES = 6
 
-    def __init__(self, header: BlockHeader, nonce: int, short_ids: list, prefilled_txs: list):
+    def __init__(self, header: BlockHeader, nonce: int, short_ids: list, prefilled_txs: list[PrefilledTransaction]):
         self.header = header
         self.nonce = nonce
         self.shortids = short_ids
@@ -84,7 +84,7 @@ class HeaderAndShortIDs:
     def to_bytes(self):
         return (self.header.to_bytes() + to_little_bytes(self.nonce, self.NONCE_BYTES)
                 + write_compact_size(self.shortids_length) + b''.join(self.shortids)
-                + write_compact_size(self.prefilledtxn_length) + b''.join(self.prefilledtxn))
+                + write_compact_size(self.prefilledtxn_length) + b''.join([t.to_bytes() for t in self.prefilledtxn]))
 
     def to_dict(self):
         header_and_short_ids_dict = {
