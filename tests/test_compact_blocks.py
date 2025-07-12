@@ -2,7 +2,10 @@
 Tests for the data structures created in BIP-0152
 """
 from random import randint
+from secrets import token_bytes
 
+from src.crypto import hash256
+from src.data import write_compact_size
 from src.logger import get_logger
 from src.network_utils import *
 from tests.randbtc_generators import get_random_prefilled_tx, get_random_block_header, get_random_nonce, \
@@ -42,3 +45,16 @@ def test_header_and_short_ids():
     # Verify to_bytes -> from_bytes
     assert recovered_header_and_shortid.to_bytes() == random_header_and_shortid.to_bytes(), \
         "to_bytes -> from_bytes construction failed for HeaderAndShortIDs"
+
+
+def test_block_tx_request():
+    random_hash = hash256(token_bytes(8))
+    random_index = int.from_bytes(token_bytes(2), "big")
+    # 3 consecutive differentially encoded indexes
+    test_diff_list = [write_compact_size(random_index), write_compact_size(0), write_compact_size(0)]
+    random_block_tx_request = BlockTransactionsRequest(random_hash, test_diff_list)
+    recovered_block_tx_req = BlockTransactionsRequest.from_bytes(random_block_tx_request.to_bytes())
+
+    # Verify to_bytes -> from_bytes
+    assert recovered_block_tx_req.to_bytes() == random_block_tx_request.to_bytes(), \
+        "to_bytes -> from_bytes construction failed for BlockTransactionRequest"

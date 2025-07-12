@@ -9,10 +9,18 @@ from src.data.byte_stream import get_stream, read_compact_size, read_little_int,
 from src.data.data_handling import write_compact_size, to_little_bytes
 from src.tx import Transaction
 
-__all__ = ["PrefilledTransaction", "HeaderAndShortIDs"]
+__all__ = ["PrefilledTransaction", "HeaderAndShortIDs", "BlockTransactionsRequest"]
 
 
 class PrefilledTransaction:
+    """
+    -------------------------------------------------------------
+    |   Name    |   Data type   |   byte format |   byte size   |
+    -------------------------------------------------------------
+    |   Index   |   int         |   CompactSize |   varInt      |
+    |   Tx      |   Transaction |   tx.to_bytes |   var         |
+    -------------------------------------------------------------
+    """
 
     def __init__(self, index: int, tx: Transaction):
         self.index = index
@@ -52,6 +60,18 @@ class PrefilledTransaction:
 
 
 class HeaderAndShortIDs:
+    """
+    ---------------------------------------------------------------------------------
+    |   Name                |   Data type       |   byte format     |   byte size   |
+    ---------------------------------------------------------------------------------
+    |   Header              |   Block header    |   header.to_bytes |   80          |
+    |   Nonce               |   int             |   little-endian   |   8           |
+    |   shorts_ids_length   |   int             |   CompactSize     |   varint      |
+    |   shortids            |   list            |   little-endian   |   6 * length  |
+    |   prefilled_tx_length |   int             |   CompactSize     |   varint      |
+    |   prefilled_tx        |   list            |   tx.to_bytes     |   var         |
+    ---------------------------------------------------------------------------------
+    """
     NONCE_BYTES = 8
     SHORTIDS_BYTES = 6
 
@@ -110,6 +130,93 @@ class HeaderAndShortIDs:
         return json.dumps(self.to_dict())
 
 
+class BlockTransactionsRequest:
+    """
+    ---------------------------------------------------------------------------------
+    |   Name            |   Data type   |   byte format             |   byte size   |
+    ---------------------------------------------------------------------------------
+    |   block_hash      |   bytes       |   natural_byte_order      |   32          |
+    |   indexes_length  |   int         |   CompactSize             |   varint      |
+    |   indexes         |   list        |   Differentially encoded  |   var         |
+    ---------------------------------------------------------------------------------
+    """
+    BLOCKHASH_BYTES = 32
+
+    def __init__(self, block_hash: bytes, indexes: list):
+        """
+        We assume that the indexes list is already differentially encoded
+        """
+        self.block_hash = block_hash
+        self.indexes = indexes
+        self.indexes_length = len(indexes)
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO):
+        # Get stream
+        stream = get_stream(byte_stream)
+
+        # Get block_hash
+        block_hash = read_stream(stream, cls.BLOCKHASH_BYTES, "block_hash")
+
+        # Get indexes
+        indexes_length = read_compact_size(stream, "indexes_length")
+        indexes = []
+        for _ in range(indexes_length):
+            indexes.append(write_compact_size(read_compact_size(stream, "differentially encoded index")))
+
+        return cls(block_hash, indexes)
+
+    def to_bytes(self):
+        return self.block_hash + write_compact_size(self.indexes_length) + b''.join(self.indexes)
+
+    def to_dict(self):
+        index_dict = {}
+        diff_encode_dict = {}
+        current_index = read_compact_size(get_stream(self.indexes[0]), "Compact Size")
+
+        for x in range(self.indexes_length):
+            # First index case
+            if x == 0:
+                index_dict.update({
+                    "index_0": current_index
+                })
+                diff_encode_dict.update({
+                    "differentially_encoded_index_0": current_index
+                })
+            # Remaining elements in list
+            else:
+                temp_index = read_compact_size(get_stream(self.indexes[x]), "Differentially encoded int")
+                diff_encode_dict.update({
+                    f"differentially_encoded_index_{x}": temp_index
+                })
+                current_index = temp_index + 1 + current_index
+                index_dict.update({
+                    f"index_{x}": current_index
+                })
+
+        block_tx_req_dict = {
+            "block_hash": self.block_hash[::-1].hex(),  # reverse byte order for display
+            "index_count": self.indexes_length,
+            "index list": index_dict,
+            "differentially encoded indexes": diff_encode_dict
+        }
+        return block_tx_req_dict
+
+    def to_json(self):
+        return json.dumps(self.to_dict(), indent=2)
+
+
 # --- TESTING
+from src.crypto import hash256
+from secrets import token_bytes
+
 if __name__ == "__main__":
-    pass
+    test_hash = hash256(token_bytes(4))
+    leading_index = int.from_bytes(token_bytes(2), "big")
+    print(f"LEADING INDEX: {leading_index}")
+    test_diff_list = [write_compact_size(leading_index), write_compact_size(0), write_compact_size(0)]  # 3
+    # consecutive differentially encoded indexes
+    test_block_tx_request = BlockTransactionsRequest(test_hash, test_diff_list)
+    print(f"TEST BLOCK TX REQUEST: {test_block_tx_request.to_json()}")
+    recovered_block_tx_req = BlockTransactionsRequest.from_bytes(test_block_tx_request.to_bytes())
+    print(f"RECOVERED BLOCK TX REQ: {recovered_block_tx_req.to_json()}")
