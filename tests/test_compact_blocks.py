@@ -1,7 +1,6 @@
 """
 Tests for the data structures created in BIP-0152
 """
-import json
 from random import randint
 
 from src.logger import get_logger
@@ -38,13 +37,8 @@ def test_header_and_short_ids():
     random_prefilled_tx = [get_random_prefilled_tx(index=n) for n in range(random_prefilled_tx_length)]
 
     random_header_and_shortid = HeaderAndShortIDs(random_header, random_nonce, random_shortids, random_prefilled_tx)
-    # logger.info(f"RANDOM HEADER AND SHORTID: {random_header_and_shortid.to_json()}")
-    # print(f"RANDOM HEADER AND SHORTID: {random_header_and_shortid.to_json()}")
-    ugly_json = random_header_and_shortid.to_json()
-    print(json.dumps(json.loads(ugly_json), indent=2))
-    # recovered_header_and_shortid = HeaderAndShortIDs.from_bytes(random_header_and_shortid.to_bytes())
-    # logger.info(f"RECOVERED HEADER AND SHORTID: {recovered_header_and_shortid.to_json()}")
+    recovered_header_and_shortid = HeaderAndShortIDs.from_bytes(random_header_and_shortid.to_bytes())
 
-    # # Verify to_bytes -> from_bytes
-    # assert recovered_header_and_shortid.to_bytes() == random_header_and_shortid.to_bytes(), \
-    #     "to_bytes -> from_bytes construction failed for HeaderAndShortIDs"
+    # Verify to_bytes -> from_bytes
+    assert recovered_header_and_shortid.to_bytes() == random_header_and_shortid.to_bytes(), \
+        "to_bytes -> from_bytes construction failed for HeaderAndShortIDs"

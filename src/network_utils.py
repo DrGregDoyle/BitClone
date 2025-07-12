@@ -5,7 +5,7 @@ import json
 from io import BytesIO
 
 from src.block import BlockHeader
-from src.data.byte_stream import get_stream, read_compact_size, read_little_int
+from src.data.byte_stream import get_stream, read_compact_size, read_little_int, read_stream
 from src.data.data_handling import write_compact_size, to_little_bytes
 from src.tx import Transaction
 
@@ -73,7 +73,7 @@ class HeaderAndShortIDs:
         shortids_length = read_compact_size(stream, "shortids_length")
         shortids = []
         for _ in range(shortids_length):
-            shortids.append(read_little_int(stream, cls.SHORTIDS_BYTES, "shortids"))
+            shortids.append(read_stream(stream, cls.SHORTIDS_BYTES, "short_ids"))
         prefilledtxn_length = read_compact_size(stream, "prefilledtxn_length")
         prefilledtxn = []
         for _ in range(prefilledtxn_length):
@@ -82,16 +82,24 @@ class HeaderAndShortIDs:
         return cls(header, nonce, shortids, prefilledtxn)
 
     def to_bytes(self):
+
         return (self.header.to_bytes() + to_little_bytes(self.nonce, self.NONCE_BYTES)
                 + write_compact_size(self.shortids_length) + b''.join(self.shortids)
                 + write_compact_size(self.prefilledtxn_length) + b''.join([t.to_bytes() for t in self.prefilledtxn]))
 
     def to_dict(self):
+        short_ids_dict = {}
+        for x in range(self.shortids_length):
+            temp_shortid = self.shortids[x]
+            short_ids_dict.update({
+                f"short_id_{x}": temp_shortid.hex()
+            })
+
         header_and_short_ids_dict = {
             "header": self.header.to_dict(),
             "nonce": self.nonce,
             "shortids_length": self.shortids_length,
-            "shortids": {f"id_{x}": self.shortids[x].hex() for x in range(self.shortids_length)},
+            "shortids": short_ids_dict,  # {f"id_{x}": self.shortids[x].hex() for x in range(self.shortids_length)},
             "prefilledtxn_length": self.prefilledtxn_length,
             "prefilledtxn": {f"prefilled_txn_{x}": self.prefilledtxn[x].to_dict() for x in
                              range(self.prefilledtxn_length)}
