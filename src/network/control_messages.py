@@ -1,9 +1,7 @@
 """
 Control Messages:
-    -FeeFilter
-    -FilterClear
     -FilerLoad
-    -SendHeaders
+
 """
 import ipaddress
 from datetime import datetime
@@ -11,7 +9,7 @@ from io import BytesIO
 from time import time as now
 
 from src.data import get_stream, read_little_int, read_stream, read_compact_size, write_compact_size, MAINNET, \
-    NetAddr, RejectType
+    NetAddr, RejectType, to_little_bytes
 from src.network.messages import ControlMessage
 
 
@@ -336,6 +334,78 @@ class SendHeaders(ControlMessage):
         return b''
 
 
+class FeeFilter(ControlMessage):
+    """
+    The feefilter message is a request to the receiving peer to not relay any transaction inv messages to the sending
+    peer where the fee rate for the transaction is below the fee rate specified in the feefilter message.
+
+    The payload is always 8 bytes long and it encodes 64 bit integer value (LSB / little endian) of feerate. The
+    value represents a minimal fee and is expressed in satoshis per 1000 bytes.
+    """
+    FEERATE_BYTES = 8
+
+    def __init__(self, feerate: int, magic_bytes: bytes = MAINNET):
+        super().__init__(magic_bytes)
+        self.feerate = feerate
+        self.magic_bytes = magic_bytes
+
+    @property
+    def command(self) -> str:
+        return "feefilter"
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+        stream = get_stream(byte_stream)
+
+        feerate = read_little_int(stream, cls.FEERATE_BYTES, "feerate")
+        return cls(feerate, magic_bytes)
+
+    def payload(self) -> bytes:
+        return to_little_bytes(self.feerate, self.FEERATE_BYTES)
+
+    def _payload_dict(self) -> dict:
+        return {
+            "feerate": self.feerate
+        }
+
+
+class FilterClear(ControlMessage):
+    """
+    The filterclear message tells the receiving peer to remove a previously-set bloom filter. This also undoes the
+    effect of setting the relay field in the version message to 0, allowing unfiltered access to inv messages
+    announcing new transactions.
+
+    Bitcoin Core does not require a filterclear message before a replacement filter is loaded with filterload. It also
+    doesn’t require a filterload message before a filterclear message.
+
+    There is no payload in a filterclear message
+    """
+
+    @property
+    def command(self) -> str:
+        return "filterclear"
+
+    def payload(self) -> bytes:
+        return b''
+
+
+class FilterLoad(ControlMessage):
+    """
+    -------------------------------------------------------------------------
+    |   Name        |   Data type       |   Byte format     |   byte size   |
+    -------------------------------------------------------------------------
+    |   filter      |   bytes           |   bit_field       |   max 36,000  |
+    |   nHashFuncs  |   int (max 50)    |   little-endian   |   4           |
+    |   nTweak      |   int             |   little-endian   |   4           |
+    |   nFlags      |   BLOOM_TYPE      |   little-endian   |   1           |
+    -------------------------------------------------------------------------
+    """
+
+    @property
+    def command(self) -> str:
+        return "filterload"
+
+
 if __name__ == "__main__":
     from random import randint
     from secrets import token_bytes
@@ -382,3 +452,9 @@ if __name__ == "__main__":
     test_sendheaders = SendHeaders()
     print(f"GET ADDR: {test_getaddr.to_json()}")
     print(f"SEND HEADERS: {test_sendheaders.to_json()}")
+
+    test_feefilter = FeeFilter(50000)
+    print(f"FEE FILTER: {test_feefilter.to_json()}")
+
+    test_filterclear = FilterClear()
+    print(f"FILTER CLEAR: {test_filterclear.to_json()}")
