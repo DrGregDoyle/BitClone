@@ -3,7 +3,6 @@ Control Messages:
     -FeeFilter
     -FilterClear
     -FilerLoad
-    -GetAddr
     -SendHeaders
 """
 import ipaddress
@@ -304,6 +303,39 @@ class Reject(ControlMessage):
         return payload_dict
 
 
+class GetAddr(ControlMessage):
+    """
+    The getaddr message requests an addr message from the receiving node, preferably one with lots of IP addresses of
+    other receiving nodes. The transmitting node can use those IP addresses to quickly update its database of
+    available nodes rather than waiting for unsolicited addr messages to arrive over time.
+
+    There is no payload in a getaddr message.
+    """
+
+    @property
+    def command(self) -> str:
+        return "getaddr"
+
+    def payload(self):
+        return b''
+
+
+class SendHeaders(ControlMessage):
+    """
+    The sendheaders message tells the receiving peer to send new block announcements using a headers message rather
+    than an inv message.
+
+    There is no payload in a sendheaders message
+    """
+
+    @property
+    def command(self) -> str:
+        return "sendheaders"
+
+    def payload(self) -> bytes:
+        return b''
+
+
 if __name__ == "__main__":
     from random import randint
     from secrets import token_bytes
@@ -345,3 +377,8 @@ if __name__ == "__main__":
     print(f"TEST REJECT: {test_reject.to_json()}")
     rj_from_bytes = Reject.from_bytes(test_reject.payload())
     print(f"REJECT FROM BYTES: {rj_from_bytes.to_json()}")
+
+    test_getaddr = GetAddr()
+    test_sendheaders = SendHeaders()
+    print(f"GET ADDR: {test_getaddr.to_json()}")
+    print(f"SEND HEADERS: {test_sendheaders.to_json()}")

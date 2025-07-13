@@ -1,7 +1,6 @@
 """
 Data Messages:
     -Headers
-    -MemPool
     -MerkleBlock
     -CmpctBlock
     -SendCmpct
@@ -270,6 +269,23 @@ class HeaderMessage(DataMessage):
             "headers": header_dict
         }
         return payload_dict
+
+
+class MemPool(DataMessage):
+    """
+    The mempool message sends a request to a node asking for information about transactions it has verified but which
+    have not yet confirmed. The response to receiving this message is an inv message containing the transaction
+    hashes for all the transactions in the node's mempool.
+
+    No additional data is transmitted with this message.
+    """
+
+    @property
+    def command(self) -> str:
+        return "mempool"
+
+    def payload(self):
+        return b''
 
 
 # --- BIP-0152 --- #
