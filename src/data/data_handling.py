@@ -5,7 +5,7 @@ import struct
 
 __all__ = ["write_compact_size", "byte_format", "to_little_bytes",
            "target_to_bits", "bits_to_target", "bits_to_target_int",
-           "bytes_to_binary_string"]
+           "bytes_to_binary_string", "bytes_to_2byte_binary_string"]
 
 
 def write_compact_size(value: int) -> bytes:
@@ -43,6 +43,11 @@ def byte_format(data: bytes, length: int):
 
 def bytes_to_binary_string(b: bytes):
     return bin(int.from_bytes(b, 'big'))[2:].zfill(len(b) * 8)
+
+
+def bytes_to_2byte_binary_string(b: bytes):
+    bits = bytes_to_binary_string(b)
+    return " ".join([bits[i:i + 4] for i in range(0, len(bits), 4)])
 
 
 def to_little_bytes(num: int, length: int = None):

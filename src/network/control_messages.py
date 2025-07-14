@@ -3,13 +3,11 @@ Control Messages:
     -FilerLoad
 
 """
-import ipaddress
 from datetime import datetime
 from io import BytesIO
-from time import time as now
 
 from src.data import get_stream, read_little_int, read_stream, read_compact_size, write_compact_size, MAINNET, \
-    NetAddr, RejectType, to_little_bytes
+    NetAddr, RejectType, to_little_bytes, BloomType, bytes_to_2byte_binary_string
 from src.network.messages import ControlMessage
 
 
@@ -394,12 +392,64 @@ class FilterLoad(ControlMessage):
     -------------------------------------------------------------------------
     |   Name        |   Data type       |   Byte format     |   byte size   |
     -------------------------------------------------------------------------
+    |   filter_size |   int             |   CompactSize     |   varint      |
     |   filter      |   bytes           |   bit_field       |   max 36,000  |
     |   nHashFuncs  |   int (max 50)    |   little-endian   |   4           |
     |   nTweak      |   int             |   little-endian   |   4           |
     |   nFlags      |   BLOOM_TYPE      |   little-endian   |   1           |
     -------------------------------------------------------------------------
     """
+    MAX_FILTER = 0x8ca0  # 36,000 bytes
+    MAX_TWEAK = 0x32  # 50
+    HASHFUNC_BYTES = TWEAK_BYTES = 4
+    FLAG_BYTES = 1
+
+    def __init__(self, filter_bytes: bytes, nhashfunc: int, ntweak: int, nflags: int | BloomType,
+                 magic_bytes: bytes = MAINNET):
+        super().__init__(magic_bytes)
+        # Error checking
+        if len(filter_bytes) > self.MAX_FILTER:
+            raise ValueError(f"Size of filter bytes exceeds {self.MAX_FILTER}. Filter size: {len(filter_bytes)}")
+        if nhashfunc > self.MAX_TWEAK:
+            raise ValueError(f"Hash function num exceeds {self.MAX_TWEAK}. Hashfunc num: {nhashfunc}")
+
+        self.filter_bytes = filter_bytes
+        self.filter_bytes_size = len(self.filter_bytes)
+        self.nhashfunc = nhashfunc
+        self.ntweak = ntweak
+        self.nflags = BloomType(nflags) if isinstance(nflags, int) else nflags  # BloomType
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+        # Get Stream
+        stream = get_stream(byte_stream)
+
+        # Get filter_bytes
+        filter_size = read_compact_size(stream, "filter_bytes_size")
+        filter_bytes = read_stream(stream, filter_size, "filter_bytes")
+
+        # Get n-vals
+        nhashfunc = read_little_int(stream, cls.HASHFUNC_BYTES, "n_hash_func")
+        ntweak = read_little_int(stream, cls.TWEAK_BYTES, "n_tweak")
+        nflag = read_little_int(stream, cls.FLAG_BYTES, "n_flags")
+
+        return cls(filter_bytes, nhashfunc, ntweak, nflag)
+
+    def payload(self) -> bytes:
+        payload_parts = [write_compact_size(self.filter_bytes_size), self.filter_bytes,
+                         write_compact_size(self.nhashfunc), write_compact_size(self.ntweak), self.nflags.to_byte()]
+        return b''.join(payload_parts)
+
+    def _payload_dict(self) -> dict:
+        payload_dict = {
+            "filter_bytes_size": self.filter_bytes_size,
+            "filter_bytes": self.filter_bytes.hex(),
+            "binary_filter": bytes_to_2byte_binary_string(self.filter_bytes),
+            "n_hash_funct": self.nhashfunc,
+            "n_tweak": self.ntweak,
+            "nflags": self.nflags.name
+        }
+        return payload_dict
 
     @property
     def command(self) -> str:
@@ -408,53 +458,61 @@ class FilterLoad(ControlMessage):
 
 if __name__ == "__main__":
     from random import randint
-    from secrets import token_bytes
 
-    test_version_bytes = bytes.fromhex(
-        "7E1101000000000000000000C515CF6100000000000000000000000000000000000000000000FFFF2E13894A208D000000000000000000000000000000000000FFFF7F000001208D00000000000000000000000000")
-    test_version = Version.from_bytes(test_version_bytes)
-    print(f"TEST VERSION: {test_version.to_json()}")
+    # test_version_bytes = bytes.fromhex(
+    #     "7E1101000000000000000000C515CF6100000000000000000000000000000000000000000000FFFF2E13894A208D000000000000000000000000000000000000FFFF7F000001208D00000000000000000000000000")
+    # test_version = Version.from_bytes(test_version_bytes)
+    # print(f"TEST VERSION: {test_version.to_json()}")
+    #
+    # test_verack = VerAck()
+    # print(f"VERACK: {test_verack.to_json()}")
+    #
+    # random_ping = Ping(randint(250, 500))
+    # print(f"RANDOM PING: {random_ping.to_json()}")
+    # print(f"PONG: = {Pong(random_ping.nonce).to_json()}")
+    #
+    #
+    # def random_netaddr() -> NetAddr:
+    #     # Random services
+    #     services = token_bytes(8)
+    #
+    #     # Random ip
+    #     ip_addr = str(ipaddress.IPv4Address(randint(0, 2 ** 32 - 1)))
+    #
+    #     # Random port
+    #     port = randint(0, 0xffff)
+    #
+    #     return NetAddr(int(now()), services, ip_addr, port)
+    #
+    #
+    # net_addr_list = [random_netaddr() for _ in range(randint(1, 5))]
+    # test_addr = Addr(net_addr_list)
+    # print(f"TEST ADDR: {test_addr.to_json()}")
+    #
+    # # TEST REJECT MESSAGE
+    # test_reject = Reject("tx", 0x10, "non-mandatory-script-verify-flag (Witness required)",
+    #                      bytes.fromhex("0e3e2357e806b6cdb1f70f5c5e3a3d6a89e1f4c9f7eb45c8e14a7c7c8e4a5e09"))
+    #
+    # print(f"TEST REJECT: {test_reject.to_json()}")
+    # rj_from_bytes = Reject.from_bytes(test_reject.payload())
+    # print(f"REJECT FROM BYTES: {rj_from_bytes.to_json()}")
+    #
+    # test_getaddr = GetAddr()
+    # test_sendheaders = SendHeaders()
+    # print(f"GET ADDR: {test_getaddr.to_json()}")
+    # print(f"SEND HEADERS: {test_sendheaders.to_json()}")
+    #
+    # test_feefilter = FeeFilter(50000)
+    # print(f"FEE FILTER: {test_feefilter.to_json()}")
+    #
+    # test_filterclear = FilterClear()
+    # print(f"FILTER CLEAR: {test_filterclear.to_json()}")
 
-    test_verack = VerAck()
-    print(f"VERACK: {test_verack.to_json()}")
-
-    random_ping = Ping(randint(250, 500))
-    print(f"RANDOM PING: {random_ping.to_json()}")
-    print(f"PONG: = {Pong(random_ping.nonce).to_json()}")
-
-
-    def random_netaddr() -> NetAddr:
-        # Random services
-        services = token_bytes(8)
-
-        # Random ip
-        ip_addr = str(ipaddress.IPv4Address(randint(0, 2 ** 32 - 1)))
-
-        # Random port
-        port = randint(0, 0xffff)
-
-        return NetAddr(int(now()), services, ip_addr, port)
-
-
-    net_addr_list = [random_netaddr() for _ in range(randint(1, 5))]
-    test_addr = Addr(net_addr_list)
-    print(f"TEST ADDR: {test_addr.to_json()}")
-
-    # TEST REJECT MESSAGE
-    test_reject = Reject("tx", 0x10, "non-mandatory-script-verify-flag (Witness required)",
-                         bytes.fromhex("0e3e2357e806b6cdb1f70f5c5e3a3d6a89e1f4c9f7eb45c8e14a7c7c8e4a5e09"))
-
-    print(f"TEST REJECT: {test_reject.to_json()}")
-    rj_from_bytes = Reject.from_bytes(test_reject.payload())
-    print(f"REJECT FROM BYTES: {rj_from_bytes.to_json()}")
-
-    test_getaddr = GetAddr()
-    test_sendheaders = SendHeaders()
-    print(f"GET ADDR: {test_getaddr.to_json()}")
-    print(f"SEND HEADERS: {test_sendheaders.to_json()}")
-
-    test_feefilter = FeeFilter(50000)
-    print(f"FEE FILTER: {test_feefilter.to_json()}")
-
-    test_filterclear = FilterClear()
-    print(f"FILTER CLEAR: {test_filterclear.to_json()}")
+    # test_filter_bytes = token_bytes(randint(100, 200))
+    test_filter_bytes = bytes.fromhex("b50f")
+    test_nhashfunc = randint(1, 50)
+    # test_ntweak = int.from_bytes(token_bytes(4), "little")
+    test_ntweak = 0
+    test_nflag = 0  # randint(0, 2)
+    test_filterload = FilterLoad(test_filter_bytes, test_nhashfunc, test_ntweak, test_nflag)
+    print(f"TEST FILTERLOAD: {test_filterload.to_json()}")
