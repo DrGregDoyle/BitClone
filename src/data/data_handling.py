@@ -45,8 +45,12 @@ def bytes_to_binary_string(b: bytes):
     return bin(int.from_bytes(b, 'big'))[2:].zfill(len(b) * 8)
 
 
+def little_bytes_to_binary_string(b: bytes):
+    return ''.join(f"{byte:08b}"[::-1] for byte in b)
+
+
 def bytes_to_2byte_binary_string(b: bytes):
-    bits = bytes_to_binary_string(b)
+    bits = little_bytes_to_binary_string(b)
     return " ".join([bits[i:i + 4] for i in range(0, len(bits), 4)])
 
 

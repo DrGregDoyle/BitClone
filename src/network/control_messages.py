@@ -400,7 +400,7 @@ class FilterLoad(ControlMessage):
     -------------------------------------------------------------------------
     """
     MAX_FILTER = 0x8ca0  # 36,000 bytes
-    MAX_TWEAK = 0x32  # 50
+    MAX_HASHFUNC = 0x32  # 50
     HASHFUNC_BYTES = TWEAK_BYTES = 4
     FLAG_BYTES = 1
 
@@ -410,8 +410,8 @@ class FilterLoad(ControlMessage):
         # Error checking
         if len(filter_bytes) > self.MAX_FILTER:
             raise ValueError(f"Size of filter bytes exceeds {self.MAX_FILTER}. Filter size: {len(filter_bytes)}")
-        if nhashfunc > self.MAX_TWEAK:
-            raise ValueError(f"Hash function num exceeds {self.MAX_TWEAK}. Hashfunc num: {nhashfunc}")
+        if nhashfunc > self.MAX_HASHFUNC:
+            raise ValueError(f"Hash function num exceeds {self.MAX_HASHFUNC}. Hashfunc num: {nhashfunc}")
 
         self.filter_bytes = filter_bytes
         self.filter_bytes_size = len(self.filter_bytes)
@@ -437,7 +437,9 @@ class FilterLoad(ControlMessage):
 
     def payload(self) -> bytes:
         payload_parts = [write_compact_size(self.filter_bytes_size), self.filter_bytes,
-                         write_compact_size(self.nhashfunc), write_compact_size(self.ntweak), self.nflags.to_byte()]
+                         to_little_bytes(self.nhashfunc, self.HASHFUNC_BYTES),
+                         to_little_bytes(self.ntweak, self.TWEAK_BYTES),
+                         self.nflags.to_byte()]
         return b''.join(payload_parts)
 
     def _payload_dict(self) -> dict:
