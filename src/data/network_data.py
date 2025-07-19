@@ -2,16 +2,16 @@
 Classes and Methods for help with p2p messaging/networking
 """
 from io import BytesIO
-from typing import Union
 
 from src.data.byte_stream import get_stream, read_little_int, read_stream
 from src.data.data_types import InvType
+from src.data.serializable import Serializable
 
 __all__ = ["Inventory"]
 
 
 # --- INVENTORY --- #
-class Inventory:
+class Inventory(Serializable):
     """
     ---------------------------------------------------------
     |   Name    | datatype  | format                | size  |
@@ -23,7 +23,7 @@ class Inventory:
     TYPE_BYTES = 4
     HASH_BYTES = 32
 
-    def __init__(self, inv_type: Union[int, InvType], hash_: bytes):
+    def __init__(self, inv_type: int | InvType, hash_: bytes):
         # Error checking
         if not isinstance(inv_type, (int, InvType)):
             raise ValueError("inv_type must be int or InvType")

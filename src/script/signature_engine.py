@@ -9,7 +9,7 @@ NOTES:
 from src.crypto import hash256, ecdsa, verify_ecdsa, sha256, tagged_hash_function, HashType, ORDER, \
     generator_exponent, PRIME, get_pt_from_x, scalar_multiplication, add_points
 from src.data import write_compact_size, encode_der_signature, to_little_bytes, get_public_key_point, \
-    decode_der_signature
+    decode_der_signature, BitcoinFormats
 from src.data.utxo import UTXO
 from src.logger import get_logger
 from src.script.sighash import SigHash
@@ -18,6 +18,8 @@ from src.tx import Transaction, Input
 logger = get_logger(__name__)
 
 __all__ = ["SignatureEngine"]
+
+BFT = BitcoinFormats.Tx
 
 
 class SignatureEngine:
@@ -41,7 +43,7 @@ class SignatureEngine:
         return tx
 
     def _encode_outpoint(self, _input: Input):
-        return _input.txid + to_little_bytes(_input.vout, Input.VOUT_BYTES)
+        return _input.txid + to_little_bytes(_input.vout, BFT.VOUT)
 
     def _handle_extension(self):
         pass
@@ -88,14 +90,14 @@ class SignatureEngine:
         """
 
         # Version
-        version = to_little_bytes(tx.version, Transaction.VERSION_BYTES)
+        version = to_little_bytes(tx.version, BFT.VERSION)
 
         # hash256(inputs)
         inputs = b''.join([self._encode_outpoint(txin) for txin in tx.inputs])
         hashed_inputs = hash256(inputs)
 
         # hash256(sequences)
-        sequences = b''.join([to_little_bytes(txin.sequence, Input.SEQ_BYTES) for txin in tx.inputs])
+        sequences = b''.join([to_little_bytes(txin.sequence, BFT.SEQUENCE) for txin in tx.inputs])
         hashed_sequences = hash256(sequences)
 
         # input
@@ -103,17 +105,17 @@ class SignatureEngine:
         tx_input = self._encode_outpoint(temp_input)
 
         # amount
-        amount = to_little_bytes(amount, Transaction.AMOUNT_BYTES)
+        amount = to_little_bytes(amount, BFT.AMOUNT)
 
         # sequence
-        sequence = to_little_bytes(temp_input.sequence, Input.SEQ_BYTES)
+        sequence = to_little_bytes(temp_input.sequence, BFT.SEQUENCE)
 
         # hash256(outputs)
         outputs = b''.join([txout.to_bytes() for txout in tx.outputs])
         hashed_outputs = hash256(outputs)
 
         # locktime
-        locktime = to_little_bytes(tx.locktime, Transaction.LOCKTIME_BYTES)
+        locktime = to_little_bytes(tx.locktime, BFT.LOCK_TIME)
 
         # sighash
         sighash = SigHash(sighash_flag)
@@ -137,15 +139,15 @@ class SignatureEngine:
         # Get data
         sighash_epoch = b'\x00'
         hash_byte = hash_type.to_byte()
-        version = to_little_bytes(tx.version, Transaction.VERSION_BYTES)
-        locktime = to_little_bytes(tx.locktime, Transaction.LOCKTIME_BYTES)
+        version = to_little_bytes(tx.version, BFT.VERSION)
+        locktime = to_little_bytes(tx.locktime, BFT.LOCK_TIME)
 
         # sha256(inputs)
         inputs = b''.join([self._encode_outpoint(txin) for txin in tx.inputs])
         hashed_prevouts = sha256(inputs)
 
         # sha256(amounts)
-        amounts = b''.join([to_little_bytes(utxo.amount, Transaction.AMOUNT_BYTES) for utxo in utxos])
+        amounts = b''.join([to_little_bytes(utxo.amount, BFT.AMOUNT) for utxo in utxos])
         hashed_amounts = sha256(amounts)
 
         # sha256(scriptpubkeys)
@@ -153,7 +155,7 @@ class SignatureEngine:
         hashed_scriptpubkeys = sha256(scriptpubkeys)
 
         # sha256(sequences)
-        sequences = b''.join([to_little_bytes(txin.sequence, Transaction.SEQ_BYTES) for txin in tx.inputs])
+        sequences = b''.join([to_little_bytes(txin.sequence, BFT.SEQUENCE) for txin in tx.inputs])
         hashed_sequences = sha256(sequences)
 
         # sha256(outputs)
@@ -168,9 +170,9 @@ class SignatureEngine:
         indexed_input = tx.inputs[input_index]
         indexed_utxo = utxos[input_index]
         txin_outpoint = self._encode_outpoint(indexed_input)
-        txin_amount = to_little_bytes(indexed_utxo.amount, Transaction.AMOUNT_BYTES)
+        txin_amount = to_little_bytes(indexed_utxo.amount, BFT.AMOUNT)
         txin_scriptpubkey = indexed_utxo.script_pubkey
-        txin_sequence = to_little_bytes(indexed_input.sequence, Input.SEQ_BYTES)
+        txin_sequence = to_little_bytes(indexed_input.sequence, BFT.SEQUENCE)
 
         # input_index
         input_index_bytes = to_little_bytes(input_index, 4)  # Hardcoded Index bytes

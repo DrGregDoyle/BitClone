@@ -13,11 +13,11 @@ __all__ = ["HashType", "tagged_hash_function", "sha1", "sha256", "hash256", "rip
 
 
 class HashType(Enum):
-    SHA1 = auto()
-    SHA256 = auto()
-    HASH256 = auto()
-    HASH160 = auto()
-    RIPEMD160 = auto()
+    SHA1 = auto
+    SHA256 = auto
+    HASH256 = auto
+    HASH160 = auto
+    RIPEMD160 = auto
 
 
 # SCHNORR
@@ -82,11 +82,11 @@ def pbkdf2(mnemonic: list, passphrase='', iterations=2048, dklen=64) -> bytes:
     """
     Derives a cryptographic key from a mnemonic (list of words) using PBKDF2-HMAC-SHA512.
 
-    :param mnemonic: A list of words representing the mnemonic.
-    :param passphrase: An optional passphrase string (default: empty string).
-    :param iterations: Number of iterations for PBKDF2 (default: 2048).
-    :param dklen: Length of the derived key in bytes (default: 64 bytes).
-    :return: The derived key as a hexadecimal string.
+    mnemonic: A list of words representing the mnemonic.
+    passphrase: An optional passphrase string (default: empty string).
+    iterations: Number of iterations for PBKDF2 (default: 2048).
+    dklen: Length of the derived key in bytes (default: 64 bytes).
+    return: The derived key as a hexadecimal string.
     """
     # Step 1: Concatenate the mnemonic list into a single string
     mnemonic_str = ' '.join(mnemonic)

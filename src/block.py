@@ -5,12 +5,17 @@ Block and MerkleTree classes
 from io import BytesIO
 
 from src.crypto import hash256
+from src.data import BitcoinFormats
 from src.data import Serializable, read_compact_size, MerkleTree, write_compact_size, get_stream, \
-    read_stream, to_little_bytes, read_little_int
+    read_stream, read_little_int
 from src.logger import get_logger
 from src.tx import Transaction
 
 logger = get_logger(__name__)
+
+# alias the nested classese for formatting
+BFB = BitcoinFormats.Block
+BFP = BitcoinFormats.Protocol
 
 
 class BlockHeader(Serializable):
@@ -37,20 +42,26 @@ class BlockHeader(Serializable):
         self.nonce = nonce
 
     def to_bytes(self):
-        return (to_little_bytes(self.version,
-                                self.VERSION_BYTES) + self.prev_block + self.merkle_root + to_little_bytes(
-            self.timestamp, self.TIME_BYTES) + self.bits + to_little_bytes(self.nonce, self.NONCE_BYTES))
+        parts = [
+            self.version.to_bytes(BFB.VERSION, "little"),
+            self.prev_block,
+            self.merkle_root,
+            self.timestamp.to_bytes(BFB.TIMESTAMP, "little"),
+            self.bits,
+            self.nonce.to_bytes(BFB.NONCE, "little")
+        ]
+        return b''.join(parts)
 
     @classmethod
     def from_bytes(cls, byte_stream: bytes | BytesIO):
         stream = get_stream(byte_stream)
 
-        version = read_little_int(stream, cls.VERSION_BYTES, "version")
-        prev_block = read_stream(stream, cls.PREV_BLOCK_BYTES, "prev_block")
-        merkle_root = read_stream(stream, cls.MERKLEROOT_BYTES, "merkle_root")
-        timestamp = read_little_int(stream, cls.TIME_BYTES, "Unix epoch time")
-        bits = read_stream(stream, cls.BITS_BYTES, "bits")
-        nonce = read_little_int(stream, cls.NONCE_BYTES, "nonce")
+        version = read_little_int(stream, BFB.VERSION, "version")
+        prev_block = read_stream(stream, BFB.PREVIOUS_HASH, "prev_block")
+        merkle_root = read_stream(stream, BFB.MERKLE_ROOT, "merkle_root")
+        timestamp = read_little_int(stream, BFB.TIMESTAMP, "Unix epoch time")
+        bits = read_stream(stream, BFB.BITS, "bits")
+        nonce = read_little_int(stream, BFB.NONCE, "nonce")
 
         return cls(version, prev_block, merkle_root, timestamp, bits, nonce)
 
@@ -98,7 +109,7 @@ class Block(Serializable):
         self.timestamp = timestamp
         self.bits = bits
         self.nonce = nonce
-        self.version = version or self.VERSION
+        self.version = version or BFP.VERSION
 
         # Get txs and merkle tree
         self.tx_count = len(transactions)
@@ -110,7 +121,7 @@ class Block(Serializable):
         stream = get_stream(byte_stream)
 
         # Get header
-        header_data = read_stream(stream, cls.HEADER_BYTES, "block_header")
+        header_data = read_stream(stream, BFB.HEADER, "block_header")
         header = BlockHeader.from_bytes(header_data)
 
         # Get txs | handle only header data
@@ -210,7 +221,8 @@ class BlockTransactions(Serializable):
 
 
 if __name__ == "__main__":
+    # notype
     genesis_bytes = bytes.fromhex(
-        "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c0101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff4d04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73ffffffff0100f2052a01000000434104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac00000000")
+        "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c0101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff4d04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73ffffffff0100f2052a01000000434104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac00000000")  # notype
     genesis_block = Block.from_bytes(genesis_bytes)
     print(f"GENESIS BLOCK: {genesis_block.to_json()}")

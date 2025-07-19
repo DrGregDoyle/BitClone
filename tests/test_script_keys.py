@@ -27,7 +27,6 @@ def mutate_signature(signature: bytes, mode: str = "s") -> bytes:
             - "sighash": flips one bit in sighash byte
             - "s": modifies s slightly
             - "r": modifies r slightly
-        curve_order (int): Needed for modular operations on r/s
 
     Returns:
         bytes: Mutated signature (still DER-valid)

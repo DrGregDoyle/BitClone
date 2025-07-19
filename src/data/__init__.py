@@ -1,10 +1,10 @@
 """
 data folder used to house all files dealing with data formats, and encoding/decoding various data
 """
-
 # data/__init__.py
-
 from src.data.bloom_type import *
+
+from src.data.btc_formats import *
 from src.data.byte_stream import *
 from src.data.codec import *
 from src.data.data_handling import *

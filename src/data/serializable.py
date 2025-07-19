@@ -9,18 +9,6 @@ class Serializable(ABC):
     for Bitcoin protocol objects.
     """
 
-    # Protocol constants 
-    VERSION = 2
-
-    # Field sizes in bytes
-    HEADER_BYTES = 80
-    TXID_BYTES = MERKLEROOT_BYTES = PREV_BLOCK_BYTES = 32
-    COMMAND_BYTES = 12
-    AMOUNT_BYTES = 8
-    VOUT_BYTES = SEQ_BYTES = VERSION_BYTES = LOCKTIME_BYTES = TIME_BYTES = BITS_BYTES = NONCE_BYTES = SIGHASH_BYTES = \
-        MB_BYTES = SIZE_BYTES = CHECKSUM_BYTES = 4
-    MARKERFLAG_BYTES = 2
-
     @classmethod
     @abstractmethod
     def from_bytes(cls, byte_stream: bytes | BytesIO):
