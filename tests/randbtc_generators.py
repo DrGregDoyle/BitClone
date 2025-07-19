@@ -6,9 +6,11 @@ NOTE: SQLITE supports signed 64-bit integers, hence the maximum random value for
 63 bytes
 
 """
+from random import randint
 from secrets import token_bytes, randbits, randbelow
 
 from src.block import Block, BlockHeader
+from src.data import InvType
 from src.network_utils import PrefilledTransaction
 from src.tx import Input, Output, WitnessItem, Witness, Transaction
 
@@ -133,3 +135,11 @@ def get_random_shortid(shortid_bytes: int = 6):
 
 def get_random_nonce(nonce_bytes: int = 8):
     return int.from_bytes(token_bytes(nonce_bytes), "little")
+
+
+def get_random_invtype(with_error: bool = False):
+    lower_bound = 0 if not with_error else 1
+    rand_num = randint(lower_bound, 7)
+    if rand_num > 4:
+        rand_num = (1 << 30) + rand_num
+    return InvType(rand_num)

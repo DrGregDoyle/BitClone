@@ -8,11 +8,12 @@ from src.data.bloom_type import *
 from src.data.byte_stream import *
 from src.data.codec import *
 from src.data.data_handling import *
-from src.data.inventory import *
+from src.data.data_types import *
 from src.data.ip_utils import *
 from src.data.magic_bytes import *
 from src.data.merkle import *
 from src.data.network_address import *
+from src.data.network_data import *
 from src.data.pubkey_utils import *
 from src.data.reject_type import *
 from src.data.serializable import *

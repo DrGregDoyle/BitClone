@@ -1,27 +1,15 @@
 """
-Inventory Vector Data Type
+Classes and Methods for help with p2p messaging/networking
 """
-
-import json
-from enum import Enum
 from io import BytesIO
 
 from src.data.byte_stream import get_stream, read_little_int, read_stream
+from src.data.data_types import InvType
 
-__all__ = ["InvType", "Inventory"]
-
-
-class InvType(Enum):
-    ERROR = 0
-    MSG_TX = 1
-    MSG_BLOCK = 2
-    MSG_FILTERED_BLOCK = 3
-    MSG_CMPCT_BLOCK = 4
-    MSG_WITNESS_TX = 0x40000001
-    MSG_WITNESS_BLOCK = 0x40000002
-    MSG_FILTERED_WITNESS_BLOCK = 0x40000003
+__all__ = ["Inventory"]
 
 
+# --- INVENTORY --- #
 class Inventory:
     """
     ---------------------------------------------------------
@@ -67,14 +55,3 @@ class Inventory:
             "hash": self.hash.hex()
         }
         return inv_dict
-
-    def to_json(self):
-        return json.dumps(self.to_dict(), indent=2)
-
-
-# -- TESTING
-if __name__ == "__main__":
-    dummy_hash = bytes.fromhex("aa325e9122aa39ca18c75aabe2a3ceaf9802acd1a40720925bfd77fff58ed821")
-    test_inv = Inventory(1, dummy_hash)
-    print(f"TEST INVENTORY: {test_inv.to_bytes().hex()}")
-    print(f"TEST INV DICT: {test_inv.to_json()}")
