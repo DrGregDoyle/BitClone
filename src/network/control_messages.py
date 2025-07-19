@@ -8,6 +8,9 @@ from src.data import get_stream, read_little_int, read_stream, read_compact_size
     NetAddr, RejectType, to_little_bytes, BloomType, bytes_to_2byte_binary_string
 from src.network.messages import ControlMessage
 
+__all__ = ["Version", "VerAck", "Pong", "Ping", "Addr", "Reject", "GetAddr", "SendHeaders", "FilterLoad",
+           "FilterClear", "FeeFilter"]
+
 
 class Version(ControlMessage):
     """
@@ -243,6 +246,18 @@ class Addr(ControlMessage):
 
 
 class Reject(ControlMessage):
+    """
+    ---------------------------------------------------------------------
+    |   Name            |   Data type   |   byte format     |   size    |
+    ---------------------------------------------------------------------
+    |   Msg_bytes       |   int         |   CompactSize     |   varint  |
+    |   Msg             |   str         |   ascii bytes     |   var     |
+    |   Code            |   int         |   little-endian   |   1       |
+    |   Reason_bytes    |   int         |   CompactSize     |   varint  |
+    |   Reason          |   str         |   ascii bytes     |   var     |
+    |   Data            |   bytes       |   various         |   var     |
+    ---------------------------------------------------------------------
+    """
     DATA_BYTES = 32
 
     def __init__(self, message: str, ccode: RejectType | int, reason: str, data: bytes = b''):
@@ -458,55 +473,58 @@ class FilterLoad(ControlMessage):
 
 if __name__ == "__main__":
     from random import randint
+    from secrets import token_bytes
+    import ipaddress
+    from time import time as now
 
-    # test_version_bytes = bytes.fromhex(
-    #     "7E1101000000000000000000C515CF6100000000000000000000000000000000000000000000FFFF2E13894A208D000000000000000000000000000000000000FFFF7F000001208D00000000000000000000000000")
-    # test_version = Version.from_bytes(test_version_bytes)
-    # print(f"TEST VERSION: {test_version.to_json()}")
-    #
-    # test_verack = VerAck()
-    # print(f"VERACK: {test_verack.to_json()}")
-    #
-    # random_ping = Ping(randint(250, 500))
-    # print(f"RANDOM PING: {random_ping.to_json()}")
-    # print(f"PONG: = {Pong(random_ping.nonce).to_json()}")
-    #
-    #
-    # def random_netaddr() -> NetAddr:
-    #     # Random services
-    #     services = token_bytes(8)
-    #
-    #     # Random ip
-    #     ip_addr = str(ipaddress.IPv4Address(randint(0, 2 ** 32 - 1)))
-    #
-    #     # Random port
-    #     port = randint(0, 0xffff)
-    #
-    #     return NetAddr(int(now()), services, ip_addr, port)
-    #
-    #
-    # net_addr_list = [random_netaddr() for _ in range(randint(1, 5))]
-    # test_addr = Addr(net_addr_list)
-    # print(f"TEST ADDR: {test_addr.to_json()}")
-    #
-    # # TEST REJECT MESSAGE
-    # test_reject = Reject("tx", 0x10, "non-mandatory-script-verify-flag (Witness required)",
-    #                      bytes.fromhex("0e3e2357e806b6cdb1f70f5c5e3a3d6a89e1f4c9f7eb45c8e14a7c7c8e4a5e09"))
-    #
-    # print(f"TEST REJECT: {test_reject.to_json()}")
-    # rj_from_bytes = Reject.from_bytes(test_reject.payload())
-    # print(f"REJECT FROM BYTES: {rj_from_bytes.to_json()}")
-    #
-    # test_getaddr = GetAddr()
-    # test_sendheaders = SendHeaders()
-    # print(f"GET ADDR: {test_getaddr.to_json()}")
-    # print(f"SEND HEADERS: {test_sendheaders.to_json()}")
-    #
-    # test_feefilter = FeeFilter(50000)
-    # print(f"FEE FILTER: {test_feefilter.to_json()}")
-    #
-    # test_filterclear = FilterClear()
-    # print(f"FILTER CLEAR: {test_filterclear.to_json()}")
+    test_version_bytes = bytes.fromhex(
+        "7E1101000000000000000000C515CF6100000000000000000000000000000000000000000000FFFF2E13894A208D000000000000000000000000000000000000FFFF7F000001208D00000000000000000000000000")
+    test_version = Version.from_bytes(test_version_bytes)
+    print(f"TEST VERSION: {test_version.to_json()}")
+
+    test_verack = VerAck()
+    print(f"VERACK: {test_verack.to_json()}")
+
+    random_ping = Ping(randint(250, 500))
+    print(f"RANDOM PING: {random_ping.to_json()}")
+    print(f"PONG: = {Pong(random_ping.nonce).to_json()}")
+
+
+    def random_netaddr() -> NetAddr:
+        # Random services
+        services = token_bytes(8)
+
+        # Random ip
+        ip_addr = str(ipaddress.IPv4Address(randint(0, 2 ** 32 - 1)))
+
+        # Random port
+        port = randint(0, 0xffff)
+
+        return NetAddr(int(now()), services, ip_addr, port)
+
+
+    net_addr_list = [random_netaddr() for _ in range(randint(1, 5))]
+    test_addr = Addr(net_addr_list)
+    print(f"TEST ADDR: {test_addr.to_json()}")
+
+    # TEST REJECT MESSAGE
+    test_reject = Reject("tx", 0x10, "non-mandatory-script-verify-flag (Witness required)",
+                         bytes.fromhex("0e3e2357e806b6cdb1f70f5c5e3a3d6a89e1f4c9f7eb45c8e14a7c7c8e4a5e09"))
+
+    print(f"TEST REJECT: {test_reject.to_json()}")
+    rj_from_bytes = Reject.from_bytes(test_reject.payload())
+    print(f"REJECT FROM BYTES: {rj_from_bytes.to_json()}")
+
+    test_getaddr = GetAddr()
+    test_sendheaders = SendHeaders()
+    print(f"GET ADDR: {test_getaddr.to_json()}")
+    print(f"SEND HEADERS: {test_sendheaders.to_json()}")
+
+    test_feefilter = FeeFilter(50000)
+    print(f"FEE FILTER: {test_feefilter.to_json()}")
+
+    test_filterclear = FilterClear()
+    print(f"FILTER CLEAR: {test_filterclear.to_json()}")
 
     # test_filter_bytes = token_bytes(randint(100, 200))
     test_filter_bytes = bytes.fromhex("b50f")
