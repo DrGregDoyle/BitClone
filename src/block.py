@@ -162,7 +162,53 @@ class Block(Serializable):
         self.nonce += 1
 
 
+class BlockTransactions(Serializable):
+    """
+    Added in protocol version 70014 as described by BIP152.
+    ---------------------------------------------------------------------
+    |   Name        |	Data Type   | Byte Format           |   Size    |
+    ---------------------------------------------------------------------
+    |   block_hash  | bytes         |   natural_byte_order  |   32      |
+    |   tx_num      |   int         |   CompactSize         |   varint  |
+    |   txs         |   list        |   tx.to_bytes()       |   var     |
+    ---------------------------------------------------------------------
+    """
+    BLOCKHASH_BYTES = 32
+
+    def __init__(self, block_hash: bytes, txs: list[Transaction]):
+        self.block_hash = block_hash
+        self.txs = txs
+        self.tx_num = len(txs)
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO):
+        stream = get_stream(byte_stream)
+
+        # Get hash
+        block_hash = read_stream(stream, cls.BLOCKHASH_BYTES, "block_hash")
+
+        # Get txs
+        tx_num = read_compact_size(stream, "BlockTransactions.tx_num")
+        txs = [Transaction.from_bytes(stream) for _ in range(tx_num)]
+
+        return cls(block_hash, txs)
+
+    def to_bytes(self) -> bytes:
+        tx_bytes = b''.join([tx.to_bytes() for tx in self.txs])
+        return self.block_hash + write_compact_size(self.tx_num) + tx_bytes
+
+    def to_dict(self) -> dict:
+        blocktx_dict = {
+            "block_hash": self.block_hash[::-1].hex(),  # Reverse for display
+            "tx_num": self.tx_num,
+            "txs": {f"tx_{x}": self.txs[x].to_dict() for x in range(self.tx_num)}
+        }
+        return blocktx_dict
+
+
 # --- TESTING
+
+
 if __name__ == "__main__":
     genesis_bytes = bytes.fromhex(
         "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c0101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff4d04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73ffffffff0100f2052a01000000434104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac00000000")

@@ -1,7 +1,5 @@
 """
-Control Messages:
-    -FilerLoad
-
+Control Message Classes
 """
 from datetime import datetime
 from io import BytesIO

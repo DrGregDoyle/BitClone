@@ -4,7 +4,7 @@ data folder used to house all files dealing with data formats, and encoding/deco
 
 # data/__init__.py
 
-from src.data.bloom_type import BloomType
+from src.data.bloom_type import *
 from src.data.byte_stream import *
 from src.data.codec import *
 from src.data.data_handling import *
@@ -16,5 +16,6 @@ from src.data.network_address import *
 from src.data.pubkey_utils import *
 from src.data.reject_type import *
 from src.data.serializable import *
+from src.data.shortids import *
 from src.data.utxo import UTXO
 from src.data.word_list import WORDLIST

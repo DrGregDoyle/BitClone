@@ -5,14 +5,14 @@ import json
 from io import BytesIO
 
 from src.block import BlockHeader
-from src.data.byte_stream import get_stream, read_compact_size, read_little_int, read_stream
-from src.data.data_handling import write_compact_size, to_little_bytes
+from src.data import get_stream, read_compact_size, read_little_int, read_stream, write_compact_size, to_little_bytes, \
+    Serializable
 from src.tx import Transaction
 
-__all__ = ["PrefilledTransaction", "HeaderAndShortIDs", "BlockTransactionsRequest", "BlockTransactions"]
+__all__ = ["PrefilledTransaction", "HeaderAndShortIDs", "BlockTransactionsRequest"]
 
 
-class PrefilledTransaction:
+class PrefilledTransaction(Serializable):
     """
     -------------------------------------------------------------
     |   Name    |   Data type   |   byte format |   byte size   |
@@ -59,7 +59,7 @@ class PrefilledTransaction:
         return json.dumps(self.to_dict(), indent=2)
 
 
-class HeaderAndShortIDs:
+class HeaderAndShortIDs(Serializable):
     """
     ---------------------------------------------------------------------------------
     |   Name                |   Data type       |   byte format     |   byte size   |
@@ -67,7 +67,7 @@ class HeaderAndShortIDs:
     |   Header              |   Block header    |   header.to_bytes |   80          |
     |   Nonce               |   int             |   little-endian   |   8           |
     |   shorts_ids_length   |   int             |   CompactSize     |   varint      |
-    |   shortids            |   list            |   little-endian   |   6 * length  |
+    |   shortids            |   list            |   little-endian   |   8 * length  |
     |   prefilled_tx_length |   int             |   CompactSize     |   varint      |
     |   prefilled_tx        |   list            |   tx.to_bytes     |   var         |
     ---------------------------------------------------------------------------------
@@ -130,7 +130,7 @@ class HeaderAndShortIDs:
         return json.dumps(self.to_dict())
 
 
-class BlockTransactionsRequest:
+class BlockTransactionsRequest(Serializable):
     """
     ---------------------------------------------------------------------------------
     |   Name            |   Data type   |   byte format             |   byte size   |
@@ -206,61 +206,72 @@ class BlockTransactionsRequest:
         return json.dumps(self.to_dict(), indent=2)
 
 
-class BlockTransactions:
+class CompactBlock(Serializable):
     """
-    ---------------------------------------------------------------------------------
-    |   Name            |   Data type   |   byte format             |   byte size   |
-    ---------------------------------------------------------------------------------
-    |   block_hash      |   bytes       |   natural byte order      |   32          |
-    |   tx_length       |   int         |   Compactsize             |   varint      |
-    |   tx_list         |   list        |   tx.to_bytes()           |   var         |
-    ---------------------------------------------------------------------------------
+    ---------------------------------------------------------------------------------------------------------
+    |   Name                    |	Data Type   | Byte Format                       |   Size                |
+    ---------------------------------------------------------------------------------------------------------
+    |   block_header            |   Blockheader |   block_header.to_bytes()         |   80                  |
+    |   nonce                   |   int         |   little-endian                   |   8                   |
+    |   shortids_length         |   int         |   CompactSize                     |   varint              |
+    |   shortids                |   list        |   6-byte int with 2-null bytes    |   8*shortids_length   |
+    |   prefilled_tx_length     |   int         |   CompactSize                     |   varint              |
+    |   prefilled_txs           |   list        |   PrefilledTxn.to_bytes()         |   var                 |
+    ---------------------------------------------------------------------------------------------------------
     """
-    BLOCKHASH_BYTES = 32
+    NONCE_BYTES = SHORTIDS_BYTES = 8
 
-    def __init__(self, block_hash: bytes, tx_list: list[Transaction]):
-        self.block_hash = block_hash
-        self.txs = tx_list
-        self.tx_length = len(self.txs)
+    def __init__(self, header: BlockHeader, nonce: int, shortids: list[bytes],
+                 prefilled_txs: list[PrefilledTransaction]):
+        self.header = header
+        self.nonce = nonce
+        self.shortids_length = len(shortids)
+        self.shortids = shortids
+        self.prefilled_tx_length = len(prefilled_txs)
+        self.prefilled_txs = prefilled_txs
 
     @classmethod
     def from_bytes(cls, byte_stream: bytes | BytesIO):
-        # Get stream
         stream = get_stream(byte_stream)
 
-        # Get hash
-        block_hash = read_stream(stream, cls.BLOCKHASH_BYTES, "block_hash")
+        # header
+        header = BlockHeader.from_bytes(stream)
 
-        # Get txs
-        tx_num = read_compact_size(stream, "tx_num")
-        tx_list = []
-        for _ in range(tx_num):
-            tx_list.append(
-                Transaction.from_bytes(stream)
-            )
-        return cls(block_hash, tx_list)
+        # nonce
+        nonce = read_little_int(stream, cls.NONCE_BYTES, "nonce")
 
-    def to_bytes(self):
-        parts = [self.block_hash, write_compact_size(self.tx_length)]
-        for t in self.txs:
-            parts.append(t.to_bytes())
+        # shortids
+        shortids_length = read_compact_size(stream, "shortids_length")
+        shortids = [read_stream(stream, cls.SHORTIDS_BYTES, "shortids") for _ in range(shortids_length)]
+
+        # prefilled_txs
+        prefilled_tx_length = read_compact_size(stream, "prefilled_tx_length")
+        prefilled_txs = [PrefilledTransaction.from_bytes(stream) for _ in range(prefilled_tx_length)]
+
+        return cls(header, nonce, shortids, prefilled_txs)
+
+    def to_bytes(self) -> bytes:
+        parts = [
+            self.header.to_bytes(),
+            to_little_bytes(self.nonce, self.NONCE_BYTES),
+            write_compact_size(self.shortids_length),
+            b''.join(self.shortids),
+            write_compact_size(self.prefilled_tx_length),
+            b''.join([tx.to_bytes() for tx in self.prefilled_txs])
+        ]
         return b''.join(parts)
 
-    def to_dict(self):
-        tx_dict = {}
-        for x in range(self.tx_length):
-            tx_dict.update({
-                f"tx_{x}": self.txs[x].to_dict()
-            })
-        block_txs_dict = {
-            "block_hash": self.block_hash[::-1].hex(),  # Reverse bytes for display
-            "tx_length": self.tx_length,
-            "transactions": tx_dict
+    def to_dict(self) -> dict:
+        cmpctblock_dict = {
+            "header": self.header.to_dict(),
+            "nonce": self.nonce,
+            "shortids_length": self.shortids_length,
+            "shortids": {f'short_id_{x}': self.shortids[x].hex() for x in range(self.shortids_length)},
+            "prefilled_txs_length": self.prefilled_tx_length,
+            "prefilled_txs": {f'prefilled_tx_{y}': self.prefilled_txs[y].to_dict() for y in
+                              range(self.prefilled_tx_length)}
         }
-        return block_txs_dict
-
-    def to_json(self):
-        return json.dumps(self.to_dict(), indent=2)
+        return cmpctblock_dict
 
 
 # --- TESTING

@@ -4,6 +4,7 @@ Tests for the data structures created in BIP-0152
 from random import randint
 from secrets import token_bytes
 
+from src.block import BlockTransactions
 from src.crypto import hash256
 from src.data import write_compact_size
 from src.logger import get_logger
@@ -69,6 +70,8 @@ def test_block_transactions():
 
     random_block_tx = BlockTransactions(random_hash, tx_list)
     recovered_block_tx = BlockTransactions.from_bytes(random_block_tx.to_bytes())
+
+    print(f"RANDOM BLOCK TRANSACTION: {random_block_tx.to_json()}")
 
     # Verify to_bytes -> from_bytes
     assert random_block_tx.to_bytes() == recovered_block_tx.to_bytes(), \

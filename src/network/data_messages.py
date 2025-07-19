@@ -1,16 +1,14 @@
 """
 Data Messages:
-    -Headers
     -MerkleBlock
     -CmpctBlock
     -SendCmpct
     -GetBlockTxn
-    -BlockTxn
-    -Tx
+
 """
 from io import BytesIO
 
-from src.block import Block, BlockHeader
+from src.block import Block, BlockHeader, BlockTransactions
 from src.data import MAINNET, Inventory, get_stream, read_compact_size, read_stream, write_compact_size, read_little_int
 from src.network.messages import DataMessage
 from src.tx import Transaction
@@ -286,6 +284,30 @@ class MemPool(DataMessage):
 
     def payload(self):
         return b''
+
+
+class BlockTxn(DataMessage):
+
+    def __init__(self, block_tx: BlockTransactions):
+        super().__init__()
+        self.block_tx = block_tx
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+        stream = get_stream(byte_stream)
+
+        block_tx = BlockTransactions.from_bytes(stream)
+        return cls(block_tx)
+
+    @property
+    def command(self) -> str:
+        return "blocktxn"
+
+    def payload(self) -> bytes:
+        return self.block_tx.to_bytes()
+
+    def _payload_dict(self) -> dict:
+        return {"block_txn": self.block_tx.to_dict()}
 
 
 # --- BIP-0152 --- #
