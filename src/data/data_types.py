@@ -2,13 +2,13 @@
 The various ENUM classes indicating different types
 """
 
-from enum import Enum
+from enum import IntEnum
 
 __all__ = ["InvType"]
 
 
 # --- INVENTORY TYPE --- #
-class InvType(Enum):
+class InvType(IntEnum):
     ERROR = 0
     MSG_TX = 1
     MSG_BLOCK = 2

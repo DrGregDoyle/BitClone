@@ -140,6 +140,7 @@ def get_random_nonce(nonce_bytes: int = 8):
 def get_random_invtype(with_error: bool = False):
     lower_bound = 0 if not with_error else 1
     rand_num = randint(lower_bound, 7)
-    if rand_num > 4:
-        rand_num = (1 << 30) + rand_num
+    if 5 <= rand_num <= 7:
+        rand_num = (1 << 30) + (rand_num - 4)
+
     return InvType(rand_num)
