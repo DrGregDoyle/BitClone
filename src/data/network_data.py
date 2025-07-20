@@ -1,13 +1,21 @@
 """
 Classes and Methods for help with p2p messaging/networking
 """
+import ipaddress as IP
+from datetime import datetime
 from io import BytesIO
+from time import time as now
 
-from src.data.byte_stream import get_stream, read_little_int, read_stream
+from src.crypto import hash256
+from src.data.btc_formats import BitcoinFormats
+from src.data.byte_stream import get_stream, read_little_int, read_stream, read_big_int
 from src.data.data_types import InvType
 from src.data.serializable import Serializable
 
-__all__ = ["Inventory"]
+__all__ = ["Inventory", "NetAddr", "ShortID", "Header"]
+
+BTN = BitcoinFormats.Network
+MB = BitcoinFormats.MagicBytes
 
 
 # --- INVENTORY --- #
@@ -37,12 +45,12 @@ class Inventory(Serializable):
         stream = get_stream(byte_stream)
 
         # Type
-        type = read_little_int(stream, cls.TYPE_BYTES, "inventory type")
+        invtype = read_little_int(stream, cls.TYPE_BYTES, "inventory type")
 
         # Hash
-        hash = read_stream(stream, cls.HASH_BYTES, "inventory hash")
+        invhash = read_stream(stream, cls.HASH_BYTES, "inventory hash")
 
-        return cls(type, hash)
+        return cls(invtype, invhash)
 
     def to_bytes(self):
         """
@@ -56,3 +64,189 @@ class Inventory(Serializable):
             "hash": self.hash.hex()
         }
         return inv_dict
+
+
+class NetAddr(Serializable):
+    """
+    -----------------------------------------------------------------
+    |   Name            | Data type | Formatted             | Size  |
+    -----------------------------------------------------------------
+    |   time            | int       | little-endian         | 4     |
+    |   Services        | bytes     | little-endian         | 8     |
+    |   ip address      | ipv6      | network byte order    | 16    |
+    |   port            | int       | network byte order    | 2     |
+    -----------------------------------------------------------------
+    """
+    IPV6_BYTES = bytes.fromhex("00000000000000000000ffff")
+    TIME_BYTES = 4
+    SERVICES_BYTES = 8
+    IP_BYTES = 16
+    PORT_BYTES = 2
+    TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+    def __init__(self, timestamp: int, services: bytes, ip_addr: str, port: int, is_version: bool = False):
+        self.timestamp = timestamp
+        self.services = services
+        self.ip_address = self._get_ipv6(ip_addr)
+        self.port = port
+        self.is_version = is_version
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, is_version=False):
+        # Get stream
+        stream = get_stream(byte_stream)
+
+        # Check version message
+        if not is_version:
+            timestamp = read_little_int(stream, cls.TIME_BYTES, "time")
+        else:
+            timestamp = int(now())
+
+        # Get the rest
+        services = read_stream(stream, cls.SERVICES_BYTES, "services")
+        ip_bytes = read_stream(stream, cls.IP_BYTES, "ip")
+        ip_address = IP.IPv6Address(ip_bytes)
+        port = read_big_int(stream, 2, "port")
+
+        return cls(timestamp, services, str(ip_address), port, is_version)
+
+    @property
+    def display_ip(self) -> str:
+        return str(self.ip_address.ipv4_mapped) if self.ip_address.ipv4_mapped else str(self.ip_address)
+
+    @property
+    def display_time(self) -> str:
+        return datetime.utcfromtimestamp(self.timestamp).strftime(self.TIME_FORMAT)
+
+    def to_bytes(self, is_version=False):
+        # Add time if not version Address
+        payload = self.timestamp.to_bytes(self.TIME_BYTES, "little") if not is_version else b''
+        payload += self.services + self.ip_address.packed + self.port.to_bytes(self.PORT_BYTES, "big")
+        return payload
+
+    def _get_ipv6(self, ip_addr: str):
+        temp_ip = IP.ip_address(ip_addr)
+        if isinstance(temp_ip, IP.IPv4Address):
+            return IP.IPv6Address(self.IPV6_BYTES + temp_ip.packed)
+        elif isinstance(temp_ip, IP.IPv6Address):
+            return temp_ip
+        else:
+            raise ValueError(f"Given ip address not in IPv4/IPv6 format: {ip_addr}")
+
+    def to_dict(self):
+        if not self.is_version:
+            net_addr_dict = {"time": self.display_time}
+        else:
+            net_addr_dict = {}
+        net_addr_dict.update({
+            "services": self.services.hex(),
+            "ip_address": self.display_ip,
+            "port": self.port
+        })
+        return net_addr_dict
+
+
+class ShortID(Serializable):
+    """
+    A 6-byte integer, padded with 2 null-bytes, so it can be read as an 8-byte integer
+    """
+
+    def __init__(self, short_id: int | bytes):
+        # short_id as integer
+        if isinstance(short_id, int):
+            # Error checking
+            int_byte_length = (short_id.bit_length() + 7) // 8
+            if int_byte_length > BTN.MAX_SHORTID_PAYLOAD:
+                raise ValueError(f"Given integer {short_id} has byte length greater than {BTN.MAX_SHORTID_PAYLOAD}")
+            self.short_id = short_id.to_bytes(BTN.SHORTID, "little")
+        elif isinstance(short_id, bytes):
+            # Error checking
+            if len(short_id) > BTN.MAX_SHORTID_PAYLOAD:
+                raise ValueError(
+                    f"Given bytes object {short_id.hex()} has byte length greater than {BTN.MAX_SHORTID_PAYLOAD}")
+            self.short_id = short_id + b'\x00' * (BTN.SHORTID - len(short_id))
+        else:
+            raise ValueError("Incorrect short_id type")
+
+        # Underlying integer
+        self.int_value = int.from_bytes(self.short_id, "little")
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO):
+        stream = get_stream(byte_stream)
+
+        int_val = read_little_int(stream, BTN.SHORTID, "short_id")
+        return cls(int_val)
+
+    def to_bytes(self):
+        return self.short_id
+
+    def to_dict(self):
+        return {
+            "short_id": self.short_id.hex(),
+            "int_value": self.int_value
+        }
+
+
+class Header(Serializable):
+    """
+    -----------------------------------------
+    |   Name        | Format        | Size  |
+    -----------------------------------------
+    |   Magic Bytes | Bytes         | 4     |
+    |   Command     | Ascii bytes   | 12    |
+    |   Size        | little-endian | 4     |
+    |   Checksum    | bytes         | 4     |
+    -----------------------------------------
+    """
+
+    def __init__(self, magic_bytes: bytes, command: str, size: int, checksum: bytes):
+        self.magic_bytes = magic_bytes
+        self.command = command
+        self.size = size
+        self.checksum = checksum[:4]
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO):
+        # Get byte stream
+        stream = get_stream(byte_stream)
+
+        # Get byte data
+        magic_bytes = read_stream(stream, BTN.MAGIC_BYTES, "magic_bytes")
+        command = read_stream(stream, BTN.COMMAND, "command").decode("ascii")
+        size = read_little_int(stream, BTN.HEADER_SIZE, "size")
+        checksum = read_stream(stream, BTN.HEADER_CHECKSUM, "checksum")
+
+        return cls(magic_bytes, command, size, checksum)
+
+    @classmethod
+    def from_payload(cls, payload: bytes, command: str = "version", magic_bytes: bytes = MB.MAINNET):
+        size = len(payload)
+        checksum = hash256(payload)
+        return cls(magic_bytes, command, size, checksum)
+
+    def to_bytes(self) -> bytes:
+        """
+        Serialization of the header | 24 bytes
+        """
+        command_bytes = self.command.encode("ascii")
+        command_bytes = command_bytes.ljust(12, b'\x00')[:12]
+        header_bytes = (
+                self.magic_bytes
+                + command_bytes
+                + self.size.to_bytes(BTN.HEADER_SIZE, "little")
+                + self.checksum
+        )
+        return header_bytes
+
+    def to_dict(self) -> dict:
+        """
+        Returns display dict with instance values
+        """
+        header_dict = {
+            "magic_bytes": self.magic_bytes.hex(),
+            "command": self.command.rstrip('\x00'),
+            "size": self.size,
+            "checksum": self.checksum.hex()
+        }
+        return header_dict

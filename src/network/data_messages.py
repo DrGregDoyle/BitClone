@@ -9,9 +9,12 @@ Data Messages:
 from io import BytesIO
 
 from src.block import Block, BlockHeader, BlockTransactions
-from src.data import MAINNET, Inventory, get_stream, read_compact_size, read_stream, write_compact_size, read_little_int
+from src.data import Inventory, get_stream, read_compact_size, read_stream, write_compact_size, read_little_int, \
+    BitcoinFormats
 from src.network.messages import DataMessage
 from src.tx import Transaction
+
+MB = BitcoinFormats.MagicBytes
 
 
 # --- Inv | GetData | NotFound --- #
@@ -27,14 +30,14 @@ class InvDataParent(DataMessage):
     """
     INV_BYTES = 36
 
-    def __init__(self, inventory: list[Inventory], magic_bytes: bytes = MAINNET):
+    def __init__(self, inventory: list[Inventory], magic_bytes: bytes = MB.MAINNET):
         super().__init__(magic_bytes)
         self.magic_bytes = magic_bytes
         self.count = len(inventory)
         self.inventory = inventory
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
         stream = get_stream(byte_stream)
         inv_count = read_compact_size(stream, "inventory count")
         inv_list = []
@@ -99,7 +102,7 @@ class GetBlockParent(DataMessage):
     VERSION_BYTES = 4
 
     def __init__(self, version: int, locator_hashes: list[bytes], hash_stop: bytes = None,
-                 magic_bytes: bytes = MAINNET):
+                 magic_bytes: bytes = MB.MAINNET):
         super().__init__()
         self.version = version
         self.hash_count = len(locator_hashes)
@@ -108,7 +111,7 @@ class GetBlockParent(DataMessage):
         self.magic_bytes = magic_bytes
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
         # Get stream
         stream = get_stream(byte_stream)
 
@@ -171,12 +174,12 @@ class BlockMessage(DataMessage):
     Will package and send a block
     """
 
-    def __init__(self, block: Block, magic_bytes: bytes = MAINNET):
-        super().__init__()
+    def __init__(self, block: Block, magic_bytes: bytes = MB.MAINNET):
+        super().__init__(magic_bytes)
         self.block = block
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
         # Use inherent block method
         return Block.from_bytes(byte_stream)
 
@@ -201,7 +204,7 @@ class TxMessage(DataMessage):
         self.tx = tx
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
         # Use inherent block method
         return Transaction.from_bytes(byte_stream)
 
@@ -227,14 +230,14 @@ class HeaderMessage(DataMessage):
     -------------------------------------------------
     """
 
-    def __init__(self, header_list: list[BlockHeader], magic_bytes: bytes = MAINNET):
+    def __init__(self, header_list: list[BlockHeader], magic_bytes: bytes = MB.MAINNET):
         super().__init__()
         self.headers = header_list
         self.count = len(self.headers)
         self.magic_bytes = magic_bytes
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
         stream = get_stream(byte_stream)
 
         # Get count
@@ -293,7 +296,7 @@ class BlockTxn(DataMessage):
         self.block_tx = block_tx
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
         stream = get_stream(byte_stream)
 
         block_tx = BlockTransactions.from_bytes(stream)

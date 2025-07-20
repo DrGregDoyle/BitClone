@@ -4,12 +4,14 @@ Control Message Classes
 from datetime import datetime
 from io import BytesIO
 
-from src.data import get_stream, read_little_int, read_stream, read_compact_size, write_compact_size, MAINNET, \
-    NetAddr, RejectType, to_little_bytes, BloomType, bytes_to_2byte_binary_string
+from src.data import get_stream, read_little_int, read_stream, read_compact_size, write_compact_size, \
+    NetAddr, RejectType, to_little_bytes, BloomType, bytes_to_2byte_binary_string, BitcoinFormats
 from src.network.messages import ControlMessage
 
 __all__ = ["Version", "VerAck", "Pong", "Ping", "Addr", "Reject", "GetAddr", "SendHeaders", "FilterLoad",
            "FilterClear", "FeeFilter"]
+
+MB = BitcoinFormats.MagicBytes
 
 
 class Version(ControlMessage):
@@ -42,7 +44,7 @@ class Version(ControlMessage):
                  nonce: int,
                  user_agent: str,
                  last_block: int,
-                 magic_bytes: bytes = MAINNET):
+                 magic_bytes: bytes = MB.MAINNET):
         # Magic Bytes
         super().__init__(magic_bytes)
         self.magic_bytes = magic_bytes
@@ -58,7 +60,7 @@ class Version(ControlMessage):
         self.last_block = last_block
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
         # Setup stream
         stream = get_stream(byte_stream)
 
@@ -138,13 +140,13 @@ class Ping(ControlMessage):
     """
     NONCE_BYTES = 8
 
-    def __init__(self, nonce: int, magic_bytes: bytes = MAINNET):
+    def __init__(self, nonce: int, magic_bytes: bytes = MB.MAINNET):
         super().__init__(magic_bytes)
         self.nonce = nonce
         self.magic_bytes = magic_bytes
 
     @classmethod
-    def from_bytes(cls, bytes_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+    def from_bytes(cls, bytes_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
         stream = get_stream(bytes_stream)
         nonce = read_little_int(stream, cls.NONCE_BYTES, "nonce")
         return cls(nonce, magic_bytes)
@@ -170,13 +172,13 @@ class Pong(ControlMessage):
     """
     NONCE_BYTES = 8
 
-    def __init__(self, nonce: int, magic_bytes: bytes = MAINNET):
+    def __init__(self, nonce: int, magic_bytes: bytes = MB.MAINNET):
         super().__init__(magic_bytes)
         self.nonce = nonce
         self.magic_bytes = magic_bytes
 
     @classmethod
-    def from_bytes(cls, bytes_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+    def from_bytes(cls, bytes_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
         stream = get_stream(bytes_stream)
         nonce = read_little_int(stream, cls.NONCE_BYTES, "nonce")
         return cls(nonce, magic_bytes)
@@ -202,13 +204,13 @@ class Addr(ControlMessage):
     -----------------------------------------------------
     """
 
-    def __init__(self, addr_list: list[NetAddr], magic_bytes: bytes = MAINNET):
-        super().__init__()
+    def __init__(self, addr_list: list[NetAddr], magic_bytes: bytes = MB.MAINNET):
+        super().__init__(magic_bytes)
         self.addr_list = addr_list
         self.count = len(addr_list)
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
         # Get stream
         stream = get_stream(byte_stream)
 
@@ -268,7 +270,7 @@ class Reject(ControlMessage):
         self.data = data
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
         # Get stream
         stream = get_stream(byte_stream)
 
@@ -350,12 +352,12 @@ class FeeFilter(ControlMessage):
     The feefilter message is a request to the receiving peer to not relay any transaction inv messages to the sending
     peer where the fee rate for the transaction is below the fee rate specified in the feefilter message.
 
-    The payload is always 8 bytes long and it encodes 64 bit integer value (LSB / little endian) of feerate. The
+    The payload is always 8 bytes long, and it encodes 64-bit integer value (LSB / little endian) of feerate. The
     value represents a minimal fee and is expressed in satoshis per 1000 bytes.
     """
     FEERATE_BYTES = 8
 
-    def __init__(self, feerate: int, magic_bytes: bytes = MAINNET):
+    def __init__(self, feerate: int, magic_bytes: bytes = MB.MAINNET):
         super().__init__(magic_bytes)
         self.feerate = feerate
         self.magic_bytes = magic_bytes
@@ -365,7 +367,7 @@ class FeeFilter(ControlMessage):
         return "feefilter"
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
         stream = get_stream(byte_stream)
 
         feerate = read_little_int(stream, cls.FEERATE_BYTES, "feerate")
@@ -418,7 +420,7 @@ class FilterLoad(ControlMessage):
     FLAG_BYTES = 1
 
     def __init__(self, filter_bytes: bytes, nhashfunc: int, ntweak: int, nflags: int | BloomType,
-                 magic_bytes: bytes = MAINNET):
+                 magic_bytes: bytes = MB.MAINNET):
         super().__init__(magic_bytes)
         # Error checking
         if len(filter_bytes) > self.MAX_FILTER:
@@ -433,7 +435,7 @@ class FilterLoad(ControlMessage):
         self.nflags = BloomType(nflags) if isinstance(nflags, int) else nflags  # BloomType
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
         # Get Stream
         stream = get_stream(byte_stream)
 

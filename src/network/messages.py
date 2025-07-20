@@ -5,10 +5,11 @@ import json
 from abc import ABC, abstractmethod
 from io import BytesIO
 
-from src.data import MAINNET
-from src.network.header import Header
+from src.data import BitcoinFormats, Header
 
 __all__ = ["ControlMessage", "DataMessage"]
+
+MB = BitcoinFormats.MagicBytes
 
 
 # TODO: Change Control and Data message to inherit from Serializable
@@ -19,7 +20,7 @@ class ControlMessage(ABC):
     Provides common functionality for message creation, serialization, and JSON output.
     """
 
-    def __init__(self, magic_bytes: bytes = MAINNET):
+    def __init__(self, magic_bytes: bytes = MB.MAINNET):
         self.magic_bytes = magic_bytes
 
     @property
@@ -77,7 +78,7 @@ class ControlMessage(ABC):
         return json.dumps(self.to_dict(), indent=2)
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
         """
         Create message instance from bytes.
         Subclasses should override this method if they need to parse payload data.
@@ -92,11 +93,11 @@ class DataMessage(ABC):
     Provides common functionality for message creation, serialization, and JSON output.
     """
 
-    def __init__(self, magic_bytes: bytes = MAINNET):
+    def __init__(self, magic_bytes: bytes = MB.MAINNET):
         self.magic_bytes = magic_bytes
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MAINNET):
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
         """
         Create message instance from bytes.
         Subclasses should override this method if they need to parse payload data.

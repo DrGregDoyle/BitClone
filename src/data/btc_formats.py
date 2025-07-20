@@ -33,6 +33,8 @@ class BitcoinFormats:
         VERSION = 4
         SERVICES = 8
         TIMESTAMP = 4
+        HEADER_SIZE = 4
+        HEADER_CHECKSUM = 4
         NONCE = 4
         TARGET = 4
         DIFFICULTY = 4
@@ -40,6 +42,8 @@ class BitcoinFormats:
         MESSAGE_HEADER = 24  # Full message header
         PAYLOAD_LENGTH = 4
         MAGIC_BYTES = 4
+        SHORTID = 8
+        MAX_SHORTID_PAYLOAD = 6
 
     class Address:
         """Address format sizes"""
@@ -88,3 +92,10 @@ class BitcoinFormats:
     class Protocol:
         """Protocol values"""
         VERSION = 2
+
+    class MagicBytes:
+        """Magic byte constants"""
+        MAINNET = bytes.fromhex("f9beb4d9")
+        TESTNET = bytes.fromhex("0b110907")
+        REGTEST = bytes.fromhex("fabfb5da")
+
