@@ -13,11 +13,11 @@ __all__ = ["HashType", "tagged_hash_function", "sha1", "sha256", "hash256", "rip
 
 
 class HashType(Enum):
-    SHA1 = auto
-    SHA256 = auto
-    HASH256 = auto
-    HASH160 = auto
-    RIPEMD160 = auto
+    SHA1 = auto()
+    SHA256 = auto()
+    HASH256 = auto()
+    HASH160 = auto()
+    RIPEMD160 = auto()
 
 
 # SCHNORR

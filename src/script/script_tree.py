@@ -23,7 +23,7 @@ class Leaf:
 
     def __init__(self, leaf_script: bytes):
         self.leaf_script = leaf_script
-        self.leaf_hash = tagged_hash_function(self._encode_data(leaf_script), LEAF_TAG)
+        self.leaf_hash = tagged_hash_function(encoded_data=self._encode_data(leaf_script), tag=LEAF_TAG)
 
     def _encode_data(self, leaf_script: bytes):
         return VERSION_BYTE + write_compact_size(len(leaf_script)) + leaf_script
