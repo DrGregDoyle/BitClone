@@ -10,11 +10,15 @@ from io import BytesIO
 
 from src.block import Block, BlockHeader, BlockTransactions
 from src.data import Inventory, get_stream, read_compact_size, read_stream, write_compact_size, read_little_int, \
-    BitcoinFormats
+    BitcoinFormats, bytes_to_binary_string
 from src.network.messages import DataMessage
 from src.tx import Transaction
 
+CB = BitcoinFormats.CompactBlock
 MB = BitcoinFormats.MagicBytes
+
+__all__ = ["Inv", "GetData", "NotFound", "GetBlockParent", "GetBlocks", "GetHeaders", "BlockMessage", "TxMessage",
+           "HeaderMessage", "MemPool", "MerkleBlock", "BlockTxn"]
 
 
 # --- Inv | GetData | NotFound --- #
@@ -311,6 +315,76 @@ class BlockTxn(DataMessage):
 
     def _payload_dict(self) -> dict:
         return {"block_txn": self.block_tx.to_dict()}
+
+
+class MerkleBlock(DataMessage):
+    """
+    -------------------------------------------------------------------------
+    |   Name            |   Data type   |   byte format         |   size    |
+    -------------------------------------------------------------------------
+    |   Header          |   Blockheader |   to_bytes            |   80      |
+    |   tx_num          |   int         |   little_endian       |   4       |
+    |   hash_num        |   int         |   CompactSize         |   varint  |
+    |   hashes          |   list        |   internal byte order |   32      |
+    |   flag_byte_num   |   int         |   CompactSize         |   varint  |
+    |   flags           |   bytes       |   little-endian       |   var     |
+    -------------------------------------------------------------------------
+    """
+
+    def __init__(self, header: BlockHeader, tx_num: int, hashes: list, flags: bytes):
+        super().__init__()
+        self.header = header
+        self.tx_num = tx_num
+        self.hash_num = len(hashes)
+        self.hashes = hashes
+        self.flag_num = len(flags)
+        self.flags = flags
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
+        stream = get_stream(byte_stream)
+
+        # header
+        header = BlockHeader.from_bytes(stream)
+
+        # tx_num
+        tx_num = read_little_int(stream, CB.TX_NUM, "tx_num")
+
+        # hashes
+        hash_num = read_compact_size(stream, "hash_num")
+        hashes = [read_stream(stream, CB.MERKLE_HASH, "merkle_hash") for _ in range(hash_num)]
+
+        # flags
+        flag_num = read_compact_size(stream, "flag_byte_count")
+        flags = read_stream(stream, flag_num, "flags")
+
+        return cls(header, tx_num, hashes, flags)
+
+    @property
+    def command(self) -> str:
+        return "merkleblock"
+
+    def payload(self) -> bytes:
+        parts = [
+            self.header.to_bytes(),
+            self.tx_num.to_bytes(CB.TX_NUM, "little"),
+            write_compact_size(self.hash_num),
+            b''.join(self.hashes),
+            write_compact_size(self.flag_num),
+            self.flags
+        ]
+        return b''.join(parts)
+
+    def to_dict(self) -> dict:
+        merkleblock_dict = {
+            "header": self.header.to_dict(),
+            "tx_num": self.tx_num,
+            "hash_num": self.hash_num,
+            "hashes": {f"hash_{x}": self.hashes[x].hex() for x in range(self.hash_num)},
+            "flag_num": self.flag_num,
+            "flags": bytes_to_binary_string(self.flags)
+        }
+        return merkleblock_dict
 
 
 # --- BIP-0152 --- #

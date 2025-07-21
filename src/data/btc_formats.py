@@ -73,6 +73,11 @@ class BitcoinFormats:
         SCRIPT_LENGTH_MIN = 1  # VarInt minimum
         OUTPOINT = 36  # 32 byte hash + 4 byte index
 
+    class CompactBlock:
+        """Constants for various compact block elements"""
+        TX_NUM = 4
+        MERKLE_HASH = 32
+
     class Block:
         """Block structure sizes"""
         HEADER = 80
