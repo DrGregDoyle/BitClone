@@ -44,6 +44,8 @@ class BitcoinFormats:
         MAGIC_BYTES = 4
         SHORTID = 8
         MAX_SHORTID_PAYLOAD = 6
+        IP = 16
+        PORT = 2
 
     class Address:
         """Address format sizes"""
@@ -99,3 +101,6 @@ class BitcoinFormats:
         TESTNET = bytes.fromhex("0b110907")
         REGTEST = bytes.fromhex("fabfb5da")
 
+    class Time:
+        """Time Formatting for Display"""
+        FORMAT = "%Y-%m-%d %H:%M:%S"

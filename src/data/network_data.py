@@ -14,6 +14,8 @@ from src.data.serializable import Serializable
 
 __all__ = ["Inventory", "NetAddr", "ShortID", "Header"]
 
+BTF = BitcoinFormats.Time
+BTI = BitcoinFormats.Inventory
 BTN = BitcoinFormats.Network
 MB = BitcoinFormats.MagicBytes
 
@@ -28,8 +30,6 @@ class Inventory(Serializable):
     |   hash    |   bytes   | natural byte order    | 32    |
     ---------------------------------------------------------
     """
-    TYPE_BYTES = 4
-    HASH_BYTES = 32
 
     def __init__(self, inv_type: int | InvType, hash_: bytes):
         # Error checking
@@ -45,10 +45,10 @@ class Inventory(Serializable):
         stream = get_stream(byte_stream)
 
         # Type
-        invtype = read_little_int(stream, cls.TYPE_BYTES, "inventory type")
+        invtype = read_little_int(stream, BTI.TYPE, "inventory type")
 
         # Hash
-        invhash = read_stream(stream, cls.HASH_BYTES, "inventory hash")
+        invhash = read_stream(stream, BTI.HASH, "inventory hash")
 
         return cls(invtype, invhash)
 
@@ -56,7 +56,7 @@ class Inventory(Serializable):
         """
         Formatted inventory
         """
-        return self.inv_type.value.to_bytes(self.TYPE_BYTES, "little") + self.hash
+        return self.inv_type.value.to_bytes(BTI.TYPE, "little") + self.hash
 
     def to_dict(self):
         inv_dict = {
@@ -77,12 +77,6 @@ class NetAddr(Serializable):
     |   port            | int       | network byte order    | 2     |
     -----------------------------------------------------------------
     """
-    IPV6_BYTES = bytes.fromhex("00000000000000000000ffff")
-    TIME_BYTES = 4
-    SERVICES_BYTES = 8
-    IP_BYTES = 16
-    PORT_BYTES = 2
-    TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
     def __init__(self, timestamp: int, services: bytes, ip_addr: str, port: int, is_version: bool = False):
         self.timestamp = timestamp
@@ -98,13 +92,13 @@ class NetAddr(Serializable):
 
         # Check version message
         if not is_version:
-            timestamp = read_little_int(stream, cls.TIME_BYTES, "time")
+            timestamp = read_little_int(stream, BTN.TIMESTAMP, "time")
         else:
             timestamp = int(now())
 
         # Get the rest
-        services = read_stream(stream, cls.SERVICES_BYTES, "services")
-        ip_bytes = read_stream(stream, cls.IP_BYTES, "ip")
+        services = read_stream(stream, BTN.SERVICES, "services")
+        ip_bytes = read_stream(stream, BTN.IP, "ip")
         ip_address = IP.IPv6Address(ip_bytes)
         port = read_big_int(stream, 2, "port")
 
@@ -116,18 +110,18 @@ class NetAddr(Serializable):
 
     @property
     def display_time(self) -> str:
-        return datetime.utcfromtimestamp(self.timestamp).strftime(self.TIME_FORMAT)
+        return datetime.utcfromtimestamp(self.timestamp).strftime(BTF.FORMAT)
 
     def to_bytes(self, is_version=False):
         # Add time if not version Address
-        payload = self.timestamp.to_bytes(self.TIME_BYTES, "little") if not is_version else b''
-        payload += self.services + self.ip_address.packed + self.port.to_bytes(self.PORT_BYTES, "big")
+        payload = self.timestamp.to_bytes(BTN.TIMESTAMP, "little") if not is_version else b''
+        payload += self.services + self.ip_address.packed + self.port.to_bytes(BTN.PORT, "big")
         return payload
 
     def _get_ipv6(self, ip_addr: str):
         temp_ip = IP.ip_address(ip_addr)
         if isinstance(temp_ip, IP.IPv4Address):
-            return IP.IPv6Address(self.IPV6_BYTES + temp_ip.packed)
+            return IP.IPv6Address(bytes.fromhex("00000000000000000000ffff") + temp_ip.packed)
         elif isinstance(temp_ip, IP.IPv6Address):
             return temp_ip
         else:
