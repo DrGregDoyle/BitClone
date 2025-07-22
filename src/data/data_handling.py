@@ -5,7 +5,7 @@ import struct
 
 __all__ = ["write_compact_size", "byte_format", "to_little_bytes",
            "target_to_bits", "bits_to_target", "bits_to_target_int",
-           "bytes_to_binary_string", "bytes_to_2byte_binary_string"]
+           "bytes_to_binary_string", "bytes_to_2byte_binary_string", "little_bytes_to_binary_string"]
 
 
 def write_compact_size(value: int) -> bytes:

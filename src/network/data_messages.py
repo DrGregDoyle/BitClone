@@ -10,7 +10,7 @@ from io import BytesIO
 
 from src.block import Block, BlockHeader, BlockTransactions
 from src.data import Inventory, get_stream, read_compact_size, read_stream, write_compact_size, read_little_int, \
-    BitcoinFormats, bytes_to_binary_string
+    BitcoinFormats, little_bytes_to_binary_string
 from src.network.messages import DataMessage
 from src.tx import Transaction
 
@@ -18,7 +18,7 @@ CB = BitcoinFormats.CompactBlock
 MB = BitcoinFormats.MagicBytes
 
 __all__ = ["Inv", "GetData", "NotFound", "GetBlockParent", "GetBlocks", "GetHeaders", "BlockMessage", "TxMessage",
-           "HeaderMessage", "MemPool", "MerkleBlock", "BlockTxn"]
+           "HeaderMessage", "MemPool", "MerkleBlock", "BlockTxn", "SendCompact"]
 
 
 # --- Inv | GetData | NotFound --- #
@@ -382,9 +382,54 @@ class MerkleBlock(DataMessage):
             "hash_num": self.hash_num,
             "hashes": {f"hash_{x}": self.hashes[x].hex() for x in range(self.hash_num)},
             "flag_num": self.flag_num,
-            "flags": bytes_to_binary_string(self.flags)
+            "flags": little_bytes_to_binary_string(self.flags)  # Little endian display
         }
         return merkleblock_dict
+
+
+class SendCompact(DataMessage):
+    """
+    -------------------------------------------------------------
+    |   Name    |   Data type   |   Byte format     |   size    |
+    -------------------------------------------------------------
+    |   Announce    |   int     |   little-endian   |   1       |
+    |   version     |   int     |   little-endian   |   8       |
+    -------------------------------------------------------------
+    """
+
+    def __init__(self, announce: int, version: int):
+        # Error checking
+        super().__init__()
+        if announce not in [0, 1]:
+            raise ValueError("Announce value MUST be either 0 or 1")
+
+        self.announce = announce
+        self.version = version
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
+        stream = get_stream(byte_stream)
+
+        # Announce
+        announce = read_little_int(stream, CB.ANNOUNCE, "announce")
+
+        # Version
+        version = read_little_int(stream, CB.VERSION, "version")
+
+        return cls(announce, version)
+
+    @property
+    def command(self) -> str:
+        return "sendcmpct"
+
+    def payload(self) -> bytes:
+        return self.announce.to_bytes(CB.ANNOUNCE, "little") + self.version.to_bytes(CB.VERSION, "little")
+
+    def to_dict(self) -> dict:
+        return {
+            "announce": self.announce,
+            "version": self.version
+        }
 
 
 # --- BIP-0152 --- #

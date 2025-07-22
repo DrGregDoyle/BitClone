@@ -77,6 +77,8 @@ class BitcoinFormats:
         """Constants for various compact block elements"""
         TX_NUM = 4
         MERKLE_HASH = 32
+        ANNOUNCE = 1
+        VERSION = 8
 
     class Block:
         """Block structure sizes"""

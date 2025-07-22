@@ -74,7 +74,7 @@ class BlockHeader(Serializable):
             "merkle_root": self.merkle_root[::-1].hex(),  # Reverse for display
             "timestamp": self.timestamp,
             "bits": self.bits.hex(),
-            "nonce": self.nonce,
+            "nonce": self.nonce.to_bytes(BFB.NONCE, "little").hex(),
         }
 
     @property
