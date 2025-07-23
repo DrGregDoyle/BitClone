@@ -2,11 +2,12 @@
 Tests for the various data structures associated with p2p messaging
 """
 
+from random import randint
 from secrets import token_bytes
 
 import pytest
 
-from src.data import Inventory, InvType
+from src.data import Inventory, InvType, write_compact_size, BlockTxRequest
 from tests.randbtc_generators import get_random_invtype
 
 
@@ -36,3 +37,12 @@ def test_inventory_int_vs_enum():
 def test_invtype_invalid_value():
     with pytest.raises(ValueError):
         InvType(999)
+
+
+def test_blocktx_request():
+    rand_hash = token_bytes(32)
+    rand_index_num = randint(2, 5)
+    rand_index = [write_compact_size(randint(1, 10)) for _ in range(rand_index_num)]
+
+    rand_blocktx_req = BlockTxRequest(rand_hash, rand_index)
+    print(f"BLOCKTX REQ: {rand_blocktx_req.to_json()}")

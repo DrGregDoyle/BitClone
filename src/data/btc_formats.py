@@ -46,6 +46,7 @@ class BitcoinFormats:
         MAX_SHORTID_PAYLOAD = 6
         IP = 16
         PORT = 2
+        BLOCKTX_HASH = 32
 
     class Address:
         """Address format sizes"""

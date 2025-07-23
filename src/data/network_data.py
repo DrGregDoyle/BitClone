@@ -8,11 +8,12 @@ from time import time as now
 
 from src.crypto import hash256
 from src.data.btc_formats import BitcoinFormats
-from src.data.byte_stream import get_stream, read_little_int, read_stream, read_big_int
+from src.data.byte_stream import get_stream, read_little_int, read_stream, read_big_int, read_compact_size
+from src.data.data_handling import write_compact_size
 from src.data.data_types import InvType
 from src.data.serializable import Serializable
 
-__all__ = ["Inventory", "NetAddr", "ShortID", "Header"]
+__all__ = ["Inventory", "NetAddr", "ShortID", "Header", "BlockTxRequest"]
 
 BTF = BitcoinFormats.Time
 BTI = BitcoinFormats.Inventory
@@ -244,3 +245,48 @@ class Header(Serializable):
             "checksum": self.checksum.hex()
         }
         return header_dict
+
+
+class BlockTxRequest(Serializable):
+    """
+    -------------------------------------------------------------------------------------
+    |   Name        |   data type   |   byte format                         |   size    |
+    -------------------------------------------------------------------------------------
+    |   block_hash  |   bytes       |   internal byte order                 |   32      |
+    |   index_num   |   int         |   CompactSize                         |   varint  |
+    |   indexes     |   list        |   diff-encoded list of CompactSize    |   var     |
+    -------------------------------------------------------------------------------------
+    """
+
+    def __init__(self, block_hash: bytes, indexes: list):
+        self.block_hash = block_hash
+        self.index_num = len(indexes)
+        self.indexes = indexes
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO):
+        stream = get_stream(byte_stream)
+
+        # hash
+        block_hash = read_stream(stream, BTN.BLOCKTX_HASH, "block_hash")
+
+        # indexes
+        index_num = read_compact_size(stream, "index_num")
+        indexes = [read_compact_size(stream, "indexes") for _ in range(index_num)]
+
+        return cls(block_hash, indexes)
+
+    def to_bytes(self) -> bytes:
+        parts = [
+            self.block_hash,
+            write_compact_size(self.index_num),
+            b''.join(self.indexes)
+        ]
+        return b''.join(parts)
+
+    def to_dict(self) -> dict:
+        return {
+            "block_hash": self.block_hash.hex(),
+            "index_num": self.index_num,
+            "indexes": {f"index_{x}": self.indexes[x].hex() for x in range(self.index_num)}
+        }

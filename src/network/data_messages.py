@@ -1,10 +1,7 @@
 """
 Data Messages:
-    -MerkleBlock
     -CmpctBlock
-    -SendCmpct
     -GetBlockTxn
-
 """
 from io import BytesIO
 
@@ -18,7 +15,7 @@ CB = BitcoinFormats.CompactBlock
 MB = BitcoinFormats.MagicBytes
 
 __all__ = ["Inv", "GetData", "NotFound", "GetBlockParent", "GetBlocks", "GetHeaders", "BlockMessage", "TxMessage",
-           "HeaderMessage", "MemPool", "MerkleBlock", "BlockTxn", "SendCompact"]
+           "HeaderMessage", "MemPool", "MerkleBlock", "BlockTxn", "SendCompact", "GetBlockTxn"]
 
 
 # --- Inv | GetData | NotFound --- #
@@ -430,6 +427,34 @@ class SendCompact(DataMessage):
             "announce": self.announce,
             "version": self.version
         }
+
+
+class GetBlockTxn(DataMessage):
+    """
+    The getblocktxn message is defined as a message containing a serialized BlockTransactionsRequest message and
+    pchCommand == "getblocktxn".
+    """
+
+    def __init__(self, blocktxn: BlockTransactions):
+        super().__init__()
+        self.blocktxn = blocktxn
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
+        stream = get_stream(byte_stream)
+
+        blocktxn = BlockTransactions.from_bytes(stream)
+        return cls(blocktxn)
+
+    @property
+    def command(self) -> str:
+        return "getblocktxn"
+
+    def payload(self) -> bytes:
+        return self.blocktxn.to_bytes()
+
+    def _payload_dict(self) -> dict:
+        return self.blocktxn.to_dict()
 
 
 # --- BIP-0152 --- #
