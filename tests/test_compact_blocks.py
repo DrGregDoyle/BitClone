@@ -4,11 +4,10 @@ Tests for the data structures created in BIP-0152
 from random import randint
 from secrets import token_bytes
 
-from src.block import BlockTransactions
 from src.crypto import hash256
 from src.data import write_compact_size
 from src.logger import get_logger
-from src.network_utils import *
+from src.messaging import *
 from tests.randbtc_generators import get_random_prefilled_tx, get_random_block_header, get_random_nonce, \
     get_random_shortid, get_random_tx
 

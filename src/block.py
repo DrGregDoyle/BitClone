@@ -5,9 +5,8 @@ Block and MerkleTree classes
 from io import BytesIO
 
 from src.crypto import hash256
-from src.data import BitcoinFormats
-from src.data import Serializable, read_compact_size, MerkleTree, write_compact_size, get_stream, \
-    read_stream, read_little_int
+from src.data import Serializable, read_compact_size, MerkleTree, write_compact_size, get_stream, read_stream, \
+    read_little_int, BitcoinFormats
 from src.logger import get_logger
 from src.tx import Transaction
 
@@ -171,50 +170,6 @@ class Block(Serializable):
 
     def increment(self):
         self.nonce += 1
-
-
-class BlockTransactions(Serializable):
-    """
-    Added in protocol version 70014 as described by BIP152.
-    ---------------------------------------------------------------------
-    |   Name        |	Data Type   | Byte Format           |   Size    |
-    ---------------------------------------------------------------------
-    |   block_hash  | bytes         |   natural_byte_order  |   32      |
-    |   tx_num      |   int         |   CompactSize         |   varint  |
-    |   txs         |   list        |   tx.to_bytes()       |   var     |
-    ---------------------------------------------------------------------
-    """
-    BLOCKHASH_BYTES = 32
-
-    def __init__(self, block_hash: bytes, txs: list[Transaction]):
-        self.block_hash = block_hash
-        self.txs = txs
-        self.tx_num = len(txs)
-
-    @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO):
-        stream = get_stream(byte_stream)
-
-        # Get hash
-        block_hash = read_stream(stream, cls.BLOCKHASH_BYTES, "block_hash")
-
-        # Get txs
-        tx_num = read_compact_size(stream, "BlockTransactions.tx_num")
-        txs = [Transaction.from_bytes(stream) for _ in range(tx_num)]
-
-        return cls(block_hash, txs)
-
-    def to_bytes(self) -> bytes:
-        tx_bytes = b''.join([tx.to_bytes() for tx in self.txs])
-        return self.block_hash + write_compact_size(self.tx_num) + tx_bytes
-
-    def to_dict(self) -> dict:
-        blocktx_dict = {
-            "block_hash": self.block_hash[::-1].hex(),  # Reverse for display
-            "tx_num": self.tx_num,
-            "txs": {f"tx_{x}": self.txs[x].to_dict() for x in range(self.tx_num)}
-        }
-        return blocktx_dict
 
 
 # --- TESTING

@@ -1,17 +1,28 @@
 """
-Various Utils
+Class files for messages that rely on Block or Tx
 """
-import json
 from io import BytesIO
 
-from src.block import BlockHeader
-from src.data import get_stream, read_compact_size, read_little_int, read_stream, write_compact_size, to_little_bytes, \
-    Serializable
+from src.block import BlockHeader, Block
+from src.data import BitcoinFormats, Serializable, get_stream, read_stream, read_compact_size, write_compact_size, \
+    read_little_int, little_bytes_to_binary_string, to_little_bytes
 from src.tx import Transaction
 
-__all__ = ["PrefilledTransaction", "HeaderAndShortIDs", "BlockTransactionsRequest"]
+__all__ = ["HeaderMessage", "PrefilledTransaction", "BlockTransactions", "HeaderAndShortIDs",
+           "BlockTransactionsRequest", "MerkleBlock"]
+
+# --- ALIASING
+MB = BitcoinFormats.MagicBytes
+CB = BitcoinFormats.CompactBlock
 
 
+# --- TRANSACTIONS --- #
+
+
+# --- BLOCKS --- #
+
+
+# --- COMPACTBLOCKS --- #
 class PrefilledTransaction(Serializable):
     """
     -------------------------------------------------------------
@@ -55,8 +66,274 @@ class PrefilledTransaction(Serializable):
         }
         return prefilled_tx_dict
 
-    def to_json(self):
-        return json.dumps(self.to_dict(), indent=2)
+
+class BlockTransactions(Serializable):
+    """
+    Added in protocol version 70014 as described by BIP152.
+    ---------------------------------------------------------------------
+    |   Name        |	Data Type   | Byte Format           |   Size    |
+    ---------------------------------------------------------------------
+    |   block_hash  | bytes         |   natural_byte_order  |   32      |
+    |   tx_num      |   int         |   CompactSize         |   varint  |
+    |   txs         |   list        |   tx.to_bytes()       |   var     |
+    ---------------------------------------------------------------------
+    """
+    BLOCKHASH_BYTES = 32
+
+    def __init__(self, block_hash: bytes, txs: list[Transaction]):
+        self.block_hash = block_hash
+        self.txs = txs
+        self.tx_num = len(txs)
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO):
+        stream = get_stream(byte_stream)
+
+        # Get hash
+        block_hash = read_stream(stream, cls.BLOCKHASH_BYTES, "block_hash")
+
+        # Get txs
+        tx_num = read_compact_size(stream, "BlockTransactions.tx_num")
+        txs = [Transaction.from_bytes(stream) for _ in range(tx_num)]
+
+        return cls(block_hash, txs)
+
+    def to_bytes(self) -> bytes:
+        tx_bytes = b''.join([tx.to_bytes() for tx in self.txs])
+        return self.block_hash + write_compact_size(self.tx_num) + tx_bytes
+
+    def to_dict(self) -> dict:
+        blocktx_dict = {
+            "block_hash": self.block_hash[::-1].hex(),  # Reverse for display
+            "tx_num": self.tx_num,
+            "txs": {f"tx_{x}": self.txs[x].to_dict() for x in range(self.tx_num)}
+        }
+        return blocktx_dict
+
+
+class BlockMessage(Serializable):
+    """
+    Will package and send a block
+    """
+
+    def __init__(self, block: Block, magic_bytes: bytes = MB.MAINNET):
+        super().__init__(magic_bytes)
+        self.block = block
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
+        # Use inherent block method
+        return Block.from_bytes(byte_stream)
+
+    @property
+    def command(self) -> str:
+        return "block"
+
+    def to_bytes(self) -> bytes:
+        return self.block.to_bytes()
+
+    def to_dict(self) -> dict:
+        return self.block.to_dict()
+
+
+class TxMessage(Serializable):
+    """
+    Will package and send a tx
+    """
+
+    def __init__(self, tx: Transaction):
+        super().__init__()
+        self.tx = tx
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
+        # Use inherent block method
+        return Transaction.from_bytes(byte_stream)
+
+    @property
+    def command(self) -> str:
+        return "tx"
+
+    def to_bytes(self) -> bytes:
+        return self.tx.to_bytes()
+
+    def to_dict(self) -> dict:
+        return self.tx.to_dict()
+
+
+class HeaderMessage(Serializable):
+    """
+    The headers packet returns block headers in response to a getheaders packet.
+    -------------------------------------------------
+    |   Name    | data type |   format      | size  |
+    -------------------------------------------------
+    |   count   | int       | CompactSize   | var   |
+    |   headers | list      | BlockHeader   | 81x   |
+    -------------------------------------------------
+    """
+
+    def __init__(self, header_list: list[BlockHeader], magic_bytes: bytes = MB.MAINNET):
+        super().__init__()
+        self.headers = header_list
+        self.count = len(self.headers)
+        self.magic_bytes = magic_bytes
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
+        stream = get_stream(byte_stream)
+
+        # Get count
+        count = read_compact_size(stream, "headers_count")
+
+        # Get headers
+        header_list = []
+        for _ in range(count):
+            temp_header = BlockHeader.from_bytes(stream)
+            header_list.append(temp_header)
+
+        return cls(header_list, magic_bytes)
+
+    @property
+    def command(self) -> str:
+        return "headers"
+
+    def to_bytes(self) -> bytes:
+        to_bytes = write_compact_size(self.count)
+        for h in self.headers:
+            to_bytes += h.to_bytes() + b'\x00'  # 80 byte header + 1 byte tx count set to 0
+        return to_bytes
+
+    def to_dict(self) -> dict:
+        header_dict = {}
+        for x in range(self.count):
+            header_dict.update({f"header_{x}": self.headers[x].to_dict()})
+        to_bytes_dict = {
+            "count": self.count,
+            "headers": header_dict
+        }
+        return to_bytes_dict
+
+
+class BlockTxn(Serializable):
+
+    def __init__(self, block_tx: BlockTransactions):
+        super().__init__()
+        self.block_tx = block_tx
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
+        stream = get_stream(byte_stream)
+
+        block_tx = BlockTransactions.from_bytes(stream)
+        return cls(block_tx)
+
+    @property
+    def command(self) -> str:
+        return "blocktxn"
+
+    def to_bytes(self) -> bytes:
+        return self.block_tx.to_bytes()
+
+    def to_dict(self) -> dict:
+        return {"block_txn": self.block_tx.to_dict()}
+
+
+class MerkleBlock(Serializable):
+    """
+    -------------------------------------------------------------------------
+    |   Name            |   Data type   |   byte format         |   size    |
+    -------------------------------------------------------------------------
+    |   Header          |   Blockheader |   to_bytes            |   80      |
+    |   tx_num          |   int         |   little_endian       |   4       |
+    |   hash_num        |   int         |   CompactSize         |   varint  |
+    |   hashes          |   list        |   internal byte order |   32      |
+    |   flag_byte_num   |   int         |   CompactSize         |   varint  |
+    |   flags           |   bytes       |   little-endian       |   var     |
+    -------------------------------------------------------------------------
+    """
+
+    def __init__(self, header: BlockHeader, tx_num: int, hashes: list, flags: bytes):
+        super().__init__()
+        self.header = header
+        self.tx_num = tx_num
+        self.hash_num = len(hashes)
+        self.hashes = hashes
+        self.flag_num = len(flags)
+        self.flags = flags
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
+        stream = get_stream(byte_stream)
+
+        # header
+        header = BlockHeader.from_bytes(stream)
+
+        # tx_num
+        tx_num = read_little_int(stream, CB.TX_NUM, "tx_num")
+
+        # hashes
+        hash_num = read_compact_size(stream, "hash_num")
+        hashes = [read_stream(stream, CB.MERKLE_HASH, "merkle_hash") for _ in range(hash_num)]
+
+        # flags
+        flag_num = read_compact_size(stream, "flag_byte_count")
+        flags = read_stream(stream, flag_num, "flags")
+
+        return cls(header, tx_num, hashes, flags)
+
+    @property
+    def command(self) -> str:
+        return "merkleblock"
+
+    def to_bytes(self) -> bytes:
+        parts = [
+            self.header.to_bytes(),
+            self.tx_num.to_bytes(CB.TX_NUM, "little"),
+            write_compact_size(self.hash_num),
+            b''.join(self.hashes),
+            write_compact_size(self.flag_num),
+            self.flags
+        ]
+        return b''.join(parts)
+
+    def to_dict(self) -> dict:
+        merkleblock_dict = {
+            "header": self.header.to_dict(),
+            "tx_num": self.tx_num,
+            "hash_num": self.hash_num,
+            "hashes": {f"hash_{x}": self.hashes[x].hex() for x in range(self.hash_num)},
+            "flag_num": self.flag_num,
+            "flags": little_bytes_to_binary_string(self.flags)  # Little endian display
+        }
+        return merkleblock_dict
+
+
+class GetBlockTxn(Serializable):
+    """
+    The getblocktxn message is defined as a message containing a serialized BlockTransactionsRequest message and
+    pchCommand == "getblocktxn".
+    """
+
+    def __init__(self, blocktxn: BlockTransactions):
+        super().__init__()
+        self.blocktxn = blocktxn
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
+        stream = get_stream(byte_stream)
+
+        blocktxn = BlockTransactions.from_bytes(stream)
+        return cls(blocktxn)
+
+    @property
+    def command(self) -> str:
+        return "getblocktxn"
+
+    def to_bytes(self) -> bytes:
+        return self.blocktxn.to_bytes()
+
+    def to_dict(self) -> dict:
+        return self.blocktxn.to_dict()
 
 
 class HeaderAndShortIDs(Serializable):
@@ -125,9 +402,6 @@ class HeaderAndShortIDs(Serializable):
                              range(self.prefilledtxn_length)}
         }
         return header_and_short_ids_dict
-
-    def to_json(self):
-        return json.dumps(self.to_dict())
 
 
 class BlockTransactionsRequest(Serializable):
@@ -202,9 +476,6 @@ class BlockTransactionsRequest(Serializable):
         }
         return block_tx_req_dict
 
-    def to_json(self):
-        return json.dumps(self.to_dict(), indent=2)
-
 
 class CompactBlock(Serializable):
     """
@@ -272,19 +543,3 @@ class CompactBlock(Serializable):
                               range(self.prefilled_tx_length)}
         }
         return cmpctblock_dict
-
-
-# --- TESTING
-from src.crypto import hash256
-from secrets import token_bytes
-
-if __name__ == "__main__":
-    test_hash = hash256(token_bytes(4))
-    leading_index = int.from_bytes(token_bytes(2), "big")
-    print(f"LEADING INDEX: {leading_index}")
-    test_diff_list = [write_compact_size(leading_index), write_compact_size(0), write_compact_size(0)]  # 3
-    # consecutive differentially encoded indexes
-    test_block_tx_request = BlockTransactionsRequest(test_hash, test_diff_list)
-    print(f"TEST BLOCK TX REQUEST: {test_block_tx_request.to_json()}")
-    recovered_block_tx_req = BlockTransactionsRequest.from_bytes(test_block_tx_request.to_bytes())
-    print(f"RECOVERED BLOCK TX REQ: {recovered_block_tx_req.to_json()}")

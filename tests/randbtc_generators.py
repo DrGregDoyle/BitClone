@@ -11,7 +11,7 @@ from secrets import token_bytes, randbits, randbelow
 
 from src.block import Block, BlockHeader
 from src.data import InvType
-from src.network_utils import PrefilledTransaction
+from src.messaging import PrefilledTransaction
 from src.tx import Input, Output, WitnessItem, Witness, Transaction
 
 

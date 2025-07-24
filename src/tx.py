@@ -485,6 +485,10 @@ class Transaction(Serializable):
         return version_bytes + inputs_bytes + outputs_bytes + locktime_bytes
 
 
+# --- COMPACT BLOCKS
+
+
+# --- COINBASE
 class Coinbase(Transaction):
     def __init__(self, script_sig: bytes = None, outputs: list[Output] = None, locktime: int = 0, version: int = None,
                  segwit: bool = True):

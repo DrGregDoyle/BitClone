@@ -5,17 +5,14 @@ Data Messages:
 """
 from io import BytesIO
 
-from src.block import Block, BlockHeader, BlockTransactions
 from src.data import Inventory, get_stream, read_compact_size, read_stream, write_compact_size, read_little_int, \
-    BitcoinFormats, little_bytes_to_binary_string
+    BitcoinFormats
 from src.network.messages import DataMessage
-from src.tx import Transaction
 
 CB = BitcoinFormats.CompactBlock
 MB = BitcoinFormats.MagicBytes
 
-__all__ = ["Inv", "GetData", "NotFound", "GetBlockParent", "GetBlocks", "GetHeaders", "BlockMessage", "TxMessage",
-           "HeaderMessage", "MemPool", "MerkleBlock", "BlockTxn", "SendCompact", "GetBlockTxn"]
+__all__ = ["Inv", "GetData", "NotFound", "GetBlockParent", "GetBlocks", "GetHeaders", "MemPool", "SendCompact"]
 
 
 # --- Inv | GetData | NotFound --- #
@@ -83,6 +80,68 @@ class NotFound(InvDataParent):
     @property
     def command(self):
         return "notfound"
+
+
+class SendCompact(DataMessage):
+    """
+    -------------------------------------------------------------
+    |   Name    |   Data type   |   Byte format     |   size    |
+    -------------------------------------------------------------
+    |   Announce    |   int     |   little-endian   |   1       |
+    |   version     |   int     |   little-endian   |   8       |
+    -------------------------------------------------------------
+    """
+
+    def __init__(self, announce: int, version: int):
+        # Error checking
+        super().__init__()
+        if announce not in [0, 1]:
+            raise ValueError("Announce value MUST be either 0 or 1")
+
+        self.announce = announce
+        self.version = version
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
+        stream = get_stream(byte_stream)
+
+        # Announce
+        announce = read_little_int(stream, CB.ANNOUNCE, "announce")
+
+        # Version
+        version = read_little_int(stream, CB.VERSION, "version")
+
+        return cls(announce, version)
+
+    @property
+    def command(self) -> str:
+        return "sendcmpct"
+
+    def payload(self) -> bytes:
+        return self.announce.to_bytes(CB.ANNOUNCE, "little") + self.version.to_bytes(CB.VERSION, "little")
+
+    def to_dict(self) -> dict:
+        return {
+            "announce": self.announce,
+            "version": self.version
+        }
+
+
+class MemPool(DataMessage):
+    """
+    The mempool message sends a request to a node asking for information about transactions it has verified but which
+    have not yet confirmed. The response to receiving this message is an inv message containing the transaction
+    hashes for all the transactions in the node's mempool.
+
+    No additional data is transmitted with this message.
+    """
+
+    @property
+    def command(self) -> str:
+        return "mempool"
+
+    def payload(self):
+        return b''
 
 
 # ---  GetData Messages --- #
@@ -169,292 +228,6 @@ class GetHeaders(GetBlockParent):
 
 
 # --- Object Messages --- #
-
-class BlockMessage(DataMessage):
-    """
-    Will package and send a block
-    """
-
-    def __init__(self, block: Block, magic_bytes: bytes = MB.MAINNET):
-        super().__init__(magic_bytes)
-        self.block = block
-
-    @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
-        # Use inherent block method
-        return Block.from_bytes(byte_stream)
-
-    @property
-    def command(self) -> str:
-        return "block"
-
-    def payload(self) -> bytes:
-        return self.block.to_bytes()
-
-    def _payload_dict(self) -> dict:
-        return self.block.to_dict()
-
-
-class TxMessage(DataMessage):
-    """
-    Will package and send a tx
-    """
-
-    def __init__(self, tx: Transaction):
-        super().__init__()
-        self.tx = tx
-
-    @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
-        # Use inherent block method
-        return Transaction.from_bytes(byte_stream)
-
-    @property
-    def command(self) -> str:
-        return "tx"
-
-    def payload(self) -> bytes:
-        return self.tx.to_bytes()
-
-    def _payload_dict(self) -> dict:
-        return self.tx.to_dict()
-
-
-class HeaderMessage(DataMessage):
-    """
-    The headers packet returns block headers in response to a getheaders packet.
-    -------------------------------------------------
-    |   Name    | data type |   format      | size  |
-    -------------------------------------------------
-    |   count   | int       | CompactSize   | var   |
-    |   headers | list      | BlockHeader   | 81x   |
-    -------------------------------------------------
-    """
-
-    def __init__(self, header_list: list[BlockHeader], magic_bytes: bytes = MB.MAINNET):
-        super().__init__()
-        self.headers = header_list
-        self.count = len(self.headers)
-        self.magic_bytes = magic_bytes
-
-    @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
-        stream = get_stream(byte_stream)
-
-        # Get count
-        count = read_compact_size(stream, "headers_count")
-
-        # Get headers
-        header_list = []
-        for _ in range(count):
-            temp_header = BlockHeader.from_bytes(stream)
-            header_list.append(temp_header)
-
-        return cls(header_list, magic_bytes)
-
-    @property
-    def command(self) -> str:
-        return "headers"
-
-    def payload(self) -> bytes:
-        payload = write_compact_size(self.count)
-        for h in self.headers:
-            payload += h.to_bytes() + b'\x00'  # 80 byte header + 1 byte tx count set to 0
-        return payload
-
-    def _payload_dict(self) -> dict:
-        header_dict = {}
-        for x in range(self.count):
-            header_dict.update({f"header_{x}": self.headers[x].to_dict()})
-        payload_dict = {
-            "count": self.count,
-            "headers": header_dict
-        }
-        return payload_dict
-
-
-class MemPool(DataMessage):
-    """
-    The mempool message sends a request to a node asking for information about transactions it has verified but which
-    have not yet confirmed. The response to receiving this message is an inv message containing the transaction
-    hashes for all the transactions in the node's mempool.
-
-    No additional data is transmitted with this message.
-    """
-
-    @property
-    def command(self) -> str:
-        return "mempool"
-
-    def payload(self):
-        return b''
-
-
-class BlockTxn(DataMessage):
-
-    def __init__(self, block_tx: BlockTransactions):
-        super().__init__()
-        self.block_tx = block_tx
-
-    @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
-        stream = get_stream(byte_stream)
-
-        block_tx = BlockTransactions.from_bytes(stream)
-        return cls(block_tx)
-
-    @property
-    def command(self) -> str:
-        return "blocktxn"
-
-    def payload(self) -> bytes:
-        return self.block_tx.to_bytes()
-
-    def _payload_dict(self) -> dict:
-        return {"block_txn": self.block_tx.to_dict()}
-
-
-class MerkleBlock(DataMessage):
-    """
-    -------------------------------------------------------------------------
-    |   Name            |   Data type   |   byte format         |   size    |
-    -------------------------------------------------------------------------
-    |   Header          |   Blockheader |   to_bytes            |   80      |
-    |   tx_num          |   int         |   little_endian       |   4       |
-    |   hash_num        |   int         |   CompactSize         |   varint  |
-    |   hashes          |   list        |   internal byte order |   32      |
-    |   flag_byte_num   |   int         |   CompactSize         |   varint  |
-    |   flags           |   bytes       |   little-endian       |   var     |
-    -------------------------------------------------------------------------
-    """
-
-    def __init__(self, header: BlockHeader, tx_num: int, hashes: list, flags: bytes):
-        super().__init__()
-        self.header = header
-        self.tx_num = tx_num
-        self.hash_num = len(hashes)
-        self.hashes = hashes
-        self.flag_num = len(flags)
-        self.flags = flags
-
-    @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
-        stream = get_stream(byte_stream)
-
-        # header
-        header = BlockHeader.from_bytes(stream)
-
-        # tx_num
-        tx_num = read_little_int(stream, CB.TX_NUM, "tx_num")
-
-        # hashes
-        hash_num = read_compact_size(stream, "hash_num")
-        hashes = [read_stream(stream, CB.MERKLE_HASH, "merkle_hash") for _ in range(hash_num)]
-
-        # flags
-        flag_num = read_compact_size(stream, "flag_byte_count")
-        flags = read_stream(stream, flag_num, "flags")
-
-        return cls(header, tx_num, hashes, flags)
-
-    @property
-    def command(self) -> str:
-        return "merkleblock"
-
-    def payload(self) -> bytes:
-        parts = [
-            self.header.to_bytes(),
-            self.tx_num.to_bytes(CB.TX_NUM, "little"),
-            write_compact_size(self.hash_num),
-            b''.join(self.hashes),
-            write_compact_size(self.flag_num),
-            self.flags
-        ]
-        return b''.join(parts)
-
-    def to_dict(self) -> dict:
-        merkleblock_dict = {
-            "header": self.header.to_dict(),
-            "tx_num": self.tx_num,
-            "hash_num": self.hash_num,
-            "hashes": {f"hash_{x}": self.hashes[x].hex() for x in range(self.hash_num)},
-            "flag_num": self.flag_num,
-            "flags": little_bytes_to_binary_string(self.flags)  # Little endian display
-        }
-        return merkleblock_dict
-
-
-class SendCompact(DataMessage):
-    """
-    -------------------------------------------------------------
-    |   Name    |   Data type   |   Byte format     |   size    |
-    -------------------------------------------------------------
-    |   Announce    |   int     |   little-endian   |   1       |
-    |   version     |   int     |   little-endian   |   8       |
-    -------------------------------------------------------------
-    """
-
-    def __init__(self, announce: int, version: int):
-        # Error checking
-        super().__init__()
-        if announce not in [0, 1]:
-            raise ValueError("Announce value MUST be either 0 or 1")
-
-        self.announce = announce
-        self.version = version
-
-    @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
-        stream = get_stream(byte_stream)
-
-        # Announce
-        announce = read_little_int(stream, CB.ANNOUNCE, "announce")
-
-        # Version
-        version = read_little_int(stream, CB.VERSION, "version")
-
-        return cls(announce, version)
-
-    @property
-    def command(self) -> str:
-        return "sendcmpct"
-
-    def payload(self) -> bytes:
-        return self.announce.to_bytes(CB.ANNOUNCE, "little") + self.version.to_bytes(CB.VERSION, "little")
-
-    def to_dict(self) -> dict:
-        return {
-            "announce": self.announce,
-            "version": self.version
-        }
-
-
-class GetBlockTxn(DataMessage):
-    """
-    The getblocktxn message is defined as a message containing a serialized BlockTransactionsRequest message and
-    pchCommand == "getblocktxn".
-    """
-
-    def __init__(self, blocktxn: BlockTransactions):
-        super().__init__()
-        self.blocktxn = blocktxn
-
-    @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
-        stream = get_stream(byte_stream)
-
-        blocktxn = BlockTransactions.from_bytes(stream)
-        return cls(blocktxn)
-
-    @property
-    def command(self) -> str:
-        return "getblocktxn"
-
-    def payload(self) -> bytes:
-        return self.blocktxn.to_bytes()
-
-    def _payload_dict(self) -> dict:
-        return self.blocktxn.to_dict()
 
 
 # --- BIP-0152 --- #
