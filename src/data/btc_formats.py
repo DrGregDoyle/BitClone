@@ -47,6 +47,7 @@ class BitcoinFormats:
         IP = 16
         PORT = 2
         BLOCKTX_HASH = 32
+        INV = 36
 
     class Address:
         """Address format sizes"""
@@ -80,16 +81,21 @@ class BitcoinFormats:
         MERKLE_HASH = 32
         ANNOUNCE = 1
         VERSION = 8
+        NONCE = 8
+        SHORTID = 8
 
     class Block:
         """Block structure sizes"""
         HEADER = 80
+        BLOCK_HASH = 32
         VERSION = 4
         PREVIOUS_HASH = 32
         MERKLE_ROOT = 32
         TIMESTAMP = 4
         BITS = 4
         NONCE = 4
+        CMPCT_NONCE = 8
+        SHORTID = 6
         TRANSACTION_COUNT_MIN = 1  # VarInt minimum
 
     class Inventory:
@@ -98,6 +104,10 @@ class BitcoinFormats:
         HASH = 32
         ENTRY = 36  # TYPE + HASH
         MAX_ENTRIES = 50000  # Protocol limit
+
+    class Filter:
+        """Constants related to message filters"""
+        FEERATE = 8
 
     class Protocol:
         """Protocol values"""
@@ -108,7 +118,27 @@ class BitcoinFormats:
         MAINNET = bytes.fromhex("f9beb4d9")
         TESTNET = bytes.fromhex("0b110907")
         REGTEST = bytes.fromhex("fabfb5da")
+        DEFAULT = MAINNET
 
     class Time:
         """Time Formatting for Display"""
         FORMAT = "%Y-%m-%d %H:%M:%S"
+
+    class Message:
+        """
+        Constants related to data and control messages
+        """
+        # --- Data Messages --- #
+        INV = 36
+        MERKLEHASH = BLOCKTXHASH = 32
+        CMPCT_NONCE = CMPCT_VERSION = SHORTID = 8
+        TXNUM = PROTOCOL_VERSION = 4
+        ANNOUNCE = 1
+
+        # --- Control Messages --- #
+        FEERATE = 8
+        MAX_FILTER = 36000
+        MAX_HASHFUNC = 50
+        HASHFUNC = 4
+        TWEAK = 4
+        FLAG = 1

@@ -8,13 +8,15 @@ from src.crypto import hash256
 from src.data import Serializable, read_compact_size, MerkleTree, write_compact_size, get_stream, read_stream, \
     read_little_int, BitcoinFormats
 from src.logger import get_logger
-from src.tx import Transaction
+from src.tx import Transaction, PrefilledTransaction
 
 logger = get_logger(__name__)
 
 # alias the nested classese for formatting
 BFB = BitcoinFormats.Block
 BFP = BitcoinFormats.Protocol
+
+__all__ = ["Block", "BlockHeader", "BlockTransactions", "BlockTransactionsRequest", "HeaderAndShortIDs"]
 
 
 class BlockHeader(Serializable):
@@ -170,6 +172,194 @@ class Block(Serializable):
 
     def increment(self):
         self.nonce += 1
+
+
+# --- BIP152 DATA STRUCTURES --- #
+
+class HeaderAndShortIDs(Serializable):
+    """
+    ---------------------------------------------------------------------------------
+    |   Name                |   Data type       |   byte format     |   byte size   |
+    ---------------------------------------------------------------------------------
+    |   Header              |   Block header    |   header.to_bytes |   80          |
+    |   Nonce               |   int             |   little-endian   |   8           |
+    |   shorts_ids_length   |   int             |   CompactSize     |   varint      |
+    |   shortids            |   list            |   little-endian   |   8 * length  |
+    |   prefilled_tx_length |   int             |   CompactSize     |   varint      |
+    |   prefilled_tx        |   list            |   tx.to_bytes     |   var         |
+    ---------------------------------------------------------------------------------
+    """
+
+    # NONCE_BYTES = 8
+    # SHORTIDS_BYTES = 6
+
+    def __init__(self, header: BlockHeader, nonce: int, short_ids: list, prefilled_txs: list[PrefilledTransaction]):
+        self.header = header
+        self.nonce = nonce
+        self.shortids = short_ids
+        self.shortids_length = len(short_ids)
+        self.prefilledtxn = prefilled_txs
+        self.prefilledtxn_length = len(prefilled_txs)
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO):
+        stream = get_stream(byte_stream)
+
+        # Get data
+        header = BlockHeader.from_bytes(stream)
+        nonce = read_little_int(stream, BFB.CMPCT_NONCE, "nonce")
+        shortids_length = read_compact_size(stream, "shortids_length")
+        shortids = []
+        for _ in range(shortids_length):
+            shortids.append(read_stream(stream, BFB.SHORTID, "short_ids"))
+        prefilledtxn_length = read_compact_size(stream, "prefilledtxn_length")
+        prefilledtxn = []
+        for _ in range(prefilledtxn_length):
+            prefilledtxn.append(PrefilledTransaction.from_bytes(stream))
+
+        return cls(header, nonce, shortids, prefilledtxn)
+
+    def to_bytes(self):
+
+        return (self.header.to_bytes() + self.nonce.to_bytes(BFB.CMPCT_NONCE, "little")
+                + write_compact_size(self.shortids_length) + b''.join(self.shortids)
+                + write_compact_size(self.prefilledtxn_length) + b''.join([t.to_bytes() for t in self.prefilledtxn]))
+
+    def to_dict(self):
+        short_ids_dict = {}
+        for x in range(self.shortids_length):
+            temp_shortid = self.shortids[x]
+            short_ids_dict.update({
+                f"short_id_{x}": temp_shortid.hex()
+            })
+
+        header_and_short_ids_dict = {
+            "header": self.header.to_dict(),
+            "nonce": self.nonce,
+            "shortids_length": self.shortids_length,
+            "shortids": short_ids_dict,  # {f"id_{x}": self.shortids[x].hex() for x in range(self.shortids_length)},
+            "prefilledtxn_length": self.prefilledtxn_length,
+            "prefilledtxn": {f"prefilled_txn_{x}": self.prefilledtxn[x].to_dict() for x in
+                             range(self.prefilledtxn_length)}
+        }
+        return header_and_short_ids_dict
+
+
+class BlockTransactions(Serializable):
+    """
+    Added in protocol version 70014 as described by BIP152.
+    ---------------------------------------------------------------------
+    |   Name        |	Data Type   | Byte Format           |   Size    |
+    ---------------------------------------------------------------------
+    |   block_hash  | bytes         |   natural_byte_order  |   32      |
+    |   tx_num      |   int         |   CompactSize         |   varint  |
+    |   txs         |   list        |   tx.to_bytes()       |   var     |
+    ---------------------------------------------------------------------
+    """
+
+    def __init__(self, block_hash: bytes, txs: list[Transaction]):
+        self.block_hash = block_hash
+        self.txs = txs
+        self.tx_num = len(txs)
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO):
+        stream = get_stream(byte_stream)
+
+        # Get hash
+        block_hash = read_stream(stream, BFB.BLOCK_HASH, "block_hash")
+
+        # Get txs
+        tx_num = read_compact_size(stream, "BlockTransactions.tx_num")
+        txs = [Transaction.from_bytes(stream) for _ in range(tx_num)]
+
+        return cls(block_hash, txs)
+
+    def to_bytes(self) -> bytes:
+        tx_bytes = b''.join([tx.to_bytes() for tx in self.txs])
+        return self.block_hash + write_compact_size(self.tx_num) + tx_bytes
+
+    def to_dict(self) -> dict:
+        blocktx_dict = {
+            "block_hash": self.block_hash[::-1].hex(),  # Reverse for display
+            "tx_num": self.tx_num,
+            "txs": {f"tx_{x}": self.txs[x].to_dict() for x in range(self.tx_num)}
+        }
+        return blocktx_dict
+
+
+class BlockTransactionsRequest(Serializable):
+    """
+    Added in protocol version 70014 as described by BIP152.
+    In version 2 of compact blocks, the wtxid should be used instead of the txid as defined by BIP141
+    ---------------------------------------------------------------------------------
+    |   Name            |   Data type   |   byte format             |   byte size   |
+    ---------------------------------------------------------------------------------
+    |   block_hash      |   bytes       |   natural_byte_order      |   32          |
+    |   indexes_length  |   int         |   CompactSize             |   varint      |
+    |   indexes         |   list        |   Differentially encoded  |   var         |
+    ---------------------------------------------------------------------------------
+    """
+
+    def __init__(self, block_hash: bytes, indexes: list):
+        """
+        We assume that the indexes list is already differentially encoded
+        """
+        self.block_hash = block_hash
+        self.indexes = indexes
+        self.indexes_length = len(indexes)
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO):
+        # Get stream
+        stream = get_stream(byte_stream)
+
+        # Get block_hash
+        block_hash = read_stream(stream, BFB.BLOCK_HASH, "block_hash")
+
+        # Get indexes
+        indexes_length = read_compact_size(stream, "indexes_length")
+        indexes = []
+        for _ in range(indexes_length):
+            indexes.append(write_compact_size(read_compact_size(stream, "differentially encoded index")))
+
+        return cls(block_hash, indexes)
+
+    def to_bytes(self):
+        return self.block_hash + write_compact_size(self.indexes_length) + b''.join(self.indexes)
+
+    def to_dict(self):
+        index_dict = {}
+        diff_encode_dict = {}
+        current_index = read_compact_size(get_stream(self.indexes[0]), "Compact Size")
+
+        for x in range(self.indexes_length):
+            # First index case
+            if x == 0:
+                index_dict.update({
+                    "index_0": current_index
+                })
+                diff_encode_dict.update({
+                    "differentially_encoded_index_0": current_index
+                })
+            # Remaining elements in list
+            else:
+                temp_index = read_compact_size(get_stream(self.indexes[x]), "Differentially encoded int")
+                diff_encode_dict.update({
+                    f"differentially_encoded_index_{x}": temp_index
+                })
+                current_index = temp_index + 1 + current_index
+                index_dict.update({
+                    f"index_{x}": current_index
+                })
+
+        block_tx_req_dict = {
+            "block_hash": self.block_hash[::-1].hex(),  # reverse byte order for display
+            "index_count": self.indexes_length,
+            "index list": index_dict,
+            "differentially encoded indexes": diff_encode_dict
+        }
+        return block_tx_req_dict
 
 
 # --- TESTING

@@ -486,6 +486,41 @@ class Transaction(Serializable):
 
 
 # --- COMPACT BLOCKS
+class PrefilledTransaction(Serializable):
+    """
+    -------------------------------------------------------------
+    |   Name    |   Data type   |   byte format |   byte size   |
+    -------------------------------------------------------------
+    |   Index   |   int         |   CompactSize |   varInt      |
+    |   Tx      |   Transaction |   tx.to_bytes |   var         |
+    -------------------------------------------------------------
+    """
+
+    def __init__(self, index: int, tx: Transaction):
+        self.index = index
+        self.tx = tx
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO):
+        stream = get_stream(byte_stream)
+
+        # index
+        index = read_compact_size(stream, "prefilled_tx_index")
+
+        # tx
+        tx = Transaction.from_bytes(stream)
+
+        return cls(index, tx)
+
+    def to_bytes(self) -> bytes:
+        return write_compact_size(self.index) + self.tx.to_bytes()
+
+    def to_dict(self):
+        prefilled_tx_dict = {
+            "index": self.index,
+            "tx": self.tx.to_dict()
+        }
+        return prefilled_tx_dict
 
 
 # --- COINBASE

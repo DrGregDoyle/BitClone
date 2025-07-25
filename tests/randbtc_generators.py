@@ -11,8 +11,7 @@ from secrets import token_bytes, randbits, randbelow
 
 from src.block import Block, BlockHeader
 from src.data import InvType
-from src.messaging import PrefilledTransaction
-from src.tx import Input, Output, WitnessItem, Witness, Transaction
+from src.tx import Input, Output, WitnessItem, Witness, Transaction, PrefilledTransaction
 
 
 def get_random_scriptpubkey(scriptpubkey_type: str = None):

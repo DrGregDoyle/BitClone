@@ -4,10 +4,11 @@ Tests for the data structures created in BIP-0152
 from random import randint
 from secrets import token_bytes
 
+from src.block import HeaderAndShortIDs, BlockTransactionsRequest, BlockTransactions
 from src.crypto import hash256
 from src.data import write_compact_size
 from src.logger import get_logger
-from src.messaging import *
+from src.tx import PrefilledTransaction
 from tests.randbtc_generators import get_random_prefilled_tx, get_random_block_header, get_random_nonce, \
     get_random_shortid, get_random_tx
 
@@ -26,9 +27,6 @@ def test_prefilled_tx():
                                                                   "PrefilledTransaction1"
     assert prefilled_tx2.to_bytes() == recovered_ptx2.to_bytes(), "to_bytes -> from_bytes construction failed for " \
                                                                   "PrefilledTransaction2"
-    # Verify differential encoding
-    prefilled_tx2.differentially_encode_index(previous_index=prefilled_tx1.index)
-    assert prefilled_tx2.index == 0, "Failed to differentially encode index for squential indices"
 
 
 def test_header_and_short_ids():

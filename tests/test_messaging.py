@@ -4,8 +4,7 @@ Testing the various messages
 from random import randint, choice
 from secrets import token_bytes
 
-from src.messaging import MerkleBlock
-from src.network import SendCompact
+from src.network import SendCompact, MerkleBlock
 from tests.randbtc_generators import get_random_block_header
 
 
@@ -20,7 +19,7 @@ def test_merkleblock():
     random_merkleblock = MerkleBlock(random_header, tx_num, hashes, flags)
     print(f"RANDOM MERKLEBLOCK: {random_merkleblock.to_json()}")
 
-    recovered_merkleblock = MerkleBlock.from_bytes(random_merkleblock.to_bytes())
+    recovered_merkleblock = MerkleBlock.from_bytes(random_merkleblock.payload())
     assert random_merkleblock.to_bytes() == recovered_merkleblock.to_bytes(), \
         "Merkleblock failed to_bytes -> from_bytes construction"
 

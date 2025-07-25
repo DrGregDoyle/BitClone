@@ -1,200 +1,65 @@
 """
 Control Message Classes
+
+The following network messages all help control the connection between two peers or allow them to advise each other
+about the rest of the network:
+    -addr
+    -feefilter
+    -filteradd
+
+    -filterclear
+    -filterload
+    -getaddr
+
+    -ping
+    -pong
+    -reject
+
+    -sendheaders
+    -verack
+    -version
 """
 from datetime import datetime
 from io import BytesIO
 
 from src.data import get_stream, read_little_int, read_stream, read_compact_size, write_compact_size, \
-    NetAddr, RejectType, to_little_bytes, BloomType, bytes_to_2byte_binary_string, BitcoinFormats
-from src.network.messages import ControlMessage
+    NetAddr, RejectType, BloomType, bytes_to_2byte_binary_string, BitcoinFormats
+from src.network.message import Message
 
-__all__ = ["Version", "VerAck", "Pong", "Ping", "Addr", "Reject", "GetAddr", "SendHeaders", "FilterLoad",
-           "FilterClear", "FeeFilter"]
+__all__ = ["Addr", "FeeFilter", "FilterAdd", "FilterClear", "FilterLoad", "GetAddr", "Ping", "Pong", "Reject",
+           "SendHeaders", "VerAck", "Version"]
 
-MB = BitcoinFormats.MagicBytes
+BF = BitcoinFormats.Message
 
 
-class Version(ControlMessage):
+# --- PARENT CLASSES FOR SIMILAR MESSAGES --- #
+
+class EmptyMessage(Message):
     """
-    -----------------------------------------------------------------
-    |   Name            | Data type | Formatted         | Size      |
-    -----------------------------------------------------------------
-    |   (Protocol) version  | int   | little-endian     | 4         |
-    |   Services            | bytes | little-endian     | 8         |
-    |   Time                | int   | little-endian     | 8         |
-    |   Remote services     | bytes | little-endian     | 8         |
-    |   Remote ip           | str   | ipv6, big-endian  | 16        |
-    |   Remote port         | int   | big-endian        | 2         |
-    |   Local services      | bytes | little-endian     | 8         |
-    |   Local ip            | str   | ipv6, big-endian  | 16        |
-    |   Local port          | int   | big-endian        | 2         |
-    |   nonce               | int   | little-endian     | 8         |
-    |   user agent size     | *     | compact_size      | varint    |
-    |   user agent          | str   | ascii bytes       | varint    |
-    |   last block          | int   | little-endian     | 4         |
-    -----------------------------------------------------------------
+    Used for Messages with no payload
     """
-    # --- BYTE SIZES
-    PORT_BYTES = 2
-    VERSION_BYTES = LAST_BLOCK_BYTES = 4
-    SERVICE_BYTES = TIME_BYTES = NONCE_BYTES = 8
-    IP_BYTES = 16
 
-    def __init__(self, version: int, services: bytes, timestamp: int, remote_addr: NetAddr, local_addr: NetAddr,
-                 nonce: int,
-                 user_agent: str,
-                 last_block: int,
-                 magic_bytes: bytes = MB.MAINNET):
-        # Magic Bytes
-        super().__init__(magic_bytes)
-        self.magic_bytes = magic_bytes
-
-        # Raw Data
-        self.protocol_version = version
-        self.services = services
-        self.timestamp = timestamp
-        self.remote_net_addr = remote_addr
-        self.local_net_addr = local_addr
-        self.nonce = nonce
-        self.user_agent = user_agent
-        self.last_block = last_block
+    def __init__(self):
+        super().__init__()
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
-        # Setup stream
-        stream = get_stream(byte_stream)
-
-        # Read version, services and timestamp
-        version = read_little_int(stream, cls.VERSION_BYTES, "protocol_version")
-        services = read_stream(stream, cls.SERVICE_BYTES, "services")
-        timestamp = read_little_int(stream, cls.TIME_BYTES, "time")
-
-        # Read in remote and local NetAddr
-        remote_netaddr = NetAddr.from_bytes(stream, is_version=True)
-        local_netaddr = NetAddr.from_bytes(stream, is_version=True)
-
-        # Read in nonce, user agent and last block
-        nonce = read_little_int(stream, cls.NONCE_BYTES, "nonce")
-        user_agent_size = read_compact_size(stream, "user_agent_size")
-        user_agent = read_stream(stream, user_agent_size, "user_agent").decode("ascii")
-        last_block = read_little_int(stream, cls.LAST_BLOCK_BYTES, "last_block")
-
-        return cls(version, services, timestamp, remote_netaddr, local_netaddr, nonce, user_agent, last_block,
-                   magic_bytes)
+    def from_bytes(cls, byte_stream: bytes | BytesIO = b''):
+        return cls()
 
     @property
-    def command(self) -> str:
-        return "version"
+    def command(self):
+        return self.__class__.command
 
-    def payload(self):
-        byte_string = b''
-
-        # Protocol version, services, time
-        byte_string += self.protocol_version.to_bytes(self.VERSION_BYTES, "little")
-        byte_string += self.services[::-1]
-        byte_string += self.timestamp.to_bytes(self.TIME_BYTES, "little")
-
-        # Remote and local netaddr
-        byte_string += self.remote_net_addr.to_bytes() + self.local_net_addr.to_bytes()
-
-        # Nonce, user agent and last block
-        byte_string += self.nonce.to_bytes(self.NONCE_BYTES, "little")
-        user_agent = self.user_agent.encode("ascii")
-        user_agent_size = write_compact_size(len(user_agent))
-        byte_string += user_agent_size + user_agent
-        byte_string += self.last_block.to_bytes(self.LAST_BLOCK_BYTES, "little")
-
-        return byte_string
-
-    def _payload_dict(self) -> dict:
-        version_dict = {
-            "protocol_version": self.protocol_version,
-            "services": self.services.hex(),
-            "time": datetime.utcfromtimestamp(self.timestamp).strftime("%Y-%m-%d %H:%M:%S"),
-            "remote_netaddr": self.remote_net_addr.to_dict(),
-            "local_netaddr": self.local_net_addr.to_dict(),
-            "nonce": self.nonce,
-            "user_agent": self.user_agent,
-            "last_block": self.last_block
-        }
-        return version_dict
-
-
-class VerAck(ControlMessage):
-
-    @property
-    def command(self) -> str:
-        return "verack"
-
-    def payload(self):
+    def payload(self) -> bytes:
         return b''
 
-
-class Ping(ControlMessage):
-    """
-    -------------------------------------------------
-    |   Name    | Data type | format        | size  |
-    -------------------------------------------------
-    |   Nonce   | int       | little-endian | 8     |
-    -------------------------------------------------
-    """
-    NONCE_BYTES = 8
-
-    def __init__(self, nonce: int, magic_bytes: bytes = MB.MAINNET):
-        super().__init__(magic_bytes)
-        self.nonce = nonce
-        self.magic_bytes = magic_bytes
-
-    @classmethod
-    def from_bytes(cls, bytes_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
-        stream = get_stream(bytes_stream)
-        nonce = read_little_int(stream, cls.NONCE_BYTES, "nonce")
-        return cls(nonce, magic_bytes)
-
-    @property
-    def command(self):
-        return "ping"
-
-    def payload(self):
-        return self.nonce.to_bytes(self.NONCE_BYTES, "little")
-
-    def _payload_dict(self) -> dict:
-        return {"nonce": self.nonce}
+    def payload_dict(self) -> dict:
+        return {}
 
 
-class Pong(ControlMessage):
-    """
-    -------------------------------------------------
-    |   Name    | Data type | format        | size  |
-    -------------------------------------------------
-    |   Nonce   | int       | little-endian | 8     |
-    -------------------------------------------------
-    """
-    NONCE_BYTES = 8
+# --- CONTROL MESSAGES --- #
 
-    def __init__(self, nonce: int, magic_bytes: bytes = MB.MAINNET):
-        super().__init__(magic_bytes)
-        self.nonce = nonce
-        self.magic_bytes = magic_bytes
-
-    @classmethod
-    def from_bytes(cls, bytes_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
-        stream = get_stream(bytes_stream)
-        nonce = read_little_int(stream, cls.NONCE_BYTES, "nonce")
-        return cls(nonce, magic_bytes)
-
-    @property
-    def command(self):
-        return "pong"
-
-    def payload(self):
-        return self.nonce.to_bytes(self.NONCE_BYTES, "little")
-
-    def _payload_dict(self) -> dict:
-        return {"nonce": self.nonce}
-
-
-class Addr(ControlMessage):
+class Addr(Message):
     """
     -----------------------------------------------------
     |   Name        | Data type | format        | size  |
@@ -204,13 +69,13 @@ class Addr(ControlMessage):
     -----------------------------------------------------
     """
 
-    def __init__(self, addr_list: list[NetAddr], magic_bytes: bytes = MB.MAINNET):
-        super().__init__(magic_bytes)
+    def __init__(self, addr_list: list[NetAddr]):
+        super().__init__()
         self.addr_list = addr_list
         self.count = len(addr_list)
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
+    def from_bytes(cls, byte_stream: bytes | BytesIO):
         # Get stream
         stream = get_stream(byte_stream)
 
@@ -222,7 +87,7 @@ class Addr(ControlMessage):
         for _ in range(count):
             addr_list.append(NetAddr.from_bytes(stream))
 
-        return cls(addr_list, magic_bytes)
+        return cls(addr_list)
 
     @property
     def command(self) -> str:
@@ -234,7 +99,7 @@ class Addr(ControlMessage):
             payload += a.to_bytes()
         return payload
 
-    def _payload_dict(self) -> dict:
+    def payload_dict(self) -> dict:
         # Collect addresses first
         addr_dict = {}
         for x in range(self.count):
@@ -247,7 +112,249 @@ class Addr(ControlMessage):
         return payload_dict
 
 
-class Reject(ControlMessage):
+class FeeFilter(Message):
+    """
+    The feefilter message is a request to the receiving peer to not relay any transaction inv messages to the sending
+    peer where the fee rate for the transaction is below the fee rate specified in the feefilter message.
+
+    The payload is always 8 bytes long, and it encodes 64-bit integer value (LSB / little endian) of feerate. The
+    value represents a minimal fee and is expressed in satoshis per 1000 bytes.
+    """
+
+    def __init__(self, feerate: int):
+        super().__init__()
+        self.feerate = feerate
+
+    @property
+    def command(self) -> str:
+        return "feefilter"
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO):
+        stream = get_stream(byte_stream)
+
+        feerate = read_little_int(stream, BF.FEERATE, "feerate")
+        return cls(feerate)
+
+    def payload(self) -> bytes:
+        return self.feerate.to_bytes(BF.FEERATE, "little")
+
+    def payload_dict(self) -> dict:
+        return {
+            "feerate": self.payload().hex()
+        }
+
+
+class FilterAdd(Message):
+    """
+    The filteradd message tells the receiving peer to add a single element to a previously-set bloom filter,
+    such as a new public key. The element is sent directly to the receiving peer; the peer then uses the parameters
+    set in the filterload message to add the element to the bloom filter.
+
+    Note: a filteradd message will not be accepted unless a filter was previously set with the filterload message.
+    """
+
+    def __init__(self, element: bytes):
+        super().__init__()
+        self.element_bytes = len(element)
+        self.element = element
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO):
+        stream = get_stream(byte_stream)
+
+        # element bytes
+        element_bytes = read_compact_size(stream, "element_bytes")
+
+        # element
+        element = read_stream(stream, element_bytes, "element")
+
+        return cls(element)
+
+    @property
+    def command(self) -> str:
+        return "filteradd"
+
+    def payload(self) -> bytes:
+        return write_compact_size(self.element_bytes) + self.element
+
+    def payload_dict(self) -> dict:
+        return {
+            "element_bytes": self.element_bytes,
+            "element": self.element.hex()
+        }
+
+
+class FilterClear(Message):
+    """
+    The filterclear message tells the receiving peer to remove a previously-set bloom filter. This also undoes the
+    effect of setting the relay field in the version message to 0, allowing unfiltered access to inv messages
+    announcing new transactions.
+
+    Bitcoin Core does not require a filterclear message before a replacement filter is loaded with filterload. It also
+    doesn’t require a filterload message before a filterclear message.
+
+    There is no payload in a filterclear message
+    """
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO = b''):
+        return cls()
+
+    @property
+    def command(self) -> str:
+        return "filterclear"
+
+    def payload(self) -> bytes:
+        return b''
+
+    def payload_dict(self) -> dict:
+        return {}
+
+
+class FilterLoad(Message):
+    """
+    -------------------------------------------------------------------------
+    |   Name        |   Data type       |   Byte format     |   byte size   |
+    -------------------------------------------------------------------------
+    |   filter_size |   int             |   CompactSize     |   varint      |
+    |   filter      |   bytes           |   bit_field       |   max 36,000  |
+    |   nHashFuncs  |   int (max 50)    |   little-endian   |   4           |
+    |   nTweak      |   int             |   little-endian   |   4           |
+    |   nFlags      |   BLOOM_TYPE      |   little-endian   |   1           |
+    -------------------------------------------------------------------------
+    """
+
+    def __init__(self, filter_bytes: bytes, nhashfunc: int, ntweak: int, nflags: int | BloomType):
+        super().__init__()
+        # Error checking
+        if len(filter_bytes) > BF.MAX_FILTER:
+            raise ValueError(f"Size of filter bytes exceeds {BF.MAX_FILTER}. Filter size: {len(filter_bytes)}")
+        if nhashfunc > BF.MAX_HASHFUNC:
+            raise ValueError(f"Hash function num exceeds {BF.MAX_HASHFUNC}. Hashfunc num: {nhashfunc}")
+
+        self.filter_bytes = filter_bytes
+        self.filter_bytes_size = len(self.filter_bytes)
+        self.nhashfunc = nhashfunc
+        self.ntweak = ntweak
+        self.nflags = BloomType(nflags) if isinstance(nflags, int) else nflags  # BloomType
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO):
+        # Get Stream
+        stream = get_stream(byte_stream)
+
+        # Get filter_bytes
+        filter_size = read_compact_size(stream, "filter_bytes_size")
+        filter_bytes = read_stream(stream, filter_size, "filter_bytes")
+
+        # Get n-vals
+        nhashfunc = read_little_int(stream, BF.HASHFUNC, "n_hash_func")
+        ntweak = read_little_int(stream, BF.TWEAK, "n_tweak")
+        nflag = read_little_int(stream, BF.FLAG, "n_flags")
+
+        return cls(filter_bytes, nhashfunc, ntweak, nflag)
+
+    def payload(self) -> bytes:
+        payload_parts = [write_compact_size(self.filter_bytes_size), self.filter_bytes,
+                         self.nhashfunc.to_bytes(BF.HASHFUNC, "little"),
+                         self.ntweak.to_bytes(BF.TWEAK, "little"),
+                         self.nflags.to_byte()]
+        return b''.join(payload_parts)
+
+    def payload_dict(self) -> dict:
+        payload_dict = {
+            "filter_bytes_size": self.filter_bytes_size,
+            "filter_bytes": self.filter_bytes.hex(),
+            "binary_filter": bytes_to_2byte_binary_string(self.filter_bytes),
+            "n_hash_funct": self.nhashfunc,
+            "n_tweak": self.ntweak,
+            "nflags": self.nflags.name
+        }
+        return payload_dict
+
+    @property
+    def command(self) -> str:
+        return "filterload"
+
+
+class GetAddr(EmptyMessage):
+    """
+    The getaddr message requests an addr message from the receiving node, preferably one with lots of IP addresses of
+    other receiving nodes. The transmitting node can use those IP addresses to quickly update its database of
+    available nodes rather than waiting for unsolicited addr messages to arrive over time.
+
+    There is no payload in a getaddr message.
+    """
+
+    @property
+    def command(self) -> str:
+        return "getaddr"
+
+
+class Ping(Message):
+    """
+    -------------------------------------------------
+    |   Name    | Data type | format        | size  |
+    -------------------------------------------------
+    |   Nonce   | int       | little-endian | 8     |
+    -------------------------------------------------
+    """
+    NONCE_BYTES = 8
+
+    def __init__(self, nonce: int):
+        super().__init__()
+        self.nonce = nonce
+
+    @classmethod
+    def from_bytes(cls, bytes_stream: bytes | BytesIO):
+        stream = get_stream(bytes_stream)
+        nonce = read_little_int(stream, cls.NONCE_BYTES, "nonce")
+        return cls(nonce)
+
+    @property
+    def command(self):
+        return "ping"
+
+    def payload(self):
+        return self.nonce.to_bytes(self.NONCE_BYTES, "little")
+
+    def payload_dict(self) -> dict:
+        return {"nonce": self.nonce}
+
+
+class Pong(Message):
+    """
+    -------------------------------------------------
+    |   Name    | Data type | format        | size  |
+    -------------------------------------------------
+    |   Nonce   | int       | little-endian | 8     |
+    -------------------------------------------------
+    """
+    NONCE_BYTES = 8
+
+    def __init__(self, nonce: int):
+        super().__init__()
+        self.nonce = nonce
+
+    @classmethod
+    def from_bytes(cls, bytes_stream: bytes | BytesIO):
+        stream = get_stream(bytes_stream)
+        nonce = read_little_int(stream, cls.NONCE_BYTES, "nonce")
+        return cls(nonce)
+
+    @property
+    def command(self):
+        return "pong"
+
+    def payload(self):
+        return self.nonce.to_bytes(self.NONCE_BYTES, "little")
+
+    def payload_dict(self) -> dict:
+        return {"nonce": self.nonce}
+
+
+class Reject(Message):
     """
     ---------------------------------------------------------------------
     |   Name            |   Data type   |   byte format     |   size    |
@@ -260,7 +367,6 @@ class Reject(ControlMessage):
     |   Data            |   bytes       |   various         |   var     |
     ---------------------------------------------------------------------
     """
-    DATA_BYTES = 32
 
     def __init__(self, message: str, ccode: RejectType | int, reason: str, data: bytes = b''):
         super().__init__()
@@ -270,7 +376,7 @@ class Reject(ControlMessage):
         self.data = data
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
+    def from_bytes(cls, byte_stream: bytes | BytesIO):
         # Get stream
         stream = get_stream(byte_stream)
 
@@ -304,7 +410,7 @@ class Reject(ControlMessage):
             len(encoded_reason)) + encoded_reason + self.data
         return payload
 
-    def _payload_dict(self) -> dict:
+    def payload_dict(self) -> dict:
         payload_dict = {
             "rejected_message": self.reject_message,
             "ccode": self.ccode.name,
@@ -314,30 +420,17 @@ class Reject(ControlMessage):
         return payload_dict
 
 
-class GetAddr(ControlMessage):
-    """
-    The getaddr message requests an addr message from the receiving node, preferably one with lots of IP addresses of
-    other receiving nodes. The transmitting node can use those IP addresses to quickly update its database of
-    available nodes rather than waiting for unsolicited addr messages to arrive over time.
-
-    There is no payload in a getaddr message.
-    """
-
-    @property
-    def command(self) -> str:
-        return "getaddr"
-
-    def payload(self):
-        return b''
-
-
-class SendHeaders(ControlMessage):
+class SendHeaders(Message):
     """
     The sendheaders message tells the receiving peer to send new block announcements using a headers message rather
     than an inv message.
 
     There is no payload in a sendheaders message
     """
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO = b''):
+        return cls()
 
     @property
     def command(self) -> str:
@@ -346,131 +439,118 @@ class SendHeaders(ControlMessage):
     def payload(self) -> bytes:
         return b''
 
+    def payload_dict(self) -> dict:
+        return {}
 
-class FeeFilter(ControlMessage):
-    """
-    The feefilter message is a request to the receiving peer to not relay any transaction inv messages to the sending
-    peer where the fee rate for the transaction is below the fee rate specified in the feefilter message.
 
-    The payload is always 8 bytes long, and it encodes 64-bit integer value (LSB / little endian) of feerate. The
-    value represents a minimal fee and is expressed in satoshis per 1000 bytes.
-    """
-    FEERATE_BYTES = 8
-
-    def __init__(self, feerate: int, magic_bytes: bytes = MB.MAINNET):
-        super().__init__(magic_bytes)
-        self.feerate = feerate
-        self.magic_bytes = magic_bytes
+class VerAck(EmptyMessage):
 
     @property
     def command(self) -> str:
-        return "feefilter"
+        return "verack"
+
+
+class Version(Message):
+    """
+    -----------------------------------------------------------------
+    |   Name            | Data type | Formatted         | Size      |
+    -----------------------------------------------------------------
+    |   (Protocol) version  | int   | little-endian     | 4         |
+    |   Services            | bytes | little-endian     | 8         |
+    |   Time                | int   | little-endian     | 8         |
+    |   Remote services     | bytes | little-endian     | 8         |
+    |   Remote ip           | str   | ipv6, big-endian  | 16        |
+    |   Remote port         | int   | big-endian        | 2         |
+    |   Local services      | bytes | little-endian     | 8         |
+    |   Local ip            | str   | ipv6, big-endian  | 16        |
+    |   Local port          | int   | big-endian        | 2         |
+    |   nonce               | int   | little-endian     | 8         |
+    |   user agent size     | *     | compact_size      | varint    |
+    |   user agent          | str   | ascii bytes       | varint    |
+    |   last block          | int   | little-endian     | 4         |
+    -----------------------------------------------------------------
+    """
+    # --- BYTE SIZES
+    PORT_BYTES = 2
+    VERSION_BYTES = LAST_BLOCK_BYTES = 4
+    SERVICE_BYTES = TIME_BYTES = NONCE_BYTES = 8
+    IP_BYTES = 16
+
+    def __init__(self, version: int, services: bytes, timestamp: int, remote_addr: NetAddr, local_addr: NetAddr,
+                 nonce: int,
+                 user_agent: str,
+                 last_block: int):
+        # Magic Bytes
+        super().__init__()
+
+        # Raw Data
+        self.protocol_version = version
+        self.services = services
+        self.timestamp = timestamp
+        self.remote_net_addr = remote_addr
+        self.local_net_addr = local_addr
+        self.nonce = nonce
+        self.user_agent = user_agent
+        self.last_block = last_block
 
     @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
+    def from_bytes(cls, byte_stream: bytes | BytesIO):
+        # Setup stream
         stream = get_stream(byte_stream)
 
-        feerate = read_little_int(stream, cls.FEERATE_BYTES, "feerate")
-        return cls(feerate, magic_bytes)
+        # Read version, services and timestamp
+        version = read_little_int(stream, cls.VERSION_BYTES, "protocol_version")
+        services = read_stream(stream, cls.SERVICE_BYTES, "services")
+        timestamp = read_little_int(stream, cls.TIME_BYTES, "time")
 
-    def payload(self) -> bytes:
-        return to_little_bytes(self.feerate, self.FEERATE_BYTES)
+        # Read in remote and local NetAddr
+        remote_netaddr = NetAddr.from_bytes(stream, is_version=True)
+        local_netaddr = NetAddr.from_bytes(stream, is_version=True)
 
-    def _payload_dict(self) -> dict:
-        return {
-            "feerate": self.feerate
-        }
+        # Read in nonce, user agent and last block
+        nonce = read_little_int(stream, cls.NONCE_BYTES, "nonce")
+        user_agent_size = read_compact_size(stream, "user_agent_size")
+        user_agent = read_stream(stream, user_agent_size, "user_agent").decode("ascii")
+        last_block = read_little_int(stream, cls.LAST_BLOCK_BYTES, "last_block")
 
-
-class FilterClear(ControlMessage):
-    """
-    The filterclear message tells the receiving peer to remove a previously-set bloom filter. This also undoes the
-    effect of setting the relay field in the version message to 0, allowing unfiltered access to inv messages
-    announcing new transactions.
-
-    Bitcoin Core does not require a filterclear message before a replacement filter is loaded with filterload. It also
-    doesn’t require a filterload message before a filterclear message.
-
-    There is no payload in a filterclear message
-    """
+        return cls(version, services, timestamp, remote_netaddr, local_netaddr, nonce, user_agent, last_block)
 
     @property
     def command(self) -> str:
-        return "filterclear"
+        return "version"
 
-    def payload(self) -> bytes:
-        return b''
+    def payload(self):
+        byte_string = b''
 
+        # Protocol version, services, time
+        byte_string += self.protocol_version.to_bytes(self.VERSION_BYTES, "little")
+        byte_string += self.services[::-1]
+        byte_string += self.timestamp.to_bytes(self.TIME_BYTES, "little")
 
-class FilterLoad(ControlMessage):
-    """
-    -------------------------------------------------------------------------
-    |   Name        |   Data type       |   Byte format     |   byte size   |
-    -------------------------------------------------------------------------
-    |   filter_size |   int             |   CompactSize     |   varint      |
-    |   filter      |   bytes           |   bit_field       |   max 36,000  |
-    |   nHashFuncs  |   int (max 50)    |   little-endian   |   4           |
-    |   nTweak      |   int             |   little-endian   |   4           |
-    |   nFlags      |   BLOOM_TYPE      |   little-endian   |   1           |
-    -------------------------------------------------------------------------
-    """
-    MAX_FILTER = 0x8ca0  # 36,000 bytes
-    MAX_HASHFUNC = 0x32  # 50
-    HASHFUNC_BYTES = TWEAK_BYTES = 4
-    FLAG_BYTES = 1
+        # Remote and local netaddr
+        byte_string += self.remote_net_addr.to_bytes() + self.local_net_addr.to_bytes()
 
-    def __init__(self, filter_bytes: bytes, nhashfunc: int, ntweak: int, nflags: int | BloomType,
-                 magic_bytes: bytes = MB.MAINNET):
-        super().__init__(magic_bytes)
-        # Error checking
-        if len(filter_bytes) > self.MAX_FILTER:
-            raise ValueError(f"Size of filter bytes exceeds {self.MAX_FILTER}. Filter size: {len(filter_bytes)}")
-        if nhashfunc > self.MAX_HASHFUNC:
-            raise ValueError(f"Hash function num exceeds {self.MAX_HASHFUNC}. Hashfunc num: {nhashfunc}")
+        # Nonce, user agent and last block
+        byte_string += self.nonce.to_bytes(self.NONCE_BYTES, "little")
+        user_agent = self.user_agent.encode("ascii")
+        user_agent_size = write_compact_size(len(user_agent))
+        byte_string += user_agent_size + user_agent
+        byte_string += self.last_block.to_bytes(self.LAST_BLOCK_BYTES, "little")
 
-        self.filter_bytes = filter_bytes
-        self.filter_bytes_size = len(self.filter_bytes)
-        self.nhashfunc = nhashfunc
-        self.ntweak = ntweak
-        self.nflags = BloomType(nflags) if isinstance(nflags, int) else nflags  # BloomType
+        return byte_string
 
-    @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO, magic_bytes: bytes = MB.MAINNET):
-        # Get Stream
-        stream = get_stream(byte_stream)
-
-        # Get filter_bytes
-        filter_size = read_compact_size(stream, "filter_bytes_size")
-        filter_bytes = read_stream(stream, filter_size, "filter_bytes")
-
-        # Get n-vals
-        nhashfunc = read_little_int(stream, cls.HASHFUNC_BYTES, "n_hash_func")
-        ntweak = read_little_int(stream, cls.TWEAK_BYTES, "n_tweak")
-        nflag = read_little_int(stream, cls.FLAG_BYTES, "n_flags")
-
-        return cls(filter_bytes, nhashfunc, ntweak, nflag)
-
-    def payload(self) -> bytes:
-        payload_parts = [write_compact_size(self.filter_bytes_size), self.filter_bytes,
-                         to_little_bytes(self.nhashfunc, self.HASHFUNC_BYTES),
-                         to_little_bytes(self.ntweak, self.TWEAK_BYTES),
-                         self.nflags.to_byte()]
-        return b''.join(payload_parts)
-
-    def _payload_dict(self) -> dict:
-        payload_dict = {
-            "filter_bytes_size": self.filter_bytes_size,
-            "filter_bytes": self.filter_bytes.hex(),
-            "binary_filter": bytes_to_2byte_binary_string(self.filter_bytes),
-            "n_hash_funct": self.nhashfunc,
-            "n_tweak": self.ntweak,
-            "nflags": self.nflags.name
+    def payload_dict(self) -> dict:
+        version_dict = {
+            "protocol_version": self.protocol_version,
+            "services": self.services.hex(),
+            "time": datetime.utcfromtimestamp(self.timestamp).strftime("%Y-%m-%d %H:%M:%S"),
+            "remote_netaddr": self.remote_net_addr.to_dict(),
+            "local_netaddr": self.local_net_addr.to_dict(),
+            "nonce": self.nonce,
+            "user_agent": self.user_agent,
+            "last_block": self.last_block
         }
-        return payload_dict
-
-    @property
-    def command(self) -> str:
-        return "filterload"
+        return version_dict
 
 
 if __name__ == "__main__":
