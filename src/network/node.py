@@ -58,18 +58,22 @@ class Node:
         header_bytes = message[:BN.MESSAGE_HEADER]
         payload_bytes = message[BN.MESSAGE_HEADER:]
 
-        print(f"HEADER BYTES: {header_bytes.hex()}")
-        print(f"PAYLOAD BYTES: {payload_bytes[:50].hex()}{'...' if len(payload_bytes) > 50 else ''}")
-
         # Parse header
         recovered_header = Header.from_bytes(header_bytes)
-        print(f"HEADER: {recovered_header.to_dict()}")
 
         match recovered_header.command:
             case "version":
                 return Version.from_bytes(payload_bytes)
+            # TODO: Add other message types
             case _:
                 return None
+
+    def handshake(self, remote_ip: str = LEARN_ME_A_BITCOIN_IP, port: int = 8333):
+        """
+        Attempts a handshake with the given remote_ip
+        """
+        version_message = self.create_version_message(remote_ip=remote_ip, port=port)
+        verack_message = VerAck()
 
 
 # --- TESTING
