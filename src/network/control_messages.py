@@ -23,7 +23,7 @@ from datetime import datetime
 from io import BytesIO
 
 from src.data import get_stream, read_little_int, read_stream, read_compact_size, write_compact_size, \
-    NetAddr, RejectType, BloomType, bytes_to_2byte_binary_string, BitcoinFormats
+    NetAddr, RejectType, BloomType, bytes_to_2byte_binary_string, BitcoinFormats, NodeType
 from src.network.message import Message
 
 __all__ = ["Addr", "FeeFilter", "FilterAdd", "FilterClear", "FilterLoad", "GetAddr", "Ping", "Pong", "Reject",
@@ -55,6 +55,32 @@ class EmptyMessage(Message):
 
     def payload_dict(self) -> dict:
         return {}
+
+
+class PingPongParent(Message):
+    """
+    The parent class for the Ping and Pong messages
+    """
+
+    def __init__(self, nonce: int):
+        super().__init__()
+        self.nonce = nonce
+
+    @classmethod
+    def from_bytes(cls, bytes_stream: bytes | BytesIO):
+        stream = get_stream(bytes_stream)
+        nonce = read_little_int(stream, BF.CMPCT_NONCE, "nonce")
+        return cls(nonce)
+
+    @property
+    def command(self):
+        return self.__class__.command
+
+    def payload(self):
+        return self.nonce.to_bytes(BF.CMPCT_NONCE, "little")
+
+    def payload_dict(self) -> dict:
+        return {"nonce": self.nonce}
 
 
 # --- CONTROL MESSAGES --- #
@@ -292,7 +318,7 @@ class GetAddr(EmptyMessage):
         return "getaddr"
 
 
-class Ping(Message):
+class Ping(PingPongParent):
     """
     -------------------------------------------------
     |   Name    | Data type | format        | size  |
@@ -300,30 +326,13 @@ class Ping(Message):
     |   Nonce   | int       | little-endian | 8     |
     -------------------------------------------------
     """
-    NONCE_BYTES = 8
-
-    def __init__(self, nonce: int):
-        super().__init__()
-        self.nonce = nonce
-
-    @classmethod
-    def from_bytes(cls, bytes_stream: bytes | BytesIO):
-        stream = get_stream(bytes_stream)
-        nonce = read_little_int(stream, cls.NONCE_BYTES, "nonce")
-        return cls(nonce)
 
     @property
     def command(self):
         return "ping"
 
-    def payload(self):
-        return self.nonce.to_bytes(self.NONCE_BYTES, "little")
 
-    def payload_dict(self) -> dict:
-        return {"nonce": self.nonce}
-
-
-class Pong(Message):
+class Pong(PingPongParent):
     """
     -------------------------------------------------
     |   Name    | Data type | format        | size  |
@@ -331,27 +340,10 @@ class Pong(Message):
     |   Nonce   | int       | little-endian | 8     |
     -------------------------------------------------
     """
-    NONCE_BYTES = 8
-
-    def __init__(self, nonce: int):
-        super().__init__()
-        self.nonce = nonce
-
-    @classmethod
-    def from_bytes(cls, bytes_stream: bytes | BytesIO):
-        stream = get_stream(bytes_stream)
-        nonce = read_little_int(stream, cls.NONCE_BYTES, "nonce")
-        return cls(nonce)
 
     @property
     def command(self):
         return "pong"
-
-    def payload(self):
-        return self.nonce.to_bytes(self.NONCE_BYTES, "little")
-
-    def payload_dict(self) -> dict:
-        return {"nonce": self.nonce}
 
 
 class Reject(Message):
@@ -420,7 +412,7 @@ class Reject(Message):
         return payload_dict
 
 
-class SendHeaders(Message):
+class SendHeaders(EmptyMessage):
     """
     The sendheaders message tells the receiving peer to send new block announcements using a headers message rather
     than an inv message.
@@ -428,19 +420,9 @@ class SendHeaders(Message):
     There is no payload in a sendheaders message
     """
 
-    @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO = b''):
-        return cls()
-
     @property
     def command(self) -> str:
         return "sendheaders"
-
-    def payload(self) -> bytes:
-        return b''
-
-    def payload_dict(self) -> dict:
-        return {}
 
 
 class VerAck(EmptyMessage):
@@ -470,22 +452,15 @@ class Version(Message):
     |   last block          | int   | little-endian     | 4         |
     -----------------------------------------------------------------
     """
-    # --- BYTE SIZES
-    PORT_BYTES = 2
-    VERSION_BYTES = LAST_BLOCK_BYTES = 4
-    SERVICE_BYTES = TIME_BYTES = NONCE_BYTES = 8
-    IP_BYTES = 16
 
-    def __init__(self, version: int, services: bytes, timestamp: int, remote_addr: NetAddr, local_addr: NetAddr,
-                 nonce: int,
-                 user_agent: str,
-                 last_block: int):
+    def __init__(self, version: int, services: int | NodeType, timestamp: int, remote_addr: NetAddr,
+                 local_addr: NetAddr, nonce: int, user_agent: str, last_block: int):
         # Magic Bytes
         super().__init__()
 
         # Raw Data
         self.protocol_version = version
-        self.services = services
+        self.services = NodeType(services) if isinstance(services, int) else services
         self.timestamp = timestamp
         self.remote_net_addr = remote_addr
         self.local_net_addr = local_addr
@@ -499,19 +474,19 @@ class Version(Message):
         stream = get_stream(byte_stream)
 
         # Read version, services and timestamp
-        version = read_little_int(stream, cls.VERSION_BYTES, "protocol_version")
-        services = read_stream(stream, cls.SERVICE_BYTES, "services")
-        timestamp = read_little_int(stream, cls.TIME_BYTES, "time")
+        version = read_little_int(stream, BF.PROTOCOL_VERSION, "protocol_version")
+        services = read_little_int(stream, BF.SERVICES, "services")
+        timestamp = read_little_int(stream, BF.TIME, "time")
 
         # Read in remote and local NetAddr
         remote_netaddr = NetAddr.from_bytes(stream, is_version=True)
         local_netaddr = NetAddr.from_bytes(stream, is_version=True)
 
         # Read in nonce, user agent and last block
-        nonce = read_little_int(stream, cls.NONCE_BYTES, "nonce")
+        nonce = read_little_int(stream, BF.CMPCT_NONCE, "nonce")
         user_agent_size = read_compact_size(stream, "user_agent_size")
-        user_agent = read_stream(stream, user_agent_size, "user_agent").decode("ascii")
-        last_block = read_little_int(stream, cls.LAST_BLOCK_BYTES, "last_block")
+        user_agent = read_stream(stream, user_agent_size, "user_agent").rstrip(b'\x00').decode("ascii")
+        last_block = read_little_int(stream, BF.LASTBLOCK, "last_block")
 
         return cls(version, services, timestamp, remote_netaddr, local_netaddr, nonce, user_agent, last_block)
 
@@ -523,26 +498,26 @@ class Version(Message):
         byte_string = b''
 
         # Protocol version, services, time
-        byte_string += self.protocol_version.to_bytes(self.VERSION_BYTES, "little")
-        byte_string += self.services[::-1]
-        byte_string += self.timestamp.to_bytes(self.TIME_BYTES, "little")
+        byte_string += self.protocol_version.to_bytes(BF.PROTOCOL_VERSION, "little")
+        byte_string += self.services.byte_format()
+        byte_string += self.timestamp.to_bytes(BF.TIME, "little")
 
         # Remote and local netaddr
         byte_string += self.remote_net_addr.to_bytes() + self.local_net_addr.to_bytes()
 
         # Nonce, user agent and last block
-        byte_string += self.nonce.to_bytes(self.NONCE_BYTES, "little")
+        byte_string += self.nonce.to_bytes(BF.CMPCT_NONCE, "little")
         user_agent = self.user_agent.encode("ascii")
         user_agent_size = write_compact_size(len(user_agent))
         byte_string += user_agent_size + user_agent
-        byte_string += self.last_block.to_bytes(self.LAST_BLOCK_BYTES, "little")
+        byte_string += self.last_block.to_bytes(BF.LASTBLOCK, "little")
 
         return byte_string
 
     def payload_dict(self) -> dict:
         version_dict = {
             "protocol_version": self.protocol_version,
-            "services": self.services.hex(),
+            "services": self.services.name,
             "time": datetime.utcfromtimestamp(self.timestamp).strftime("%Y-%m-%d %H:%M:%S"),
             "remote_netaddr": self.remote_net_addr.to_dict(),
             "local_netaddr": self.local_net_addr.to_dict(),

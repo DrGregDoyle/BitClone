@@ -4,7 +4,7 @@ The various ENUM classes indicating different types
 
 from enum import IntEnum
 
-__all__ = ["InvType", "BloomType", "RejectType"]
+__all__ = ["InvType", "BloomType", "RejectType", "NodeType"]
 
 
 class InvType(IntEnum):
@@ -45,16 +45,33 @@ class RejectType(IntEnum):
 
 
 class NodeType(IntEnum):
-    NODE_NETWORK = pow(2, 0)
-    NODE_GETUTXO = pow(2, 1)
-    NODE_BLOOM = pow(2, 2)
-    NODE_WITNESS = pow(2, 3)
-    NODE_XTHIN = pow(2, 4)
-    NODE_COMPACT_FILTERS = pow(2, 6)
-    NODE_NETWORK_LIMITED = pow(2, 10)
+    NONE = 0
+    NODE_NETWORK = 0x01
+    NODE_GETUTXO = 0x02
+    NODE_BLOOM = 0x04
+    NODE_WITNESS = 0x08
+    NODE_XTHIN = 0x10
+    NODE_COMPACT_FILTERS = 0x40
+    NODE_NETWORK_LIMITED = 0x400
 
     def byte_format(self):
         """
         Returns the little-endian byte representation of the integer
         """
         return self.value.to_bytes(8, "little")
+
+    @classmethod
+    def _missing_(cls, value: object) -> "NodeType":
+        # Whenever NodeType(value) is called with a value not in the enum,
+        # fall back to NONE instead of ValueError.
+        return cls.NONE
+
+
+# --- TESTING
+from random import choice
+
+if __name__ == "__main__":
+    node_val = choice([0, 1, 2, 4, 8, 16, 64, 1024])
+    dummy_node = NodeType(node_val)
+    print(f"DUMMY NODE: {dummy_node.name}")
+    print(f"BYTE VALS: {dummy_node.byte_format().hex()}")

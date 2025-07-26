@@ -136,9 +136,12 @@ class BitcoinFormats:
         ANNOUNCE = 1
 
         # --- Control Messages --- #
+        SERVICES = 8
         FEERATE = 8
+        TIME = 8
         MAX_FILTER = 36000
         MAX_HASHFUNC = 50
         HASHFUNC = 4
+        LASTBLOCK = 4
         TWEAK = 4
         FLAG = 1

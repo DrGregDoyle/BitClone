@@ -10,7 +10,7 @@ from src.crypto import hash256
 from src.data.btc_formats import BitcoinFormats
 from src.data.byte_stream import get_stream, read_little_int, read_stream, read_big_int, read_compact_size
 from src.data.data_handling import write_compact_size
-from src.data.data_types import InvType
+from src.data.data_types import InvType, NodeType
 from src.data.serializable import Serializable
 
 __all__ = ["Inventory", "NetAddr", "ShortID", "Header", "BlockTxRequest"]
@@ -78,9 +78,9 @@ class NetAddr(Serializable):
     -----------------------------------------------------------------
     """
 
-    def __init__(self, timestamp: int, services: bytes, ip_addr: str, port: int, is_version: bool = False):
+    def __init__(self, timestamp: int, services: int | NodeType, ip_addr: str, port: int, is_version: bool = False):
         self.timestamp = timestamp
-        self.services = services
+        self.services = NodeType(services) if isinstance(services, int) else services
         self.ip_address = self._get_ipv6(ip_addr)
         self.port = port
         self.is_version = is_version
@@ -97,7 +97,7 @@ class NetAddr(Serializable):
             timestamp = int(now())
 
         # Get the rest
-        services = read_stream(stream, BTN.SERVICES, "services")
+        services = read_little_int(stream, BTN.SERVICES, "services")
         ip_bytes = read_stream(stream, BTN.IP, "ip")
         ip_address = IP.IPv6Address(ip_bytes)
         port = read_big_int(stream, 2, "port")
@@ -112,10 +112,10 @@ class NetAddr(Serializable):
     def display_time(self) -> str:
         return datetime.utcfromtimestamp(self.timestamp).strftime(BTF.FORMAT)
 
-    def to_bytes(self, is_version=False):
+    def to_bytes(self):
         # Add time if not version Address
-        payload = self.timestamp.to_bytes(BTN.TIMESTAMP, "little") if not is_version else b''
-        payload += self.services + self.ip_address.packed + self.port.to_bytes(BTN.PORT, "big")
+        payload = self.timestamp.to_bytes(BTN.TIMESTAMP, "little") if not self.is_version else b''
+        payload += self.services.byte_format() + self.ip_address.packed + self.port.to_bytes(BTN.PORT, "big")
         return payload
 
     def _get_ipv6(self, ip_addr: str):
@@ -133,7 +133,7 @@ class NetAddr(Serializable):
         else:
             net_addr_dict = {}
         net_addr_dict.update({
-            "services": self.services.hex(),
+            "services": self.services.name,
             "ip_address": self.display_ip,
             "port": self.port
         })
@@ -207,7 +207,7 @@ class Header(Serializable):
 
         # Get byte data
         magic_bytes = read_stream(stream, BTN.MAGIC_BYTES, "magic_bytes")
-        command = read_stream(stream, BTN.COMMAND, "command").decode("ascii")
+        command = read_stream(stream, BTN.COMMAND, "command").rstrip(b'\x00').decode("ascii")
         size = read_little_int(stream, BTN.HEADER_SIZE, "size")
         checksum = read_stream(stream, BTN.HEADER_CHECKSUM, "checksum")
 
