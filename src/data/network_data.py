@@ -18,7 +18,6 @@ __all__ = ["Inventory", "NetAddr", "ShortID", "Header", "BlockTxRequest"]
 BTF = BitcoinFormats.Time
 BTI = BitcoinFormats.Inventory
 BTN = BitcoinFormats.Network
-MB = BitcoinFormats.MagicBytes
 
 
 # --- INVENTORY --- #
@@ -215,7 +214,7 @@ class Header(Serializable):
         return cls(magic_bytes, command, size, checksum)
 
     @classmethod
-    def from_payload(cls, payload: bytes, command: str = "version", magic_bytes: bytes = MB.MAINNET):
+    def from_payload(cls, payload: bytes, command: str, magic_bytes: bytes):
         size = len(payload)
         checksum = hash256(payload)
         return cls(magic_bytes, command, size, checksum)

@@ -553,17 +553,3 @@ class TxMsg(Message):
 
     def payload_dict(self) -> dict:
         return self.tx.to_dict()
-
-
-# --- TESTING
-from src.crypto import hash256
-from secrets import token_bytes
-from random import randint
-
-if __name__ == "__main__":
-    random_version = int.from_bytes(token_bytes(4), "big")
-    random_hash_count = randint(1, 10)
-    random_locator_hash_list = [hash256(token_bytes(32)) for _ in range(random_hash_count)]
-
-    random_get_blocks = GetBlocks(random_version, random_locator_hash_list)
-    print(f"RANDOM GET BLOCKS: {random_get_blocks.to_json()}")
