@@ -94,6 +94,7 @@ class Addr(Message):
     |   addr_list   |   list    | NetAddr       | var   |
     -----------------------------------------------------
     """
+    COMMAND = "addr"
 
     def __init__(self, addr_list: list[NetAddr]):
         super().__init__()
@@ -114,10 +115,6 @@ class Addr(Message):
             addr_list.append(NetAddr.from_bytes(stream))
 
         return cls(addr_list)
-
-    @property
-    def command(self) -> str:
-        return "addr"
 
     def payload(self) -> bytes:
         payload = write_compact_size(self.count)
@@ -146,14 +143,11 @@ class FeeFilter(Message):
     The payload is always 8 bytes long, and it encodes 64-bit integer value (LSB / little endian) of feerate. The
     value represents a minimal fee and is expressed in satoshis per 1000 bytes.
     """
+    COMMAND = "feefilter"
 
     def __init__(self, feerate: int):
         super().__init__()
         self.feerate = feerate
-
-    @property
-    def command(self) -> str:
-        return "feefilter"
 
     @classmethod
     def from_bytes(cls, byte_stream: bytes | BytesIO):
@@ -179,6 +173,7 @@ class FilterAdd(Message):
 
     Note: a filteradd message will not be accepted unless a filter was previously set with the filterload message.
     """
+    COMMAND = "filter"
 
     def __init__(self, element: bytes):
         super().__init__()
@@ -196,10 +191,6 @@ class FilterAdd(Message):
         element = read_stream(stream, element_bytes, "element")
 
         return cls(element)
-
-    @property
-    def command(self) -> str:
-        return "filteradd"
 
     def payload(self) -> bytes:
         return write_compact_size(self.element_bytes) + self.element
@@ -222,14 +213,11 @@ class FilterClear(Message):
 
     There is no payload in a filterclear message
     """
+    COMMAND = "filterclear"
 
     @classmethod
     def from_bytes(cls, byte_stream: bytes | BytesIO = b''):
         return cls()
-
-    @property
-    def command(self) -> str:
-        return "filterclear"
 
     def payload(self) -> bytes:
         return b''
@@ -250,6 +238,7 @@ class FilterLoad(Message):
     |   nFlags      |   BLOOM_TYPE      |   little-endian   |   1           |
     -------------------------------------------------------------------------
     """
+    COMMAND = "filterload"
 
     def __init__(self, filter_bytes: bytes, nhashfunc: int, ntweak: int, nflags: int | BloomType):
         super().__init__()
@@ -299,10 +288,6 @@ class FilterLoad(Message):
         }
         return payload_dict
 
-    @property
-    def command(self) -> str:
-        return "filterload"
-
 
 class GetAddr(EmptyMessage):
     """
@@ -312,10 +297,7 @@ class GetAddr(EmptyMessage):
 
     There is no payload in a getaddr message.
     """
-
-    @property
-    def command(self) -> str:
-        return "getaddr"
+    COMMAND = "getaddr"
 
 
 class Ping(PingPongParent):
@@ -326,10 +308,7 @@ class Ping(PingPongParent):
     |   Nonce   | int       | little-endian | 8     |
     -------------------------------------------------
     """
-
-    @property
-    def command(self):
-        return "ping"
+    COMMAND = "ping"
 
 
 class Pong(PingPongParent):
@@ -340,10 +319,7 @@ class Pong(PingPongParent):
     |   Nonce   | int       | little-endian | 8     |
     -------------------------------------------------
     """
-
-    @property
-    def command(self):
-        return "pong"
+    COMMAND = "pong"
 
 
 class Reject(Message):
@@ -359,6 +335,7 @@ class Reject(Message):
     |   Data            |   bytes       |   various         |   var     |
     ---------------------------------------------------------------------
     """
+    COMMAND = "reject"
 
     def __init__(self, message: str, ccode: RejectType | int, reason: str, data: bytes = b''):
         super().__init__()
@@ -390,10 +367,6 @@ class Reject(Message):
 
         return cls(message, ccode, reason, data)
 
-    @property
-    def command(self) -> str:
-        return "reject"
-
     def payload(self) -> bytes:
         encoded_message = self.reject_message.encode("ascii")
         encoded_reason = self.reason.encode("ascii")
@@ -419,17 +392,11 @@ class SendHeaders(EmptyMessage):
 
     There is no payload in a sendheaders message
     """
-
-    @property
-    def command(self) -> str:
-        return "sendheaders"
+    COMMAND = "sendheaders"
 
 
 class VerAck(EmptyMessage):
-
-    @property
-    def command(self) -> str:
-        return "verack"
+    COMMAND = "verack"
 
 
 class Version(Message):
@@ -452,6 +419,7 @@ class Version(Message):
     |   last block          | int   | little-endian     | 4         |
     -----------------------------------------------------------------
     """
+    COMMAND = "version"
 
     def __init__(self, version: int, services: int | NodeType, timestamp: int, remote_addr: NetAddr,
                  local_addr: NetAddr, nonce: int, user_agent: str, last_block: int):
@@ -489,10 +457,6 @@ class Version(Message):
         last_block = read_little_int(stream, BF.LASTBLOCK, "last_block")
 
         return cls(version, services, timestamp, remote_netaddr, local_netaddr, nonce, user_agent, last_block)
-
-    @property
-    def command(self) -> str:
-        return "version"
 
     def payload(self):
         byte_string = b''

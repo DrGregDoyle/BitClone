@@ -17,10 +17,17 @@ class Message(Serializable, ABC):
     We fix the magic bytes to be default for all messages
     The `is_data` flag distinguishes control vs. data.
     """
+    _registry: dict[str, type["Message"]] = {}
 
     def __init__(self, is_data: bool = True):
         self.magic_bytes = MB  # Hardcoded to default magic bytes in all messages
         self.is_data = is_data
+
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        cmd = getattr(cls, "COMMAND", None)
+        if cmd:  # only concrete subclasses have COMMAND
+            cls._registry[cmd] = cls
 
     # --- ABSTRACT METHODS FOR MESSAGING --- #
 
@@ -31,12 +38,6 @@ class Message(Serializable, ABC):
         Deserialize an instance from its byte representation.
         """
         raise NotImplementedError(f"{cls.__name__} must implement from_bytes()")
-
-    @property
-    @abstractmethod
-    def command(self) -> str:
-        """The message command"""
-        raise NotImplementedError(f"{self.__class__.__name__} must implement command()")
 
     @abstractmethod
     def payload(self) -> bytes:
@@ -54,7 +55,7 @@ class Message(Serializable, ABC):
         """Return the Header object associated with the payload"""
         return Header.from_payload(
             payload=self.payload(),
-            command=self.command,
+            command=self.COMMAND,  # ignore type
             magic_bytes=self.magic_bytes
         )
 

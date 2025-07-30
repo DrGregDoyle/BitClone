@@ -149,6 +149,7 @@ class BlockMsg(Message):
     """
     Will package and send a block
     """
+    COMMAND = "block"
 
     def __init__(self, block: Block):
         super().__init__()
@@ -158,10 +159,6 @@ class BlockMsg(Message):
     def from_bytes(cls, byte_stream: bytes | BytesIO):
         # Use inherent block method
         return cls(Block.from_bytes(byte_stream))
-
-    @property
-    def command(self) -> str:
-        return "block"
 
     def payload(self) -> bytes:
         return self.block.to_bytes()
@@ -174,6 +171,7 @@ class BlockTxn(Message):
     """
     The BlockTxn message sends a BlockTransactions data structure, as described by BIP152.
     """
+    COMMAND = "blocktxn"
 
     def __init__(self, block_tx: BlockTransactions):
         super().__init__()
@@ -185,10 +183,6 @@ class BlockTxn(Message):
 
         block_tx = BlockTransactions.from_bytes(stream)
         return cls(block_tx)
-
-    @property
-    def command(self) -> str:
-        return "blocktxn"
 
     def payload(self) -> bytes:
         return self.block_tx.to_bytes()
@@ -210,6 +204,7 @@ class CmpctBlock(Message):
     |   prefilled_txs           |   list        |   PrefilledTxn.to_bytes()         |   var                 |
     ---------------------------------------------------------------------------------------------------------
     """
+    COMMAND = "cmpctblock"
 
     def __init__(self, header: BlockHeader, nonce: int, shortids: list[bytes],
                  prefilled_txs: list[PrefilledTransaction]):
@@ -241,10 +236,6 @@ class CmpctBlock(Message):
 
         return cls(header, nonce, shortids, prefilled_txs)
 
-    @property
-    def command(self) -> str:
-        return "cmpctblock"
-
     def payload(self) -> bytes:
         parts = [
             self.header.to_bytes(),
@@ -270,10 +261,7 @@ class CmpctBlock(Message):
 
 
 class GetBlocks(GetBlockParent):
-
-    @property
-    def command(self) -> str:
-        return "getblocks"
+    COMMAND = "getblocks"
 
 
 class GetBlockTxn(Message):
@@ -281,6 +269,7 @@ class GetBlockTxn(Message):
     The getblocktxn message is defined as a message containing a serialized BlockTransactionsRequest message and
     pchCommand == "getblocktxn".
     """
+    COMMAND = "getblocktxn"
 
     def __init__(self, blocktxn_requestt: BlockTransactionsRequest):
         super().__init__()
@@ -293,10 +282,6 @@ class GetBlockTxn(Message):
         blocktxn_request = BlockTransactionsRequest.from_bytes(stream)
         return cls(blocktxn_request)
 
-    @property
-    def command(self) -> str:
-        return "getblocktxn"
-
     def payload(self) -> bytes:
         return self.blocktxn_requestt.to_bytes()
 
@@ -305,16 +290,11 @@ class GetBlockTxn(Message):
 
 
 class GetData(InvParent):
-
-    @property
-    def command(self):
-        return "getdata"
+    COMMAND = "getdata"
 
 
 class GetHeaders(GetBlockParent):
-    @property
-    def command(self) -> str:
-        return "getheaders"
+    COMMAND = "getheaders"
 
 
 class Headers(Message):
@@ -327,6 +307,7 @@ class Headers(Message):
     |   headers | list      | BlockHeader   | 81x   |
     -------------------------------------------------
     """
+    COMMAND = "headers"
 
     def __init__(self, header_list: list[BlockHeader]):
         super().__init__()
@@ -348,10 +329,6 @@ class Headers(Message):
 
         return cls(header_list)
 
-    @property
-    def command(self) -> str:
-        return "headers"
-
     def payload(self) -> bytes:
         to_bytes = write_compact_size(self.count)
         for h in self.headers:
@@ -370,10 +347,7 @@ class Headers(Message):
 
 
 class Inv(InvParent):
-
-    @property
-    def command(self):
-        return "inv"
+    COMMAND = "inv"
 
 
 class MemPool(Message):
@@ -384,6 +358,7 @@ class MemPool(Message):
 
     No additional data is transmitted with this message.
     """
+    COMMAND = "mempool"
 
     def __init__(self):
         super().__init__()
@@ -396,10 +371,6 @@ class MemPool(Message):
         if len(stream) > 0:
             raise ValueError("MemPool has no payload")
         return cls()
-
-    @property
-    def command(self) -> str:
-        return "mempool"
 
     def payload(self):
         return b''
@@ -421,6 +392,7 @@ class MerkleBlock(Message):
     |   flags           |   bytes       |   little-endian       |   var     |
     -------------------------------------------------------------------------
     """
+    COMMAND = "merkleblock"
 
     def __init__(self, blockheader: BlockHeader, tx_num: int, hashes: list, flags: bytes):
         super().__init__()
@@ -451,10 +423,6 @@ class MerkleBlock(Message):
 
         return cls(header, tx_num, hashes, flags)
 
-    @property
-    def command(self) -> str:
-        return "merkleblock"
-
     def payload(self) -> bytes:
         parts = [
             self.blockheader.to_bytes(),
@@ -479,10 +447,7 @@ class MerkleBlock(Message):
 
 
 class NotFound(InvParent):
-
-    @property
-    def command(self):
-        return "notfound"
+    COMMAND = "notfound"
 
 
 class SendCompact(Message):
@@ -494,6 +459,7 @@ class SendCompact(Message):
     |   version     |   int     |   little-endian   |   8       |
     -------------------------------------------------------------
     """
+    COMMAND = "sendcmpct"
 
     def __init__(self, announce: int, version: int):
         # Error checking
@@ -518,7 +484,7 @@ class SendCompact(Message):
 
     @property
     def command(self) -> str:
-        return "sendcmpct"
+        return self.COMMAND
 
     def payload(self) -> bytes:
         return self.announce.to_bytes(BF.ANNOUNCE, "little") + self.version.to_bytes(BF.CMPCT_VERSION, "little")
@@ -534,6 +500,7 @@ class TxMsg(Message):
     """
     Will package and send a tx
     """
+    COMMAND = "tx"
 
     def __init__(self, tx: Transaction):
         super().__init__()
@@ -543,10 +510,6 @@ class TxMsg(Message):
     def from_bytes(cls, byte_stream: bytes | BytesIO):
         # Use inherent block method
         return Transaction.from_bytes(byte_stream)
-
-    @property
-    def command(self) -> str:
-        return "tx"
 
     def payload(self) -> bytes:
         return self.tx.to_bytes()
