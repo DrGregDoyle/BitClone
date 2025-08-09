@@ -39,6 +39,10 @@ class Message(Serializable, ABC):
         """
         raise NotImplementedError(f"{cls.__name__} must implement from_bytes()")
 
+    @classmethod
+    def from_payload(cls, byte_stream: bytes | BytesIO):
+        return cls.from_bytes(byte_stream)
+
     @abstractmethod
     def payload(self) -> bytes:
         """Return the payload of the message"""
@@ -73,3 +77,7 @@ class Message(Serializable, ABC):
     @property
     def message(self):
         return self.to_bytes()
+
+    @classmethod
+    def get_registered(cls, command: str):
+        return cls._registry.get(command)

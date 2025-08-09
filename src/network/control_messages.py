@@ -19,7 +19,6 @@ about the rest of the network:
     -verack
     -version
 """
-from datetime import datetime
 from io import BytesIO
 
 from src.data import get_stream, read_little_int, read_stream, read_compact_size, write_compact_size, \
@@ -173,7 +172,7 @@ class FilterAdd(Message):
 
     Note: a filteradd message will not be accepted unless a filter was previously set with the filterload message.
     """
-    COMMAND = "filter"
+    COMMAND = "filteradd"
 
     def __init__(self, element: bytes):
         super().__init__()
@@ -482,7 +481,8 @@ class Version(Message):
         version_dict = {
             "protocol_version": self.protocol_version,
             "services": self.services.name,
-            "time": datetime.utcfromtimestamp(self.timestamp).strftime("%Y-%m-%d %H:%M:%S"),
+            "time": self.timestamp,
+            # "time": datetime.utcfromtimestamp(self.timestamp).strftime("%Y-%m-%d %H:%M:%S"),
             "remote_netaddr": self.remote_net_addr.to_dict(),
             "local_netaddr": self.local_net_addr.to_dict(),
             "nonce": self.nonce,

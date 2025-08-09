@@ -147,3 +147,6 @@ class BitCloneDatabase:
                 SELECT COUNT(*) FROM blocks
             """)
             return c.fetchone()[0]
+
+    def new_db(self):
+        self._clear_db()

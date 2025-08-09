@@ -5,4 +5,5 @@ network folder used to house all files dealing with networking functions
 
 from src.network.control_messages import *
 from src.network.data_messages import *
-from src.network.node import *
+# from src.network.node import *
+from src.network.message import *
