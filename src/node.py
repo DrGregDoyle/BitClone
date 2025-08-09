@@ -70,7 +70,7 @@ class Node:
         header_bytes = self.recv_exact(sock, BN.MESSAGE_HEADER)
         return Header.from_bytes(header_bytes)
 
-    def recv_message(self, sock: socket.socket):
+    def recv_message(self, sock: socket.socket) -> Message:
         """
         With the socket connected, we get the Header and Payload. Parsing the header command, we return the
         appropriate message
@@ -78,7 +78,12 @@ class Node:
         # Get message data
         header = self.recv_header(sock)
         payload = self.recv_exact(sock, header.size)
+        return self.parse_message(header, payload)
 
+    def parse_message(self, header: Header, payload: bytes) -> Message:
+        """
+        Given a message Header a payload, we return the corresponding Message object
+        """
         cls = Message.get_registered(header.command)
         if cls is None:
             raise ValueError(f"Unknown message type {header.command}")
