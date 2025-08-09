@@ -30,6 +30,41 @@ class Node:
         self.peers = []
         self.usr_agent = usr_agent
 
+    # --- HELPERS --- #
+
+    def _build_version(self, remote_ip: str, remote_port: int) -> Version:
+        current_time = int(now())
+
+        # Create remote addr
+        remote_addr = NetAddr(
+            timestamp=current_time,
+            services=NodeType.NONE,
+            ip_addr=remote_ip,
+            port=remote_port,
+            is_version=True
+        )
+
+        # Create local addr
+        local_addr = NetAddr(
+            timestamp=current_time,
+            services=NodeType.NONE,
+            ip_addr="127.0.0.1",
+            port=PORT,
+            is_version=True
+        )
+
+        version_message = Version(
+            version=70014,
+            services=NodeType.NONE,
+            timestamp=current_time,
+            remote_addr=remote_addr,
+            local_addr=local_addr,
+            nonce=random.getrandbits(64),
+            user_agent=self.usr_agent,
+            last_block=0
+        )
+        return version_message
+
     # --- NETWORKING --- #
 
     def open_connection(self, host: str, port: int, timeout: float = 10.0) -> socket.socket:
@@ -101,7 +136,7 @@ class Node:
         Returns True on success, False otherwise.
         """
         # Get version and verack
-        version_msg = create_version(host, port, self.usr_agent)
+        version_msg = self._build_version(host, port)
         verack_msg = VerAck()
         sock = None
 
@@ -142,40 +177,6 @@ class Node:
                 pass
 
         return True
-
-
-def create_version(remote_ip: str = LMAB_IP, port: int = PORT, usr_agent: str = "") -> Version:
-    current_time = int(now())
-
-    # Create remote addr
-    remote_addr = NetAddr(
-        timestamp=current_time,
-        services=NodeType.NONE,
-        ip_addr=remote_ip,
-        port=port,
-        is_version=True
-    )
-
-    # Create local addr
-    local_addr = NetAddr(
-        timestamp=current_time,
-        services=NodeType.NONE,
-        ip_addr="127.0.0.1",
-        port=port,
-        is_version=True
-    )
-
-    version_message = Version(
-        version=70014,
-        services=NodeType.NONE,
-        timestamp=current_time,
-        remote_addr=remote_addr,
-        local_addr=local_addr,
-        nonce=random.getrandbits(64),
-        user_agent=usr_agent,
-        last_block=0
-    )
-    return version_message
 
 
 # --- TESTING
