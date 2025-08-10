@@ -6,15 +6,16 @@ from io import BytesIO
 
 from src.crypto import hash256
 from src.data import Serializable, read_compact_size, MerkleTree, write_compact_size, get_stream, read_stream, \
-    read_little_int, BitcoinFormats
+    read_little_int, Wire
 from src.logger import get_logger
 from src.tx import Transaction, PrefilledTransaction
 
 logger = get_logger(__name__)
 
 # alias the nested classese for formatting
-BFB = BitcoinFormats.Block
-BFP = BitcoinFormats.Protocol
+# BFB = BitcoinFormats.Block
+_blkformat = Wire.BlockHeader
+# BFP = BitcoinFormats.Protocol
 
 __all__ = ["Block", "BlockHeader", "BlockTransactions", "BlockTransactionsRequest", "HeaderAndShortIDs"]
 
@@ -44,12 +45,12 @@ class BlockHeader(Serializable):
 
     def to_bytes(self):
         parts = [
-            self.version.to_bytes(BFB.VERSION, "little"),
+            self.version.to_bytes(_blkformat.VERSION_LEN, "little"),
             self.prev_block,
             self.merkle_root,
-            self.timestamp.to_bytes(BFB.TIMESTAMP, "little"),
+            self.timestamp.to_bytes(_blkformat.TIME_LEN, "little"),
             self.bits,
-            self.nonce.to_bytes(BFB.NONCE, "little")
+            self.nonce.to_bytes(_blkformat.NONCE_LEN, "little")
         ]
         return b''.join(parts)
 
@@ -57,12 +58,12 @@ class BlockHeader(Serializable):
     def from_bytes(cls, byte_stream: bytes | BytesIO):
         stream = get_stream(byte_stream)
 
-        version = read_little_int(stream, BFB.VERSION, "version")
-        prev_block = read_stream(stream, BFB.PREVIOUS_HASH, "prev_block")
-        merkle_root = read_stream(stream, BFB.MERKLE_ROOT, "merkle_root")
-        timestamp = read_little_int(stream, BFB.TIMESTAMP, "Unix epoch time")
-        bits = read_stream(stream, BFB.BITS, "bits")
-        nonce = read_little_int(stream, BFB.NONCE, "nonce")
+        version = read_little_int(stream, _blkformat.VERSION_LEN, "version")
+        prev_block = read_stream(stream, _blkformat.PREV_HASH_LEN, "prev_block")
+        merkle_root = read_stream(stream, _blkformat.MERKLE_ROOT_LEN, "merkle_root")
+        timestamp = read_little_int(stream, _blkformat.TIME_LEN, "Unix epoch time")
+        bits = read_stream(stream, _blkformat.BITS_LEN, "bits")
+        nonce = read_little_int(stream, _blkformat.NONCE_LEN, "nonce")
 
         return cls(version, prev_block, merkle_root, timestamp, bits, nonce)
 
@@ -75,7 +76,7 @@ class BlockHeader(Serializable):
             "merkle_root": self.merkle_root[::-1].hex(),  # Reverse for display
             "timestamp": self.timestamp,
             "bits": self.bits.hex(),
-            "nonce": self.nonce.to_bytes(BFB.NONCE, "little").hex(),
+            "nonce": self.nonce.to_bytes(_blkformat.NONCE_LEN, "little").hex(),
         }
 
     @property
@@ -102,6 +103,7 @@ class Block(Serializable):
         nonce (int): to affect the block_id
     """
     __slots__ = ('prev_block', 'txs', 'tx_count', 'merkle_tree', 'timestamp', 'bits', 'nonce', 'version')
+    MINIMUM_VERSION = 4
 
     def __init__(self, prev_block: bytes, transactions: list[Transaction], timestamp: int, bits: bytes, nonce: int,
                  version: int = None):
@@ -110,7 +112,7 @@ class Block(Serializable):
         self.timestamp = timestamp
         self.bits = bits
         self.nonce = nonce
-        self.version = version or BFP.VERSION
+        self.version = version or self.MINIMUM_VERSION
 
         # Get txs and merkle tree
         self.tx_count = len(transactions)
@@ -122,7 +124,7 @@ class Block(Serializable):
         stream = get_stream(byte_stream)
 
         # Get header
-        header_data = read_stream(stream, BFB.HEADER, "block_header")
+        header_data = read_stream(stream, _blkformat.TOTAL_LEN, "block_header")
         header = BlockHeader.from_bytes(header_data)
 
         # Get txs | handle only header data
@@ -207,11 +209,11 @@ class HeaderAndShortIDs(Serializable):
 
         # Get data
         header = BlockHeader.from_bytes(stream)
-        nonce = read_little_int(stream, BFB.CMPCT_NONCE, "nonce")
+        nonce = read_little_int(stream, Wire.ShortIDSpec.NONCE_LEN, "nonce")
         shortids_length = read_compact_size(stream, "shortids_length")
         shortids = []
         for _ in range(shortids_length):
-            shortids.append(read_stream(stream, BFB.SHORTID, "short_ids"))
+            shortids.append(read_stream(stream, Wire.ShortIDSpec.PAYLOAD_LEN, "short_ids"))
         prefilledtxn_length = read_compact_size(stream, "prefilledtxn_length")
         prefilledtxn = []
         for _ in range(prefilledtxn_length):
@@ -221,7 +223,7 @@ class HeaderAndShortIDs(Serializable):
 
     def to_bytes(self):
 
-        return (self.header.to_bytes() + self.nonce.to_bytes(BFB.CMPCT_NONCE, "little")
+        return (self.header.to_bytes() + self.nonce.to_bytes(Wire.ShortIDSpec.NONCE_LEN, "little")
                 + write_compact_size(self.shortids_length) + b''.join(self.shortids)
                 + write_compact_size(self.prefilledtxn_length) + b''.join([t.to_bytes() for t in self.prefilledtxn]))
 
@@ -267,7 +269,7 @@ class BlockTransactions(Serializable):
         stream = get_stream(byte_stream)
 
         # Get hash
-        block_hash = read_stream(stream, BFB.BLOCK_HASH, "block_hash")
+        block_hash = read_stream(stream, _blkformat.PREV_HASH_LEN, "block_hash")
 
         # Get txs
         tx_num = read_compact_size(stream, "BlockTransactions.tx_num")
@@ -315,7 +317,7 @@ class BlockTransactionsRequest(Serializable):
         stream = get_stream(byte_stream)
 
         # Get block_hash
-        block_hash = read_stream(stream, BFB.BLOCK_HASH, "block_hash")
+        block_hash = read_stream(stream, _blkformat.PREV_HASH_LEN, "block_hash")
 
         # Get indexes
         indexes_length = read_compact_size(stream, "indexes_length")

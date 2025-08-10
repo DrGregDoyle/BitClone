@@ -22,13 +22,16 @@ about the rest of the network:
 from io import BytesIO
 
 from src.data import get_stream, read_little_int, read_stream, read_compact_size, write_compact_size, \
-    NetAddr, RejectType, BloomType, bytes_to_2byte_binary_string, BitcoinFormats, NodeType
+    NetAddr, RejectType, BloomType, bytes_to_2byte_binary_string, NodeType, Wire
 from src.network.message import Message
 
 __all__ = ["Addr", "FeeFilter", "FilterAdd", "FilterClear", "FilterLoad", "GetAddr", "Ping", "Pong", "Reject",
            "SendHeaders", "VerAck", "Version"]
 
-BF = BitcoinFormats.Message
+_cmpct = Wire.CompactBlock
+_fltr = Wire.Filter
+_node = Wire.Node
+_block = Wire.BlockHeader
 
 
 # --- PARENT CLASSES FOR SIMILAR MESSAGES --- #
@@ -68,7 +71,7 @@ class PingPongParent(Message):
     @classmethod
     def from_bytes(cls, bytes_stream: bytes | BytesIO):
         stream = get_stream(bytes_stream)
-        nonce = read_little_int(stream, BF.CMPCT_NONCE, "nonce")
+        nonce = read_little_int(stream, _cmpct.NONCE_LEN, "nonce")
         return cls(nonce)
 
     @property
@@ -76,7 +79,7 @@ class PingPongParent(Message):
         return self.__class__.command
 
     def payload(self):
-        return self.nonce.to_bytes(BF.CMPCT_NONCE, "little")
+        return self.nonce.to_bytes(_cmpct.NONCE_LEN, "little")
 
     def payload_dict(self) -> dict:
         return {"nonce": self.nonce}
@@ -152,11 +155,11 @@ class FeeFilter(Message):
     def from_bytes(cls, byte_stream: bytes | BytesIO):
         stream = get_stream(byte_stream)
 
-        feerate = read_little_int(stream, BF.FEERATE, "feerate")
+        feerate = read_little_int(stream, _fltr.FEERATE_LEN, "feerate")
         return cls(feerate)
 
     def payload(self) -> bytes:
-        return self.feerate.to_bytes(BF.FEERATE, "little")
+        return self.feerate.to_bytes(_fltr.FEERATE_LEN, "little")
 
     def payload_dict(self) -> dict:
         return {
@@ -242,10 +245,10 @@ class FilterLoad(Message):
     def __init__(self, filter_bytes: bytes, nhashfunc: int, ntweak: int, nflags: int | BloomType):
         super().__init__()
         # Error checking
-        if len(filter_bytes) > BF.MAX_FILTER:
-            raise ValueError(f"Size of filter bytes exceeds {BF.MAX_FILTER}. Filter size: {len(filter_bytes)}")
-        if nhashfunc > BF.MAX_HASHFUNC:
-            raise ValueError(f"Hash function num exceeds {BF.MAX_HASHFUNC}. Hashfunc num: {nhashfunc}")
+        if len(filter_bytes) > _fltr.MAXFILTER_VAL:
+            raise ValueError(f"Size of filter bytes exceeds {_fltr.MAXFILTER_VAL}. Filter size: {len(filter_bytes)}")
+        if nhashfunc > _fltr.MAXNHASH_VAL:
+            raise ValueError(f"Hash function num exceeds {_fltr.MAXNHASH_VAL}. Hashfunc num: {nhashfunc}")
 
         self.filter_bytes = filter_bytes
         self.filter_bytes_size = len(self.filter_bytes)
@@ -263,16 +266,16 @@ class FilterLoad(Message):
         filter_bytes = read_stream(stream, filter_size, "filter_bytes")
 
         # Get n-vals
-        nhashfunc = read_little_int(stream, BF.HASHFUNC, "n_hash_func")
-        ntweak = read_little_int(stream, BF.TWEAK, "n_tweak")
-        nflag = read_little_int(stream, BF.FLAG, "n_flags")
+        nhashfunc = read_little_int(stream, _fltr.NHASH_LEN, "n_hash_func")
+        ntweak = read_little_int(stream, _fltr.TWEAK_LEN, "n_tweak")
+        nflag = read_little_int(stream, _fltr.FLAG_LEN, "n_flags")
 
         return cls(filter_bytes, nhashfunc, ntweak, nflag)
 
     def payload(self) -> bytes:
         payload_parts = [write_compact_size(self.filter_bytes_size), self.filter_bytes,
-                         self.nhashfunc.to_bytes(BF.HASHFUNC, "little"),
-                         self.ntweak.to_bytes(BF.TWEAK, "little"),
+                         self.nhashfunc.to_bytes(_fltr.NHASH_LEN, "little"),
+                         self.ntweak.to_bytes(_fltr.TWEAK_LEN, "little"),
                          self.nflags.to_byte()]
         return b''.join(payload_parts)
 
@@ -441,19 +444,19 @@ class Version(Message):
         stream = get_stream(byte_stream)
 
         # Read version, services and timestamp
-        version = read_little_int(stream, BF.PROTOCOL_VERSION, "protocol_version")
-        services = read_little_int(stream, BF.SERVICES, "services")
-        timestamp = read_little_int(stream, BF.TIME, "time")
+        version = read_little_int(stream, _node.VERSION_LEN, "protocol_version")
+        services = read_little_int(stream, _node.SERVICES_LEN, "services")
+        timestamp = read_little_int(stream, _node.TIME_LEN, "time")
 
         # Read in remote and local NetAddr
         remote_netaddr = NetAddr.from_bytes(stream, is_version=True)
         local_netaddr = NetAddr.from_bytes(stream, is_version=True)
 
         # Read in nonce, user agent and last block
-        nonce = read_little_int(stream, BF.CMPCT_NONCE, "nonce")
+        nonce = read_little_int(stream, _cmpct.NONCE_LEN, "nonce")
         user_agent_size = read_compact_size(stream, "user_agent_size")
         user_agent = read_stream(stream, user_agent_size, "user_agent").rstrip(b'\x00').decode("ascii")
-        last_block = read_little_int(stream, BF.LASTBLOCK, "last_block")
+        last_block = read_little_int(stream, _block.PREV_HASH_LEN, "last_block")
 
         return cls(version, services, timestamp, remote_netaddr, local_netaddr, nonce, user_agent, last_block)
 
@@ -461,19 +464,19 @@ class Version(Message):
         byte_string = b''
 
         # Protocol version, services, time
-        byte_string += self.protocol_version.to_bytes(BF.PROTOCOL_VERSION, "little")
+        byte_string += self.protocol_version.to_bytes(_node.VERSION_LEN, "little")
         byte_string += self.services.byte_format()
-        byte_string += self.timestamp.to_bytes(BF.TIME, "little")
+        byte_string += self.timestamp.to_bytes(_node.TIME_LEN, "little")
 
         # Remote and local netaddr
         byte_string += self.remote_net_addr.to_bytes() + self.local_net_addr.to_bytes()
 
         # Nonce, user agent and last block
-        byte_string += self.nonce.to_bytes(BF.CMPCT_NONCE, "little")
+        byte_string += self.nonce.to_bytes(_cmpct.NONCE_LEN, "little")
         user_agent = self.user_agent.encode("ascii")
         user_agent_size = write_compact_size(len(user_agent))
         byte_string += user_agent_size + user_agent
-        byte_string += self.last_block.to_bytes(BF.LASTBLOCK, "little")
+        byte_string += self.last_block.to_bytes(_block.PREV_HASH_LEN, "little")
 
         return byte_string
 

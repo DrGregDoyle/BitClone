@@ -4,11 +4,10 @@ Base classes for Bitcoin protocol control messages
 from abc import ABC, abstractmethod
 from io import BytesIO
 
-from src.data import BitcoinFormats, Serializable, Header
+from src.data import Serializable, Header, MAINNET
 
 __all__ = ["Message"]
-
-MB = BitcoinFormats.MagicBytes.DEFAULT
+MB = MAINNET.magic
 
 
 class Message(Serializable, ABC):

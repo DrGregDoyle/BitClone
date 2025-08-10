@@ -26,11 +26,14 @@ from io import BytesIO
 
 from src.block import Block, BlockTransactions, BlockTransactionsRequest, BlockHeader
 from src.data import Inventory, get_stream, read_compact_size, read_stream, write_compact_size, read_little_int, \
-    BitcoinFormats, little_bytes_to_binary_string
+    little_bytes_to_binary_string, Wire
 from src.network.message import Message
 from src.tx import Transaction, PrefilledTransaction
 
-BF = BitcoinFormats.Message
+_inv = Wire.InventoryEntry
+_block = Wire.BlockHeader
+_shortid = Wire.ShortIDSpec
+_cmpct = Wire.CompactBlock
 __all__ = ["BlockMsg", "BlockTxn", "CmpctBlock", "GetBlocks", "GetBlockTxn", "GetData", "GetHeaders", "Headers", "Inv",
            "MemPool", "MerkleBlock", "NotFound", "SendCompact", "TxMsg"]
 
@@ -58,7 +61,7 @@ class InvParent(Message):
         inv_count = read_compact_size(stream, "inventory count")
         inv_list = []
         for _ in range(inv_count):
-            inv_bytes = read_stream(stream, BF.INV, "inventory")
+            inv_bytes = read_stream(stream, _inv.ENTRY_LEN, "inventory")
             inv_list.append(Inventory.from_bytes(inv_bytes))
         return cls(inv_list)
 
@@ -105,17 +108,17 @@ class GetBlockParent(Message):
         stream = get_stream(byte_stream)
 
         # Get version
-        version = read_little_int(stream, BF.PROTOCOL_VERSION, "version")
+        version = read_little_int(stream, _block.VERSION_LEN, "version")
 
         # Get locator hashes
         hash_count = read_compact_size(stream, "hash_count")
         hash_list = []
         for x in range(hash_count):
-            temp_hash = read_stream(stream, BF.BLOCKTXHASH, "locator_hash")
+            temp_hash = read_stream(stream, _block.PREV_HASH_LEN, "locator_hash")
             hash_list.append(temp_hash)
 
         # Get stop_hash
-        stop_hash = read_stream(stream, BF.BLOCKTXHASH, "stop_hash")
+        stop_hash = read_stream(stream, _block.PREV_HASH_LEN, "stop_hash")
 
         return cls(version, hash_list, stop_hash)
 
@@ -124,7 +127,7 @@ class GetBlockParent(Message):
         raise NotImplementedError(f"{self.__class__.__name__} must implement command")
 
     def payload(self) -> bytes:
-        payload = self.version.to_bytes(BF.PROTOCOL_VERSION, "little")
+        payload = self.version.to_bytes(_block.VERSION_LEN, "little")
         payload += write_compact_size(self.hash_count)
         payload += b''.join(self.locator_hashes)
         payload += self.hash_stop
@@ -224,11 +227,11 @@ class CmpctBlock(Message):
         header = BlockHeader.from_bytes(stream)
 
         # nonce
-        nonce = read_little_int(stream, BF.CMPCT_NONCE, "nonce")
+        nonce = read_little_int(stream, _shortid.NONCE_LEN, "nonce")
 
         # shortids
         shortids_length = read_compact_size(stream, "shortids_length")
-        shortids = [read_stream(stream, BF.SHORTID, "shortids") for _ in range(shortids_length)]
+        shortids = [read_stream(stream, _shortid.PAYLOAD_LEN, "shortids") for _ in range(shortids_length)]
 
         # prefilled_txs
         prefilled_tx_length = read_compact_size(stream, "prefilled_tx_length")
@@ -239,7 +242,7 @@ class CmpctBlock(Message):
     def payload(self) -> bytes:
         parts = [
             self.header.to_bytes(),
-            self.nonce.to_bytes(BF.CMPCT_NONCE, "little"),
+            self.nonce.to_bytes(_shortid.NONCE_LEN, "little"),
             write_compact_size(self.shortids_length),
             b''.join(self.shortids),
             write_compact_size(self.prefilled_tx_length),
@@ -411,11 +414,11 @@ class MerkleBlock(Message):
         header = BlockHeader.from_bytes(stream)
 
         # tx_num
-        tx_num = read_little_int(stream, BF.TXNUM, "tx_num")
+        tx_num = read_little_int(stream, _cmpct.TXNUM_LEN, "tx_num")
 
         # hashes
         hash_num = read_compact_size(stream, "hash_num")
-        hashes = [read_stream(stream, BF.MERKLEHASH, "merkle_hash") for _ in range(hash_num)]
+        hashes = [read_stream(stream, _cmpct.MERKLE_HASH_LEN, "merkle_hash") for _ in range(hash_num)]
 
         # flags
         flag_num = read_compact_size(stream, "flag_byte_count")
@@ -426,7 +429,7 @@ class MerkleBlock(Message):
     def payload(self) -> bytes:
         parts = [
             self.blockheader.to_bytes(),
-            self.tx_num.to_bytes(BF.TXNUM, "little"),
+            self.tx_num.to_bytes(_cmpct.TXNUM_LEN, "little"),
             write_compact_size(self.hash_num),
             b''.join(self.hashes),
             write_compact_size(self.flag_num),
@@ -475,10 +478,10 @@ class SendCompact(Message):
         stream = get_stream(byte_stream)
 
         # Announce
-        announce = read_little_int(stream, BF.ANNOUNCE, "announce")
+        announce = read_little_int(stream, _cmpct.ANNOUNCE_LEN, "announce")
 
         # Version
-        version = read_little_int(stream, BF.CMPCT_VERSION, "version")
+        version = read_little_int(stream, _cmpct.VERSION_LEN, "version")
 
         return cls(announce, version)
 
@@ -487,7 +490,8 @@ class SendCompact(Message):
         return self.COMMAND
 
     def payload(self) -> bytes:
-        return self.announce.to_bytes(BF.ANNOUNCE, "little") + self.version.to_bytes(BF.CMPCT_VERSION, "little")
+        return self.announce.to_bytes(_cmpct.ANNOUNCE_LEN, "little") + self.version.to_bytes(_cmpct.VERSION_LEN,
+                                                                                             "little")
 
     def payload_dict(self) -> dict:
         return {

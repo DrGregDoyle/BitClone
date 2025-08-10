@@ -3,13 +3,13 @@ The TxEngine class - Used for signing a transaction
 
 NOTES:
     - Signatures are designed with an output in mind. They are designed to unlock an output.
-    - Hence a legacy, segwit or taproot signature will be used depending ont the type of output referenced.
+    - Hence a legacy, segwit or taproot signature will be used depending on the type of output referenced.
 """
 
 from src.crypto import hash256, ecdsa, verify_ecdsa, sha256, tagged_hash_function, HashType, ORDER, \
     generator_exponent, PRIME, get_pt_from_x, scalar_multiplication, add_points
 from src.data import write_compact_size, encode_der_signature, to_little_bytes, get_public_key_point, \
-    decode_der_signature, BitcoinFormats
+    decode_der_signature, TxFmt
 from src.data.utxo import UTXO
 from src.logger import get_logger
 from src.script.sighash import SigHash
@@ -19,7 +19,8 @@ logger = get_logger(__name__)
 
 __all__ = ["SignatureEngine"]
 
-BFT = BitcoinFormats.Tx
+
+# BFT = BitcoinFormats.Tx
 
 
 class SignatureEngine:
@@ -43,7 +44,7 @@ class SignatureEngine:
         return tx
 
     def _encode_outpoint(self, _input: Input):
-        return _input.txid + to_little_bytes(_input.vout, BFT.VOUT)
+        return _input.txid + to_little_bytes(_input.vout, TxFmt.VOUT_LEN)
 
     def _handle_extension(self):
         pass
@@ -80,8 +81,8 @@ class SignatureEngine:
         # 4. Return message hash
         return hash256(data)
 
-    def get_segwit_sighash(self, tx: Transaction, input_index: int, script_code: bytes, amount: int, sighash_flag:
-    int) -> bytes:
+    def get_segwit_sighash(self, tx: Transaction, input_index: int, script_code: bytes, amount: int,
+                           sighash_flag: int) -> bytes:
         """
         We obtrain the segwit pre-image using the following formula:
             version + hash256(inputs) + hash256(sequences) + input + scriptcode + amount + sequence + hash256(outputs) 
@@ -90,14 +91,14 @@ class SignatureEngine:
         """
 
         # Version
-        version = to_little_bytes(tx.version, BFT.VERSION)
+        version = to_little_bytes(tx.version, TxFmt.VERSION_LEN)
 
         # hash256(inputs)
         inputs = b''.join([self._encode_outpoint(txin) for txin in tx.inputs])
         hashed_inputs = hash256(inputs)
 
         # hash256(sequences)
-        sequences = b''.join([to_little_bytes(txin.sequence, BFT.SEQUENCE) for txin in tx.inputs])
+        sequences = b''.join([to_little_bytes(txin.sequence, TxFmt.SEQUENCE_LEN) for txin in tx.inputs])
         hashed_sequences = hash256(sequences)
 
         # input
@@ -105,17 +106,17 @@ class SignatureEngine:
         tx_input = self._encode_outpoint(temp_input)
 
         # amount
-        amount = to_little_bytes(amount, BFT.AMOUNT)
+        amount = to_little_bytes(amount, TxFmt.AMOUNT_LEN)
 
         # sequence
-        sequence = to_little_bytes(temp_input.sequence, BFT.SEQUENCE)
+        sequence = to_little_bytes(temp_input.sequence, TxFmt.SEQUENCE_LEN)
 
         # hash256(outputs)
         outputs = b''.join([txout.to_bytes() for txout in tx.outputs])
         hashed_outputs = hash256(outputs)
 
         # locktime
-        locktime = to_little_bytes(tx.locktime, BFT.LOCK_TIME)
+        locktime = to_little_bytes(tx.locktime, TxFmt.LOCKTIME_LEN)
 
         # sighash
         sighash = SigHash(sighash_flag)
@@ -139,15 +140,15 @@ class SignatureEngine:
         # Get data
         sighash_epoch = b'\x00'
         hash_byte = hash_type.to_byte()
-        version = to_little_bytes(tx.version, BFT.VERSION)
-        locktime = to_little_bytes(tx.locktime, BFT.LOCK_TIME)
+        version = to_little_bytes(tx.version, TxFmt.VERSION_LEN)
+        locktime = to_little_bytes(tx.locktime, TxFmt.LOCKTIME_LEN)
 
         # sha256(inputs)
         inputs = b''.join([self._encode_outpoint(txin) for txin in tx.inputs])
         hashed_prevouts = sha256(inputs)
 
         # sha256(amounts)
-        amounts = b''.join([to_little_bytes(utxo.amount, BFT.AMOUNT) for utxo in utxos])
+        amounts = b''.join([to_little_bytes(utxo.amount, TxFmt.AMOUNT_LEN) for utxo in utxos])
         hashed_amounts = sha256(amounts)
 
         # sha256(scriptpubkeys)
@@ -155,7 +156,7 @@ class SignatureEngine:
         hashed_scriptpubkeys = sha256(scriptpubkeys)
 
         # sha256(sequences)
-        sequences = b''.join([to_little_bytes(txin.sequence, BFT.SEQUENCE) for txin in tx.inputs])
+        sequences = b''.join([to_little_bytes(txin.sequence, TxFmt.SEQUENCE_LEN) for txin in tx.inputs])
         hashed_sequences = sha256(sequences)
 
         # sha256(outputs)
@@ -170,9 +171,9 @@ class SignatureEngine:
         indexed_input = tx.inputs[input_index]
         indexed_utxo = utxos[input_index]
         txin_outpoint = self._encode_outpoint(indexed_input)
-        txin_amount = to_little_bytes(indexed_utxo.amount, BFT.AMOUNT)
+        txin_amount = to_little_bytes(indexed_utxo.amount, TxFmt.AMOUNT_LEN)
         txin_scriptpubkey = indexed_utxo.script_pubkey
-        txin_sequence = to_little_bytes(indexed_input.sequence, BFT.SEQUENCE)
+        txin_sequence = to_little_bytes(indexed_input.sequence, TxFmt.SEQUENCE_LEN)
 
         # input_index
         input_index_bytes = to_little_bytes(input_index, 4)  # Hardcoded Index bytes
@@ -205,7 +206,7 @@ class SignatureEngine:
         # Return taggedhash
         return tagged_hash_function(sighash_epoch + comsig_message + extension, b'TapSighash', HashType.SHA256)
 
-    ### === ECDSA === ###
+    # === ECDSA === #
 
     # --- Sign Message
     def sign_message(self, private_key: int, message_hash: bytes, sighash_flag: int) -> bytes:
@@ -236,7 +237,7 @@ class SignatureEngine:
         # Return verification bool
         return verify_ecdsa(sig_tuple, message_hash, pubkey_point)
 
-    ### === SCHNORR === ###
+    # === SCHNORR === #
     def schnorr_signature(self, private_key: int, message: bytes, auxiliary_bits: bytes = BIP340_ARRAY) -> bytes:
         # Curve setup
         n = ORDER

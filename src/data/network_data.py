@@ -6,18 +6,21 @@ from io import BytesIO
 from time import time as now
 
 from src.crypto import hash256
-from src.data.btc_formats import BitcoinFormats
 from src.data.byte_stream import get_stream, read_little_int, read_stream, read_big_int, read_compact_size
 from src.data.data_handling import write_compact_size
 from src.data.data_types import InvType, NodeType
+from src.data.formats import Wire
 from src.data.ip_utils import IPLike, normalize, to_display, read_ip16
 from src.data.serializable import Serializable
 
 __all__ = ["Inventory", "NetAddr", "ShortID", "Header", "BlockTxRequest"]
 
-BTF = BitcoinFormats.Time
-BTI = BitcoinFormats.Inventory
-BTN = BitcoinFormats.Network
+# BTF = BitcoinFormats.Time
+# BTI = BitcoinFormats.Inventory
+_inv = Wire.InventoryEntry
+
+
+# BTN = BitcoinFormats.Network
 
 
 # --- INVENTORY --- #
@@ -45,10 +48,10 @@ class Inventory(Serializable):
         stream = get_stream(byte_stream)
 
         # Type
-        invtype = read_little_int(stream, BTI.TYPE, "inventory type")
+        invtype = read_little_int(stream, _inv.TYPE_LEN, "inventory type")
 
         # Hash
-        invhash = read_stream(stream, BTI.HASH, "inventory hash")
+        invhash = read_stream(stream, _inv.HASH_LEN, "inventory hash")
 
         return cls(invtype, invhash)
 
@@ -56,7 +59,7 @@ class Inventory(Serializable):
         """
         Formatted inventory
         """
-        return self.inv_type.value.to_bytes(BTI.TYPE, "little") + self.hash
+        return self.inv_type.value.to_bytes(_inv.TYPE_LEN, "little") + self.hash
 
     def to_dict(self):
         inv_dict = {
@@ -92,12 +95,12 @@ class NetAddr(Serializable):
 
         # Check version message
         if not is_version:
-            timestamp = read_little_int(stream, BTN.TIMESTAMP, "time")
+            timestamp = read_little_int(stream, Wire.NetAddr.TIME_LEN, "time")
         else:
             timestamp = int(now())
 
         # Get the rest
-        services = read_little_int(stream, BTN.SERVICES, "services")
+        services = read_little_int(stream, Wire.NetAddr.SERVICES_LEN, "services")
         ipv6 = read_ip16(stream)
         port = read_big_int(stream, 2, "port")
 
@@ -113,8 +116,9 @@ class NetAddr(Serializable):
 
     def to_bytes(self):
         # Add time if not version Address
-        payload = self.timestamp.to_bytes(BTN.TIMESTAMP, "little") if not self.is_version else b''
-        payload += self.services.byte_format() + self.ip_address.packed + self.port.to_bytes(BTN.PORT, "big")
+        payload = self.timestamp.to_bytes(Wire.NetAddr.TIME_LEN, "little") if not self.is_version else b''
+        payload += self.services.byte_format() + self.ip_address.packed + self.port.to_bytes(Wire.NetAddr.PORT_LEN,
+                                                                                             "big")
         return payload
 
     def to_dict(self):
@@ -140,15 +144,16 @@ class ShortID(Serializable):
         if isinstance(short_id, int):
             # Error checking
             int_byte_length = (short_id.bit_length() + 7) // 8
-            if int_byte_length > BTN.MAX_SHORTID_PAYLOAD:
-                raise ValueError(f"Given integer {short_id} has byte length greater than {BTN.MAX_SHORTID_PAYLOAD}")
-            self.short_id = short_id.to_bytes(BTN.SHORTID, "little")
+            if int_byte_length > Wire.ShortIDSpec.PAYLOAD_LEN:
+                raise ValueError(
+                    f"Given integer {short_id} has byte length greater than {Wire.ShortIDSpec.PAYLOAD_LEN}")
+            self.short_id = short_id.to_bytes(Wire.ShortIDSpec.PADDED_LEN, "little")
         elif isinstance(short_id, bytes):
             # Error checking
-            if len(short_id) > BTN.MAX_SHORTID_PAYLOAD:
+            if len(short_id) > Wire.ShortIDSpec.PAYLOAD_LEN:
                 raise ValueError(
-                    f"Given bytes object {short_id.hex()} has byte length greater than {BTN.MAX_SHORTID_PAYLOAD}")
-            self.short_id = short_id + b'\x00' * (BTN.SHORTID - len(short_id))
+                    f"Given bytes object {short_id.hex()} has byte length greater than {Wire.ShortIDSpec.PAYLOAD_LEN}")
+            self.short_id = short_id + b'\x00' * (Wire.ShortIDSpec.PADDED_LEN - len(short_id))
         else:
             raise ValueError("Incorrect short_id type")
 
@@ -159,7 +164,7 @@ class ShortID(Serializable):
     def from_bytes(cls, byte_stream: bytes | BytesIO):
         stream = get_stream(byte_stream)
 
-        int_val = read_little_int(stream, BTN.SHORTID, "short_id")
+        int_val = read_little_int(stream, Wire.ShortIDSpec.PADDED_LEN, "short_id")
         return cls(int_val)
 
     def to_bytes(self):
@@ -196,10 +201,10 @@ class Header(Serializable):
         stream = get_stream(byte_stream)
 
         # Get byte data
-        magic_bytes = read_stream(stream, BTN.MAGIC_BYTES, "magic_bytes")
-        command = read_stream(stream, BTN.COMMAND, "command").rstrip(b'\x00').decode("ascii")
-        size = read_little_int(stream, BTN.HEADER_SIZE, "size")
-        checksum = read_stream(stream, BTN.HEADER_CHECKSUM, "checksum")
+        magic_bytes = read_stream(stream, Wire.Header.MAGIC_LEN, "magic_bytes")
+        command = read_stream(stream, Wire.Header.COMMAND_LEN, "command").rstrip(b'\x00').decode("ascii")
+        size = read_little_int(stream, Wire.Header.SIZE_LEN, "size")
+        checksum = read_stream(stream, Wire.Header.CHECKSUM_LEN, "checksum")
 
         return cls(magic_bytes, command, size, checksum)
 
@@ -218,7 +223,7 @@ class Header(Serializable):
         header_bytes = (
                 self.magic_bytes
                 + command_bytes
-                + self.size.to_bytes(BTN.HEADER_SIZE, "little")
+                + self.size.to_bytes(Wire.Header.SIZE_LEN, "little")
                 + self.checksum
         )
         return header_bytes
@@ -257,7 +262,7 @@ class BlockTxRequest(Serializable):
         stream = get_stream(byte_stream)
 
         # hash
-        block_hash = read_stream(stream, BTN.BLOCKTX_HASH, "block_hash")
+        block_hash = read_stream(stream, Wire.BlockHeader.PREV_HASH_LEN, "block_hash")
 
         # indexes
         index_num = read_compact_size(stream, "index_num")

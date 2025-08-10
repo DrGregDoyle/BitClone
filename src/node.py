@@ -8,14 +8,13 @@ from pathlib import Path
 from time import time as now
 
 from src.blockchain import Blockchain
-from src.data import NetAddr, NodeType, Header, BitcoinFormats
+from src.data import NetAddr, NodeType, Header, Wire
 from src.db import DB_PATH
 from src.logger import get_logger
 from src.network import Message, Version, VerAck
 
 LMAB_IP = "162.120.69.182"
 PORT = 8333  # Mainnet
-BN = BitcoinFormats.Network
 
 # Formatting
 logger = get_logger(__name__, "DEBUG")
@@ -102,7 +101,7 @@ class Node:
         return b"".join(chunks)
 
     def recv_header(self, sock: socket.socket):
-        header_bytes = self.recv_exact(sock, BN.MESSAGE_HEADER)
+        header_bytes = self.recv_exact(sock, Wire.Header.TOTAL_LEN)
         return Header.from_bytes(header_bytes)
 
     def recv_message(self, sock: socket.socket) -> Message:
