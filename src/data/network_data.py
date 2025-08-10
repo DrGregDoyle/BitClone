@@ -1,7 +1,6 @@
 """
 Classes and Methods for help with p2p messaging/networking
 """
-import ipaddress as IP
 from datetime import datetime
 from io import BytesIO
 from time import time as now
@@ -11,6 +10,7 @@ from src.data.btc_formats import BitcoinFormats
 from src.data.byte_stream import get_stream, read_little_int, read_stream, read_big_int, read_compact_size
 from src.data.data_handling import write_compact_size
 from src.data.data_types import InvType, NodeType
+from src.data.ip_utils import IPLike, normalize, to_display, read_ip16
 from src.data.serializable import Serializable
 
 __all__ = ["Inventory", "NetAddr", "ShortID", "Header", "BlockTxRequest"]
@@ -78,10 +78,10 @@ class NetAddr(Serializable):
     -----------------------------------------------------------------
     """
 
-    def __init__(self, timestamp: int, services: int | NodeType, ip_addr: str, port: int, is_version: bool = False):
+    def __init__(self, timestamp: int, services: int | NodeType, ip_addr: IPLike, port: int, is_version: bool = False):
         self.timestamp = timestamp
         self.services = NodeType(services) if isinstance(services, int) else services
-        self.ip_address = self._get_ipv6(ip_addr)
+        self.ip_address = normalize(ip_addr)  # IPv6Address
         self.port = port
         self.is_version = is_version
 
@@ -98,15 +98,14 @@ class NetAddr(Serializable):
 
         # Get the rest
         services = read_little_int(stream, BTN.SERVICES, "services")
-        ip_bytes = read_stream(stream, BTN.IP, "ip")
-        ip_address = IP.IPv6Address(ip_bytes)
+        ipv6 = read_ip16(stream)
         port = read_big_int(stream, 2, "port")
 
-        return cls(timestamp, services, str(ip_address), port, is_version)
+        return cls(timestamp, services, ipv6, port, is_version)
 
     @property
     def display_ip(self) -> str:
-        return str(self.ip_address.ipv4_mapped) if self.ip_address.ipv4_mapped else str(self.ip_address)
+        return to_display(self.ip_address)
 
     @property
     def display_time(self) -> str:
@@ -117,15 +116,6 @@ class NetAddr(Serializable):
         payload = self.timestamp.to_bytes(BTN.TIMESTAMP, "little") if not self.is_version else b''
         payload += self.services.byte_format() + self.ip_address.packed + self.port.to_bytes(BTN.PORT, "big")
         return payload
-
-    def _get_ipv6(self, ip_addr: str):
-        temp_ip = IP.ip_address(ip_addr)
-        if isinstance(temp_ip, IP.IPv4Address):
-            return IP.IPv6Address(bytes.fromhex("00000000000000000000ffff") + temp_ip.packed)
-        elif isinstance(temp_ip, IP.IPv6Address):
-            return temp_ip
-        else:
-            raise ValueError(f"Given ip address not in IPv4/IPv6 format: {ip_addr}")
 
     def to_dict(self):
         if not self.is_version:

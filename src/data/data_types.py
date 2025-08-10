@@ -2,7 +2,7 @@
 The various ENUM classes indicating different types
 """
 
-from enum import IntEnum
+from enum import IntEnum, IntFlag
 
 __all__ = ["InvType", "BloomType", "RejectType", "NodeType"]
 
@@ -44,7 +44,7 @@ class RejectType(IntEnum):
         return self.value.to_bytes(1, "little")
 
 
-class NodeType(IntEnum):
+class NodeType(IntFlag):
     NONE = 0
     NODE_NETWORK = 0x01
     NODE_GETUTXO = 0x02
@@ -54,11 +54,9 @@ class NodeType(IntEnum):
     NODE_COMPACT_FILTERS = 0x40
     NODE_NETWORK_LIMITED = 0x400
 
-    def byte_format(self):
-        """
-        Returns the little-endian byte representation of the integer
-        """
-        return self.value.to_bytes(8, "little")
+    def byte_format(self, width: int = 8) -> bytes:
+        """Little‑endian serialization (default 8 bytes, per protocol services)."""
+        return int(self).to_bytes(width, "little", signed=False)
 
     @classmethod
     def _missing_(cls, value: object) -> "NodeType":

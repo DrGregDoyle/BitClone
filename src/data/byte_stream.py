@@ -1,10 +1,9 @@
 """
 Helper functions for the Serialization.from_bytes() method(s)
 """
-import ipaddress
 from io import BytesIO
 
-__all__ = ["get_stream", "read_stream", "read_little_int", "read_big_int", "read_compact_size", "read_ip"]
+__all__ = ["get_stream", "read_stream", "read_little_int", "read_big_int", "read_compact_size"]
 
 
 def get_stream(byte_stream: bytes | BytesIO):
@@ -52,9 +51,3 @@ def read_compact_size(stream: BytesIO, data_type: str = "compact-size encoded da
         # prefix_val == 0xff -> Next 8 bytes as uint64 (little-endian)
         raw = read_stream(stream, 8, "0xff prefix value")
     return int.from_bytes(raw, "little")
-
-
-def read_ip(stream: BytesIO, length: int, data_type: str = "ipv6 ip address"):
-    ip_bytes = read_stream(stream, length, data_type)
-    ip = ipaddress.IPv6Address(ip_bytes)
-    return str(ip.ipv4_mapped) if ip.ipv4_mapped else str(ip)
