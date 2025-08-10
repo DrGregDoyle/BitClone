@@ -36,7 +36,7 @@ def byte_format(data: bytes, length: int):
     if diff == 0:
         return data
     elif diff > 0:
-        return data.rjust(diff, b'\x00')  # Pad with 0 bytes
+        return data.rjust(length, b'\x00')  # Pad with 0 bytes
     else:
         raise ValueError("data size greater than length")
 

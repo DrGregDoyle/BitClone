@@ -276,11 +276,8 @@ class BlockTxRequest(Serializable):
         return cls(block_hash, indexes)
 
     def to_bytes(self) -> bytes:
-        parts = [
-            self.block_hash,
-            write_compact_size(self.index_num),
-            b''.join(self.indexes)
-        ]
+        parts = [self.block_hash, write_compact_size(self.index_num)]
+        parts += [write_compact_size(i) for i in self.indexes]
         return b''.join(parts)
 
     def to_dict(self) -> dict:

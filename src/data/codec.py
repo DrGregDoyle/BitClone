@@ -128,8 +128,8 @@ def encode_bech32(pubkeydata: bytes, hrp: str = "bc", witver: int = 0) -> str:
     bech32_address = bech32_encode(hrp=hrp, data=converted_data, spec=spec)
 
     # Decode the address to verify checksum
-    decoded_hrp, decoded_data, spec = bech32_decode(bech32_address)
-    if decoded_hrp != hrp or decoded_data is None or spec != spec:
+    decoded_hrp, decoded_data, dec_spec = bech32_decode(bech32_address)
+    if decoded_hrp != hrp or decoded_data is None or dec_spec != spec:
         raise ValueError("Checksum verification failed. The generated Bech32 address is invalid.")
 
     return bech32_address
