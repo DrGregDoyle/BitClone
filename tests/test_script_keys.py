@@ -6,8 +6,9 @@ from random import randint
 from secrets import randbits
 
 from src.crypto import hash160, ORDER, generator_exponent
-from src.data import compress_public_key, write_compact_size, decode_der_signature, encode_der_signature
+from src.data import compress_public_key, decode_der_signature, encode_der_signature
 from src.data.utxo import UTXO
+from src.data.varint import write_compact_size
 from src.logger import get_logger
 from src.script import ScriptValidator, SigHash, ScriptTree, Branch
 from src.taproot import Taproot

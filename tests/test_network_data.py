@@ -7,7 +7,8 @@ from time import time as now
 
 import pytest
 
-from src.data import Inventory, InvType, write_compact_size, BlockTxRequest, NodeType, NetAddr
+from src.data import Inventory, InvType, BlockTxRequest, NodeType, NetAddr
+from src.data.varint import write_compact_size
 from tests.randbtc_generators import get_random_invtype
 
 

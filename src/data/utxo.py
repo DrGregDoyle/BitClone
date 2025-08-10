@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
-from src.data import to_little_bytes, write_compact_size
+from src.data import to_little_bytes
+from src.data.varint import write_compact_size
 
 # from src.tx import Output
 

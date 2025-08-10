@@ -3,8 +3,8 @@ Class for the ScriptEvaluator: High-level API: validates UTXO spends using scrip
 """
 
 from src.crypto import hash160, sha256, tagged_hash_function, HashType
-from src.data import write_compact_size
 from src.data.utxo import UTXO
+from src.data.varint import write_compact_size
 from src.db import BitCloneDatabase
 from src.logger import get_logger
 from src.script.script_engine import ScriptEngine

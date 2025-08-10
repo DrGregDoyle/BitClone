@@ -21,8 +21,9 @@ about the rest of the network:
 """
 from io import BytesIO
 
-from src.data import get_stream, read_little_int, read_stream, read_compact_size, write_compact_size, \
-    NetAddr, RejectType, BloomType, bytes_to_2byte_binary_string, NodeType, Wire
+from src.data import get_stream, read_little_int, read_stream, NetAddr, RejectType, BloomType, \
+    bytes_to_2byte_binary_string, NodeType, Wire
+from src.data.varint import write_compact_size, read_compact_size
 from src.network.message import Message
 
 __all__ = ["Addr", "FeeFilter", "FilterAdd", "FilterClear", "FilterLoad", "GetAddr", "Ping", "Pong", "Reject",

@@ -6,12 +6,12 @@ from io import BytesIO
 from time import time as now
 
 from src.crypto import hash256
-from src.data.byte_stream import get_stream, read_little_int, read_stream, read_big_int, read_compact_size
-from src.data.data_handling import write_compact_size
+from src.data.byte_stream import get_stream, read_little_int, read_stream, read_big_int
 from src.data.data_types import InvType, NodeType
 from src.data.formats import Wire
 from src.data.ip_utils import IPLike, normalize, to_display, read_ip16
 from src.data.serializable import Serializable
+from src.data.varint import write_compact_size, read_compact_size
 
 __all__ = ["Inventory", "NetAddr", "ShortID", "Header", "BlockTxRequest"]
 

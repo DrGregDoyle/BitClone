@@ -8,9 +8,10 @@ NOTES:
 
 from src.crypto import hash256, ecdsa, verify_ecdsa, sha256, tagged_hash_function, HashType, ORDER, \
     generator_exponent, PRIME, get_pt_from_x, scalar_multiplication, add_points
-from src.data import write_compact_size, encode_der_signature, to_little_bytes, get_public_key_point, \
+from src.data import encode_der_signature, to_little_bytes, get_public_key_point, \
     decode_der_signature, TxFmt
 from src.data.utxo import UTXO
+from src.data.varint import write_compact_size
 from src.logger import get_logger
 from src.script.sighash import SigHash
 from src.tx import Transaction, Input

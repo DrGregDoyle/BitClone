@@ -5,8 +5,9 @@ Block and MerkleTree classes
 from io import BytesIO
 
 from src.crypto import hash256
-from src.data import Serializable, read_compact_size, MerkleTree, write_compact_size, get_stream, read_stream, \
+from src.data import Serializable, MerkleTree, get_stream, read_stream, \
     read_little_int, Wire
+from src.data.varint import write_compact_size, read_compact_size
 from src.logger import get_logger
 from src.tx import Transaction, PrefilledTransaction
 

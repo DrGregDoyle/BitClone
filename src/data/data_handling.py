@@ -1,34 +1,10 @@
 """
 Methods for handling data in BitClone
 """
-import struct
 
-__all__ = ["write_compact_size", "byte_format", "to_little_bytes",
+__all__ = ["byte_format", "to_little_bytes",
            "target_to_bits", "bits_to_target", "bits_to_target_int",
            "bytes_to_binary_string", "bytes_to_2byte_binary_string", "little_bytes_to_binary_string"]
-
-
-def write_compact_size(value: int) -> bytes:
-    """
-    Encodes an integer into a Bitcoin CompactSize (varint) byte sequence.
-
-    Args:
-        value (int): The integer value to encode.
-
-    Returns:
-        bytes: The bytes representing the CompactSize encoding of `value`.
-    """
-    if value < 0:
-        raise ValueError("Negative values are not allowed in CompactSize encoding.")
-
-    if value < 0xfd:
-        return struct.pack("B", value)
-    elif value <= 0xffff:
-        return b'\xfd' + struct.pack("<H", value)
-    elif value <= 0xffffffff:
-        return b'\xfe' + struct.pack("<I", value)
-    else:
-        return b'\xff' + struct.pack("<Q", value)
 
 
 def byte_format(data: bytes, length: int):

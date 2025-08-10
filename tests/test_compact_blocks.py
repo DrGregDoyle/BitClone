@@ -6,7 +6,7 @@ from secrets import token_bytes
 
 from src.block import HeaderAndShortIDs, BlockTransactionsRequest, BlockTransactions
 from src.crypto import hash256
-from src.data import write_compact_size
+from src.data.varint import write_compact_size
 from src.logger import get_logger
 from src.tx import PrefilledTransaction
 from tests.randbtc_generators import get_random_prefilled_tx, get_random_block_header, get_random_nonce, \

@@ -13,9 +13,10 @@ B: unsigned char (1 byte)
 from io import SEEK_CUR, BytesIO
 
 from src.crypto.hash_functions import hash256
-from src.data import Serializable, write_compact_size, read_compact_size, byte_format, to_little_bytes, get_stream, \
+from src.data import Serializable, byte_format, to_little_bytes, get_stream, \
     read_stream, read_little_int, TxFmt
 from src.data import UTXO
+from src.data.varint import write_compact_size, read_compact_size
 
 
 # alias

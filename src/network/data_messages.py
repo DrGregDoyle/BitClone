@@ -25,8 +25,9 @@ The following network messages all request or provide data related to transactio
 from io import BytesIO
 
 from src.block import Block, BlockTransactions, BlockTransactionsRequest, BlockHeader
-from src.data import Inventory, get_stream, read_compact_size, read_stream, write_compact_size, read_little_int, \
+from src.data import Inventory, get_stream, read_stream, read_little_int, \
     little_bytes_to_binary_string, Wire
+from src.data.varint import write_compact_size, read_compact_size
 from src.network.message import Message
 from src.tx import Transaction, PrefilledTransaction
 

@@ -4,7 +4,7 @@ A class for Taproot merkle trees
 from __future__ import annotations
 
 from src.crypto import tagged_hash_function
-from src.data import write_compact_size
+from src.data.varint import write_compact_size
 
 __all__ = ["Leaf", "Branch", "ScriptTree"]
 
