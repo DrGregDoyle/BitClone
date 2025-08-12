@@ -1,7 +1,6 @@
 """
 Tests for the MerkleTree, BlockHeader and Block classes
 """
-
 from secrets import token_bytes
 
 from src.block import BlockHeader, Block
@@ -21,10 +20,16 @@ def test_merkle_tree():
     random_ids = [r1, r2, r3]
     random_tree = MerkleTree(random_ids)
 
+    print(f"RANDOM TREE: {random_tree.hex_tree}")
+
     # Verification hashes
     r_12 = hash256(r1 + r2)
     r_33 = hash256(r3 + r3)
     root = hash256(r_12 + r_33)
+
+    print(f"R12: {r_12.hex()}")
+    print(f"R33: {r_33.hex()}")
+    print(f"ROOT: {root.hex()}")
 
     # Merkle proof lists
     r1_proof = [(r2, 'right'), (r_33, 'right')]
