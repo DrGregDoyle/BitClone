@@ -59,7 +59,8 @@ class MerkleTree:
         tree: dict[int, list[bytes]] = {}
         mutated = False
         for level in range(self.height, 0, -1):  # Stop at level 1, leave root for 0
-            if len(clean_list) % 2 != 0:
+            orig_len = len(clean_list)
+            if orig_len % 2 != 0:
                 clean_list.append(clean_list[-1])  # duplicate last if odd (not a mutation)
             tree[level] = clean_list
             next_level: list[bytes] = []
@@ -67,7 +68,7 @@ class MerkleTree:
                 left = clean_list[i]
                 right = clean_list[i + 1]
                 # Set mutated if two distinct siblings are identical (i+1 exists and not the odd-dup case)
-                if i + 1 < len(tree[level]) and left == right:
+                if i + 1 < orig_len and left == right:
                     mutated = True
                 next_level.append(hash256(left + right))
             clean_list = next_level
