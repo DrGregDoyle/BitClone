@@ -22,7 +22,7 @@ about the rest of the network:
 from io import BytesIO
 
 from src.data import get_stream, read_little_int, read_stream, NetAddr, RejectType, BloomType, \
-    bytes_to_2byte_binary_string, NodeType, Wire
+    bytes_to_nibbles_string, NodeType, Wire
 from src.data.varint import write_compact_size, read_compact_size
 from src.network.message import Message
 
@@ -284,7 +284,7 @@ class FilterLoad(Message):
         payload_dict = {
             "filter_bytes_size": self.filter_bytes_size,
             "filter_bytes": self.filter_bytes.hex(),
-            "binary_filter": bytes_to_2byte_binary_string(self.filter_bytes),
+            "binary_filter": bytes_to_nibbles_string(self.filter_bytes),
             "n_hash_funct": self.nhashfunc,
             "n_tweak": self.ntweak,
             "nflags": self.nflags.name

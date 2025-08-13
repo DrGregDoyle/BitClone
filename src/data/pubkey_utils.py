@@ -36,7 +36,7 @@ def compress_public_key(*args) -> bytes:
         raise TypeError("Tuple must contain two integers.")
 
     prefix = b'\x02' if y % 2 == 0 else b'\x03'
-    x_bytes = x.to_bytes(32, 'big')
+    x_bytes = x.to_bytes(PUBKEY_BYTELENGTH, 'big')
     return prefix + x_bytes
 
 

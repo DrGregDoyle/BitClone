@@ -4,7 +4,7 @@ Methods for handling data in BitClone
 
 __all__ = ["byte_format", "to_little_bytes",
            "target_to_bits", "bits_to_target", "bits_to_target_int",
-           "bytes_to_binary_string", "bytes_to_2byte_binary_string", "little_bytes_to_binary_string"]
+           "bytes_to_binary_string", "bytes_to_nibbles_string", "little_bytes_to_binary_string"]
 
 
 def byte_format(data: bytes, length: int):
@@ -25,7 +25,7 @@ def little_bytes_to_binary_string(b: bytes):
     return ''.join(f"{byte:08b}"[::-1] for byte in b)
 
 
-def bytes_to_2byte_binary_string(b: bytes):
+def bytes_to_nibbles_string(b: bytes):
     bits = little_bytes_to_binary_string(b)
     return " ".join([bits[i:i + 4] for i in range(0, len(bits), 4)])
 

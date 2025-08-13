@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from src.data import to_little_bytes
+from src.data.formats import TxFmt
 from src.data.varint import write_compact_size
 
 # from src.tx import Output
@@ -39,3 +40,9 @@ class UTXO:
         Returns amount + scriptpubkey_size + scriptpubkey, suitable for use in Output.from_bytes() constructor
         """
         return to_little_bytes(self.amount, 8) + write_compact_size(len(self.script_pubkey)) + self.script_pubkey
+
+    def outpoint(self) -> bytes:
+        """
+        Returns tx_id + vout
+        """
+        return self.txid + self.vout.to_bytes(TxFmt.VOUT_LEN, "little")

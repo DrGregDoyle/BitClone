@@ -8,7 +8,7 @@ from time import time as now
 from src.crypto import hash256
 from src.data.byte_stream import get_stream, read_little_int, read_stream, read_big_int
 from src.data.data_types import InvType, NodeType
-from src.data.formats import Wire
+from src.data.formats import Wire, Display
 from src.data.ip_utils import IPLike, normalize, to_display, read_ip16
 from src.data.serializable import Serializable
 from src.data.varint import write_compact_size, read_compact_size
@@ -18,6 +18,8 @@ __all__ = ["Inventory", "NetAddr", "ShortID", "Header", "BlockTxRequest"]
 # BTF = BitcoinFormats.Time
 # BTI = BitcoinFormats.Inventory
 _inv = Wire.InventoryEntry
+_hdr = Wire.Header
+_sid = Wire.ShortIDSpec
 
 
 # BTN = BitcoinFormats.Network
@@ -33,6 +35,8 @@ class Inventory(Serializable):
     |   hash    |   bytes   | natural byte order    | 32    |
     ---------------------------------------------------------
     """
+
+    __slots__ = ["inv_type", "hash"]
 
     def __init__(self, inv_type: int | InvType, hash_: bytes):
         # Error checking
@@ -80,6 +84,7 @@ class NetAddr(Serializable):
     |   port            | int       | network byte order    | 2     |
     -----------------------------------------------------------------
     """
+    __slots__ = ["timestamp", "services", "ip_address", "port", "is_version"]
 
     def __init__(self, timestamp: int, services: int | NodeType, ip_addr: IPLike, port: int, is_version: bool = False):
         self.timestamp = timestamp
@@ -112,7 +117,7 @@ class NetAddr(Serializable):
 
     @property
     def display_time(self) -> str:
-        return datetime.utcfromtimestamp(self.timestamp).strftime(BTF.FORMAT)
+        return datetime.utcfromtimestamp(self.timestamp).strftime(Display.TIME_FORMAT)
 
     def to_bytes(self):
         # Add time if not version Address
@@ -138,22 +143,23 @@ class ShortID(Serializable):
     """
     A 6-byte integer, padded with 2 null-bytes, so it can be read as an 8-byte integer
     """
+    __slots__ = ["short_id"]
 
     def __init__(self, short_id: int | bytes):
         # short_id as integer
         if isinstance(short_id, int):
             # Error checking
             int_byte_length = (short_id.bit_length() + 7) // 8
-            if int_byte_length > Wire.ShortIDSpec.PAYLOAD_LEN:
+            if int_byte_length > _sid.PAYLOAD_LEN:
                 raise ValueError(
-                    f"Given integer {short_id} has byte length greater than {Wire.ShortIDSpec.PAYLOAD_LEN}")
-            self.short_id = short_id.to_bytes(Wire.ShortIDSpec.PADDED_LEN, "little")
+                    f"Given integer {short_id} has byte length greater than {_sid.PAYLOAD_LEN}")
+            self.short_id = short_id.to_bytes(_sid.PADDED_LEN, "little")
         elif isinstance(short_id, bytes):
             # Error checking
-            if len(short_id) > Wire.ShortIDSpec.PAYLOAD_LEN:
+            if len(short_id) > _sid.PAYLOAD_LEN:
                 raise ValueError(
-                    f"Given bytes object {short_id.hex()} has byte length greater than {Wire.ShortIDSpec.PAYLOAD_LEN}")
-            self.short_id = short_id + b'\x00' * (Wire.ShortIDSpec.PADDED_LEN - len(short_id))
+                    f"Given bytes object {short_id.hex()} has byte length greater than {_sid.PAYLOAD_LEN}")
+            self.short_id = short_id + b'\x00' * (_sid.PADDED_LEN - len(short_id))
         else:
             raise ValueError("Incorrect short_id type")
 
@@ -164,7 +170,7 @@ class ShortID(Serializable):
     def from_bytes(cls, byte_stream: bytes | BytesIO):
         stream = get_stream(byte_stream)
 
-        int_val = read_little_int(stream, Wire.ShortIDSpec.PADDED_LEN, "short_id")
+        int_val = read_little_int(stream, _sid.PADDED_LEN, "short_id")
         return cls(int_val)
 
     def to_bytes(self):
@@ -188,6 +194,7 @@ class Header(Serializable):
     |   Checksum    | bytes         | 4     |
     -----------------------------------------
     """
+    __slots__ = ["magic_bytes", "command", "size", "checksum"]
 
     def __init__(self, magic_bytes: bytes, command: str, size: int, checksum: bytes):
         self.magic_bytes = magic_bytes
@@ -201,18 +208,18 @@ class Header(Serializable):
         stream = get_stream(byte_stream)
 
         # Get byte data
-        magic_bytes = read_stream(stream, Wire.Header.MAGIC_LEN, "magic_bytes")
-        command = read_stream(stream, Wire.Header.COMMAND_LEN, "command").rstrip(b'\x00').decode("ascii")
-        size = read_little_int(stream, Wire.Header.SIZE_LEN, "size")
-        checksum = read_stream(stream, Wire.Header.CHECKSUM_LEN, "checksum")
+        magic_bytes = read_stream(stream, _hdr.MAGIC_LEN, "magic_bytes")
+        command = read_stream(stream, _hdr.COMMAND_LEN, "command").rstrip(b'\x00').decode("ascii")
+        size = read_little_int(stream, _hdr.SIZE_LEN, "size")
+        checksum = read_stream(stream, _hdr.CHECKSUM_LEN, "checksum")
 
         return cls(magic_bytes, command, size, checksum)
 
     @classmethod
     def from_payload(cls, payload: bytes, command: str, magic_bytes: bytes):
         size = len(payload)
-        checksum = hash256(payload)
-        return cls(magic_bytes, command, size, checksum)
+        payload_checksum = hash256(payload)[:4]
+        return cls(magic_bytes, command, size, payload_checksum)
 
     def to_bytes(self) -> bytes:
         """
@@ -223,7 +230,7 @@ class Header(Serializable):
         header_bytes = (
                 self.magic_bytes
                 + command_bytes
-                + self.size.to_bytes(Wire.Header.SIZE_LEN, "little")
+                + self.size.to_bytes(_hdr.SIZE_LEN, "little")
                 + self.checksum
         )
         return header_bytes
@@ -251,6 +258,7 @@ class BlockTxRequest(Serializable):
     |   indexes     |   list        |   diff-encoded list of CompactSize    |   var     |
     -------------------------------------------------------------------------------------
     """
+    __slots__ = ["block_hash", "indexes", "index_num"]
 
     def __init__(self, block_hash: bytes, indexes: list):
         self.block_hash = block_hash
