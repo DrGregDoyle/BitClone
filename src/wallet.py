@@ -2,13 +2,12 @@
 HD Wallet
 """
 
-# --- IMPORTS
-
 import abc
 from secrets import randbits
 
 from src.crypto import sha256, pbkdf2, hmac_sha512, hash160, generator_exponent, ORDER, add_points
-from src.data import compress_public_key, decompress_public_key, encode_base58check, encode_bech32, WORDLIST
+from src.data import compress_public_key, decompress_public_key, encode_base58check, encode_bech32, get_wordlist, \
+    get_index_map
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -88,14 +87,22 @@ class Mnemonic:
         binary_chunks = [seed_materials[i:i + 11] for i in range(0, len(seed_materials), 11)]
 
         # Use binary chunks to get index from WORDLIST
-        return [WORDLIST[int(c, 2)] for c in binary_chunks]
+        _wordlist = get_wordlist()
+        return [_wordlist[int(c, 2)] for c in binary_chunks]
 
     def validate_mnemonic(self, word_list: list | None = None) -> bool:
         # Use instance mnemonic if none given
         _mnemonic = self.mnemonic if word_list is None else word_list
 
         # Convert words in the mnemonic back in to bits
-        index_list = [WORDLIST.index(w) for w in _mnemonic]
+        # index_list = [WORDLIST.index(w) for w in _mnemonic]
+        idx_map = get_index_map()
+        try:
+            index_list = [idx_map[w] for w in _mnemonic]
+        except KeyError:
+            logger.error(f"Missing wordlist index in mnemonic:  {_mnemonic}")
+            return False
+
         binary_string = "".join([format(i, f"011b") for i in index_list])
 
         # Get entropy and checksum part

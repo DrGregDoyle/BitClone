@@ -17,4 +17,4 @@ from src.data.pubkey_utils import *
 from src.data.serializable import *
 from src.data.utxo import UTXO
 from src.data.varint import *
-from src.data.word_list import WORDLIST
+from src.data.wordlist import *
