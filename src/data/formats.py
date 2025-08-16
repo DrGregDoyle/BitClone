@@ -20,6 +20,7 @@ class Keys:
     SIG_DER_MAX: Final[int] = 72
     SIG_COMPACT: Final[int] = 64
     SIG_RECOVERABLE: Final[int] = 65
+    ENTROPY_BITS: Final[int] = 256
 
 
 class Display:
@@ -27,6 +28,31 @@ class Display:
 
 
 class Wire:
+    class Network:
+        # -- HRP codes for bech32
+        HRP_MAIN: Final[str] = 'bc'
+        HRP_TEST: Final[str] = 'tb'
+
+        # -- xprv, xpub key byte dicts
+        BIP44: Final[dict] = {
+            "xprv": bytes.fromhex("0488ade4"),
+            "xpub": bytes.fromhex("0488ade4")
+        }
+        BIP49: Final[dict] = {
+            "xprv": bytes.fromhex("049d7878"),
+            "xpub": bytes.fromhex("049d7cb2")
+        }
+
+        BIP84: Final[dict] = {
+            "xprv": bytes.fromhex("04b2430c"),
+            "xpub": bytes.fromhex("04b24746")
+        }
+
+        # -- magic bytes
+        MB_MAIN: Final[bytes] = bytes.fromhex("f9beb4d9")
+        MB_TEST: Final[bytes] = bytes.fromhex("0b110907")
+        MB_REG: Final[bytes] = bytes.fromhex("fabfb5da")
+
     class Header:
         MAGIC_LEN: Final[int] = 4
         COMMAND_LEN: Final[int] = 12

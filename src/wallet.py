@@ -4,23 +4,26 @@ HD Wallet
 
 import abc
 from secrets import randbits
+from typing import Union
 
 from src.crypto import sha256, pbkdf2, hmac_sha512, hash160, generator_exponent, ORDER, add_points
 from src.data import compress_public_key, decompress_public_key, encode_base58check, encode_bech32, get_wordlist, \
-    get_index_map
+    get_index_map, Keys, Wire
 from src.logger import get_logger
 
 logger = get_logger(__name__)
+
+_ntwk = Wire.Network
 
 
 class Mnemonic:
     """
     A class for storing the mnemonic phrase used to generate the seed from which all extended keys are derived.
     """
-    DEFAULT_ENTROPY_BIT_LENGTH = 256
+    __slots__ = ("mnemonic",)
 
     def __init__(self, mnemonic: list | None = None, entropy: bytes | str | None = None,
-                 entropy_bit_length: int = DEFAULT_ENTROPY_BIT_LENGTH):
+                 entropy_bit_length: int = Keys.ENTROPY_BITS):
 
         # Check to see if a mnemonic is given
         if mnemonic is not None:
@@ -46,7 +49,10 @@ class Mnemonic:
 
     @staticmethod
     def parse_entropy(input_entropy: bytes | str, entropy_bit_length: int):
-        entropy_num = None
+        # Validate allowed entropy sizes per BIP-39
+        if entropy_bit_length not in {128, 160, 192, 224, 256}:
+            raise ValueError("entropy_bit_length must be one of 128,160,192,224,256")
+
         # Handle bytes
         if isinstance(input_entropy, bytes):
             entropy_num = int.from_bytes(input_entropy, byteorder="big")
@@ -61,6 +67,12 @@ class Mnemonic:
             # Error
             else:
                 raise ValueError("Inputted entropy not the correct datatype")
+        else:
+            raise ValueError("No entropy could be parsed")
+
+        # Guard: never truncate silently; zero-pad to requested width
+        if entropy_num.bit_length() > entropy_bit_length:
+            raise ValueError("Input entropy has more bits than entropy_bit_length")
         return format(entropy_num, f"0{entropy_bit_length}b")
 
     @staticmethod
@@ -72,7 +84,7 @@ class Mnemonic:
         entropy_hash = sha256(int(entropy, 2).to_bytes(len(entropy) // 8, byteorder="big"))
 
         # Get entropy_hash as binary string
-        binary_entropy_hash = format(int.from_bytes(entropy_hash, byteorder="big"), f"0{len(entropy)}b")
+        binary_entropy_hash = format(int.from_bytes(entropy_hash, byteorder="big"), f"0{Keys.ENTROPY_BITS}b")
 
         # Return first bit_length bits from the binary hash
         return binary_entropy_hash[:bit_length]
@@ -127,20 +139,7 @@ class ExtendedKey(abc.ABC):
     """
     HARDENED_INDEX = 0x80000000
 
-    # Mainnet Version bytes
-    BIP44 = {
-        "xprv": bytes.fromhex("0488ade4"),
-        "xpub": bytes.fromhex("0488ade4")
-    }
-    BIP49 = {
-        "xprv": bytes.fromhex("049d7878"),
-        "xpub": bytes.fromhex("049d7cb2")
-    }
-
-    BIP84 = {
-        "xprv": bytes.fromhex("04b2430c"),
-        "xpub": bytes.fromhex("04b24746")
-    }
+    __slots__ = ("chain_code", "depth", "parent_fingerprint", "child_number", "version")
 
     def __init__(
             self,
@@ -150,11 +149,26 @@ class ExtendedKey(abc.ABC):
             child_number: int,
             version: dict | None = None
     ):
+        # -- Error checking -- #
+        # - Chain code
+        if not isinstance(chain_code, (bytes, bytearray)) or len(chain_code) != 32:
+            raise ValueError("chain_code must be 32 bytes.")
+        # - Depth
+        if not (0 <= depth <= 255):
+            raise ValueError("depth must be in [0,255].")
+        # - Parent fingerprint
+        if not (0 <= parent_fingerprint <= 0xFFFFFFFF):
+            raise ValueError("parent_fingerprint must be a 4-byte unsigned int.")
+        # - Child number
+        if not (0 <= child_number <= 0xFFFFFFFF):
+            raise ValueError("child_number must be a 4-byte unsigned int.")
+
+        # -- Assign values -- #
         self.chain_code = chain_code
         self.depth = depth
         self.parent_fingerprint = parent_fingerprint
         self.child_number = child_number
-        self.version = version if version is not None else self.BIP44
+        self.version = version if version is not None else _ntwk.BIP44
 
     @abc.abstractmethod
     def derive_child(self, index: int) -> "ExtendedKey":
@@ -186,10 +200,10 @@ class ExtendedKey(abc.ABC):
         if len(key_data_33) != 33:
             raise ValueError("Key data must be 33 bytes. 0x00 + privkey or compressed pubkey.")
 
-        version = self.version["xpub"] if as_public else self.version["xprv"]
+        ver = self.version["xpub" if as_public else "xprv"]
 
         raw = (
-                version +  # 4 bytes
+                ver +  # 4 bytes
                 self.depth.to_bytes(1, 'big') +  # 1 byte
                 self.parent_fingerprint.to_bytes(4, 'big') +  # 4 bytes
                 self.child_number.to_bytes(4, 'big') +  # 4 bytes
@@ -212,6 +226,7 @@ class XPrv(ExtendedKey):
     Extended Private Key (xprv).
     """
     SEED_KEY = b'Bitcoin seed'
+    __slots__ = ("private_key",)
 
     def __init__(
             self,
@@ -222,8 +237,15 @@ class XPrv(ExtendedKey):
             child_number: int,
             version: dict | None = None
     ):
+        # Call the parent init
         super().__init__(chain_code, depth, parent_fingerprint, child_number, version)
-        self.private_key = private_key
+
+        # Error checking
+        if not isinstance(private_key, (bytes, bytearray)) or len(private_key) != 32:
+            raise ValueError("private_key must be 32 bytes.")
+
+        # Assign vals
+        self.private_key = bytes(private_key)
 
     @classmethod
     def from_master_seed(cls, seed: bytes, version: dict | None = None) -> "XPrv":
@@ -363,6 +385,7 @@ class XPub(ExtendedKey):
     Extended Public Key (xpub).
     public_key is assumed to be the byte representation of the compressed public key
     """
+    __slots__ = ("public_key",)
 
     def __init__(
             self,
@@ -373,8 +396,17 @@ class XPub(ExtendedKey):
             child_number: int,
             version: dict | None = None
     ):
+        # Call the parent init
         super().__init__(chain_code, depth, parent_fingerprint, child_number, version)
-        self.public_key = public_key
+
+        # Error checking
+        if not isinstance(public_key, (bytes, bytearray)) or len(public_key) != 33:
+            raise ValueError("public_key must be 33 bytes (compressed).")
+        if public_key[0] not in (0x02, 0x03):
+            raise ValueError("compressed public_key must start with 0x02 or 0x03.")
+
+        # Assign value
+        self.public_key = bytes(public_key)
 
     @property
     def public_key_point(self):
@@ -458,16 +490,18 @@ class HDWallet:
     BIP49_BASE_PATH = "m/49'/0'/0'/0/0"
     BIP84_BASE_PATH = "m/84'/0'/0'/0/0"
     BIP86_BASE_PATH = "m/86'/0'/0'/0/0"
+    MnemonicLike = Union[Mnemonic, list]
 
-    def __init__(self, mnemonic: Mnemonic | list | None = None, passphrase: str = "",
-                 version=None):
+    __slots__ = ("mnemonic", "master_xprv", "cache", "hrp")
+
+    def __init__(self, mnemonic: MnemonicLike = None, passphrase: str = "", version=None, hrp: str = _ntwk.HRP_MAIN):
         """
         We instantiate our wallet given a mnemonic phrase and optional passphrase. If no mnemonic is provided we
         create one.
         """
         # Get version
         if version is None:
-            version = ExtendedKey.BIP44  # Default magic bytes
+            version = _ntwk.BIP44  # Default key byte dicts
 
         # Get mnemonic
         if mnemonic is None:
@@ -489,6 +523,9 @@ class HDWallet:
         # Cache dict for keys
         self.cache = {}
 
+        # Bech32 HRP for SegWit addresses (mainnet 'bc', testnet 'tb')
+        self.hrp = hrp
+
     def address(self, path: str, script_type: str = "p2pkh") -> str:
         """
         Generate an address for the given derivation path and script type.
@@ -506,14 +543,13 @@ class HDWallet:
                 return self._p2pkh_address(pubkey=pubkey)
             case "p2sh":
                 # pay 2 script hash - have to know redeem script from script sig ahead of time
-                # TODO:
-                pass
+                raise NotImplementedError("P2SH address generation is not implemented yet.")
             case "p2wpkh":
                 return self._p2wpkh_address(pubkey=pubkey)
             case "p2wsh":
-                pass
+                raise NotImplementedError("P2WSH address generation is not implemented yet.")
             case "p2tr":
-                pass
+                raise NotImplementedError("P2TR (Taproot) address generation is not implemented yet.")
             case _:
                 raise ValueError(f"Unsupported script type: {script_type}")
 
@@ -525,40 +561,7 @@ class HDWallet:
     def _p2wpkh_address(self, pubkey: bytes) -> str:
         """Pay-to-Witness-PubKeyHash: Bech32(0x00 + hash160(pubkey))"""
         pubkeyhash = hash160(pubkey)
-        return encode_bech32(pubkeyhash)
-
-    # def _p2pkh_address(self, pubkey: bytes) -> str:
-
-    #     h160 = hash160(pubkey)
-    #     version_byte = b"\x00"  # mainnet P2PKH
-    #     return base58_check_encode(version_byte, h160)
-    #
-    # def _p2sh_p2wpkh_address(self, pubkey: bytes) -> str:
-    #     """
-    #     Pay-to-script-Hash of the redeem script for P2WPKH (which is 0x00 + push of hash160(pubkey)).
-    #     The redeem script itself is typically:  0x00 0x14 <20-byte hash160(pubkey)>
-    #     Then we do P2SH = base58Check(0x05 + hash160(redeem_script)).
-    #     """
-    #     # 1) Construct the redeem script for P2WPKH:
-    #     #    OP_0 (0x00) + OP_PUSH20 (0x14) + <hash160(pubkey)>
-    #     h160 = hash160(pubkey)
-    #     redeem_script = b"\x00\x14" + h160
-    #
-    #     # 2) Hash160 of that redeem script:
-    #     redeem_script_hash = hash160(redeem_script)
-    #
-    #     # 3) Use version byte for P2SH = 0x05 (mainnet)
-    #     version_byte = b"\x05"
-    #     return base58_check_encode(version_byte, redeem_script_hash)
-
-    # def _p2wpkh_address(self, pubkey: bytes) -> str:
-    #     """
-    #     Native SegWit (Bech32) for v0 witness program = hash160(pubkey).
-    #     Typically encoded as bc1q....
-    #     """
-    #     h160 = hash160(pubkey)
-    #     # For mainnet, hrp = 'bc'. For testnet, hrp = 'tb'.
-    #     return encode_bech32(hrp='bc', witness_version=0, witness_program=h160)
+        return encode_bech32(pubkeyhash, hrp=self.hrp, witver=0)
 
     def derive_key(self, path: str, as_public=False):
         """
@@ -568,7 +571,8 @@ class HDWallet:
         """
         if path in self.cache:
             # Already derived it
-            return self.cache[path]
+            cached = self.cache[path]  # always an XPrv
+            return cached.to_xpub() if as_public else cached
 
         # parse path segments
         segments = path.split("/")
@@ -585,15 +589,9 @@ class HDWallet:
                 idx |= self.HARDENED_INDEX
             current_key = current_key.derive_child(idx)
 
-        # If the user wants a public key, call to_xpub()
-        if as_public:
-            derived_key = current_key.to_xpub()
-        else:
-            derived_key = current_key
-
-        # Store in cache
-        self.cache[path] = derived_key
-        return derived_key
+        # Store only the private key in cache; return requested type
+        self.cache[path] = current_key
+        return current_key.to_xpub() if as_public else current_key
 
     def get_cached_paths(self):
         """Return all derivation paths we've derived so far."""

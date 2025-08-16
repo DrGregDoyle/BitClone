@@ -36,7 +36,7 @@ class Inventory(Serializable):
     ---------------------------------------------------------
     """
 
-    __slots__ = ["inv_type", "hash"]
+    __slots__ = ("inv_type", "hash")
 
     def __init__(self, inv_type: int | InvType, hash_: bytes):
         # Error checking
@@ -84,7 +84,7 @@ class NetAddr(Serializable):
     |   port            | int       | network byte order    | 2     |
     -----------------------------------------------------------------
     """
-    __slots__ = ["timestamp", "services", "ip_address", "port", "is_version"]
+    __slots__ = ("timestamp", "services", "ip_address", "port", "is_version")
 
     def __init__(self, timestamp: int, services: int | NodeType, ip_addr: IPLike, port: int, is_version: bool = False):
         self.timestamp = timestamp
@@ -143,7 +143,7 @@ class ShortID(Serializable):
     """
     A 6-byte integer, padded with 2 null-bytes, so it can be read as an 8-byte integer
     """
-    __slots__ = ["short_id"]
+    __slots__ = ("short_id",)
 
     def __init__(self, short_id: int | bytes):
         # short_id as integer
@@ -194,7 +194,7 @@ class Header(Serializable):
     |   Checksum    | bytes         | 4     |
     -----------------------------------------
     """
-    __slots__ = ["magic_bytes", "command", "size", "checksum"]
+    __slots__ = ("magic_bytes", "command", "size", "checksum")
 
     def __init__(self, magic_bytes: bytes, command: str, size: int, checksum: bytes):
         self.magic_bytes = magic_bytes
@@ -258,7 +258,7 @@ class BlockTxRequest(Serializable):
     |   indexes     |   list        |   diff-encoded list of CompactSize    |   var     |
     -------------------------------------------------------------------------------------
     """
-    __slots__ = ["block_hash", "indexes", "index_num"]
+    __slots__ = ("block_hash", "indexes", "index_num")
 
     def __init__(self, block_hash: bytes, indexes: list):
         self.block_hash = block_hash
