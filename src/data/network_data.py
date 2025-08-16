@@ -284,8 +284,9 @@ class BlockTxRequest(Serializable):
         return b''.join(parts)
 
     def to_dict(self) -> dict:
+        # Must be json serializable dict
         return {
             "block_hash": self.block_hash.hex(),
             "index_num": self.index_num,
-            "indexes": list(self.indexes)
+            "indexes": {f"index_{x}": self.indexes[x].hex() for x in range(self.index_num)}
         }

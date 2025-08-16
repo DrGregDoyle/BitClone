@@ -146,7 +146,15 @@ class MerkleTree:
         """
         Converts transaction IDs to bytes format.
         """
-        return [bytes.fromhex(_id) if isinstance(_id, str) else _id for _id in id_list]
+        out: list[bytes] = []
+
+        for _id in id_list:
+            b = bytes.fromhex(_id) if isinstance(_id, str) else _id
+            # Check bytes
+            if len(b) != 32:
+                raise ValueError("All leaves must be 32-byte txids (internal byte order).")
+            out.append(b)
+        return out
 
     def __repr__(self):
         return f"MerkleTree(height={self.height}, root={self.merkle_root.hex()}, mutated=" \

@@ -4,7 +4,7 @@ All methods used for reading and writing CompactSize integers
 import struct
 from io import BytesIO
 
-from src.data import read_stream, get_stream
+from src.data.byte_stream import read_stream, get_stream
 
 __all__ = ["read_compact_size", "write_compact_size"]
 

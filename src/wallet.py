@@ -436,6 +436,9 @@ class XPub(ExtendedKey):
 
         # 5. Get new public key through elliptic curve pt addition
         temp_int = int.from_bytes(temp, byteorder="big")
+        # Guard: Invalid index
+        if temp_int >= ORDER or temp_int == 0:
+            raise ValueError("Invalid child derivation.")
         temp_pt = generator_exponent(temp_int)
         new_pubkey_pt = add_points(self.public_key_point, temp_pt)
 
@@ -529,7 +532,7 @@ class HDWallet:
     def address(self, path: str, script_type: str = "p2pkh") -> str:
         """
         Generate an address for the given derivation path and script type.
-        Example script_type values: 'p2pkh', 'p2sh-p2wpkh', 'p2wpkh', etc.
+        Supported: 'p2pkh', 'p2wpkh'. Others raise NotImplementedError.
         """
         # 1) Derive the key at the specified path (this returns an XPrv)
         derived_xprv = self.derive_key(path=path)
