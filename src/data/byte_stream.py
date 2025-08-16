@@ -21,11 +21,11 @@ def read_stream(stream: BytesIO, length: int, data_type: str):
     return data
 
 
-def read_little_int(stream: BytesIO, length: int, data_type: str = "little-endian integert") -> int:
+def read_little_int(stream: BytesIO, length: int, data_type: str = "little-endian integer") -> int:
     data = read_stream(stream, length, data_type)
     return int.from_bytes(data, "little")
 
 
-def read_big_int(stream: BytesIO, length: int, data_type: str = "big-endian integert") -> int:
+def read_big_int(stream: BytesIO, length: int, data_type: str = "big-endian integer") -> int:
     data = read_stream(stream, length, data_type)
     return int.from_bytes(data, "big")

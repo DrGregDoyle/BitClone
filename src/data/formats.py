@@ -32,11 +32,12 @@ class Wire:
         # -- HRP codes for bech32
         HRP_MAIN: Final[str] = 'bc'
         HRP_TEST: Final[str] = 'tb'
+        HRP_REG: Final[str] = 'bcrt'
 
         # -- xprv, xpub key byte dicts
         BIP44: Final[dict] = {
             "xprv": bytes.fromhex("0488ade4"),
-            "xpub": bytes.fromhex("0488ade4")
+            "xpub": bytes.fromhex("0488b21e")
         }
         BIP49: Final[dict] = {
             "xprv": bytes.fromhex("049d7878"),

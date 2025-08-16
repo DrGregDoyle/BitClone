@@ -163,8 +163,8 @@ class ShortID(Serializable):
         else:
             raise ValueError("Incorrect short_id type")
 
-        # Underlying integer
-        self.int_value = int.from_bytes(self.short_id, "little")
+    def int_value(self) -> int:
+        return int.from_bytes(self.short_id, "little")
 
     @classmethod
     def from_bytes(cls, byte_stream: bytes | BytesIO):
@@ -255,7 +255,7 @@ class BlockTxRequest(Serializable):
     -------------------------------------------------------------------------------------
     |   block_hash  |   bytes       |   internal byte order                 |   32      |
     |   index_num   |   int         |   CompactSize                         |   varint  |
-    |   indexes     |   list        |   diff-encoded list of CompactSize    |   var     |
+    |   indexes     |   list[int]   |   diff-encoded list of CompactSize    |   var     |
     -------------------------------------------------------------------------------------
     """
     __slots__ = ("block_hash", "indexes", "index_num")
@@ -287,5 +287,5 @@ class BlockTxRequest(Serializable):
         return {
             "block_hash": self.block_hash.hex(),
             "index_num": self.index_num,
-            "indexes": {f"index_{x}": self.indexes[x].hex() for x in range(self.index_num)}
+            "indexes": list(self.indexes)
         }

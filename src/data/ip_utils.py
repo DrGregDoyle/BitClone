@@ -37,6 +37,13 @@ def normalize(ip: IPLike) -> _ip.IPv6Address:
     # Strings -> recurse
     if isinstance(ip, str):
         s = ip.strip()
+        # Allow URI-style bracketed IPv6 and scope IDs
+        if s.startswith("[") and s.endswith("]"):
+            s = s[1:-1]
+
+        if "%" in s:  # strip zone index e.g fe80::1%etho0 -> fe80::1
+            s = s.split("%", 1)[0]
+
         obj = _ip.ip_address(s)
         return normalize(obj)
 
