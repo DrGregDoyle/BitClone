@@ -37,7 +37,7 @@ class Wire:
         # -- xprv, xpub key byte dicts
         BIP44: Final[dict] = {
             "xprv": bytes.fromhex("0488ade4"),
-            "xpub": bytes.fromhex("0488b21e")
+            "xpub": bytes.fromhex("0488b21e ")
         }
         BIP49: Final[dict] = {
             "xprv": bytes.fromhex("049d7878"),
@@ -81,6 +81,7 @@ class Wire:
         BITS_LEN: Final[int] = 4
         NONCE_LEN: Final[int] = 4
         TOTAL_LEN: Final[int] = 80
+        LAST_BLOCK_LEN: Final[int] = 4
 
     class ShortIDSpec:
         PAYLOAD_LEN: Final[int] = 6  # BIP152 shortid

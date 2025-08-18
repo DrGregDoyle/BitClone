@@ -102,7 +102,9 @@ class Node:
 
     def recv_header(self, sock: socket.socket):
         header_bytes = self.recv_exact(sock, Wire.Header.TOTAL_LEN)
-        return Header.from_bytes(header_bytes)
+        temp_header = Header.from_bytes(header_bytes)
+        print(f"RECEIVED HEADER: {temp_header.to_json()}")
+        return temp_header
 
     def recv_message(self, sock: socket.socket) -> Message:
         """
@@ -112,6 +114,11 @@ class Node:
         # Get message data
         header = self.recv_header(sock)
         payload = self.recv_exact(sock, header.size)
+        # -- TESTING
+        print(f"HEADER SIZE: {header.size}")
+        print(f"PAYLOAD: {payload.hex()}")
+        print(f"PAYLOAD BYTESIZE: {len(payload)}")
+
         return self.parse_message(header, payload)
 
     def parse_message(self, header: Header, payload: bytes) -> Message:
@@ -119,6 +126,7 @@ class Node:
         Given a message Header a payload, we return the corresponding Message object
         """
         cls = Message.get_registered(header.command)
+        print(f"RECEIVED REGISTERED CLASS: {cls}")
         if cls is None:
             raise ValueError(f"Unknown message type {header.command}")
 
@@ -138,6 +146,9 @@ class Node:
         version_msg = self._build_version(host, port)
         verack_msg = VerAck()
         sock = None
+
+        # --- TESTING
+        print(f"CREATED VERSION PAYLOAD: {version_msg.payload().hex()}")
 
         # Handshake
         try:

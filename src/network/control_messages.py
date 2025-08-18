@@ -21,8 +21,11 @@ about the rest of the network:
 """
 from io import BytesIO
 
-from src.data import get_stream, read_little_int, read_stream, NetAddr, RejectType, BloomType, \
-    bytes_to_nibbles_string, NodeType, Wire
+from src.data.byte_stream import get_stream, read_stream, read_little_int
+from src.data.data_handling import bytes_to_nibbles_string
+from src.data.data_types import RejectType, BloomType, NodeType
+from src.data.formats import Wire
+from src.data.network_data import NetAddr
 from src.data.varint import write_compact_size, read_compact_size
 from src.network.message import Message
 
@@ -41,6 +44,8 @@ class EmptyMessage(Message):
     """
     Used for Messages with no payload
     """
+    IS_DATA = False
+    FIELDS = ()  # Empty payload dict
 
     def __init__(self):
         super().__init__()
@@ -49,41 +54,31 @@ class EmptyMessage(Message):
     def from_bytes(cls, byte_stream: bytes | BytesIO = b''):
         return cls()
 
-    @property
-    def command(self):
-        return self.__class__.command
-
     def payload(self) -> bytes:
         return b''
-
-    def payload_dict(self) -> dict:
-        return {}
 
 
 class PingPongParent(Message):
     """
-    The parent class for the Ping and Pong messages
+    Parent for ping/pong-style messages carrying a single uint64 nonce.
     """
+    IS_DATA = False
+    FIELDS = ("nonce",)  # auto payload_dict: {"nonce": <int>}
+
+    __slots__ = ("nonce",)
 
     def __init__(self, nonce: int):
-        super().__init__()
-        self.nonce = nonce
+        super().__init__(is_data=None)  # use class default IS_DATA
+        self.nonce = int(nonce)
 
     @classmethod
     def from_bytes(cls, bytes_stream: bytes | BytesIO):
         stream = get_stream(bytes_stream)
-        nonce = read_little_int(stream, _cmpct.NONCE_LEN, "nonce")
+        nonce = read_little_int(stream, _cmpct.NONCE_LEN, "ping/pong nonce")
         return cls(nonce)
-
-    @property
-    def command(self):
-        return self.__class__.command
 
     def payload(self):
         return self.nonce.to_bytes(_cmpct.NONCE_LEN, "little")
-
-    def payload_dict(self) -> dict:
-        return {"nonce": self.nonce}
 
 
 # --- CONTROL MESSAGES --- #
@@ -98,11 +93,18 @@ class Addr(Message):
     -----------------------------------------------------
     """
     COMMAND = "addr"
+    IS_DATA = False
+    FIELDS = ("addr_list",)
+
+    __slots__ = ("addr_list",)
 
     def __init__(self, addr_list: list[NetAddr]):
-        super().__init__()
+        super().__init__(is_data=self.IS_DATA)
+        # Check cap
+        if len(addr_list) > 1000:
+            raise ValueError("Addr message exceeds soft cap of 1000 entries")
+
         self.addr_list = addr_list
-        self.count = len(addr_list)
 
     @classmethod
     def from_bytes(cls, byte_stream: bytes | BytesIO):
@@ -113,29 +115,12 @@ class Addr(Message):
         count = read_compact_size(stream, "addr_count")
 
         # Get addrs
-        addr_list = []
-        for _ in range(count):
-            addr_list.append(NetAddr.from_bytes(stream))
+        addrs = [NetAddr.from_bytes(stream) for _ in range(count)]
 
-        return cls(addr_list)
+        return cls(addrs)
 
     def payload(self) -> bytes:
-        payload = write_compact_size(self.count)
-        for a in self.addr_list:
-            payload += a.to_bytes()
-        return payload
-
-    def payload_dict(self) -> dict:
-        # Collect addresses first
-        addr_dict = {}
-        for x in range(self.count):
-            temp_addr = self.addr_list[x]
-            addr_dict.update({f"net_addr{x}": temp_addr.to_dict()})
-        payload_dict = {
-            "count": self.count,
-            "addr_list": addr_dict
-        }
-        return payload_dict
+        return write_compact_size(len(self.addr_list)) + b''.join(a.to_bytes() for a in self.addr_list)
 
 
 class FeeFilter(Message):
@@ -147,6 +132,10 @@ class FeeFilter(Message):
     value represents a minimal fee and is expressed in satoshis per 1000 bytes.
     """
     COMMAND = "feefilter"
+    IS_DATA = False
+    FIELDS = ("feerate",)
+
+    __slots__ = ("feerate",)
 
     def __init__(self, feerate: int):
         super().__init__()
@@ -155,17 +144,11 @@ class FeeFilter(Message):
     @classmethod
     def from_bytes(cls, byte_stream: bytes | BytesIO):
         stream = get_stream(byte_stream)
-
         feerate = read_little_int(stream, _fltr.FEERATE_LEN, "feerate")
         return cls(feerate)
 
     def payload(self) -> bytes:
         return self.feerate.to_bytes(_fltr.FEERATE_LEN, "little")
-
-    def payload_dict(self) -> dict:
-        return {
-            "feerate": self.payload().hex()
-        }
 
 
 class FilterAdd(Message):
@@ -177,6 +160,10 @@ class FilterAdd(Message):
     Note: a filteradd message will not be accepted unless a filter was previously set with the filterload message.
     """
     COMMAND = "filteradd"
+    IS_DATA = False
+    FIELDS = ("element_bytes", "element")
+
+    __slots__ = ("element_bytes", "element")
 
     def __init__(self, element: bytes):
         super().__init__()
@@ -198,14 +185,8 @@ class FilterAdd(Message):
     def payload(self) -> bytes:
         return write_compact_size(self.element_bytes) + self.element
 
-    def payload_dict(self) -> dict:
-        return {
-            "element_bytes": self.element_bytes,
-            "element": self.element.hex()
-        }
 
-
-class FilterClear(Message):
+class FilterClear(EmptyMessage):
     """
     The filterclear message tells the receiving peer to remove a previously-set bloom filter. This also undoes the
     effect of setting the relay field in the version message to 0, allowing unfiltered access to inv messages
@@ -217,16 +198,6 @@ class FilterClear(Message):
     There is no payload in a filterclear message
     """
     COMMAND = "filterclear"
-
-    @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO = b''):
-        return cls()
-
-    def payload(self) -> bytes:
-        return b''
-
-    def payload_dict(self) -> dict:
-        return {}
 
 
 class FilterLoad(Message):
@@ -242,6 +213,10 @@ class FilterLoad(Message):
     -------------------------------------------------------------------------
     """
     COMMAND = "filterload"
+    IS_DATA = False
+    FIELDS = ("filter_bytes", "filter_bytes_size", "nhashfunc", "ntweak", "nflags")
+
+    __slots__ = ("filter_bytes", "filter_bytes_size", "nhashfunc", "ntweak", "nflags")
 
     def __init__(self, filter_bytes: bytes, nhashfunc: int, ntweak: int, nflags: int | BloomType):
         super().__init__()
@@ -339,6 +314,8 @@ class Reject(Message):
     ---------------------------------------------------------------------
     """
     COMMAND = "reject"
+    IS_DATA = False
+    FIELDS = ("reject_message", "ccode", "reason", "data")
 
     def __init__(self, message: str, ccode: RejectType | int, reason: str, data: bytes = b''):
         super().__init__()
@@ -378,15 +355,6 @@ class Reject(Message):
             len(encoded_reason)) + encoded_reason + self.data
         return payload
 
-    def payload_dict(self) -> dict:
-        payload_dict = {
-            "rejected_message": self.reject_message,
-            "ccode": self.ccode.name,
-            "reason": self.reason,
-            "data": self.data.hex()
-        }
-        return payload_dict
-
 
 class SendHeaders(EmptyMessage):
     """
@@ -423,6 +391,12 @@ class Version(Message):
     -----------------------------------------------------------------
     """
     COMMAND = "version"
+    IS_DATA = False
+    FIELDS = ("protocol_version", "services", "timestamp", "remote_net_addr", "local_net_addr", "nonce",
+              "user_agent", "last_block")
+
+    __slots__ = ("protocol_version", "services", "timestamp", "remote_net_addr", "local_net_addr", "nonce",
+                 "user_agent", "last_block")
 
     def __init__(self, version: int, services: int | NodeType, timestamp: int, remote_addr: NetAddr,
                  local_addr: NetAddr, nonce: int, user_agent: str, last_block: int):
@@ -457,7 +431,7 @@ class Version(Message):
         nonce = read_little_int(stream, _cmpct.NONCE_LEN, "nonce")
         user_agent_size = read_compact_size(stream, "user_agent_size")
         user_agent = read_stream(stream, user_agent_size, "user_agent").rstrip(b'\x00').decode("ascii")
-        last_block = read_little_int(stream, _block.PREV_HASH_LEN, "last_block")
+        last_block = read_little_int(stream, _block.LAST_BLOCK_LEN, "last_block")
 
         return cls(version, services, timestamp, remote_netaddr, local_netaddr, nonce, user_agent, last_block)
 
@@ -481,16 +455,24 @@ class Version(Message):
 
         return byte_string
 
-    def payload_dict(self) -> dict:
-        version_dict = {
-            "protocol_version": self.protocol_version,
-            "services": self.services.name,
-            "time": self.timestamp,
-            # "time": datetime.utcfromtimestamp(self.timestamp).strftime("%Y-%m-%d %H:%M:%S"),
-            "remote_netaddr": self.remote_net_addr.to_dict(),
-            "local_netaddr": self.local_net_addr.to_dict(),
-            "nonce": self.nonce,
-            "user_agent": self.user_agent,
-            "last_block": self.last_block
-        }
-        return version_dict
+    # def payload_dict(self) -> dict:
+    #     version_dict = {
+    #         "protocol_version": self.protocol_version,
+    #         "services": self.services.name,
+    #         "time": self.timestamp,
+    #         # "time": datetime.utcfromtimestamp(self.timestamp).strftime("%Y-%m-%d %H:%M:%S"),
+    #         "remote_netaddr": self.remote_net_addr.to_dict(),
+    #         "local_netaddr": self.local_net_addr.to_dict(),
+    #         "nonce": self.nonce,
+    #         "user_agent": self.user_agent,
+    #         "last_block": self.last_block
+    #     }
+    #     return version_dict
+
+
+# --- TESTING
+if __name__ == "__main__":
+    known_version_payload = bytes.fromhex(
+        "80110100090c00000000000088baa36800000000000000000000000000000000000000000000ffffc654ed0ad4e0090c0000000000000000000000000000000000000000000000000165e90b16e8760e102f5361746f7368693a32382e302e302f52e50d0001")
+    lmab_version = Version.from_bytes(known_version_payload)
+    print(f"LMAB VERSION: {lmab_version.to_json()}")
