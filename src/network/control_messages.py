@@ -45,7 +45,7 @@ class EmptyMessage(Message):
     Used for Messages with no payload
     """
     IS_DATA = False
-    FIELDS = ()  # Empty payload dict
+    __slots__ = ()
 
     def __init__(self):
         super().__init__()
@@ -63,7 +63,6 @@ class PingPongParent(Message):
     Parent for ping/pong-style messages carrying a single uint64 nonce.
     """
     IS_DATA = False
-    FIELDS = ("nonce",)  # auto payload_dict: {"nonce": <int>}
 
     __slots__ = ("nonce",)
 
@@ -94,7 +93,6 @@ class Addr(Message):
     """
     COMMAND = "addr"
     IS_DATA = False
-    FIELDS = ("addr_list",)
 
     __slots__ = ("addr_list",)
 
@@ -133,7 +131,6 @@ class FeeFilter(Message):
     """
     COMMAND = "feefilter"
     IS_DATA = False
-    FIELDS = ("feerate",)
 
     __slots__ = ("feerate",)
 
@@ -161,7 +158,6 @@ class FilterAdd(Message):
     """
     COMMAND = "filteradd"
     IS_DATA = False
-    FIELDS = ("element_bytes", "element")
 
     __slots__ = ("element_bytes", "element")
 
@@ -214,7 +210,6 @@ class FilterLoad(Message):
     """
     COMMAND = "filterload"
     IS_DATA = False
-    FIELDS = ("filter_bytes", "filter_bytes_size", "nhashfunc", "ntweak", "nflags")
 
     __slots__ = ("filter_bytes", "filter_bytes_size", "nhashfunc", "ntweak", "nflags")
 
@@ -315,7 +310,6 @@ class Reject(Message):
     """
     COMMAND = "reject"
     IS_DATA = False
-    FIELDS = ("reject_message", "ccode", "reason", "data")
 
     def __init__(self, message: str, ccode: RejectType | int, reason: str, data: bytes = b''):
         super().__init__()
@@ -392,8 +386,6 @@ class Version(Message):
     """
     COMMAND = "version"
     IS_DATA = False
-    FIELDS = ("protocol_version", "services", "timestamp", "remote_net_addr", "local_net_addr", "nonce",
-              "user_agent", "last_block")
 
     __slots__ = ("protocol_version", "services", "timestamp", "remote_net_addr", "local_net_addr", "nonce",
                  "user_agent", "last_block")
@@ -454,20 +446,6 @@ class Version(Message):
         byte_string += self.last_block.to_bytes(_block.PREV_HASH_LEN, "little")
 
         return byte_string
-
-    # def payload_dict(self) -> dict:
-    #     version_dict = {
-    #         "protocol_version": self.protocol_version,
-    #         "services": self.services.name,
-    #         "time": self.timestamp,
-    #         # "time": datetime.utcfromtimestamp(self.timestamp).strftime("%Y-%m-%d %H:%M:%S"),
-    #         "remote_netaddr": self.remote_net_addr.to_dict(),
-    #         "local_netaddr": self.local_net_addr.to_dict(),
-    #         "nonce": self.nonce,
-    #         "user_agent": self.user_agent,
-    #         "last_block": self.last_block
-    #     }
-    #     return version_dict
 
 
 # --- TESTING

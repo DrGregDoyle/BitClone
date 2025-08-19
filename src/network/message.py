@@ -66,23 +66,11 @@ def _to_display(v: Any) -> Any:
 class Message(Serializable, ABC):
     """
     All Bitcoin P2P messages inherit from this.
-
-    Features:
-      * Auto-registration by COMMAND.
-      * Automatic `is_data` default (override with class attr `IS_DATA`).
-      * One-shot build() to avoid recomputing payload & header multiple times.
-      * Boilerplate-free payload_dict() by declaring `FIELDS` on subclasses.
-
-    To get a zero-boilerplate `payload_dict()`:
-      - Add `FIELDS = ("attr1", "attr2", ...)` on your subclass.
-        Values will be normalized via `_to_display`.
-      - If you need custom formatting, override `payload_dict()` locally.
     """
     _registry: dict[str, type["Message"]] = {}
 
     # Subclasses may override:
     IS_DATA: bool = True  # control messages set this to False
-    FIELDS: tuple[str, ...] = ()  # names of attributes to show in payload_dict()
 
     __slots__ = ("magic_bytes", "is_data", "_built_header", "_built_payload", "_built_command")
 
@@ -110,10 +98,6 @@ class Message(Serializable, ABC):
         if cmd:
             Message._registry[cmd] = cls
 
-        # ensure FIELDS is a tuple (if mistakenly given as list)
-        if hasattr(cls, "FIELDS") and isinstance(cls.FIELDS, list):
-            cls.FIELDS = tuple(cls.FIELDS)
-
     # --- abstract hooks -----------------------------------------------------
 
     @classmethod
@@ -133,13 +117,16 @@ class Message(Serializable, ABC):
 
     def payload_dict(self) -> dict:
         """
-        Default implementation uses declared FIELDS to build a clean dict.
-        Override in subclasses when a custom view is required.
+        Use the __slots__ to get the names for the dict
+        #TODO: Refactor to use the __slots__ attributes
         """
-        if not self.FIELDS:
-            return {}
+        if hasattr(self, "__slots__"):
+            names = tuple(n for n in self.__slots__ if not n.startswith("_"))
+        else:
+            names = tuple(k for k in self.__dict__ if not k.startswith("_"))
+
         d: dict[str, Any] = {}
-        for name in self.FIELDS:
+        for name in names:
             # Support nested attr paths like "remote_net_addr.port" (optional nicety)
             obj: Any = self
             for part in name.split("."):

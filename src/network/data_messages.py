@@ -47,23 +47,23 @@ class InvParent(Message):
     |   Name        | data type |   format      | size  |
     -----------------------------------------------------
     |   Count       |   int     | compact size  | var   |
-    |   Inventory   | list      | *             | var   |
+    |   Items       | list      | *             | var   |
     -----------------------------------------------------
     """
+    __slots__ = ("items",)
 
-    def __init__(self, inventory: list[Inventory]):
+    def __init__(self, items: list[Inventory]):
         super().__init__()
-        self.count = len(inventory)
-        self.inventory = inventory
+        # Error checking
+        if len(items) > _inv.MAX_ENTRIES:
+            raise ValueError(f"Inventory list exceeds max entry value: {_inv.MAX_ENTRIES}")
+        self.items = items
 
     @classmethod
     def from_bytes(cls, byte_stream: bytes | BytesIO):
         stream = get_stream(byte_stream)
         inv_count = read_compact_size(stream, "inventory count")
-        inv_list = []
-        for _ in range(inv_count):
-            inv_bytes = read_stream(stream, _inv.ENTRY_LEN, "inventory")
-            inv_list.append(Inventory.from_bytes(inv_bytes))
+        inv_list = [Inventory.from_bytes(read_stream(stream, _inv.ENTRY_LEN, "inventory")) for _ in range(inv_count)]
         return cls(inv_list)
 
     @property
@@ -71,16 +71,7 @@ class InvParent(Message):
         return self.__class__.command
 
     def payload(self) -> bytes:
-        payload = write_compact_size(self.count)
-        for i in self.inventory:
-            payload += i.to_bytes()
-        return payload
-
-    def payload_dict(self) -> dict:
-        return {
-            "count": self.count,
-            "inventory": {f"inv_{x}": self.inventory[x].to_dict() for x in range(self.count)}
-        }
+        return write_compact_size(len(self.items)) + b''.join(item.to_bytes() for item in self.items)
 
 
 class GetBlockParent(Message):
@@ -95,11 +86,12 @@ class GetBlockParent(Message):
     |   hash_stop               |   bytes   | bytes         |   32  |
     -----------------------------------------------------------------
     """
+    __slots__ = ("version", "locator_hashes", "hash_stop")
 
     def __init__(self, version: int, locator_hashes: list[bytes], hash_stop: bytes = None):
         super().__init__()
         self.version = version
-        self.hash_count = len(locator_hashes)
+        # self.hash_count = len(locator_hashes)
         self.locator_hashes = locator_hashes
         self.hash_stop = bytes.fromhex("00" * 32) if hash_stop is None else hash_stop
 
@@ -129,22 +121,10 @@ class GetBlockParent(Message):
 
     def payload(self) -> bytes:
         payload = self.version.to_bytes(_block.VERSION_LEN, "little")
-        payload += write_compact_size(self.hash_count)
+        payload += write_compact_size(len(self.locator_hashes))
         payload += b''.join(self.locator_hashes)
         payload += self.hash_stop
         return payload
-
-    def payload_dict(self) -> dict:
-        locator_dict = {}
-        for x in range(self.hash_count):
-            locator_dict.update({f"locator_hash_{x}": self.locator_hashes[x].hex()})
-        payload_dict = {
-            "version": self.version,
-            "hash_count": self.hash_count,
-            "locator_hashes": locator_dict,
-            "hash_stop": self.hash_stop.hex()
-        }
-        return payload_dict
 
 
 # --- DATA MESSAGES --- #
