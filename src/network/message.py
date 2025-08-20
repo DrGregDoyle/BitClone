@@ -9,7 +9,7 @@ from typing import Any, Iterable
 
 from src.data import Serializable, Header, MAINNET
 
-__all__ = ["Message"]
+__all__ = ["Message", "EmptyMessage"]
 
 MB = MAINNET.magic
 
@@ -118,7 +118,6 @@ class Message(Serializable, ABC):
     def payload_dict(self) -> dict:
         """
         Use the __slots__ to get the names for the dict
-        #TODO: Refactor to use the __slots__ attributes
         """
         if hasattr(self, "__slots__"):
             names = tuple(n for n in self.__slots__ if not n.startswith("_"))
@@ -182,3 +181,20 @@ class Message(Serializable, ABC):
     @classmethod
     def get_registered(cls, command: str):
         return cls._registry.get(command)
+
+
+class EmptyMessage(Message):
+    """
+    Empty Message for various message types
+    """
+    __slots__ = ()
+
+    def __init__(self):
+        super().__init__()
+
+    @classmethod
+    def from_bytes(cls, byte_stream: bytes | BytesIO = b''):
+        return cls()
+
+    def payload(self) -> bytes:
+        return b''

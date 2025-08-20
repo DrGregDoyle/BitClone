@@ -27,7 +27,7 @@ from src.data.data_types import RejectType, BloomType, NodeType
 from src.data.formats import Wire
 from src.data.network_data import NetAddr
 from src.data.varint import write_compact_size, read_compact_size
-from src.network.message import Message
+from src.network.message import Message, EmptyMessage
 
 __all__ = ["Addr", "FeeFilter", "FilterAdd", "FilterClear", "FilterLoad", "GetAddr", "Ping", "Pong", "Reject",
            "SendHeaders", "VerAck", "Version"]
@@ -39,23 +39,6 @@ _block = Wire.BlockHeader
 
 
 # --- PARENT CLASSES FOR SIMILAR MESSAGES --- #
-
-class EmptyMessage(Message):
-    """
-    Used for Messages with no payload
-    """
-    IS_DATA = False
-    __slots__ = ()
-
-    def __init__(self):
-        super().__init__()
-
-    @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO = b''):
-        return cls()
-
-    def payload(self) -> bytes:
-        return b''
 
 
 class PingPongParent(Message):
@@ -194,6 +177,7 @@ class FilterClear(EmptyMessage):
     There is no payload in a filterclear message
     """
     COMMAND = "filterclear"
+    IS_DATA = False
 
 
 class FilterLoad(Message):
@@ -271,6 +255,7 @@ class GetAddr(EmptyMessage):
     There is no payload in a getaddr message.
     """
     COMMAND = "getaddr"
+    IS_DATA = False
 
 
 class Ping(PingPongParent):
@@ -358,10 +343,12 @@ class SendHeaders(EmptyMessage):
     There is no payload in a sendheaders message
     """
     COMMAND = "sendheaders"
+    IS_DATA = False
 
 
 class VerAck(EmptyMessage):
     COMMAND = "verack"
+    IS_DATA = False
 
 
 class Version(Message):

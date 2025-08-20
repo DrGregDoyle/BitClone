@@ -28,7 +28,7 @@ from src.block import Block, BlockTransactions, BlockTransactionsRequest, BlockH
 from src.data import Inventory, get_stream, read_stream, read_little_int, \
     little_bytes_to_binary_string, Wire
 from src.data.varint import write_compact_size, read_compact_size
-from src.network.message import Message
+from src.network.message import Message, EmptyMessage
 from src.tx import Transaction, PrefilledTransaction
 
 _inv = Wire.InventoryEntry
@@ -115,10 +115,6 @@ class GetBlockParent(Message):
 
         return cls(version, hash_list, stop_hash)
 
-    @property
-    def command(self) -> str:
-        raise NotImplementedError(f"{self.__class__.__name__} must implement command")
-
     def payload(self) -> bytes:
         payload = self.version.to_bytes(_block.VERSION_LEN, "little")
         payload += write_compact_size(len(self.locator_hashes))
@@ -134,6 +130,7 @@ class BlockMsg(Message):
     Will package and send a block
     """
     COMMAND = "block"
+    __slots__ = ("block",)
 
     def __init__(self, block: Block):
         super().__init__()
@@ -147,15 +144,13 @@ class BlockMsg(Message):
     def payload(self) -> bytes:
         return self.block.to_bytes()
 
-    def payload_dict(self) -> dict:
-        return self.block.to_dict()
-
 
 class BlockTxn(Message):
     """
     The BlockTxn message sends a BlockTransactions data structure, as described by BIP152.
     """
     COMMAND = "blocktxn"
+    __slots__ = ("block_tx",)
 
     def __init__(self, block_tx: BlockTransactions):
         super().__init__()
@@ -170,9 +165,6 @@ class BlockTxn(Message):
 
     def payload(self) -> bytes:
         return self.block_tx.to_bytes()
-
-    def payload_dict(self) -> dict:
-        return {"block_txn": self.block_tx.to_dict()}
 
 
 class CmpctBlock(Message):
@@ -189,15 +181,14 @@ class CmpctBlock(Message):
     ---------------------------------------------------------------------------------------------------------
     """
     COMMAND = "cmpctblock"
+    __slots__ = ("header", "nonce", "shortids", "prefilled_txs")
 
     def __init__(self, header: BlockHeader, nonce: int, shortids: list[bytes],
                  prefilled_txs: list[PrefilledTransaction]):
         super().__init__()
         self.header = header
         self.nonce = nonce
-        self.shortids_length = len(shortids)
         self.shortids = shortids
-        self.prefilled_tx_length = len(prefilled_txs)
         self.prefilled_txs = prefilled_txs
 
     @classmethod
@@ -224,22 +215,24 @@ class CmpctBlock(Message):
         parts = [
             self.header.to_bytes(),
             self.nonce.to_bytes(_shortid.NONCE_LEN, "little"),
-            write_compact_size(self.shortids_length),
+            write_compact_size(len(self.shortids)),
             b''.join(self.shortids),
-            write_compact_size(self.prefilled_tx_length),
+            write_compact_size(len(self.prefilled_txs)),
             b''.join([tx.to_bytes() for tx in self.prefilled_txs])
         ]
         return b''.join(parts)
 
     def payload_dict(self) -> dict:
+        shortid_len = len(self.shortids)
+        prefilled_tx_len = len(self.prefilled_txs)
         cmpctblock_dict = {
             "header": self.header.to_dict(),
             "nonce": self.nonce,
-            "shortids_length": self.shortids_length,
-            "shortids": {f'short_id_{x}': self.shortids[x].hex() for x in range(self.shortids_length)},
-            "prefilled_txs_length": self.prefilled_tx_length,
+            "shortids_length": shortid_len,
+            "shortids": {f'short_id_{x}': self.shortids[x].hex() for x in range(shortid_len)},
+            "prefilled_txs_length": prefilled_tx_len,
             "prefilled_txs": {f'prefilled_tx_{y}': self.prefilled_txs[y].to_dict() for y in
-                              range(self.prefilled_tx_length)}
+                              range(prefilled_tx_len)}
         }
         return cmpctblock_dict
 
@@ -254,6 +247,7 @@ class GetBlockTxn(Message):
     pchCommand == "getblocktxn".
     """
     COMMAND = "getblocktxn"
+    __slots__ = ("blocktxn_request",)
 
     def __init__(self, blocktxn_requestt: BlockTransactionsRequest):
         super().__init__()
@@ -268,9 +262,6 @@ class GetBlockTxn(Message):
 
     def payload(self) -> bytes:
         return self.blocktxn_requestt.to_bytes()
-
-    def payload_dict(self) -> dict:
-        return self.blocktxn_requestt.to_dict()
 
 
 class GetData(InvParent):
@@ -292,6 +283,7 @@ class Headers(Message):
     -------------------------------------------------
     """
     COMMAND = "headers"
+    __slots__ = ("headers",)
 
     def __init__(self, header_list: list[BlockHeader]):
         super().__init__()
@@ -319,22 +311,12 @@ class Headers(Message):
             to_bytes += h.to_bytes() + b'\x00'  # 80 byte header + 1 byte tx count set to 0
         return to_bytes
 
-    def payload_dict(self) -> dict:
-        header_dict = {}
-        for x in range(self.count):
-            header_dict.update({f"header_{x}": self.headers[x].to_dict()})
-        to_bytes_dict = {
-            "count": self.count,
-            "headers": header_dict
-        }
-        return to_bytes_dict
-
 
 class Inv(InvParent):
     COMMAND = "inv"
 
 
-class MemPool(Message):
+class MemPool(EmptyMessage):
     """
     The mempool message sends a request to a node asking for information about transactions it has verified but which
     have not yet confirmed. The response to receiving this message is an inv message containing the transaction
@@ -343,24 +325,6 @@ class MemPool(Message):
     No additional data is transmitted with this message.
     """
     COMMAND = "mempool"
-
-    def __init__(self):
-        super().__init__()
-
-    @classmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO):
-        stream = get_stream(byte_stream)
-
-        # byte stream should be empty
-        if len(stream) > 0:
-            raise ValueError("MemPool has no payload")
-        return cls()
-
-    def payload(self):
-        return b''
-
-    def payload_dict(self) -> dict:
-        return {}
 
 
 class MerkleBlock(Message):
@@ -377,14 +341,15 @@ class MerkleBlock(Message):
     -------------------------------------------------------------------------
     """
     COMMAND = "merkleblock"
+    __slots__ = ("blockheader", "tx_num", "hashes", "flags")
 
     def __init__(self, blockheader: BlockHeader, tx_num: int, hashes: list, flags: bytes):
         super().__init__()
         self.blockheader = blockheader
         self.tx_num = tx_num
-        self.hash_num = len(hashes)
+        # self.hash_num = len(hashes)
         self.hashes = hashes
-        self.flag_num = len(flags)
+        # self.flag_num = len(flags)
         self.flags = flags
 
     @classmethod
@@ -411,20 +376,22 @@ class MerkleBlock(Message):
         parts = [
             self.blockheader.to_bytes(),
             self.tx_num.to_bytes(_cmpct.TXNUM_LEN, "little"),
-            write_compact_size(self.hash_num),
+            write_compact_size(len(self.hashes)),
             b''.join(self.hashes),
-            write_compact_size(self.flag_num),
+            write_compact_size(len(self.flags)),
             self.flags
         ]
         return b''.join(parts)
 
     def payload_dict(self) -> dict:
+        hash_num = len(self.hashes)
+
         merkleblock_dict = {
             "header": self.blockheader.to_dict(),
             "tx_num": self.tx_num,
-            "hash_num": self.hash_num,
-            "hashes": {f"hash_{x}": self.hashes[x].hex() for x in range(self.hash_num)},
-            "flag_num": self.flag_num,
+            "hash_num": hash_num,
+            "hashes": {f"hash_{x}": self.hashes[x].hex() for x in range(hash_num)},
+            "flag_num": len(self.flags),
             "flags": little_bytes_to_binary_string(self.flags)  # Little endian display
         }
         return merkleblock_dict
@@ -444,6 +411,7 @@ class SendCompact(Message):
     -------------------------------------------------------------
     """
     COMMAND = "sendcmpct"
+    __slots__ = ("announce", "version")
 
     def __init__(self, announce: int, version: int):
         # Error checking
@@ -474,18 +442,13 @@ class SendCompact(Message):
         return self.announce.to_bytes(_cmpct.ANNOUNCE_LEN, "little") + self.version.to_bytes(_cmpct.VERSION_LEN,
                                                                                              "little")
 
-    def payload_dict(self) -> dict:
-        return {
-            "announce": self.announce,
-            "version": self.version
-        }
-
 
 class TxMsg(Message):
     """
     Will package and send a tx
     """
     COMMAND = "tx"
+    __slots__ = ("tx",)
 
     def __init__(self, tx: Transaction):
         super().__init__()
@@ -498,6 +461,3 @@ class TxMsg(Message):
 
     def payload(self) -> bytes:
         return self.tx.to_bytes()
-
-    def payload_dict(self) -> dict:
-        return self.tx.to_dict()
