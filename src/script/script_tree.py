@@ -15,11 +15,12 @@ class Leaf:
     """
     Constructed with the corresponding script for the leaf
     """
-    __slots__ = ("leaf_script", "leaf_hash")
+    __slots__ = ("leaf_script", "leaf_hash", "version_byte")
 
-    def __init__(self, leaf_script: bytes):
+    def __init__(self, leaf_script: bytes, version_byte: bytes = _tap.VERSION_BYTE):
         self.leaf_script = leaf_script
-        self.leaf_hash = tapleaf_hash(leaf_script)
+        self.version_byte = version_byte
+        self.leaf_hash = tapleaf_hash(leaf_script, version_byte)
 
 
 class Branch:
@@ -47,13 +48,34 @@ class ScriptTree:
     """
     Given a list of scripts, create the canonical Taproot Merkle tree using Leaf and Branch objects.
     """
-    __slots__ = ("balanced", "scripts", "leaves", "branches", "root")
+    __slots__ = ("balanced", "scripts", "leaves", "branches", "root", "_hashes", "_index_by_script")
 
-    def __init__(self, scripts: list[bytes], balanced=True):
+    def __init__(self, scripts: list[bytes], balanced: bool = True,
+                 version_byte: bytes | list[bytes] = _tap.VERSION_BYTE):
         self.balanced = balanced
         self.scripts = scripts
-        self.leaves = [Leaf(s) for s in self.scripts]
-        self.branches = []
+
+        # Support per-leaf version byte
+        if isinstance(version_byte, bytes):
+            self.leaves = [Leaf(s, version_byte) for s in scripts]
+        else:
+            # List of version bytes
+            if len(version_byte) != len(scripts):
+                raise ValueError("List of version bytes must be same length as list of scripts")
+            self.leaves = [Leaf(s, v) for s, v in zip(scripts, version_byte)]
+
+        # Get hash list
+        self._hashes = [lf.leaf_hash for lf in self.leaves]
+
+        # Get script indices
+        self._index_by_script = {}
+        for i, s in enumerate(scripts):
+            if s in self._index_by_script:
+                self._index_by_script[s] = None
+            else:
+                self._index_by_script[s] = i
+
+        self.branches: list[Branch] = []
         self.root = self._build_tree(self.leaves)
 
     def _build_tree(self, hash_list: list):
@@ -77,21 +99,36 @@ class ScriptTree:
         if len(leaves) == 1:
             return leaves[0].leaf_hash
 
-        level = leaves[:]
+        # Work with hashes to avoid tiny object churn
+        level = [lf.leaf_hash for lf in leaves]
         while len(level) > 1:
             next_level = []
-            for i in range(0, len(level), 2):
-                left = level[i]
-                if i + 1 < len(level):
-                    right = level[i + 1]
+            i = 0
+            n = len(level)
+            while i < n:
+                if i + 1 < n:
+                    br = Branch(level[i], level[i + 1])
+                    self.branches.append(br)
+                    next_level.append(br.branch_hash)
+                    i += 2
                 else:
-                    # If odd number of nodes, duplicate the last (Taproot/Bitcoin convention)
-                    right = left
-                branch = Branch(left, right)
-                self.branches.append(branch)
-                next_level.append(branch)
+                    # carry last hash up (no duplication)
+                    next_level.append(level[i])
+                    i += 1
             level = next_level
-        return level[0].branch_hash  # root
+        return level[0]
+        #     for i in range(0, len(level), 2):
+        #         left = level[i]
+        #         if i + 1 < len(level):
+        #             right = level[i + 1]
+        #         else:
+        #             # If odd number of nodes, duplicate the last (Taproot/Bitcoin convention)
+        #             right = left
+        #         branch = Branch(left, right)
+        #         self.branches.append(branch)
+        #         next_level.append(branch)
+        #     level = next_level
+        # return level[0].branch_hash  # root
 
     def _build_unbalanced_tree(self, leaves: list[Leaf]):
         """
@@ -279,26 +316,34 @@ if __name__ == "__main__":
     test_leaves = [leaf_script1, leaf_script2, leaf_script3, leaf_script4, leaf_script5]
 
     test_tree = ScriptTree(test_leaves, balanced=False)
+    balanced_tree = ScriptTree(test_leaves, balanced=True)
 
-    mp1 = test_tree.get_merkle_path(leaf_script1)
-    mp2 = test_tree.get_merkle_path(leaf_script2)
-    mp3 = test_tree.get_merkle_path(leaf_script3)
-    mp4 = test_tree.get_merkle_path(leaf_script4)
-    mp5 = test_tree.get_merkle_path(leaf_script5)
-
-    _paths = [mp1, mp2, mp3, mp4, mp5]
-    _scripts = [leaf_script1, leaf_script2, leaf_script3, leaf_script4, leaf_script5]
-
-    for x in range(len(_paths)):
-        temp_path = _paths[x]
-        temp_script = _scripts[x]
-        calc_root = test_tree.eval_merkle_path(temp_script, temp_path)
-        print(f"MERKLE PATH {x + 1} SUCCESSFUL: {calc_root == test_tree.root}")
-    print("\n\n")
+    # mp1 = test_tree.get_merkle_path(leaf_script1)
+    # mp2 = test_tree.get_merkle_path(leaf_script2)
+    # mp3 = test_tree.get_merkle_path(leaf_script3)
+    # mp4 = test_tree.get_merkle_path(leaf_script4)
+    # mp5 = test_tree.get_merkle_path(leaf_script5)
+    #
+    # _paths = [mp1, mp2, mp3, mp4, mp5]
+    # _scripts = [leaf_script1, leaf_script2, leaf_script3, leaf_script4, leaf_script5]
+    #
+    # for x in range(len(_paths)):
+    #     temp_path = _paths[x]
+    #     temp_script = _scripts[x]
+    #     calc_root = test_tree.eval_merkle_path(temp_script, temp_path)
+    #     print(f"MERKLE PATH {x + 1} SUCCESSFUL: {calc_root == test_tree.root}")
+    # print("\n\n")
 
     # Unbalanced test tree from learnmeabitcoin.com
     print("=== UNBALANCED TREE ===")
     print(f"MERKLE ROOT: {test_tree.root.hex()}")
     print(f"LEAF HASHES: {[l.leaf_hash.hex() for l in test_tree.leaves]}")
     print(f"BRANCHES: {[b.branch_hash.hex() for b in test_tree.branches]}")
+    print("===" * 80)
+
+    # Balanced tree
+    print("=== BALANCED TREE ===")
+    print(f"MERKLE ROOT: {balanced_tree.root.hex()}")
+    print(f"LEAF HASHES: {[l.leaf_hash.hex() for l in balanced_tree.leaves]}")
+    print(f"BRANCHES: {[b.branch_hash.hex() for b in balanced_tree.branches]}")
     print("===" * 80)
