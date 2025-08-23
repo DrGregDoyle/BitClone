@@ -3,34 +3,26 @@ SigHash Enum class
 """
 from enum import IntEnum
 
-from src.script.stack import BTCNum
-
 __all__ = ["SigHash"]
 
 
 class SigHash(IntEnum):
-    DEFAULT = 0
-    ALL = 1
-    NONE = 2
-    SINGLE = 3
-    ALL_ANYONECANPAY = -127  # (0x81 interpreted as signed int)
-    NONE_ANYONECANPAY = -126  # (0x82 interpreted as signed int)
-    SINGLE_ANYONECANPAY = -125  # (0x83 interpreted as signed int)
+    DEFAULT = 0x00
+    ALL = 0x01
+    NONE = 0x02
+    SINGLE = 0x03
+    ALL_ANYONECANPAY = 0x81  # (0x81 interpreted as signed int)
+    NONE_ANYONECANPAY = 0x82  # (0x82 interpreted as signed int)
+    SINGLE_ANYONECANPAY = 0x83  # (0x83 interpreted as signed int)
 
     def to_byte(self) -> bytes:
         """
-        Encodes the sighash integer using Bitcoin numeric encoding (BTCNum).
+        Encodes the sighash integer using Bitcoin numeric encoding
         """
-        if self.value != 0:
-            btc_num = BTCNum(int(self.value))
-            return btc_num.bytes
-        return b'\x00'  # SIGHASH_DEFAULT
+        return self.value.to_bytes(1, "little")
 
     def for_hashing(self):
         """
         Encodes the sighash integer using BTCNum encoding and padded to 4 bytes
         """
-        if self.value != 0:
-            btc_num = BTCNum(int(self.value)).padded(4)
-            return btc_num
-        return bytes.fromhex("00" * 4)
+        return self.value.to_bytes(4, "little")

@@ -1,7 +1,7 @@
 # src/data/formats.py
 from typing import Final
 
-__all__ = ["Hashes", "Keys", "Wire", "TxFmt", "AddressFmt", "Display"]
+__all__ = ["Hashes", "Keys", "Wire", "TxFmt", "AddressFmt", "Display", "Taproot"]
 
 
 class Hashes:
@@ -21,6 +21,14 @@ class Keys:
     SIG_COMPACT: Final[int] = 64
     SIG_RECOVERABLE: Final[int] = 65
     ENTROPY_BITS: Final[int] = 256
+
+
+class Taproot:
+    TAPLEAF = b'TapLeaf'
+    TAPBRANCH = b'TapBranch'
+    TAPTWEAK = b'TapTweak'
+    VERSION_BYTE = b'\xc0'
+    HASH_SIZE = 32
 
 
 class Display:

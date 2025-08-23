@@ -15,7 +15,8 @@ from src.crypto import ripemd160, sha1, sha256, hash160, hash256
 from src.data.utxo import UTXO
 from src.logger import get_logger
 from src.script.op_codes import OPCODES
-from src.script.signature_engine import SignatureEngine, SigHash
+from src.script.sighash import SigHash
+from src.script.signature_engine import SignatureEngine
 from src.script.stack import BTCStack, BTCNum
 from src.tx import Transaction
 
@@ -491,7 +492,7 @@ class ScriptEngine:
     def _op_else(self, if_stack, execution_enabled):
         """
         OP_ELSE | 0x67
-        Marks an else block. The else block is executed if the if block is not executed.
+        Marks an else block. The else block is executed if the IF block is not executed.
         """
         if not if_stack:
             raise ValueError("OP_ELSE without matching OP_IF/OP_NOTIF")
@@ -742,7 +743,7 @@ class ScriptEngine:
     def _op_not(self):
         """
         OP_NOT | 0x91
-        If the input is 0 or 1, it is flipped. Otherwise the output will be 0.
+        If the input is 0 or 1, it is flipped. Otherwise, the output will be 0.
         """
         item = self.stack.pop()
         self.stack.push_bool(item == b'')
@@ -773,7 +774,7 @@ class ScriptEngine:
     def _op_booland(self):
         """
         OP_BOOLAND | 0x9a
-        If both a and b are not 0, the output is 1. Otherwise 0.
+        If both a and b are not 0, the output is 1. Otherwise, 0.
         """
         a, b = self.stack.pop_n(2)
         self.stack.push_bool(a != b'' and b != b'')
@@ -781,7 +782,7 @@ class ScriptEngine:
     def _op_boolor(self):
         """
         OP_BOOLOR |  0x9b
-        If a or b is not 0, the output is 1. Otherwise 0.
+        If a or b is not 0, the output is 1. Otherwise, 0.
         """
         a, b = self.stack.pop_n(2)
         self.stack.push_bool(a != b'' or b != b'')
@@ -845,7 +846,7 @@ class ScriptEngine:
     def _op_min(self):
         """
         OP_MIN | 0xa3
-        Returns the smaller of a and b.
+        Returns the smallest of a and b.
         """
         a, b = self.stack.pop_nums(2)
         self.stack.push(min(a, b).bytes)
@@ -853,7 +854,7 @@ class ScriptEngine:
     def _op_max(self):
         """
         OP_MAX | 0xa4
-        Returns the larger of a and b.
+        Returns the largest of a and b.
         """
         a, b = self.stack.pop_nums(2)
         self.stack.push(max(a, b).bytes)
@@ -910,7 +911,7 @@ class ScriptEngine:
     def _op_codeseparator(self):
         """
         OP_CODESEPARATOR |  0xab
-        All of the signature checking words will only match signatures to the data after the most recently-executed
+        All the signature checking words will only match signatures to the data after the most recently-executed
         OP_CODESEPARATOR.
         """
         pass

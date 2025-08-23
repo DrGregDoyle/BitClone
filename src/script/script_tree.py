@@ -4,16 +4,12 @@ A class for Taproot merkle trees
 from __future__ import annotations
 
 from src.crypto import tagged_hash_function
+from src.data.formats import Taproot
 from src.data.varint import write_compact_size
 
 __all__ = ["Leaf", "Branch", "ScriptTree"]
 
-# --- TAPROOT CONSTANTS
-VERSION_BYTE = b'\xc0'
-LEAF_TAG = b'TapLeaf'
-BRANCH_TAG = b'TapBranch'
-TWEAK_TAG = b'TapTweak'
-HASH_SIZE = 32
+_tap = Taproot
 
 
 class Leaf:
@@ -23,10 +19,10 @@ class Leaf:
 
     def __init__(self, leaf_script: bytes):
         self.leaf_script = leaf_script
-        self.leaf_hash = tagged_hash_function(encoded_data=self._encode_data(leaf_script), tag=LEAF_TAG)
+        self.leaf_hash = tagged_hash_function(encoded_data=self._encode_data(leaf_script), tag=_tap.TAPLEAF)
 
     def _encode_data(self, leaf_script: bytes):
-        return VERSION_BYTE + write_compact_size(len(leaf_script)) + leaf_script
+        return _tap.VERSION_BYTE + write_compact_size(len(leaf_script)) + leaf_script
 
 
 class Branch:
@@ -53,7 +49,7 @@ class Branch:
 
         self.left = min(_hash1, _hash2)
         self.right = max(_hash1, _hash2)
-        self.branch_hash = tagged_hash_function(self.left + self.right, BRANCH_TAG)
+        self.branch_hash = tagged_hash_function(self.left + self.right, _tap.TAPBRANCH)
 
 
 class ScriptTree:
@@ -214,11 +210,11 @@ class ScriptTree:
         merkle path
         """
         # Verify merkle_path size
-        if len(merkle_path) % HASH_SIZE != 0:
-            raise ValueError(f"Merkle path must be divisible by {HASH_SIZE}")
+        if len(merkle_path) % _tap.HASH_SIZE != 0:
+            raise ValueError(f"Merkle path must be divisible by {_tap.HASH_SIZE}")
 
         # Break merkle_path into 32-byte chunks
-        sibling_hashes = [merkle_path[i:i + HASH_SIZE] for i in range(0, len(merkle_path), HASH_SIZE)]
+        sibling_hashes = [merkle_path[i:i + _tap.HASH_SIZE] for i in range(0, len(merkle_path), _tap.HASH_SIZE)]
 
         # Get leaf hash
         target_leaf = Leaf(leaf_script)
@@ -240,12 +236,12 @@ if __name__ == "__main__":
     leaf_script4 = bytes.fromhex("5487")
     leaf_script5 = bytes.fromhex("5587")
 
-    leaves = [leaf_script1, leaf_script2, leaf_script3, leaf_script4, leaf_script5]
+    test_leaves = [leaf_script1, leaf_script2, leaf_script3, leaf_script4, leaf_script5]
 
-    test_tree = ScriptTree(leaves, balanced=False)
+    test_tree = ScriptTree(test_leaves, balanced=False)
     test_merkle_path = test_tree.get_merkle_path(leaf_script3)
 
-    balanced_tree = ScriptTree(leaves, balanced=True)
+    balanced_tree = ScriptTree(test_leaves, balanced=True)
     test_balanced_merklepath = balanced_tree.get_merkle_path(leaf_script3)
 
     # Unbalanced test tree from learnmeabitcoin.com
