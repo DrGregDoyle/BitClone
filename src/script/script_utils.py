@@ -6,7 +6,7 @@ from src.data import Taproot, write_compact_size
 
 _tap = Taproot
 
-__all__ = ["tapleaf_hash", "tapbranch_hash"]
+__all__ = ["tapleaf_hash", "tapbranch_hash", "taptweak_hash"]
 
 
 def tapleaf_hash(leaf_script: bytes, version_byte: bytes = _tap.VERSION_BYTE):
@@ -19,3 +19,7 @@ def tapleaf_hash(leaf_script: bytes, version_byte: bytes = _tap.VERSION_BYTE):
 
 def tapbranch_hash(data: bytes):
     return tagged_hash_function(data, tag=_tap.TAPBRANCH)
+
+
+def taptweak_hash(data: bytes):
+    return tagged_hash_function(data, tag=_tap.TAPTWEAK)
