@@ -3,10 +3,9 @@ The ScriptPubKey class that provides factory methods for different script types.
 """
 
 from src.crypto import sha256, hash160
-from src.data import encode_base58check, encode_bech32
+from src.data import encode_base58check, encode_bech32, ScriptType
 from src.logger import get_logger
 from src.script.script_parser import ScriptParser
-from src.script.script_type import ScriptType
 
 logger = get_logger(__name__)
 

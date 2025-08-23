@@ -2,9 +2,9 @@
 The various ENUM classes indicating different types
 """
 
-from enum import IntEnum, IntFlag
+from enum import IntEnum, IntFlag, Enum
 
-__all__ = ["InvType", "BloomType", "RejectType", "NodeType"]
+__all__ = ["InvType", "BloomType", "RejectType", "NodeType", "ScriptType"]
 
 
 class InvType(IntEnum):
@@ -63,6 +63,17 @@ class NodeType(IntFlag):
         # Whenever NodeType(value) is called with a value not in the enum,
         # fall back to NONE instead of ValueError.
         return cls.NONE
+
+
+class ScriptType(Enum):
+    P2PK = "P2PK"
+    P2PKH = "P2PKH"
+    P2MS = "P2MS"
+    P2SH = "P2SH"
+    P2WPKH = "P2WPKH"
+    P2WSH = "P2WSH"
+    P2TR = "P2TR"
+    CUSTOM = "CUSTOM"
 
 
 # --- TESTING

@@ -1,9 +1,14 @@
 """
 The ScriptSig class that provides factory methods for different script types.
+
+NOTES:
+    -The ScripSig is the UNLOCKING code for a previous output
+    -The ScriptSig is tied to particular ScriptPubKey on an output
+    -ScriptSig is used to unlock legacy ScriptPubKey types, e.g: P2PK, P2PKH, P2MS, P2SH
 """
+from src.data import ScriptType
 from src.logger import get_logger
 from src.script.script_parser import ScriptParser
-from src.script.script_type import ScriptType
 from src.script.scriptpubkey_factory import ScriptPubKey
 
 logger = get_logger(__name__)
@@ -16,12 +21,11 @@ class ScriptSig:
     # --- COMMON OPCODES
     OP_0 = b'\x00'
 
-    def __init__(self, script_type: ScriptType, *args, testnet: bool = False):
+    def __init__(self, script_type: ScriptType, *args):
         # Internals
         self._parser = ScriptParser()
 
         self.script_type = script_type
-        self.testnet = testnet
 
         # Map script types to their handler functions
         handlers = {
@@ -29,10 +33,6 @@ class ScriptSig:
             ScriptType.P2PKH: self._handle_p2pkh,
             ScriptType.P2MS: self._handle_p2ms,
             ScriptType.P2SH: self._handle_p2sh,
-            # ScriptType.P2WPKH: self._handle_p2wpkh,
-            # ScriptType.P2WSH: self._handle_p2wsh,
-            # ScriptType.P2TR: self._handle_p2tr,
-            # ScriptType.CUSTOM: self._handle_custom
         }
 
         handler = handlers.get(self.script_type)
@@ -107,25 +107,26 @@ class ScriptSig:
 
 class ScriptSigFactory:
     @staticmethod
-    def p2pk(sig: bytes, testnet: bool = False) -> ScriptSig:
-        return ScriptSig(ScriptType.P2PK, sig, testnet=testnet)
+    def p2pk(sig: bytes) -> ScriptSig:
+        return ScriptSig(ScriptType.P2PK, sig)
 
     @staticmethod
-    def p2pkh(sig: bytes, pubkey: bytes, testnet: bool = False) -> ScriptSig:
-        return ScriptSig(ScriptType.P2PKH, sig, pubkey, testnet=testnet)
+    def p2pkh(sig: bytes, pubkey: bytes) -> ScriptSig:
+        return ScriptSig(ScriptType.P2PKH, sig, pubkey)
 
     @staticmethod
-    def p2ms(signatures: list[bytes], testnet: bool = False) -> ScriptSig:
-        return ScriptSig(ScriptType.P2MS, signatures, testnet=testnet)
+    def p2ms(signatures: list[bytes]) -> ScriptSig:
+        return ScriptSig(ScriptType.P2MS, signatures)
 
     @staticmethod
     def p2sh(items: list[bytes], redeem_script: ScriptPubKey, testnet: bool = False) -> ScriptSig:
-        return ScriptSig(ScriptType.P2SH, items, redeem_script, testnet=testnet)
+        return ScriptSig(ScriptType.P2SH, items, redeem_script)
 
-    # Placeholder methods for future SegWit and Taproot support
-    # @staticmethod
-    # def p2wpkh(...): ...
-    # @staticmethod
-    # def p2wsh(...): ...
-    # @staticmethod
-    # def p2tr(...): ...
+
+# --- TESTING
+if __name__ == "__main__":
+    ss_factory = ScriptSigFactory()
+    test_uncompressed_pubkey = bytes.fromhex(
+        "049464205950188c29d377eebca6535e0f3699ce4069ecd77ffebfbd0bcf95e3c134cb7d2742d800a12df41413a09ef87a80516353a2f0a280547bb5512dc03da8")
+    p2pk_scriptsig = ss_factory.p2pk(test_uncompressed_pubkey)
+    print(f"P2PK SCRIPTSIG: {p2pk_scriptsig.asm}")

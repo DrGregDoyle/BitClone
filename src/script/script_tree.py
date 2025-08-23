@@ -3,9 +3,8 @@ A class for Taproot merkle trees
 """
 from __future__ import annotations
 
-from src.crypto import tagged_hash_function
 from src.data.formats import Taproot
-from src.data.varint import write_compact_size
+from src.script.script_utils import tapleaf_hash, tapbranch_hash
 
 __all__ = ["Leaf", "Branch", "ScriptTree"]
 
@@ -19,37 +18,28 @@ class Leaf:
 
     def __init__(self, leaf_script: bytes):
         self.leaf_script = leaf_script
-        self.leaf_hash = tagged_hash_function(encoded_data=self._encode_data(leaf_script), tag=_tap.TAPLEAF)
-
-    def _encode_data(self, leaf_script: bytes):
-        return _tap.VERSION_BYTE + write_compact_size(len(leaf_script)) + leaf_script
+        self.leaf_hash = tapleaf_hash(leaf_script)
 
 
 class Branch:
-    """
-    Given a pair of Branch or Leaf objects, we sort them lexicographically and store the branch hash
-    """
-    branch_hash = None
+    """Lexicographically ordered branch of two 32-byte hashes (Leaf/Branch/bytes)."""
+    __slots__ = ("branch_hash",)
 
-    def __init__(self, hash_1: bytes | Leaf | "Branch", hash_2: bytes | Leaf | "Branch"):
-        # Extract the actual hash from each input
-        if isinstance(hash_1, Leaf):
-            _hash1 = hash_1.leaf_hash
-        elif isinstance(hash_1, Branch):
-            _hash1 = hash_1.branch_hash
-        else:
-            _hash1 = hash_1
+    def __init__(self, a: bytes | Leaf | "Branch", b: bytes | Leaf | "Branch"):
+        # Extract 32-byte hashes
+        h1 = a.leaf_hash if isinstance(a, Leaf) else (a.branch_hash if isinstance(a, Branch) else a)
+        h2 = b.leaf_hash if isinstance(b, Leaf) else (b.branch_hash if isinstance(b, Branch) else b)
 
-        if isinstance(hash_2, Leaf):
-            _hash2 = hash_2.leaf_hash
-        elif isinstance(hash_2, Branch):
-            _hash2 = hash_2.branch_hash
-        else:
-            _hash2 = hash_2
+        h1 = bytes(h1)
+        h2 = bytes(h2)
+        if len(h1) != 32 or len(h2) != 32:
+            raise ValueError("Branch children must be 32-byte hashes")
 
-        self.left = min(_hash1, _hash2)
-        self.right = max(_hash1, _hash2)
-        self.branch_hash = tagged_hash_function(self.left + self.right, _tap.TAPBRANCH)
+        # Lexicographic order (single comparison)
+        left, right = (h1, h2) if h1 <= h2 else (h2, h1)
+
+        # BIP341 TapBranch(tagged_hash) over concatenation
+        self.branch_hash = tapbranch_hash(left + right)
 
 
 class ScriptTree:
@@ -67,6 +57,10 @@ class ScriptTree:
     def _build_tree(self, hash_list: list):
         # Get copy of leaves
         leaves = hash_list.copy()
+
+        # Error checking
+        if not leaves:
+            raise ValueError("Cannot build Merkle tree from empty leaves")
 
         # Build tree based on balanced flag
         if self.balanced:
@@ -101,23 +95,24 @@ class ScriptTree:
         """
         Build unbalanced tree - first two leaves make up branch 1, then every subsequent leaf + previous branch makes
         the next branch. The final branch is the merkle root
-
         """
+        # Store length
+        n = len(leaves)
+
         # Check for single leaf
-        if len(leaves) == 1:
+        if n == 1:
             return leaves[0].leaf_hash
 
-        # Repeat until list is empty
-        current_branch = None
-        while len(leaves) > 0:
-            if not self.branches:
-                hash1, hash2 = leaves.pop(0), leaves.pop(0)
-                current_branch = Branch(hash1, hash2)
-            else:
-                leaf_hash = leaves.pop(0)
-                current_branch = Branch(leaf_hash, current_branch)
-            self.branches.append(current_branch)
-        return current_branch.branch_hash
+        # Initial branch: leaves[0] and leaves[1]
+        current = Branch(leaves[0], leaves[1])
+        self.branches.append(current)
+
+        # Fold remaining leaves into the current branch
+        for i in range(2, n):
+            current = Branch(leaves[i], current)  # preserve original left=leaf, right=prev-branch order
+            self.branches.append(current)
+
+        return current.branch_hash
 
     def get_merkle_path(self, leaf_script: bytes):
         """

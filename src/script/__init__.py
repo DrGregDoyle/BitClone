@@ -6,7 +6,6 @@ from src.script.op_codes import OPCODES
 from src.script.script_engine import *
 from src.script.script_parser import *
 from src.script.script_tree import *
-from src.script.script_type import *
 from src.script.script_validator import *
 from src.script.scriptpubkey_factory import *
 from src.script.scriptsig_factory import *
