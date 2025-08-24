@@ -13,13 +13,13 @@ _tap = Taproot
 
 class Leaf:
     """
-    Constructed with the corresponding script for the leaf
+    We create a serialized leaf from a given leaf_script.
     """
     __slots__ = ("leaf_script", "leaf_hash", "version_byte")
 
     def __init__(self, leaf_script: bytes, version_byte: bytes = _tap.VERSION_BYTE):
-        self.leaf_script = leaf_script
         self.version_byte = version_byte
+        self.leaf_script = leaf_script
         self.leaf_hash = tapleaf_hash(leaf_script, version_byte)
 
 
@@ -50,31 +50,10 @@ class ScriptTree:
     """
     __slots__ = ("balanced", "scripts", "leaves", "branches", "root", "_hashes", "_index_by_script")
 
-    def __init__(self, scripts: list[bytes], balanced: bool = True,
-                 version_byte: bytes | list[bytes] = _tap.VERSION_BYTE):
+    def __init__(self, scripts: list[bytes], balanced: bool = True, version_byte: bytes = _tap.VERSION_BYTE):
         self.balanced = balanced
         self.scripts = scripts
-
-        # Support per-leaf version byte
-        if isinstance(version_byte, bytes):
-            self.leaves = [Leaf(s, version_byte) for s in scripts]
-        else:
-            # List of version bytes
-            if len(version_byte) != len(scripts):
-                raise ValueError("List of version bytes must be same length as list of scripts")
-            self.leaves = [Leaf(s, v) for s, v in zip(scripts, version_byte)]
-
-        # Get hash list
-        self._hashes = [lf.leaf_hash for lf in self.leaves]
-
-        # Get script indices
-        self._index_by_script = {}
-        for i, s in enumerate(scripts):
-            if s in self._index_by_script:
-                self._index_by_script[s] = None
-            else:
-                self._index_by_script[s] = i
-
+        self.leaves = [Leaf(s, version_byte) for s in self.scripts]
         self.branches: list[Branch] = []
         self.root = self._build_tree(self.leaves)
 
@@ -117,23 +96,13 @@ class ScriptTree:
                     i += 1
             level = next_level
         return level[0]
-        #     for i in range(0, len(level), 2):
-        #         left = level[i]
-        #         if i + 1 < len(level):
-        #             right = level[i + 1]
-        #         else:
-        #             # If odd number of nodes, duplicate the last (Taproot/Bitcoin convention)
-        #             right = left
-        #         branch = Branch(left, right)
-        #         self.branches.append(branch)
-        #         next_level.append(branch)
-        #     level = next_level
-        # return level[0].branch_hash  # root
 
-    def _build_unbalanced_tree(self, leaves: list[Leaf]):
+    def _build_unbalanced_tree(self, leaves: list[Leaf]) -> bytes:
         """
-        Build unbalanced tree - first two leaves make up branch 1, then every subsequent leaf + previous branch makes
-        the next branch. The final branch is the merkle root
+        Unbalanced Merkle:
+          - First two leaves form the initial branch.
+          - Each subsequent leaf combines with the previous branch to form a new branch.
+        Returns the root hash (bytes).
         """
         # Store length
         n = len(leaves)
@@ -158,11 +127,12 @@ class ScriptTree:
         We return the concatenation of the merkle path which yields the merkle root of the class
         """
         # Check script
-        if leaf_script not in self.scripts:
-            raise ValueError(f"Given leaf script not in scripts list: {leaf_script}")
+        try:
+            idx = self.scripts.index(leaf_script)
+        except ValueError:
+            raise ValueError(f"Given leaf script not in scripts list: {leaf_script!r}")
 
-        # Get leaf hash
-        leaf_hash = Leaf(leaf_script).leaf_hash
+        leaf_hash = self.leaves[idx].leaf_hash
 
         # Handled based on balanced
         if self.balanced:
@@ -178,11 +148,13 @@ class ScriptTree:
         current_level = [leaf_obj.leaf_hash for leaf_obj in self.leaves]
 
         while len(current_level) > 1:
-            # Find target hash in current level
-            if target_hash not in current_level:
+            # Index of target in this level
+            try:
+                index = current_level.index(target_hash)
+            except ValueError:
                 raise ValueError("Target hash not found in current level")
 
-            index = current_level.index(target_hash)
+            n = len(current_level)
 
             # Find sibling
             sibling_index = index + 1 if index % 2 == 0 else index - 1
@@ -281,7 +253,7 @@ class ScriptTree:
         return b"".join(parts)
 
     @staticmethod
-    def eval_merkle_path(leaf_script: bytes, merkle_path: bytes) -> bytes:
+    def eval_merkle_path(leaf_script: bytes, merkle_path: bytes, version_byte: bytes = _tap.VERSION_BYTE) -> bytes:
         """
         Given a leaf_script and merkle path, we create the leaf_hash and calculate the merkle root based on the
         merkle path
@@ -294,13 +266,11 @@ class ScriptTree:
         sibling_hashes = [merkle_path[i:i + _tap.HASH_SIZE] for i in range(0, len(merkle_path), _tap.HASH_SIZE)]
 
         # Get leaf hash
-        target_leaf = Leaf(leaf_script)
-        current_hash = target_leaf.leaf_hash
+        current_hash = tapleaf_hash(leaf_script, version_byte)
 
         # Build merkle root
         for sibling_hash in sibling_hashes:
-            temp_branch = Branch(current_hash, sibling_hash)
-            current_hash = temp_branch.branch_hash
+            current_hash = Branch(current_hash, sibling_hash).branch_hash
 
         return current_hash
 

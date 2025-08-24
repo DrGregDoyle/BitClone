@@ -1,7 +1,7 @@
 # src/data/formats.py
 from typing import Final
 
-__all__ = ["Hashes", "Keys", "Wire", "TxFmt", "AddressFmt", "Display", "Taproot"]
+__all__ = ["Hashes", "Keys", "Wire", "TxFmt", "AddressFmt", "Display", "Taproot", "OpCodes"]
 
 
 class Hashes:
@@ -135,3 +135,18 @@ class AddressFmt:
     BECH32_MAX: Final[int] = 74
     WIF_COMP: Final[int] = 38
     WIF_UNCOMP: Final[int] = 37
+
+
+class OpCodes:
+    OP_0: Final[bytes] = b'\x00'
+    OP_PUSHBYTES_20: Final[bytes] = b'\x14'
+    OP_PUSHBYTES_32: Final[bytes] = b'\x20'
+    OP_PUSHBYTES_33: Final[bytes] = b'\x21'
+    OP_PUSHBYTES_65: Final[bytes] = b'\x41'
+    OP_1: Final[bytes] = b'\x51'
+    OP_DUP: Final[bytes] = b'\x76'
+    OP_EQUAL: Final[bytes] = b'\x87'
+    OP_EQUALVERIFY: Final[bytes] = b'\x88'
+    OP_HASH160: Final[bytes] = b'\xa9'
+    OP_CHECKSIG: Final[bytes] = b'\xac'
+    OP_CHECKMULTISIG: Final[bytes] = b'\xae'

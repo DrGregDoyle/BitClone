@@ -134,16 +134,3 @@ OPCODES = {
 
     0xff: "OP_INVALIDOPCODE",
 }
-OP_ALIASES = {
-    # Push value aliases
-    "OP_FALSE": "OP_0",  # 0x00
-    "OP_TRUE": "OP_1",  # 0x51
-
-    # Control flow aliases
-    "OP_NOP2": "OP_CHECKLOCKTIMEVERIFY",  # BIP 65 (0xb1)
-    "OP_NOP3": "OP_CHECKSEQUENCEVERIFY",  # BIP 112 (0xb2)
-
-}
-
-
-

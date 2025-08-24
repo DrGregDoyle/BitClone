@@ -3,32 +3,20 @@ The ScriptPubKey class that provides factory methods for different script types.
 """
 
 from src.crypto import sha256, hash160
-from src.data import encode_base58check, encode_bech32, ScriptType
+from src.data import encode_base58check, encode_bech32, ScriptType, OpCodes
 from src.logger import get_logger
 from src.script.script_parser import ScriptParser
 
 logger = get_logger(__name__)
 
 __all__ = ["ScriptPubKey", "ScriptPubKeyFactory"]
+_op = OpCodes
 
 
 class ScriptPubKey:
     """
     A class representing scriptPubKey with factory methods to create different types
     """
-    # -- Common OP-Codes
-    OP_0 = b'\x00'
-    OP_PUSHBYTES_20 = b'\x14'
-    OP_PUSHBYTES_32 = b'\x20'
-    OP_PUSHBYTES_33 = b'\x21'
-    OP_PUSHBYTES_65 = b'\x41'
-    OP_1 = b'\x51'
-    OP_DUP = b'\x76'
-    OP_EQUAL = b'\x87'
-    OP_EQUALVERIFY = b'\x88'
-    OP_HASH160 = b'\xa9'
-    OP_CHECKSIG = b'\xac'
-    OP_CHECKMULTISIG = b'\xae'
 
     def __init__(self, script_type: ScriptType, *args, testnet: bool = False):
         # Internals
@@ -82,40 +70,40 @@ class ScriptPubKey:
         """
         # P2PKH
         if (len(script) == 25 and
-                script[0] == self.OP_DUP[0] and
-                script[1] == self.OP_HASH160[0] and
-                script[2] == self.OP_PUSHBYTES_20[0] and
-                script[-2] == self.OP_EQUALVERIFY[0] and
-                script[-1] == self.OP_CHECKSIG[0]):
+                script[0] == _op.OP_DUP[0] and
+                script[1] == _op.OP_HASH160[0] and
+                script[2] == _op.OP_PUSHBYTES_20[0] and
+                script[-2] == _op.OP_EQUALVERIFY[0] and
+                script[-1] == _op.OP_CHECKSIG[0]):
             return ScriptType.P2PKH
 
         # P2SH
         if (len(script) == 23 and
-                script[0] == self.OP_HASH160[0] and
-                script[1] == self.OP_PUSHBYTES_20[0] and
-                script[-1] == self.OP_EQUAL[0]):
+                script[0] == _op.OP_HASH160[0] and
+                script[1] == _op.OP_PUSHBYTES_20[0] and
+                script[-1] == _op.OP_EQUAL[0]):
             return ScriptType.P2SH
 
         # P2WPKH
         if (len(script) == 22 and
-                script[0] == self.OP_0[0] and
-                script[1] == self.OP_PUSHBYTES_20[0]):
+                script[0] == _op.OP_0[0] and
+                script[1] == _op.OP_PUSHBYTES_20[0]):
             return ScriptType.P2WPKH
 
         # P2WSH
         if (len(script) == 34 and
-                script[0] == self.OP_0[0] and
-                script[1] == self.OP_PUSHBYTES_32[0]):
+                script[0] == _op.OP_0[0] and
+                script[1] == _op.OP_PUSHBYTES_32[0]):
             return ScriptType.P2WSH
 
         # P2TR
         if (len(script) == 34 and
-                script[0] == self.OP_1[0] and
-                script[1] == self.OP_PUSHBYTES_32[0]):
+                script[0] == _op.OP_1[0] and
+                script[1] == _op.OP_PUSHBYTES_32[0]):
             return ScriptType.P2TR
 
         # P2PK
-        if script[-1:] == self.OP_CHECKSIG:
+        if script[-1:] == _op.OP_CHECKSIG:
             pubkey_len = len(script[1:-1])
             op_code = script[0]
             if op_code == pubkey_len:
@@ -140,9 +128,9 @@ class ScriptPubKey:
         Returns the appropriate push opcode and compression flag for a given pubkey.
         """
         if len(pubkey) == 33:
-            return self.OP_PUSHBYTES_33, True
+            return _op.OP_PUSHBYTES_33, True
         elif len(pubkey) == 65:
-            return self.OP_PUSHBYTES_65, False
+            return _op.OP_PUSHBYTES_65, False
         else:
             raise ValueError("Invalid public key length")
 
@@ -164,8 +152,8 @@ class ScriptPubKey:
             raise ValueError(f"Pubkey not in correct format. Length: {pubkey_len}, expected 33 or 65 bytes")
 
         # Assemble script
-        push_op = self.OP_PUSHBYTES_65 if pubkey_len == 65 else self.OP_PUSHBYTES_33
-        p2pk_script = push_op + pubkey + self.OP_CHECKSIG
+        push_op = _op.OP_PUSHBYTES_65 if pubkey_len == 65 else _op.OP_PUSHBYTES_33
+        p2pk_script = push_op + pubkey + _op.OP_CHECKSIG
 
         # Address
         p2pk_address = self._base58_address(hash160(pubkey))
@@ -178,8 +166,8 @@ class ScriptPubKey:
         """
         # Script
         pubkeyhash = hash160(pubkey)
-        p2pkh_script = self.OP_DUP + self.OP_HASH160 + self.OP_PUSHBYTES_20 + pubkeyhash + self.OP_EQUALVERIFY + \
-                       self.OP_CHECKSIG
+        p2pkh_script = _op.OP_DUP + _op.OP_HASH160 + _op.OP_PUSHBYTES_20 + pubkeyhash + _op.OP_EQUALVERIFY + \
+                       _op.OP_CHECKSIG
 
         # address
         p2pkh_address = self._base58_address(pubkeyhash)
@@ -214,7 +202,7 @@ class ScriptPubKey:
             script_parts.extend([push_code, pubkey])
 
         # Total number and OP_CHECKMULTISIG
-        script_parts.extend([op_total, self.OP_CHECKMULTISIG])
+        script_parts.extend([op_total, _op.OP_CHECKMULTISIG])
 
         script = b''.join(script_parts)
         return script, None  # No address for P2MS
@@ -225,7 +213,7 @@ class ScriptPubKey:
         Given the provided script, we hash160 it and return the corresponding scriptpubkey
         """
         scripthash = hash160(redeem_script)
-        p2sh_script = self.OP_HASH160 + self.OP_PUSHBYTES_20 + scripthash + self.OP_EQUAL
+        p2sh_script = _op.OP_HASH160 + _op.OP_PUSHBYTES_20 + scripthash + _op.OP_EQUAL
         p2sh_address = self._base58_address(scripthash)
         return p2sh_script, p2sh_address
 
@@ -238,7 +226,7 @@ class ScriptPubKey:
         if len(pubkey) != 33:
             raise ValueError("Given public key is not correct compressed public key size")
         pubkeyhash = hash160(pubkey)
-        p2wpkh_script = self.OP_0 + self.OP_PUSHBYTES_20 + pubkeyhash
+        p2wpkh_script = _op.OP_0 + _op.OP_PUSHBYTES_20 + pubkeyhash
         p2wpkh_address = encode_bech32(pubkeyhash)
 
         return p2wpkh_script, p2wpkh_address
@@ -249,7 +237,7 @@ class ScriptPubKey:
         Accepts a full redeem script and returns a P2WSH scriptPubKey and address.
         """
         scripthash = sha256(redeem_script)
-        p2wsh_script = self.OP_0 + self.OP_PUSHBYTES_32 + scripthash
+        p2wsh_script = _op.OP_0 + _op.OP_PUSHBYTES_32 + scripthash
 
         # Address: bech32 with witness version 0
         hrp = "tb" if self.testnet else "bc"
@@ -265,7 +253,7 @@ class ScriptPubKey:
         if len(tweaked_pubkey) != 32:
             raise ValueError("Taproot public key must be exactly 32 bytes (x-only format)")
 
-        p2tr_script = self.OP_1 + self.OP_PUSHBYTES_32 + tweaked_pubkey
+        p2tr_script = _op.OP_1 + _op.OP_PUSHBYTES_32 + tweaked_pubkey
 
         # Address encoding with Bech32m
         hrp = 'tb' if self.testnet else 'bc'
