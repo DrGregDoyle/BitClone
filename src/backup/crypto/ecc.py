@@ -5,7 +5,6 @@ NIST Elliptic Curves - See https://www.secg.org/sec2-v2.pdf for constants.
 All groups of rational points have prime order, hence all curves are suitable for use in ECDSA.
 """
 import json
-import secrets
 
 from src.backup.crypto.ecc_math import tonelli_shanks, legendre_symbol
 
@@ -50,18 +49,6 @@ class EllipticCurve:
         return (pow(x, 3, self.p) + self.a * x + self.b) % self.p
 
     # --- Points on curve --- #
-
-    def random_point(self) -> tuple:
-        """
-        Returns a cryptographically secure random point on the curve.
-        """
-        # Find a random x-coordinate that is on the curve
-        x = next(
-            x for x in (secrets.randbelow(self.p - 1) for _ in iter(int, 1))
-            if self.is_x_on_curve(x)
-        )
-        # Compute corresponding y-coordinate
-        return x, self.find_y_from_x(x)
 
     def is_point_on_curve(self, point: tuple) -> bool:
         """
