@@ -40,7 +40,8 @@ class Point:
 class EllipticCurve:
     """Optimized elliptic curve implementation"""
 
-    def __init__(self, a: int, b: int, p: int, order: int, generator: Tuple[int, int], curve: Optional[str] = None):
+    def __init__(self, a: int, b: int, p: int, order: int, generator: Tuple[int, int] | Point,
+                 curve: Optional[str] = None):
         """
         We instantiate an elliptic curve E of the form
 
@@ -60,7 +61,7 @@ class EllipticCurve:
         self.b = b
         self.p = p
         self.order = order
-        self.generator = Point(*generator)
+        self.generator = Point(*generator) if isinstance(generator, tuple) else generator
         self.curve = curve
 
         # Cache for precomputed points (optional optimization)
