@@ -7,6 +7,8 @@ from typing import Optional, Tuple
 
 from .ecc_math import is_quadratic_residue, tonelli_shanks
 
+__all__ = ["EllipticCurve", "Point", "secp256k1"]
+
 
 # Import optimized math functions
 
@@ -17,6 +19,11 @@ class Point:
     x: Optional[int] = None
     y: Optional[int] = None
 
+    def __post_init__(self):
+        """Ensure point at infinity is always (None, None)"""
+        if (self.x is None) != (self.y is None):
+            raise ValueError("Point at infinity must have both coordinates as None")
+
     def __bool__(self) -> bool:
         """Point at infinity is falsy"""
         return self.x is not None and self.y is not None
@@ -24,6 +31,10 @@ class Point:
     def __iter__(self):
         """Allow tuple unpacking: x, y = point"""
         return iter((self.x, self.y))
+
+    @property
+    def tuple(self):
+        return self.x, self.y
 
 
 class EllipticCurve:
@@ -51,10 +62,6 @@ class EllipticCurve:
         self.order = order
         self.generator = Point(*generator)
         self.curve = curve
-
-        # Precompute frequently used values
-        self._p_minus_1_half = (p - 1) >> 1
-        self._is_p_3_mod_4 = (p & 3) == 3
 
         # Cache for precomputed points (optional optimization)
         self._point_cache = {}
