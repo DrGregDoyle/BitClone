@@ -13,7 +13,7 @@ def is_quadratic_residue(n: int, p: int) -> bool:
     if n == 0:
         return True
 
-    criterion = pow(n, (p - 1) >> 2, p)
+    criterion = pow(n, (p - 1) // 2, p)
     return criterion != p - 1
 
 

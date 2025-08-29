@@ -169,8 +169,8 @@ class EllipticCurve:
         if not point2:
             return point1
 
-        x1, y1 = point1.x, point1.y
-        x2, y2 = point2.x, point2.y
+        x1, y1 = point1.tuple
+        x2, y2 = point2.tuple
 
         # Check if points are the same
         if x1 == x2:

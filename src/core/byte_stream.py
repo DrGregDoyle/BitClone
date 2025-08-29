@@ -8,6 +8,8 @@ from typing import Union, Optional, Literal
 
 from .exceptions import ReadError
 
+__all__ = ["SERIALIZED", "BYTEORDER", "get_stream", "read_stream", "read_little_int", "read_big_int"]
+
 SERIALIZED = Union[bytes, BytesIO]
 BYTEORDER = Literal['big', 'little']
 
