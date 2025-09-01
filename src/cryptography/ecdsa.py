@@ -5,12 +5,12 @@ import secrets
 from typing import Tuple
 
 from src.core.exceptions import ECDSAError
-from src.cryptography.ecc import secp256k1, EllipticCurve, Point
+from src.cryptography.ecc import SECP256K1, EllipticCurve, Point
 
 __all__ = ["ecdsa", "verify_ecdsa"]
 
 
-def ecdsa(private_key: int, message: bytes, curve: EllipticCurve = secp256k1()) -> Tuple[int, int]:
+def ecdsa(private_key: int, message: bytes, curve: EllipticCurve = SECP256K1) -> Tuple[int, int]:
     """
     Generates an ECDSA signature for a given private_key and message hash on the specified curve.
 
@@ -79,7 +79,7 @@ def ecdsa(private_key: int, message: bytes, curve: EllipticCurve = secp256k1()) 
 
 
 def verify_ecdsa(signature: tuple, message: bytes, public_key: Point | tuple,
-                 curve: EllipticCurve = secp256k1()) -> bool:
+                 curve: EllipticCurve = SECP256K1) -> bool:
     """
     We verify that the given signature corresponds to the correct public_key for the given hex_string.
 
@@ -143,7 +143,7 @@ def verify_ecdsa(signature: tuple, message: bytes, public_key: Point | tuple,
 
 # --- TESTING ---
 if __name__ == "__main__":
-    generator_pt = secp256k1().generator
+    generator_pt = SECP256K1.generator
     test_message_1 = bytes.fromhex("deadbeef")
     test_message_2 = bytes.fromhex("deadbeef" * 64)
 

@@ -3,7 +3,7 @@ Tests for the Transaction classes
 """
 
 from src import Input, Output, WitnessItem, Witness, Transaction
-from tests.backup.randbtc_generators import get_random_input, get_random_output, get_random_witness_item, \
+from src.backup.tests.backup.randbtc_generators import get_random_input, get_random_output, get_random_witness_item, \
     get_random_witness, \
     get_random_tx
 

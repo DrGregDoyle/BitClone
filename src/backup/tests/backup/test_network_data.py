@@ -9,7 +9,7 @@ import pytest
 
 from src.backup.data import Inventory, InvType, BlockTxRequest, NodeType, NetAddr
 from src.backup.data import write_compact_size
-from tests.backup.randbtc_generators import get_random_invtype
+from src.backup.tests.backup.randbtc_generators import get_random_invtype
 
 
 def test_inventory():

@@ -3,10 +3,10 @@ We generate random signatures and verify
 """
 from secrets import token_bytes, randbelow
 
-from src.cryptography import ecdsa, verify_ecdsa
+from src.cryptography import ecdsa, verify_ecdsa, SECP256K1
 
 
-def test_ecdsa(curve):
+def test_ecdsa():
     # Get random message values
     msg1 = token_bytes(16)
     msg2 = token_bytes(32)
@@ -16,10 +16,10 @@ def test_ecdsa(curve):
 
     # Generate public and private key
     while True:
-        priv_key = randbelow(curve.order)
+        priv_key = randbelow(SECP256K1.order)
         if priv_key != 0:
             break
-    pub_key = curve.multiply_generator(priv_key)
+    pub_key = SECP256K1.multiply_generator(priv_key)
 
     # Get signatures
     messages = [msg1, msg2, msg3, msg4, msg5]

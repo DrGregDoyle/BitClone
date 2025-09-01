@@ -6,8 +6,9 @@ import hmac
 
 import unicodedata
 
-__all__ = ["sha1", "sha256", "sha512", "ripemd160", "hash256", "hash160", "hmac_sha512", "pbkdf2", "tagged_sha256",
-           "tapleaf_hash", "tapbranch_hash", "taptweak_hash"]
+__all__ = ["hash160", "hash256", "hmac_sha512", "pbkdf2", "ripemd160", "sha1", "sha256", "sha512", "schnorr_aux_hash",
+           "schnorr_challenge_hash", "schnorr_nonce_hash", "tagged_sha256", "tapbranch_hash", "tapleaf_hash",
+           "taptweak_hash"]
 
 
 # --- SHA --- #
@@ -88,7 +89,7 @@ def tagged_sha256(tag: bytes, data: bytes) -> bytes:
     return sha256(tagged_hash + tagged_hash + data)
 
 
-# --- COMMONLY USED TAGGED HASH FUNCTIONS --- #
+# --- TAPROOT TAGGED HASH FUNCTIONS --- #
 def tapleaf_hash(data: bytes) -> bytes:
     return tagged_sha256(b'TapLeaf', data)
 
@@ -99,3 +100,16 @@ def tapbranch_hash(data: bytes) -> bytes:
 
 def taptweak_hash(data: bytes) -> bytes:
     return tagged_sha256(b'TapTweak', data)
+
+
+# --- SCHNORR BIP0340 TAGGED HASH FUNCTIONS --- #
+def schnorr_aux_hash(data: bytes) -> bytes:
+    return tagged_sha256(b'BIP0340/aux', data)
+
+
+def schnorr_nonce_hash(data: bytes) -> bytes:
+    return tagged_sha256(b'BIP0340/nonce', data)
+
+
+def schnorr_challenge_hash(data: bytes) -> bytes:
+    return tagged_sha256(b'BIP0340/challenge')

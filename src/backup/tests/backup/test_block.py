@@ -6,7 +6,7 @@ from secrets import token_bytes
 from src.backup.block import BlockHeader, Block
 from src.backup.crypto import hash256
 from src.backup.data import MerkleTree
-from tests.backup.randbtc_generators import get_random_block_header, get_random_block
+from src.backup.tests.backup.randbtc_generators import get_random_block_header, get_random_block
 
 
 def test_merkle_tree():

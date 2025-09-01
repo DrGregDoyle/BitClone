@@ -7,7 +7,8 @@ from typing import Optional, Tuple
 
 from .ecc_math import is_quadratic_residue, tonelli_shanks
 
-__all__ = ["EllipticCurve", "Point", "secp256k1"]
+__all__ = ["EllipticCurve", "Point", "SECP256K1", "add_points", "multiply_generator",
+           "scalar_multiplication", "is_point_on_curve", "find_y_from_x"]
 
 
 # Import optimized math functions
@@ -245,18 +246,45 @@ class EllipticCurve:
         return self._scalar_mult_generator(n % self.order)
 
 
-# --- OPTIMIZED CURVE CONSTRUCTORS --- #
-# Using constants directly instead of computing powers each time
+# --- SINGLETON INSTANCE --- #
+# Create the singleton instance once at module load time
+_secp256k1_params = {
+    'a': 0,
+    'b': 7,
+    'p': 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F,
+    'order': 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141,
+    'generator': (0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798,
+                  0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8),
+    'curve': "secp256k1"
+}
 
-def secp256k1():
-    """Optimized secp256k1 construction with precomputed constants"""
-    a = 0
-    b = 7
-    p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
-    order = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
-    generator = (0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798,
-                 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8)
+# Create singleton instance - this happens once when module is imported
+SECP256K1 = EllipticCurve(**_secp256k1_params)
 
-    return EllipticCurve(a, b, p, order, generator, curve="secp256k1")
 
-# --- TESTING
+# --- CONVENIENCE FUNCTIONS --- #
+# These act as a functional interface to the singleton instance
+
+def add_points(point1: Point, point2: Point) -> Point:
+    """Add two points on the secp256k1 curve"""
+    return SECP256K1.add_points(point1, point2)
+
+
+def multiply_generator(n: int) -> Point:
+    """Multiply the secp256k1 generator by scalar n"""
+    return SECP256K1.multiply_generator(n)
+
+
+def scalar_multiplication(n: int, point: Point) -> Point:
+    """Multiply any point by scalar n on secp256k1 curve"""
+    return SECP256K1.scalar_multiplication(n, point)
+
+
+def is_point_on_curve(point: Point) -> bool:
+    """Check if point is on secp256k1 curve"""
+    return SECP256K1.is_point_on_curve(point)
+
+
+def find_y_from_x(x: int) -> int:
+    """Find y coordinate from x on secp256k1 curve"""
+    return SECP256K1.find_y_from_x(x)

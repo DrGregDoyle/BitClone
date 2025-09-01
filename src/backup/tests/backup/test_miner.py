@@ -4,7 +4,7 @@ Tests for the miner class
 from src.backup.data import target_to_bits
 
 from src.backup.miner import Miner
-from tests.backup.randbtc_generators import get_random_block
+from src.backup.tests.backup.randbtc_generators import get_random_block
 
 
 def test_miner():

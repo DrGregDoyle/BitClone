@@ -88,7 +88,7 @@ class Blockchain:
 
 
 # --- TESTING
-from tests.backup.randbtc_generators import get_random_block
+from src.backup.tests.backup.randbtc_generators import get_random_block
 
 if __name__ == "__main__":
     test_db = Path(__file__).parent / "bitclone_db" / "test.db"

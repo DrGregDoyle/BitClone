@@ -5,7 +5,7 @@ from random import randint, choice
 from secrets import token_bytes
 
 from src.backup.network import SendCompact, MerkleBlock
-from tests.backup.randbtc_generators import get_random_block_header
+from src.backup.tests.backup.randbtc_generators import get_random_block_header
 
 
 def test_merkleblock():

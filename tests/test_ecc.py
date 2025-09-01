@@ -4,16 +4,17 @@ Testing the Point and EllipticCurve classes and methods
 import random
 from secrets import randbits
 
-from src.cryptography import Point, EllipticCurve
+from src.cryptography import Point, EllipticCurve, is_point_on_curve, SECP256K1
 
 MIN_RAND = 0
 MAX_RAND = 0xffff
 
 
-def test_point_at_infinity(curve):
+def test_point_at_infinity():
     """
     We test aspects of the point at infinity, represented by Point() = (None, None)
-    We also verify (None, x) and (x, None) yield value errors when constructed
+    We also verify (None, x) and (x, None) yield value errors when constructed.
+    Ths is_point_on_curve uses the secp256k1 curve, but the infinity point should be on every elliptic curve.
     """
     # Get point at infinity in two ways
     inf_pt1 = Point()
@@ -23,7 +24,7 @@ def test_point_at_infinity(curve):
     assert inf_pt1 == inf_pt2, "Point at infinity construction mismatch."
 
     # Test on curve
-    assert curve.is_point_on_curve(inf_pt1), "Point at infinity not on curve error"
+    assert is_point_on_curve(inf_pt1), "Point at infinity not on curve error"
 
     # Verify ValueErrors during invalid construction
     try:
@@ -39,7 +40,7 @@ def test_point_at_infinity(curve):
         assert True
 
 
-def test_elliptic_curve_functions(curve):
+def test_elliptic_curve_functions():
     """
     We use the values of the known elliptic curve:
         y^2 = x^3 + 7 (mod 11)
@@ -82,7 +83,9 @@ def test_elliptic_curve_functions(curve):
     assert test_curve.add_points(p1, p3) == known_point
     assert test_curve.add_points(p3, p1) == known_point
 
-    # def test_secp256k1():
+
+def test_sepc25k1():
+    curve = SECP256K1
 
     random_256_bit_integer = randbits(256)
     random_point = curve.multiply_generator(random_256_bit_integer)
