@@ -33,6 +33,10 @@ class PubKey:
             return False
         return self.pub_key.x == other.pub_key.x and self.pub_key.y == other.pub_key.y
 
+    def __hash__(self):
+        """Make PubKey hashable based on the point coordinates. Needed for overriding __eq__"""
+        return hash((self.pub_key.x, self.pub_key.y))
+
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED, curve: EllipticCurve = SECP256K1):
         stream = get_stream(byte_stream)
@@ -61,10 +65,13 @@ class PubKey:
         # Find y based on type byte
         if type_byte == b'\x02':
             y_int = temp_y if temp_y % 2 == 0 else curve.p - temp_y
+            instance.is_even_y = temp_y % 2 == 0  # Track if we have even y
         elif type_byte == b'\x03':
             y_int = temp_y if temp_y % 2 == 1 else curve.p - temp_y
+            instance.is_even_y = temp_y % 2 != 1  # Track if we have even y
         elif type_byte == b'\x04':
             y_int = read_big_int(stream, BYTE_LEN, "pubkey_y")
+            instance.is_even_y = y_int % 2 == 0  # Track if we have even y
         else:
             raise ECCError("Unidentified type byte for Public Key")
 

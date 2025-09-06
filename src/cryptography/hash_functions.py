@@ -112,4 +112,4 @@ def schnorr_nonce_hash(data: bytes) -> bytes:
 
 
 def schnorr_challenge_hash(data: bytes) -> bytes:
-    return tagged_sha256(b'BIP0340/challenge')
+    return tagged_sha256(b'BIP0340/challenge', data)
