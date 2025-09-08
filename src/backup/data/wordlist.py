@@ -10,7 +10,7 @@ from typing import Dict, Tuple
 
 __all__ = [
     "get_wordlist", "get_index_map", "get_prefix_map",
-    "word_index", "is_valid_word",
+    "word_index",
 ]
 
 _WORDLIST_PKG = "src.data.wordlists"  # folder with english.txt, etc.
@@ -54,8 +54,3 @@ def word_index(word: str, lang: str = "english", allow_prefix: bool = True) -> i
         if idx is not None and get_wordlist(lang)[idx].startswith(word):
             return idx
     return get_index_map(lang).get(word, -1)
-
-
-def is_valid_word(word: str, lang: str = "english") -> bool:
-    """Return True if the word is in the list."""
-    return word_index(word, lang, allow_prefix=False) >= 0

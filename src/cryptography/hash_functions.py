@@ -73,10 +73,7 @@ def pbkdf2(mnemonic: list, passphrase='', iterations=2048, dklen=64) -> bytes:
     password_bytes = normalized_mnemonic.encode('utf-8')
 
     # Step 5: Derive the key using PBKDF2-HMAC-SHA512
-    derived_key = hashlib.pbkdf2_hmac('sha512', password_bytes, salt, iterations, dklen)
-
-    # Return the derived key as a hexadecimal string
-    return derived_key
+    return hashlib.pbkdf2_hmac('sha512', password_bytes, salt, iterations, dklen)
 
 
 # --- TAGGED HASH FUNCTIONS --- #

@@ -1,7 +1,7 @@
 """
 The custom exceptions used throughout BitClone
 """
-__all__ = ["ReadError", "StreamError", "ECDSAError", "SchnorrError", "ECCPrivateKeyError", "ECCError"]
+__all__ = ["ReadError", "StreamError", "ECDSAError", "SchnorrError", "ECCPrivateKeyError", "ECCError", "WalletError"]
 
 
 class StreamError(Exception):
@@ -42,5 +42,12 @@ class ECDSAError(Exception):
 class SchnorrError(Exception):
     """
     Raised during Schnorr signatures for out of bound values
+    """
+    pass
+
+
+class WalletError(Exception):
+    """
+    Parent class for Wallet errors
     """
     pass
