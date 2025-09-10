@@ -16,6 +16,8 @@ WORD_KEY = WALLET.WORD_KEY
 BITLEN_KEY = WALLET.BITLEN_KEY
 WORD_BITS = WALLET.WORD_BITS
 
+__all__ = ["Mnemonic"]
+
 
 class Mnemonic:
     __slots__ = ("phrase",)
@@ -75,14 +77,14 @@ class Mnemonic:
             phrase.insert(0, wordlist[word_index])  # Insert at beginning
             ent_check >>= WORD_BITS  # Shift right by 11 bits
 
-        # --- TESTING
-        print("--- GENERATE PHRASE --- ")
-        print("===" * 60)
-        print(f"ENTROPY: {entropy.hex()}")
-        print(f"ENTROPY INTEGER: {entropy_int}")
-        print(f"CHECKSUM INTEGER: {checksum_int}")
-        print(f"ENT CHECK: {ent_check}")
-        print(f"PHRASE: {phrase}")
+        # # --- TESTING
+        # print("--- GENERATE PHRASE --- ")
+        # print("===" * 60)
+        # print(f"ENTROPY: {entropy.hex()}")
+        # print(f"ENTROPY INTEGER: {entropy_int}")
+        # print(f"CHECKSUM INTEGER: {checksum_int}")
+        # print(f"ENT CHECK: {ent_check}")
+        # print(f"PHRASE: {phrase}")
 
         return phrase
 
@@ -90,8 +92,8 @@ class Mnemonic:
         """
         Return the integer associated with the checksum for the given entropy
         """
-        # TESTING
-        print(f"ENTROPY BEFORE CHECKSUM: {entropy.hex()}")
+        # # TESTING
+        # print(f"ENTROPY BEFORE CHECKSUM: {entropy.hex()}")
         # Get integer value of the hash
         entropy_hash = sha256(entropy)
         entropy_hash_int = int.from_bytes(entropy_hash, "big")
@@ -145,14 +147,14 @@ class Mnemonic:
         # Get checksum from entropy
         calc_checksum = self._get_checksum_from_entropy(entropy.to_bytes(entropy_bytelen, "big"))
 
-        # --- TESTING --- #
-        print("--- VALIDATE PHRASE --- ")
-        print("===" * 60)
-        print(f"PHRASE: {phrase}")
-        print(f"PHRASE INTEGER ENT_CHECK: {ent_check}")
-        print(f"CHECKSUM FROM ENT_CHECK: {checksum}")
-        print(f"ENTROPY FROM ENT_CHECK: {entropy}")
-        print(f"CHECKSUM FROM ENTROPY: {calc_checksum}")
+        # # --- TESTING --- #
+        # print("--- VALIDATE PHRASE --- ")
+        # print("===" * 60)
+        # print(f"PHRASE: {phrase}")
+        # print(f"PHRASE INTEGER ENT_CHECK: {ent_check}")
+        # print(f"CHECKSUM FROM ENT_CHECK: {checksum}")
+        # print(f"ENTROPY FROM ENT_CHECK: {entropy}")
+        # print(f"CHECKSUM FROM ENTROPY: {calc_checksum}")
 
         return calc_checksum == checksum
 
@@ -166,22 +168,28 @@ class Mnemonic:
 
 # --- TESTING ---
 if __name__ == "__main__":
-    byte_list = WALLET.MNEMONIC.keys()
-    mnemonics = []
-    byte_size = 16
+    test_phrase = ["shine", "fly", "above", "velvet", "identify", "glance", "practice", "deposit", "rule", "upset",
+                   "entry", "flag"]
+    test_passphrase = "thispartisoptional"
+    test_mnemonic = Mnemonic(test_phrase)
+    print(f"TEST MNEMONIC: {test_mnemonic.phrase}")
+    print(f"TEST MNEMONIC SEED: {test_mnemonic.to_seed(passphrase=test_passphrase).hex()}")
+    # byte_list = WALLET.MNEMONIC.keys()
+    # mnemonics = []
+    # # byte_size = 16
     # for byte_size in byte_list:
-    random_mnemonic = Mnemonic()  # 12 words by default
-    print(f"RANDOM MNEMONIC: {random_mnemonic.phrase}")
-    print(f"RANDOM SEED FROM MNEMONIC: {random_mnemonic.to_seed().hex()}")
-
-    # recovered mnemonic
-    recovered_mnemonic = Mnemonic(phrase=random_mnemonic.phrase)
-    print(f"RECOVERED MNEMONIC: {recovered_mnemonic.phrase}")
-    print(f"RECOVERED SEED FROM MNEMONIC: {recovered_mnemonic.to_seed().hex()}")
-    print("===" * 80)
-
-    # Verify
-    print(f"TWO SEED VALUES EQUAL: {random_mnemonic.to_seed() == recovered_mnemonic.to_seed()}")
-    print("---" * 80)
-
-    print(f"VALIDATE MNEMONIC: {random_mnemonic.validate_phrase(random_mnemonic.phrase)}")
+    #     random_mnemonic = Mnemonic()  # 12 words by default
+    #     # print(f"RANDOM MNEMONIC: {random_mnemonic.phrase}")
+    #     # print(f"RANDOM SEED FROM MNEMONIC: {random_mnemonic.to_seed().hex()}")
+    #
+    #     # recovered mnemonic
+    #     recovered_mnemonic = Mnemonic(phrase=random_mnemonic.phrase)
+    #     # print(f"RECOVERED MNEMONIC: {recovered_mnemonic.phrase}")
+    #     # print(f"RECOVERED SEED FROM MNEMONIC: {recovered_mnemonic.to_seed().hex()}")
+    #     print("===" * 80)
+    #
+    #     # Verify
+    #     print(f"TWO SEED VALUES EQUAL: {random_mnemonic.to_seed() == recovered_mnemonic.to_seed()}")
+    #
+    #     print(f"VALIDATE MNEMONIC: {random_mnemonic.validate_phrase(random_mnemonic.phrase)}")
+    #     print("---" * 80)
