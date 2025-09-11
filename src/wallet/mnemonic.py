@@ -172,8 +172,10 @@ if __name__ == "__main__":
                    "entry", "flag"]
     test_passphrase = "thispartisoptional"
     test_mnemonic = Mnemonic(test_phrase)
+    test_seed = test_mnemonic.to_seed(passphrase=test_passphrase)
     print(f"TEST MNEMONIC: {test_mnemonic.phrase}")
-    print(f"TEST MNEMONIC SEED: {test_mnemonic.to_seed(passphrase=test_passphrase).hex()}")
+    print(f"TEST MNEMONIC SEED: {test_seed.hex()}")
+    print(f"TEST MNEMONIC SEED BYTE SIZE: {len(test_seed)}")
     # byte_list = WALLET.MNEMONIC.keys()
     # mnemonics = []
     # # byte_size = 16

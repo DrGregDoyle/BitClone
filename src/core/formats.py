@@ -3,7 +3,7 @@ The Bitcoin standard formats
 """
 from typing import Final
 
-__all__ = ["ECC", "WALLET"]
+__all__ = ["ECC", "WALLET", "XKEYS"]
 
 
 class ECC:
@@ -29,3 +29,13 @@ class WALLET:
     CHECKSUM_KEY: Final[str] = "checksum_bits"
     SEED_ITERATIONS: Final[str] = 2048
     DKLEN: Final[str] = 64
+
+
+class XKEYS:
+    """
+    Constants related to the extended public and private keys
+    """
+    SEED_KEY = b'Bitcoin seed'
+    CHAIN_LENGTH = 32
+    MAX_DEPTH = 255
+    HARDENED_INDEX = 0x80000000
