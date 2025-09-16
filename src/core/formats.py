@@ -3,7 +3,7 @@ The Bitcoin standard formats
 """
 from typing import Final
 
-__all__ = ["ECC", "WALLET", "XKEYS"]
+__all__ = ["ECC", "WALLET", "XKEYS", "BECH32CODE"]
 
 
 class ECC:
@@ -38,4 +38,16 @@ class XKEYS:
     SEED_KEY = b'Bitcoin seed'
     CHAIN_LENGTH = 32
     MAX_DEPTH = 255
-    HARDENED_INDEX = 0x80000000
+    # Version bytes for different key types
+    MAINNET_PRIVATE = 0x0488ade4  # xprv
+    MAINNET_PUBLIC = 0x0488b21e  # xpub
+    TESTNET_PRIVATE = 0x04358394  # tprv
+    TESTNET_PUBLIC = 0x043587cf  # tpub
+
+    # Hardened derivation threshold
+    HARDENED_OFFSET = 0x80000000
+
+
+class BECH32CODE:
+    BECH32 = 1
+    BECH32M = 2

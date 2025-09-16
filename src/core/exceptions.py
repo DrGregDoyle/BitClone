@@ -1,7 +1,8 @@
 """
 The custom exceptions used throughout BitClone
 """
-__all__ = ["ReadError", "StreamError", "ECDSAError", "SchnorrError", "ECCPrivateKeyError", "ECCError", "WalletError"]
+__all__ = ["ReadError", "StreamError", "ECDSAError", "SchnorrError", "ECCPrivateKeyError", "ECCError", "WalletError",
+           "ExtendedKeyError"]
 
 
 class StreamError(Exception):
@@ -50,4 +51,9 @@ class WalletError(Exception):
     """
     Parent class for Wallet errors
     """
+    pass
+
+
+class ExtendedKeyError(Exception):
+    """Custom exception for extended key operations"""
     pass

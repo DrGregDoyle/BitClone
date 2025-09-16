@@ -124,7 +124,7 @@ def encode_bech32(pubkeydata: bytes, hrp: str = "bc", witver: int = 0) -> str:
     # Choose encoding type
     spec = Encoding.BECH32M if witver > 0 else Encoding.BECH32
 
-    # Submit converted_data using "bc" as hrp
+    # Submit converted_data using hrp
     bech32_address = bech32_encode(hrp=hrp, data=converted_data, spec=spec)
 
     # Decode the address to verify checksum
