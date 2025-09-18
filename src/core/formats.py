@@ -39,13 +39,18 @@ class XKEYS:
     CHAIN_LENGTH = 32
     MAX_DEPTH = 255
     # Version bytes for different key types
-    MAINNET_PRIVATE = 0x0488ade4  # xprv
-    MAINNET_PUBLIC = 0x0488b21e  # xpub
-    TESTNET_PRIVATE = 0x04358394  # tprv
-    TESTNET_PUBLIC = 0x043587cf  # tpub
+    TESTNET_PRIVATE = bytes.fromhex("04358394")
+    TESTNET_PUBLIC = bytes.fromhex("043587cf")
+    BIP44_XPRV = bytes.fromhex("0488ade4")
+    BIP44_XPUB = bytes.fromhex("0488b21e")
+    BIP49_XPRV = bytes.fromhex("049d7878")
+    BIP49_XPUB = bytes.fromhex("049d7cb2")
+    BIP84_XPRV = bytes.fromhex("04b2430c")
+    BIP84_XPUB = bytes.fromhex("04b24746")
 
     # Hardened derivation threshold
     HARDENED_OFFSET = 0x80000000
+    MAX_INDEX = 0xffffffff
 
 
 class BECH32CODE:
