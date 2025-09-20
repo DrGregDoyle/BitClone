@@ -3,7 +3,14 @@ The Bitcoin standard formats
 """
 from typing import Final
 
-__all__ = ["ECC", "WALLET", "XKEYS", "BECH32CODE"]
+__all__ = ["ECC", "WALLET", "XKEYS", "BECH32CODE", "DATA"]
+
+
+class DATA:
+    """
+    Constants used in data manipulation
+    """
+    MAX_COMPACTSIZE = 0xffffffffffffffff
 
 
 class ECC:
@@ -57,3 +64,10 @@ class XKEYS:
 class BECH32CODE:
     BECH32 = 1
     BECH32M = 2
+
+
+class TX:
+    """
+    Transaction constants
+    """
+    pass

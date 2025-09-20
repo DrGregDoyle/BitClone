@@ -2,7 +2,7 @@
 The custom exceptions used throughout BitClone
 """
 __all__ = ["ReadError", "StreamError", "ECDSAError", "SchnorrError", "ECCPrivateKeyError", "ECCError", "WalletError",
-           "ExtendedKeyError", "PubKeyError"]
+           "ExtendedKeyError", "PubKeyError", "WriteError"]
 
 
 class StreamError(Exception):
@@ -15,6 +15,13 @@ class StreamError(Exception):
 class ReadError(StreamError):
     """
     For when trying to read data of length n from the stream and receiving data of length < b
+    """
+    pass
+
+
+class WriteError(StreamError):
+    """
+    For when writing data that would be otherwise out of bounds
     """
     pass
 
