@@ -3,28 +3,31 @@ We test the serialization methods for the PubKey class
 """
 from secrets import token_bytes
 
-from src.cryptography import PubKey
+from src.data import PubKey
 
 
-def test_pubkey():
-    # Pubkey 1 is random coordinates
-    random_pubkey1 = PubKey(int.from_bytes(token_bytes(64), "big"))
+def test_pubkey_recovery():
+    """
+    We have the following class methods:
+        -from uncompressed
+        -from compressed
+        -from point
+    We will verify that we can recover a pubkey using all 3 methods
+    """
+    random_privkey = int.from_bytes(token_bytes(32), "big")
+    random_pubkey = PubKey(random_privkey)
 
-    # Pubkey 2 has even y coordinate
-    random_pubkey2 = PubKey(int.from_bytes(token_bytes(64), "big"), is_even_y=True)
+    # From uncompressed
+    unc_pubkey = random_pubkey.uncompressed()
+    from_uncompressed = PubKey.from_uncompressed(unc_pubkey)
+    assert from_uncompressed == random_pubkey, "Failed to reconstruct Pubkey from uncompressed"
 
-    # Test Pubkey1
-    pk1_serial = PubKey.from_bytes(random_pubkey1.serial_pubkey())
-    pk1_compressed = PubKey.from_bytes(random_pubkey1.serial_compressed())
+    # From compressed
+    comp_pubkey = random_pubkey.compressed()
+    from_compressed = PubKey.from_compressed(comp_pubkey)
+    assert from_compressed == random_pubkey, "Failed to reconstruct Pubkey from compressed"
 
-    assert pk1_serial == random_pubkey1, "Deserialization of uncompressed pubkey failed"
-    assert pk1_compressed == random_pubkey1, "Deserialization of compressed pubkey failed"
-
-    # Test Pubkey2
-    pk2_serial = PubKey.from_bytes(random_pubkey2.serial_pubkey())
-    pk2_compressed = PubKey.from_bytes(random_pubkey2.serial_compressed())
-    pk2_xonly = PubKey.from_bytes(random_pubkey2.serial_xonly())
-
-    assert pk2_serial == random_pubkey2, "Deserialization of uncompressed pubkey failed"
-    assert pk2_compressed == random_pubkey2, "Deserialization of compressed pubkey failed"
-    assert pk2_xonly == random_pubkey2, "Deserialization of xonly pubkey failed"
+    # From point
+    pk_pt = random_pubkey.to_point()
+    from_point = PubKey.from_point(pk_pt)
+    assert from_point == random_pubkey, "Failed to reconstruct PUbkey from point"

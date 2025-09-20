@@ -38,6 +38,7 @@ class XKEYS:
     SEED_KEY = b'Bitcoin seed'
     CHAIN_LENGTH = 32
     MAX_DEPTH = 255
+
     # Version bytes for different key types
     TESTNET_PRIVATE = bytes.fromhex("04358394")
     TESTNET_PUBLIC = bytes.fromhex("043587cf")

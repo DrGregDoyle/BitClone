@@ -6,11 +6,14 @@ Implements BIP32 Hierarchical Deterministic Wallet key derivation
 import json
 from io import BytesIO
 
-from src.core import ExtendedKeyError, XKEYS, get_stream, read_stream, PubKeyError
-from src.cryptography import SECP256K1, hash160, hmac_sha512, hash256, Point
+from src.core import ExtendedKeyError, XKEYS, get_stream, read_stream
+from src.cryptography import SECP256K1, hash160, hmac_sha512, hash256
 from src.data import encode_base58, decode_base58
 
-__all__ = ["PubKey", "ExtendedKey"]
+__all__ = ["ExtendedKey"]
+
+from src.data.keys import PubKey
+
 BIP44_XPRV = XKEYS.BIP44_XPRV
 BIP44_XPUB = XKEYS.BIP44_XPUB
 BIP49_XPRV = XKEYS.BIP49_XPRV
@@ -23,74 +26,6 @@ HARDENED_INDEX = XKEYS.HARDENED_OFFSET
 SEED_KEY = XKEYS.SEED_KEY
 
 VERSIONS = [BIP44_XPRV, BIP44_XPUB, BIP49_XPRV, BIP84_XPRV, BIP84_XPUB, TESTNET_PRV, TESTNET_PUB]
-
-
-class PubKey:
-    """
-    Used for Serializaing a public key in BitClone
-    """
-    __slots__ = ("x", "y")
-
-    def __init__(self, private_key: int):
-        _pubkey_pt = SECP256K1.multiply_generator(private_key)
-        self.x, self.y = _pubkey_pt
-
-    def compressed(self) -> bytes:
-        """
-        Returns a compressed public key
-        """
-        y_byte = b'\x02' if self.y % 2 == 0 else b'\x03'
-        return y_byte + self.x.to_bytes(32, "big")
-
-    def uncompressed(self) -> bytes:
-        """
-        Returns an uncompressed public key
-        """
-        return b'\x04' + self.x_bytes() + self.y_bytes()
-
-    def x_bytes(self):
-        return self.x.to_bytes(32, "big")
-
-    def y_bytes(self):
-        return self.y.to_bytes(32, "big")
-
-    def to_point(self):
-        return Point(self.x, self.y)
-
-    @classmethod
-    def from_compressed(cls, compressed_pubkey: bytes):
-        if len(compressed_pubkey) != 33:
-            raise PubKeyError("Compressed pubkey must be 33 bytes")
-        prefix = compressed_pubkey[0]
-        if prefix not in (0x02, 0x03):
-            raise PubKeyError("Invalid prefix for compressed pubkey")
-        x = int.from_bytes(compressed_pubkey[1:], "big")
-        if not (0 < x < SECP256K1.p):
-            raise PubKeyError("x out of range")
-
-        if not SECP256K1.is_x_on_curve(x):
-            raise PubKeyError("Given x coordinate not on curve")
-
-        y = SECP256K1.find_y_from_x(x)
-        want_odd = 1 if prefix == 0x03 else 0
-        if (y & 1) != want_odd:
-            y = SECP256K1.p - y
-
-        obj = object.__new__(cls)  # bypass __init__
-        obj.x, obj.y = x, y
-        return obj
-
-    @classmethod
-    def from_point(cls, point: Point):
-        # Validate point
-        if not SECP256K1.is_point_on_curve(point):
-            raise PubKeyError("Given point not on SECP256K1 curve")
-        x, y = point
-
-        obj = object.__new__(cls)
-        obj.x = x
-        obj.y = y
-        return obj
 
 
 class ExtendedKey:
