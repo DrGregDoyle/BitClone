@@ -5,14 +5,14 @@ Tests for verifying that various script_sig + script_pub_keys will evaluate to T
 from random import randint
 from secrets import randbits
 
+from src import Transaction, Input, Output, Witness, WitnessItem
 from src.backup.crypto import hash160, ORDER, generator_exponent
-from src.backup.data import compress_public_key, decode_der_signature, encode_der_signature
 from src.backup.data import UTXO
+from src.backup.data import compress_public_key, decode_der_signature, encode_der_signature
 from src.backup.data import write_compact_size
 from src.backup.logger import get_logger
 from src.backup.script import ScriptValidator, SigHash, ScriptTree, Branch
 from src.backup.taproot import Taproot
-from src import Transaction, Input, Output, Witness, WitnessItem
 
 logger = get_logger(__name__)
 
@@ -382,7 +382,7 @@ def test_p2wpkh(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_fa
     segwit_sighash = sig_engine.get_segwit_sighash(tx, 0, script_code, utxo.amount, 1)
     segwit_sig = sig_engine.sign_message(privkey, segwit_sighash, 1)
 
-    # 6. Create Witness object and insert into tx
+    # 6. Create WitnessField object and insert into tx
     witness = build_witness(compressed_pubkey, segwit_sig)
     tx.witnesses = [witness]
 
@@ -393,7 +393,7 @@ def test_p2wpkh(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_fa
 
 def test_p2wsh_p2pk(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
-    Tests P2WSH (Pay to Witness Script Hash):
+    Tests P2WSH (Pay to WitnessField Script Hash):
     - Create redeem script (e.g., simple p2pk)
     - Build P2WSH scriptPubKey
     - Create UTXO

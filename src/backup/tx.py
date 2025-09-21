@@ -13,6 +13,7 @@ B: unsigned char (1 byte)
 from io import SEEK_CUR, BytesIO
 
 from src.backup.crypto.hash_functions import hash256
+
 from src.backup.data import Serializable, byte_format, to_little_bytes, get_stream, \
     read_stream, read_little_int, TxFmt
 from src.backup.data import UTXO
@@ -248,10 +249,10 @@ class Witness(Serializable):
 
     def to_dict(self) -> dict:
         """
-        Convert the Witness to a dictionary for easy inspection.
+        Convert the WitnessField to a dictionary for easy inspection.
 
         Returns:
-            dict: A dictionary representation of the Witness.
+            dict: A dictionary representation of the WitnessField.
         """
         witness_dict = {
             "stackitems": write_compact_size(self.stackitems).hex()

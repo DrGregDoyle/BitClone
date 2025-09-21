@@ -102,7 +102,7 @@ def encode_bech32(pubkeydata: bytes, hrp: str = "bc", witver: int = 0) -> str:
     hrp : str
         Human-readable part (e.g. 'bc' for mainnet, 'tb' for testnet)
     witver : int
-        Witness version (0 for P2WPKH/P2WSH, 1 for P2TR)
+        WitnessField version (0 for P2WPKH/P2WSH, 1 for P2TR)
 
     Returns
     -------
@@ -111,7 +111,7 @@ def encode_bech32(pubkeydata: bytes, hrp: str = "bc", witver: int = 0) -> str:
     """
     # Check witness version
     if not (0 <= witver <= 16):
-        raise ValueError("Witness version must be between 0 and 16.")
+        raise ValueError("WitnessField version must be between 0 and 16.")
 
     # Convert 8-bit data to 5-bit
     converted_data = convertbits(list(pubkeydata), 8, 5, pad=True)

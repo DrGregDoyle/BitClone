@@ -563,7 +563,7 @@ class HDWallet:
         return encode_base58check(b'\x00' + pubkeyhash)
 
     def _p2wpkh_address(self, pubkey: bytes) -> str:
-        """Pay-to-Witness-PubKeyHash: Bech32(0x00 + hash160(pubkey))"""
+        """Pay-to-WitnessField-PubKeyHash: Bech32(0x00 + hash160(pubkey))"""
         pubkeyhash = hash160(pubkey)
         return encode_bech32(pubkeyhash, hrp=self.hrp, witver=0)
 

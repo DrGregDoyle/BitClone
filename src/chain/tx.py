@@ -1,10 +1,15 @@
 """
 The classes for BitClone transactions
 """
+from io import SEEK_CUR
+
 from src.core import Serializable, SERIALIZED, get_stream, read_little_int, read_stream, TX
 from src.data import read_compact_size, write_compact_size
 
-__all__ = ["TxInput", "TxOutput", "Witness"]
+__all__ = ["TxInput", "TxOutput", "WitnessField"]
+
+# --- CACHE KEYS --- #
+SEGWIT_KEY = "is_segwit"
 
 
 class TxInput(Serializable):
@@ -111,9 +116,9 @@ class TxOutput(Serializable):
         }
 
 
-class Witness(Serializable):
+class WitnessField(Serializable):
     """
-    Witness
+    WitnessField
     -------------------------------------------------------------
     |   Field           |   Byte Size   |   Format              |
     -------------------------------------------------------------
@@ -141,7 +146,7 @@ class Witness(Serializable):
         witness_items = []
         for _ in range(stack_items):
             item_len = read_compact_size(stream)
-            witness_items.append(read_stream(stream, item_len, "Witness item"))
+            witness_items.append(read_stream(stream, item_len, "WitnessField item"))
         return cls(witness_items)
 
     def to_bytes(self) -> bytes:
@@ -182,19 +187,100 @@ class Transaction(Serializable):
     |   inputs          |   var         |   TxInput             |
     |   output_count    |   var         |   CompactSize         |
     |   outputs         |   var         |   TxOutput            |
-    |   witness*        |   var         |   Witness             |
+    |   witness*        |   var         |   WitnessField             |
     |   locktime        |   4           |   little-endian       |
     -------------------------------------------------------------
     * indicates optional segwit specific fields
     """
-    pass
-    # def __init__(self, inputs: list = [], outputs: list = [], witness_list: list = [], version: int | bytes,
-    #              locktime: int | bytes):
+    __slots__ = ("version", "inputs", "outputs", "locktime", "witness", "_cache")
+
+    def __init__(self, inputs: list[TxInput] = None, outputs: list[TxOutput] = None, witness: list[WitnessField] = None,
+                 locktime: int = 0, version: int = TX.BIP68):
+        self.inputs = inputs or []
+        self.outputs = outputs or []
+        self.witness = witness or []
+        self.version = version
+        self.locktime = locktime
+        self._cache = {}  # Internal dict for future values
+
+    def _update_cache(self):
+        """
+        Run those functions which contribute to the _cache dict
+        """
+        _ = self.is_segwit
+
+    def _invalidate_cache(self):
+        """
+        Remove all cache values
+        """
+        self._cache = {}
+
+    @property
+    def is_segwit(self):
+        """
+        True if the witness_list is populated
+        """
+        if SEGWIT_KEY not in self._cache:
+            self._cache[SEGWIT_KEY] = len(self.witness) > 0
+        return self._cache[SEGWIT_KEY]
+
+    @classmethod
+    def from_bytes(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+
+        # Version
+        version = read_little_int(stream, TX.VERSION, "version")
+
+        # Marker/Flag
+        marker = stream.read(1)
+        if marker == b'\x00':
+            flag = stream.read(1)
+            if flag != b'\x01':
+                raise ValueError("Invalid SegWit flag.")
+            segwit = True
+        else:
+            segwit = False
+            stream.seek(-1, SEEK_CUR)  # Rewind the marker byte
+
+        # Read inputs
+        num_inputs = read_compact_size(stream)
+        inputs = []
+        for _ in range(num_inputs):
+            inputs.append(TxInput.from_bytes(stream))
+
+        # Read outputs
+        num_outputs = read_compact_size(stream)
+        outputs = []
+        for _ in range(num_outputs):
+            outputs.append(TxOutput.from_bytes(stream))
+
+        # Read witness if segwit
+        witness = []
+        if segwit:
+            for _ in range(num_inputs):
+                witness.append(WitnessField.from_bytes(stream))
+
+        # Locktime
+        locktime = read_little_int(stream, TX.LOCKTIME, "locktime")
+
+        return cls(inputs, outputs, witness, locktime, version, )
 
 
 # -- TESTING ---
 if __name__ == "__main__":
-    known_witness = bytes.fromhex(
-        "024730440220537f470c1a18dc1a9d233c0b6af1d2ce18a07f3b244e4d9d54e0e60c34c55e67022058169cd11ac42374cda217d6e28143abd0e79549f7b84acc6542817466dc9b3001210301c1768b48843933bd7f0e8782716e8439fc44723d3745feefde2d57b761f503")
-    test_witness = Witness.from_bytes(known_witness)
-    print(f"TEST WITNESS: {test_witness.to_json()}")
+    pass
+    # test_dict = {
+    #     "is_segwit": True,
+    #     "is_full": False,
+    #     "is_heavy": None
+    # }
+    # var1 = test_dict.get("is_segwit")
+    # var2 = test_dict.get("is_light")
+    # print(f"VAR 1: CORRECT KEY: {var1}")
+    # print(f"VAR 2: INCORRECT KEY: {var2}")
+    # if "is_light" not in test_dict:
+    #     print(f"KEYS: {test_dict.keys()}")
+    # if True not in test_dict:
+    #     print(f"VALS: {test_dict.items()}")
+    # if "is_segwit" not in test_dict:
+    #     print(f"FULL: {json.dumps(test_dict, indent=2)}")

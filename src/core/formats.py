@@ -76,3 +76,4 @@ class TX:
     AMOUNT: Final[int] = 8
     VERSION: Final[int] = 4
     LOCKTIME: Final[int] = 4
+    BIP68: Final[int] = 2  # Tx.version

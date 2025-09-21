@@ -220,7 +220,7 @@ class ScriptPubKey:
     def _handle_p2wpkh(self, pubkey: bytes):
         """
         P2WPKH | OP_0 + OP_PUSHBYTES_20 + pubkeyhash
-        Works similarly to a p2pkh but is unlocked via the Witness field
+        Works similarly to a p2pkh but is unlocked via the WitnessField field
         """
         # Hash
         if len(pubkey) != 33:
