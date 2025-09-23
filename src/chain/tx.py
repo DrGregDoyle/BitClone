@@ -4,12 +4,14 @@ The classes for BitClone transactions
 from io import SEEK_CUR
 
 from src.core import Serializable, SERIALIZED, get_stream, read_little_int, read_stream, TX
+from src.cryptography import hash256
 from src.data import read_compact_size, write_compact_size
 
-__all__ = ["TxInput", "TxOutput", "WitnessField"]
+__all__ = ["TxInput", "TxOutput", "WitnessField", "Transaction"]
 
 # --- CACHE KEYS --- #
 SEGWIT_KEY = "is_segwit"
+TXID_KEY = "txid"
 
 
 class TxInput(Serializable):
@@ -130,10 +132,10 @@ class WitnessField(Serializable):
     |   the Size | Item format repeats for all witness items    |
     -------------------------------------------------------------    
     """
-    __slots__ = ("witness_items",)
+    __slots__ = ("items",)
 
-    def __init__(self, witness_items: list | bytes):
-        self.witness_items = witness_items if isinstance(witness_items, list) else [witness_items]
+    def __init__(self, items: list | bytes):
+        self.items = items if isinstance(items, list) else [items]
 
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):
@@ -153,18 +155,18 @@ class WitnessField(Serializable):
         """
         Serialize the stack items
         """
-        parts = [write_compact_size(len(self.witness_items))]
-        for item in self.witness_items:
+        parts = [write_compact_size(len(self.items))]
+        for item in self.items:
             parts.append(write_compact_size(len(item)))
             parts.append(item)
         return b''.join(parts)
 
     def to_dict(self) -> dict:
         witness_dict = {
-            "stack_items": len(self.witness_items)
+            "stack_items": len(self.items)
         }
-        for x in range(len(self.witness_items)):
-            temp_item = self.witness_items[x]
+        for x in range(len(self.items)):
+            temp_item = self.items[x]
             witness_dict.update({
                 x: {
                     "size": len(temp_item),
@@ -208,12 +210,51 @@ class Transaction(Serializable):
         Run those functions which contribute to the _cache dict
         """
         _ = self.is_segwit
+        _ = self.txid
 
     def _invalidate_cache(self):
         """
         Remove all cache values
         """
         self._cache = {}
+
+    def _get_txid_preimage(self) -> bytes:
+        """
+        For a given transaction, return what will need to be hashed to yield the tx id
+        For segwit, this is the formatted version, inputs, outpus and locktiem
+        For non-segwit this is the serialized tx itself
+        """
+        if self.is_segwit:
+            parts = [
+                self.version.to_bytes(TX.VERSION, "little"),
+                self._get_input_bytes(),
+                self._get_output_bytes(),
+                self.locktime.to_bytes(TX.LOCKTIME, "little")
+            ]
+            return b''.join(parts)
+
+        # Legacy TX
+        return self.to_bytes()
+
+    def _get_input_bytes(self) -> bytes:
+        """
+        Returns the serialized inputs, including input_num
+        """
+        input_num = len(self.inputs)
+        return write_compact_size(input_num) + b''.join([i.to_bytes() for i in self.inputs])
+
+    def _get_output_bytes(self) -> bytes:
+        """
+        Returns the serialized inputs, including input_num
+        """
+        output_num = len(self.outputs)
+        return write_compact_size(output_num) + b''.join([t.to_bytes() for t in self.outputs])
+
+    def _get_witness_bytes(self) -> bytes:
+        """
+        Returns the serialized witness
+        """
+        return b''.join([w.to_bytes() for w in self.witness])
 
     @property
     def is_segwit(self):
@@ -223,6 +264,16 @@ class Transaction(Serializable):
         if SEGWIT_KEY not in self._cache:
             self._cache[SEGWIT_KEY] = len(self.witness) > 0
         return self._cache[SEGWIT_KEY]
+
+    @property
+    def txid(self):
+        """
+        Return cached txid if it exists. Otherwise return new txid
+        """
+        if TXID_KEY not in self._cache:
+            txid_preimage = self._get_txid_preimage()
+            self._cache[TXID_KEY] = hash256(txid_preimage)
+        return self._cache[TXID_KEY]
 
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):
@@ -265,22 +316,80 @@ class Transaction(Serializable):
 
         return cls(inputs, outputs, witness, locktime, version, )
 
+    def to_bytes(self) -> bytes:
+        """
+        Serialize the tx
+        """
+        # Get counts ahead of time
+        input_num = len(self.inputs)
+        output_num = len(self.outputs)
+
+        # Version
+        parts = [
+            self.version.to_bytes(TX.VERSION, "little"),
+        ]
+
+        # Marker/Flag
+        if self.is_segwit:
+            parts.append(b'\x00\x01')  # Fixed MarkerFlag
+
+        # Inputs/Outputs
+        parts.append(self._get_input_bytes())
+        parts.append(self._get_output_bytes())
+
+        # Witness
+        if self.is_segwit:
+            parts.append(self._get_witness_bytes())
+
+        # Locktime
+        parts.append(self.locktime.to_bytes(TX.LOCKTIME, "little"))
+
+        return b''.join(parts)
+
+    def to_dict(self) -> dict:
+        # Get input and output list
+        inputs = [i.to_dict() for i in self.inputs]
+        outputs = [o.to_dict() for o in self.outputs]
+
+        # Begin dictionary construction
+        tx_dict = {
+            "txid": self.txid[::-1].hex(),  # Reverse byte order for display
+            "version": self.version
+        }
+
+        # Segwit check | add marker and flag
+        if self.is_segwit:
+            tx_dict.update({
+                "marker": 0x00,
+                "flag": 0x01
+            })
+
+        # Add inputs and outputs
+        tx_dict.update({
+            "input_num": len(self.inputs),
+            "inputs": inputs,
+            "output_num": len(self.outputs),
+            "outputs": outputs
+        })
+
+        # Segwit check | add witness
+        if self.is_segwit:
+            witness = [w.to_dict() for w in self.witness]
+            tx_dict.update({
+                "witness": witness
+            })
+
+        # Add locktime and return
+        tx_dict.update({
+            "locktime": self.locktime
+        })
+        return tx_dict
+
 
 # -- TESTING ---
 if __name__ == "__main__":
-    pass
-    # test_dict = {
-    #     "is_segwit": True,
-    #     "is_full": False,
-    #     "is_heavy": None
-    # }
-    # var1 = test_dict.get("is_segwit")
-    # var2 = test_dict.get("is_light")
-    # print(f"VAR 1: CORRECT KEY: {var1}")
-    # print(f"VAR 2: INCORRECT KEY: {var2}")
-    # if "is_light" not in test_dict:
-    #     print(f"KEYS: {test_dict.keys()}")
-    # if True not in test_dict:
-    #     print(f"VALS: {test_dict.items()}")
-    # if "is_segwit" not in test_dict:
-    #     print(f"FULL: {json.dumps(test_dict, indent=2)}")
+    # Read in known tx
+    known_tx_bytes = bytes.fromhex(
+        "01000000022c458cfed3a4188c6d5e4c737f1e87f2fbd6c25f729e70c43974ae35a891f5b6000000006a4730440220575b3650ab2b9ac2023419c532160e3573574df08456ecc6d323a2f4a2e750330220289312616653d5b22d5239232dd2dc1bc259d3b3eb52f4b7e24f010115850616012102cb41de73aea9a6c0ac6e1fe71f73efecb1c11b8c4746c79e1c49a7a7f10a8449ffffffff633092b5e5362701fd4ee12732cf8ddedf423a2443ce3de60b5abb5199a64f2d000000006b483045022100b4ee78f2c09e39e907586b94b003b0f0cf96a2d4c95530c5246effc714625a150220011c25f33f6e30d4862a986c50d56c24a90d7feeeb226597b0203f6d307807df012103c034edf1281053216fb70822b7eb19fd448d49c8028ea85e42360680897b7328ffffffff0254b90000000000001976a9148eb58e0fb496b6242ba353f4b8ce5d63a009d24888ace09c4100000000001976a914af0483e012bbd7817ea4c41dcadef767ef42f1a288ac00000000")
+    known_tx = Transaction.from_bytes(known_tx_bytes)
+    print(f"KNOWN TX: {known_tx.to_json()}")
