@@ -12,6 +12,9 @@ __all__ = ["TxInput", "TxOutput", "WitnessField", "Transaction"]
 # --- CACHE KEYS --- #
 SEGWIT_KEY = "is_segwit"
 TXID_KEY = "txid"
+WTXID_KEY = "wtxid"
+WU_KEY = "weight_units"
+VB_KEY = "virtual_bytes"
 
 
 class TxInput(Serializable):
@@ -236,6 +239,20 @@ class Transaction(Serializable):
         # Legacy TX
         return self.to_bytes()
 
+    def _get_wtxid_preimage(self) -> bytes:
+        if self.is_segwit:
+            parts = [
+                self.version.to_bytes(TX.VERSION, "little"),
+                b'\x00\x01',  # Marker\Flag
+                self._get_input_bytes(),
+                self._get_output_bytes(),
+                self.locktime.to_bytes(TX.LOCKTIME, "little"),
+                self._get_witness_bytes()
+            ]
+            return b''.join(parts)
+        # Legacy TX
+        return self.to_bytes()
+
     def _get_input_bytes(self) -> bytes:
         """
         Returns the serialized inputs, including input_num
@@ -268,12 +285,52 @@ class Transaction(Serializable):
     @property
     def txid(self):
         """
-        Return cached txid if it exists. Otherwise return new txid
+        Return cached txid if it exists. Otherwise, return new txid
         """
         if TXID_KEY not in self._cache:
             txid_preimage = self._get_txid_preimage()
             self._cache[TXID_KEY] = hash256(txid_preimage)
         return self._cache[TXID_KEY]
+
+    @property
+    def wtxid(self):
+        """
+        Return cached wtxid if it exists. Otherwise, return new txid
+        """
+        if WTXID_KEY not in self._cache:
+            wtxid_preimage = self._get_wtxid_preimage()
+            self._cache[WTXID_KEY] = hash256(wtxid_preimage)
+        return self._cache[WTXID_KEY]
+
+    @property
+    def wu(self):
+        """
+        Returns size of tx in terms of weight units
+        """
+        if WU_KEY not in self._cache:
+            if self.is_segwit:
+                input_length = 0
+                output_length = 0
+                witness_length = 0
+                for i in self.inputs:
+                    input_length += i.length
+                for o in self.outputs:
+                    output_length += o.length
+                for w in self.witness:
+                    witness_length += w.length
+
+                input_num = len(write_compact_size(len(self.inputs)))
+                output_num = len(write_compact_size(len(self.outputs)))
+
+                self._cache[WU_KEY] = 4 * (TX.VERSION + input_num + input_length + output_num + output_length +
+                                           TX.LOCKTIME) + (witness_length + TX.MARKERFLAG)
+            else:
+                self._cache[WU_KEY] = self.length * 4
+        return self._cache[WU_KEY]
+
+    @property
+    def vbytes(self):
+        return round(self.wu / 4, 2)
 
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):
@@ -354,6 +411,10 @@ class Transaction(Serializable):
         # Begin dictionary construction
         tx_dict = {
             "txid": self.txid[::-1].hex(),  # Reverse byte order for display
+            "wtxid": self.wtxid[::-1].hex(),  # Reverse byte order for display
+            "wu": self.wu,
+            "bytes": self.length,
+            "vbytes": self.vbytes,
             "version": self.version
         }
 
@@ -390,6 +451,6 @@ class Transaction(Serializable):
 if __name__ == "__main__":
     # Read in known tx
     known_tx_bytes = bytes.fromhex(
-        "01000000022c458cfed3a4188c6d5e4c737f1e87f2fbd6c25f729e70c43974ae35a891f5b6000000006a4730440220575b3650ab2b9ac2023419c532160e3573574df08456ecc6d323a2f4a2e750330220289312616653d5b22d5239232dd2dc1bc259d3b3eb52f4b7e24f010115850616012102cb41de73aea9a6c0ac6e1fe71f73efecb1c11b8c4746c79e1c49a7a7f10a8449ffffffff633092b5e5362701fd4ee12732cf8ddedf423a2443ce3de60b5abb5199a64f2d000000006b483045022100b4ee78f2c09e39e907586b94b003b0f0cf96a2d4c95530c5246effc714625a150220011c25f33f6e30d4862a986c50d56c24a90d7feeeb226597b0203f6d307807df012103c034edf1281053216fb70822b7eb19fd448d49c8028ea85e42360680897b7328ffffffff0254b90000000000001976a9148eb58e0fb496b6242ba353f4b8ce5d63a009d24888ace09c4100000000001976a914af0483e012bbd7817ea4c41dcadef767ef42f1a288ac00000000")
+        "01000000000101dd40a8d7f105055e781afa632207f5d3c4b4f4cad9f0fb320d0f0aa8e1ba904b0000000000ffffffff021027000000000000160014858e1f88ff6f383f45a75088e15a095f20fc663f841c0000000000001976a9142241a6c3d4cc3367efaa88b58d24748caef79a7288ac02483045022100d66341c3e6ce846b92bedcf9bc673ab8e47b770c616618eb91009e44816f4c2f0220622b5ebf6afabee3f4255bbcb84609e1185d4b6b1055602f5eed2541e26324620121022ed6c7d33a59cc16d37ad9ba54230696bd5424b8931c2a68ce76b0dbbc222f6500000000")
     known_tx = Transaction.from_bytes(known_tx_bytes)
     print(f"KNOWN TX: {known_tx.to_json()}")
