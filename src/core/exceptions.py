@@ -2,7 +2,14 @@
 The custom exceptions used throughout BitClone
 """
 __all__ = ["ReadError", "StreamError", "ECDSAError", "SchnorrError", "ECCPrivateKeyError", "ECCError", "WalletError",
-           "ExtendedKeyError", "PubKeyError", "WriteError"]
+           "ExtendedKeyError", "PubKeyError", "WriteError", "BitNumError"]
+
+
+class BitNumError(Exception):
+    """
+    For use in the BitNum class
+    """
+    pass
 
 
 class StreamError(Exception):
