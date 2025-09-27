@@ -85,6 +85,7 @@ class SCRIPT:
     Constants in use in the Script
     """
     MAX_BITNUM: Final[int] = 4
+    MAX_STACK: Final[int] = 1000
     COMMON_VALUES: Final[dict] = {
         0: b'',
         -1: b'\x81'
