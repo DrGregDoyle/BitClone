@@ -1,0 +1,47 @@
+"""
+Basic Push operations for BitCoin, including True/False
+    0x00 -- 0x60
+"""
+from src.script import BitStack, BitNum
+
+
+def op_zero(main_stack: BitStack):
+    """
+    OP_0 | 0x00
+    Push empty byte array to stack
+    """
+    main_stack.push(b'')
+
+
+def op_false(main_stack: BitStack):
+    """
+    OP_FALSE | 0x00
+    Push empty byte array to stack
+    """
+    op_zero(main_stack)
+
+
+def op_one(main_stack: BitStack):
+    """
+    OP_1, OP_TRUE | 0x51
+    Push 1 to the stack
+    """
+    main_stack.push(b'\x01')
+
+
+def op_true(main_stack: BitStack):
+    """
+    OP_1, OP_TRUE | 0x51
+    Push 1 to the stack
+    """
+    op_one(main_stack)
+
+
+# --- TESTING ---
+if __name__ == "__main__":
+    test_stack = BitStack(items=[
+        BitNum(5), BitNum(4), BitNum(3), BitNum(2), BitNum(1), BitNum(0)
+    ])
+    print(f"TEST STACK: {test_stack.to_json()}")
+    op_one(test_stack)
+    print(f"TEST STACK: {test_stack.to_json()}")

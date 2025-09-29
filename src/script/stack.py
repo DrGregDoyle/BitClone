@@ -11,7 +11,7 @@ MAX_BITNUM_BYTES = SCRIPT.MAX_BITNUM
 MAX_STACK_ITEMS = SCRIPT.MAX_STACK
 COMMON = SCRIPT.COMMON_VALUES
 
-__all__ = ["BitNum", "BitStack"]
+__all__ = ["BitNum", "BitStack", "StackItem"]
 
 
 class BitNum:
@@ -227,13 +227,13 @@ class BitStack:
     def push(self, item: StackItem):
         self._ensure_item_type(item)
         self._check_max_size()
-        self.stack.appendleft(item)
+        self.stack.appendleft(item.to_bytes() if isinstance(item, BitNum) else item)
 
     def pushitems(self, items: list[Any]):
         self._check_max_size(len(items))
         for item in items:
             self._ensure_item_type(item)
-            self.stack.appendleft(item)
+            self.stack.appendleft(item.to_bytes() if isinstance(item, BitNum) else item)
 
     def pop(self) -> Any:
         self._check_not_empty()
@@ -256,7 +256,7 @@ class BitStack:
         Shortcut to pop BitNum values
         """
         top = self.pop()
-        return top.value if isinstance(top, BitNum) else BitNum.from_bytes(top).value
+        return BitNum.from_bytes(top).value
 
     def clear(self):
         self.stack.clear()
