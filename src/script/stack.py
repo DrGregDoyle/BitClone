@@ -1,6 +1,7 @@
 """
 The classes for the BitStack and BitNum
 """
+import json
 from collections import deque
 from typing import Any
 
@@ -49,13 +50,14 @@ class BitNum:
         if predicted_len > MAX_BITNUM_BYTES:
             raise BitNumError("Integer too large to be BitNum encoded")
 
+        # The most significant bit of the most significant byte holds the sign encoding
         if mag[-1] & 0x80:
             # Add an extra byte to host the sign bit.
             return mag + (b"\x80" if neg else b"\x00")
 
         # Reuse top byte: set sign bit in place for negatives.
         if neg:
-            return mag[:-1] + bytes([mag[-1] | 0x80])
+            return mag[:-1] + bytes([mag[-1] | 0x80])  # | is the OR bitwise operator
 
         return mag
 
@@ -161,6 +163,10 @@ class BitNum:
         return self._bytes_cache.hex()
 
 
+# --- BITSTACK --- #
+StackItem = bytes | BitNum
+
+
 class BitStack:
     """
     A lightweight stack implementation for use in BitClone script
@@ -193,6 +199,12 @@ class BitStack:
             return self.stack[0]
         return None
 
+    @property
+    def bottom(self):
+        if not self.is_empty:
+            return self.stack[-1]
+        return None
+
     # --- Internal Validation --- #
     def _check_max_size(self, n: int = 1):
         if self.height + n > self.max_size:
@@ -206,15 +218,21 @@ class BitStack:
         if self.is_empty:
             raise BitStackError("Stack operations cannot be performed on empty stack")
 
+    def _ensure_item_type(self, x: StackItem):
+        if not isinstance(x, (bytes, BitNum)):
+            raise BitStackError("Only bytes or BitNum are allowed on the BitStack")
+
     # --- Stack Ops --- #
 
-    def push(self, item: Any):
+    def push(self, item: StackItem):
+        self._ensure_item_type(item)
         self._check_max_size()
         self.stack.appendleft(item)
 
     def pushitems(self, items: list[Any]):
         self._check_max_size(len(items))
         for item in items:
+            self._ensure_item_type(item)
             self.stack.appendleft(item)
 
     def pop(self) -> Any:
@@ -225,6 +243,21 @@ class BitStack:
         self._check_min_height(n)
         return [self.stack.popleft() for _ in range(n)]
 
+    # --- Item Specific Helper Functions --- #
+
+    def pushlist(self, items: list[StackItem]):
+        """
+        Push in reversed order so that elements at bottom of list end up on bottom of stack
+        """
+        self.pushitems(list(reversed(items)))
+
+    def popnum(self) -> int:
+        """
+        Shortcut to pop BitNum values
+        """
+        top = self.pop()
+        return top.value if isinstance(top, BitNum) else BitNum.from_bytes(top).value
+
     def clear(self):
         self.stack.clear()
 
@@ -232,3 +265,17 @@ class BitStack:
     def __len__(self) -> int:
         """Allow use of len() function on the stack."""
         return self.height
+
+    # --- Display --- #
+    def to_dict(self):
+        stack_dict = {}
+        # Empty stack returns empty dict
+        if not self.is_empty:
+            for i, item in enumerate(self.stack):
+                # Format item | bytes else BitNum
+                item = item.hex() if isinstance(item, bytes) else item.value
+                stack_dict.update({i: item})
+        return stack_dict
+
+    def to_json(self):
+        return json.dumps(self.to_dict(), indent=2)
