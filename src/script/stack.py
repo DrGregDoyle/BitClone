@@ -251,6 +251,10 @@ class BitStack:
         """
         self.pushitems(list(reversed(items)))
 
+    def pushbool(self, boolean: bool):
+        push_byte = b'\x01' if boolean else b''
+        self.push(push_byte)
+
     def popnum(self) -> int:
         """
         Shortcut to pop BitNum values
