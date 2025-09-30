@@ -67,7 +67,7 @@ def schnorr_sig(priv_key: int, msg: bytes, aux_bytes: bytes = None) -> bytes:
     # Setup
     n = ORDER
     curve = SECP256K1
-    aux_bytes = b'\x00' * BYTE_LEN if aux_bytes is None else aux_bytes
+    aux_bytes = b'\x00' * BYTE_LEN if aux_bytes is None else aux_bytes  # Default BIP340 Array
 
     # --- Input validation -- #
     # Private key

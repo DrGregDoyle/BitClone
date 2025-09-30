@@ -7,6 +7,8 @@ from typing import Tuple
 from src.core.exceptions import ECDSAError
 from src.cryptography.ecc import SECP256K1, EllipticCurve, Point
 
+# TODO: Move curve to Format. Fix curve project-wide in formats
+
 __all__ = ["ecdsa", "verify_ecdsa"]
 
 
