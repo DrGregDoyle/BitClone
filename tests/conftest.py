@@ -4,8 +4,8 @@ Fixtures used in the tests
 from random import randint
 from secrets import token_bytes
 
-from src.chain import TxInput, TxOutput, WitnessField, Transaction
 from src.core import TX
+from src.tx import TxInput, TxOutput, WitnessField, Transaction
 
 __all__ = ["getrand_txinput", "getrand_witnessfield", "getrand_txoutput", "getrand_tx"]
 

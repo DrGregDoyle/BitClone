@@ -78,6 +78,24 @@ class PubKey:
         return obj
 
     @classmethod
+    def from_xonly(cls, xonly_pubkey: bytes):
+        if len(xonly_pubkey) != 32:
+            raise PubKeyError("X-only pubkey must be 32 bytes")
+        x = int.from_bytes(xonly_pubkey, "big")
+        if not (0 < x < SECP256K1.p):
+            raise PubKeyError("x out of range")
+        if not SECP256K1.is_x_on_curve(x):
+            raise PubKeyError("Given x coordinate not on curve")
+
+        y = SECP256K1.find_y_from_x(x)
+        if y % 2 != 0:
+            y = SECP256K1.p - y
+
+        obj = object.__new__(cls)  # bypass __init__
+        obj.x, obj.y = x, y
+        return obj
+
+    @classmethod
     def from_point(cls, point: Point):
         # Validate point
         if not SECP256K1.is_point_on_curve(point):
@@ -88,6 +106,23 @@ class PubKey:
         obj.x = x
         obj.y = y
         return obj
+
+    @classmethod
+    def from_bytes(cls, pubkey_bytes: bytes):
+        """
+        Proceed based on length of pubkey
+        """
+        # Compressed
+        if len(pubkey_bytes) == 65 and pubkey_bytes[0] == b'\x04':
+            return cls.from_uncompressed(pubkey_bytes)
+        # Uncompresed
+        elif len(pubkey_bytes) == 33 and pubkey_bytes[0] in (b'\x02', b'\x03'):
+            return cls.from_compressed(pubkey_bytes)
+        # X-only
+        elif len(pubkey_bytes) == 32:
+            return cls.from_xonly(pubkey_bytes)
+        else:
+            raise PubKeyError("Unrecognized pubkey type")
 
     # --- FORMATTING
 

@@ -4,7 +4,7 @@ We test the various parts of a BitClone transaction
 import os
 import sys
 
-from src.chain import TxInput, TxOutput, WitnessField, Transaction
+from src.tx import TxInput, TxOutput, WitnessField, Transaction
 
 sys.path.append(os.path.dirname(__file__))
 from conftest import getrand_txinput, getrand_txoutput, getrand_witnessfield, getrand_tx

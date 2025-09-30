@@ -3,6 +3,8 @@ Methods for parsing script
 """
 from src.core import SERIALIZED, get_stream, StreamError, OpCodeError, OPCODES
 
+__all__ = ["to_asm"]
+
 
 def to_asm(script: SERIALIZED) -> list:
     """

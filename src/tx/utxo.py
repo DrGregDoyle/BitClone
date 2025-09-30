@@ -1,8 +1,8 @@
 """
 The UTXO class
 """
-from src.chain.tx import TxOutput
 from src.core import TX
+from src.tx.tx import TxOutput
 
 __all__ = ["UTXO"]
 
