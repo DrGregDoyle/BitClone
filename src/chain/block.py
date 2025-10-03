@@ -9,7 +9,7 @@ from src.core.byte_stream import SERIALIZED, get_stream, read_stream, read_littl
 from src.core.formats import BLOCK
 from src.core.serializable import Serializable
 from src.cryptography import hash256
-from src.data import bits_to_target
+from src.data import bits_to_target, MerkleTree, read_compact_size, write_compact_size
 from src.tx import Transaction
 
 
@@ -47,6 +47,10 @@ class BlockHeader(Serializable):
     def block_id(self):
         return hash256(self.to_bytes())
 
+    @property
+    def target(self):
+        return bits_to_target(self.bits)
+
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):
         stream = get_stream(byte_stream)
@@ -73,12 +77,12 @@ class BlockHeader(Serializable):
 
     def to_dict(self) -> dict:
         return {
+            "block_hash": self.block_id[::-1].hex(),  # Reverse byte order for display
             "version": self.version.to_bytes(4, "little").hex(),
             "previous_block": self.prev_block[::-1].hex(),  # Reverse order for display
             "merkle_root": self.merkle_root[::-1].hex(),  # Reverse order for display
             "timestamp": datetime.fromtimestamp(self.timestamp).strftime(BLOCK.TIMESTAMP_FORMAT),
             "bits": self.bits.hex(),
-            "target": bits_to_target(self.bits).hex(),
             "nonce": self.nonce
         }
 
@@ -120,14 +124,93 @@ class Block(Serializable):
                  ):
         self.version = version or BLOCK.VERSION
         self.prev_block = prev_block or b'\x00' * BLOCK.PREV_BLOCK
-        # self.merkle_root = merkle_root or b'\x00' * BLOCK.MERKLE_ROOT
         self.timestamp = timestamp or int(time.time())
         self.bits = bits or b'\x00' * BLOCK.BITS
         self.nonce = nonce or 0
+        self.txs = txs
+        self.merkle_tree = MerkleTree([t.txid for t in self.txs])
+
+    # --- BLOCK VALIDATION --- #
+    def _validate_block(self):
+        """
+        To be run upon construction. We want to verify the following:
+            - First tx in the list is a coinbase Transaction
+            - Validate each tx itself
+            - The total amount of inputs exceeds the total amount of outputs
+            - Tx Weight doesn't exceed 4 000 000 (4 million)
+        """
+        pass
+
+    def _validate_coinbase(self):
+        pass
+
+    def _validate_txs(self):
+        pass
+
+    def _validate_amount(self):
+        pass
+
+    @classmethod
+    def from_bytes(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+
+        # Read in blockheader
+        header = BlockHeader.from_bytes(stream)
+
+        # Read in txs
+        tx_num = read_compact_size(stream)
+        txs = []
+        for _ in range(tx_num):
+            txs.append(Transaction.from_bytes(stream))
+
+        return cls.from_header(header, txs)
+
+    @classmethod
+    def from_header(cls, header: BlockHeader, txs: list[Transaction]):
+        return cls(
+            version=header.version,
+            prev_block=header.prev_block,
+            timestamp=header.timestamp,
+            bits=header.bits,
+            nonce=header.nonce,
+            txs=txs
+        )
+
+    def get_header(self) -> BlockHeader:
+        """
+        Return the block header
+        """
+        return BlockHeader(
+            version=self.version,
+            prev_block=self.prev_block,
+            merkle_root=self.merkle_tree.merkle_root,
+            timestamp=self.timestamp,
+            bits=self.bits,
+            nonce=self.nonce
+        )
+
+    def to_bytes(self) -> bytes:
+        tx_num = len(self.txs)
+        tx_parts = [write_compact_size(tx_num)]
+        for tx in self.txs:
+            tx_parts.append(tx.to_bytes())
+        return self.get_header().to_bytes() + b''.join(tx_parts)
+
+    def to_dict(self) -> dict:
+        tx_num = len(self.txs)
+        tx_dict = {}
+        for x in range(tx_num):
+            temp_tx = self.txs[x]
+            tx_dict.update({x: temp_tx.to_dict()})
+        return {
+            "header": self.get_header().to_dict(),
+            "tx_num": tx_num,
+            "txs": tx_dict
+        }
 
 
 if __name__ == "__main__":
-    test_blockheader_bytes = bytes.fromhex(
-        "00000020b1ed6d0d4facad44a4f710a356e21fd55a6c5b3c470e1e000000000000000000d9125472b1a611fd33979466550be6e179a5e890c68020b46d4c007ab4fdbb18ecdfac5c1d072c175a2e9a00")
-    test_blockheader = BlockHeader.from_bytes(test_blockheader_bytes)
-    print(f"TEST BLOCK HEADER: {test_blockheader.to_json()}")
+    test_block_bytes = bytes.fromhex(
+        "02000000a8008de56c7e51598863e8dcdbf72410fa31275ee254b9590000000000000000d0a03183007c4e7941e7c7c9989fd956a89be722ce5e88af4df3631eb40ef12bd7595f538c9d0019e9569678")
+    test_block = BlockHeader.from_bytes(test_block_bytes)
+    print(f"TEST HEADER: {test_block.to_json()}")
