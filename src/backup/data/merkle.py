@@ -20,7 +20,6 @@ class MerkleTree:
     Attributes:
         height (int): The height of the Merkle tree.
         tree (dict[int, list[bytes]]): Dictionary representing the tree levels with hash values.
-        hex_tree (dict[int, list[str]]): Dictionary with hex representations of the tree levels.
         merkle_root (bytes): The Merkle root in little-endian format.
     """
 

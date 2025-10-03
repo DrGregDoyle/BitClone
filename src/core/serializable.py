@@ -3,7 +3,8 @@ The Abstract Base Class for all serializable elements in BitClone
 """
 import json
 from abc import ABC, abstractmethod
-from io import BytesIO
+
+from src.core.byte_stream import SERIALIZED
 
 __all__ = ["Serializable"]
 
@@ -16,7 +17,7 @@ class Serializable(ABC):
 
     @classmethod
     @abstractmethod
-    def from_bytes(cls, byte_stream: bytes | BytesIO):
+    def from_bytes(cls, byte_stream: SERIALIZED):
         """
         Deserialize an instance from its byte representation.
         """

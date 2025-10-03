@@ -3,7 +3,17 @@ The Bitcoin standard formats
 """
 from typing import Final
 
-__all__ = ["ECC", "WALLET", "XKEYS", "BECH32CODE", "DATA", "TX", "SCRIPT", "OPCODES"]
+__all__ = ["ECC", "WALLET", "XKEYS", "BECH32CODE", "DATA", "TX", "SCRIPT", "OPCODES", "BLOCK"]
+
+
+class BLOCK:
+    VERSION: Final[int] = 4  # Byte size and minimum integer version
+    PREV_BLOCK: Final[int] = 32
+    TIME: Final[int] = VERSION
+    NONCE: Final[int] = VERSION
+    BITS: Final[int] = VERSION
+    MERKLE_ROOT: Final[int] = PREV_BLOCK
+    TIMESTAMP_FORMAT: Final[str] = "%A, %d %B %Y %H:%M:%S"
 
 
 class DATA:
@@ -11,6 +21,8 @@ class DATA:
     Constants used in data manipulation
     """
     MAX_COMPACTSIZE = 0xffffffffffffffff
+    TARGET: Final[int] = 32
+    BITS: Final[int] = 4
 
 
 class ECC:

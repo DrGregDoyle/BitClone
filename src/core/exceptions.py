@@ -3,7 +3,21 @@ The custom exceptions used throughout BitClone
 """
 __all__ = ["ReadError", "StreamError", "ECDSAError", "SchnorrError", "ECCPrivateKeyError", "ECCError", "WalletError",
            "ExtendedKeyError", "PubKeyError", "WriteError", "BitNumError", "BitStackError", "OpCodeError",
-           "ScriptPubKeyError", "ScriptSigError"]
+           "ScriptPubKeyError", "ScriptSigError", "TargetBitsError", "MerkleError"]
+
+
+class MerkleError(Exception):
+    """
+    For use in the MerkleTree class
+    """
+    pass
+
+
+class TargetBitsError(Exception):
+    """
+    For use in target bit encoding and decoding
+    """
+    pass
 
 
 class BitNumError(Exception):
