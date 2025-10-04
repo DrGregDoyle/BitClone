@@ -3,7 +3,14 @@ The custom exceptions used throughout BitClone
 """
 __all__ = ["ReadError", "StreamError", "ECDSAError", "SchnorrError", "ECCPrivateKeyError", "ECCError", "WalletError",
            "ExtendedKeyError", "PubKeyError", "WriteError", "BitNumError", "BitStackError", "OpCodeError",
-           "ScriptPubKeyError", "ScriptSigError", "TargetBitsError", "MerkleError"]
+           "ScriptPubKeyError", "ScriptSigError", "TargetBitsError", "MerkleError", "SignatureError"]
+
+
+class SignatureError(Exception):
+    """
+    For use in the Signature Engine
+    """
+    pass
 
 
 class MerkleError(Exception):

@@ -131,7 +131,7 @@ class Block(Serializable):
         self.merkle_tree = MerkleTree([t.txid for t in self.txs])
 
     # --- BLOCK VALIDATION --- #
-    def _validate_block(self):
+    def validate_block(self):
         """
         To be run upon construction. We want to verify the following:
             - First tx in the list is a coinbase Transaction

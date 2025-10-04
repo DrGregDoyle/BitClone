@@ -1,14 +1,135 @@
 """
 The SignatureEngine class, used to create signatures for transactions
 """
-from src.cryptography.ecc import Point
-from src.cryptography.ecdsa import ecdsa, verify_ecdsa
-from src.cryptography.schnorr import schnorr_sig, schnorr_verify
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import IntEnum
+from typing import Optional
+
+from src.core import SignatureError
+from src.cryptography import ecdsa, verify_ecdsa, schnorr_verify, schnorr_sig, hash256, PubKey
+from src.data import encode_der_signature, decode_der_signature, PubKey
+from src.script.script_type import ScriptType
+from src.script.scriptsig import P2PK, P2PKH
+from src.tx import Transaction, TxInput, TxOutput
 
 
-# cryptography/signature_engine.py
+class SigHash(IntEnum):
+    DEFAULT = 0x00
+    ALL = 0x01
+    NONE = 0x02
+    SINGLE = 0x03
+    ALL_ANYONECANPAY = 0x81  # (0x81 interpreted as signed int)
+    NONE_ANYONECANPAY = 0x82  # (0x82 interpreted as signed int)
+    SINGLE_ANYONECANPAY = 0x83  # (0x83 interpreted as signed int)
+
+    def to_byte(self) -> bytes:
+        """
+        Encodes the sighash integer using Bitcoin numeric encoding
+        """
+        return self.value.to_bytes(1, "little")
+
+    def for_hashing(self):
+        """
+        Encodes the sighash integer using BTCNum encoding and padded to 4 bytes
+        """
+        return self.value.to_bytes(4, "little")
+
+
+@dataclass(slots=True)
+class SignatureContext:
+    """Holds all data needed to compute a signature hash for a specific input."""
+    # Always needed
+    tx: "Transaction"
+    input_index: int
+    sighash_type: int = SigHash.ALL
+
+    # Legacy / SegWit v0
+    script_code: Optional[bytes] = None  # scriptpubkey for legacy; witness script for v0
+    amount: Optional[int] = None  # satoshis (required for v0 and Taproot)
+
+    # Taproot (BIP341/342)
+    ext_flag: int = 0  # 0=key-path, 1=script-path
+    annex: Optional[bytes] = None  # must start with 0x50 if present
+    tapleaf_script: Optional[bytes] = None  # raw leaf script if script-path
+    leaf_version: int = 0xC0  # tapscript v0 default
+    codeseparator_pos: int = -1  # -1 if none (BIP342)
+
+    # Optional caches (pass precomputed hashes to avoid recompute)
+    prevouts_hash: Optional[bytes] = None
+    sequences_hash: Optional[bytes] = None
+    outputs_hash: Optional[bytes] = None
+
+
 class SignatureEngine:
     """Pure cryptographic operations for signatures"""
+
+    # --- SIGN TRANSACTION TYPES --- #
+    def sign_legacy_tx(self, tx: Transaction, input_index: int, privkey: int | bytes, script_code: bytes,
+                       script_type: ScriptType, sighash_num: int = 0) -> Transaction:
+        privkey_int = int.from_bytes(privkey, "big") if isinstance(privkey, bytes) else privkey
+        legacy_ctx = SignatureContext(tx=tx, input_index=input_index, sighash_type=sighash_num,
+                                      script_code=script_code)
+        legacy_sighash = self.get_legacy_sighash(legacy_ctx)
+        der_encoded_signature = self.get_ecdsa_sig(privkey_int, legacy_sighash)
+        signature = der_encoded_signature + SigHash(sighash_num).to_byte()
+
+        # Get ScriptSig based on ScriptType
+        if script_type == ScriptType.P2PK:
+            scriptsig = P2PK(signature).script
+        elif script_type == ScriptType.P2PKH:
+            pubkey = PubKey(privkey_int)  # Force the use of compressed public keys for P2PKH
+            scriptsig = P2PKH(signature, pubkey.compressed())
+        else:
+            raise SignatureError("Incorrect ScriptType for signing legacy transaction")
+
+        tx.inputs[input_index].scriptsig = scriptsig
+        return tx
+
+    # --- SIGHASH ALGORITHMS --- #
+
+    def get_legacy_sighash(self, ctx: SignatureContext):
+        """
+        Computes legacy message_hash for signing:
+            1. Remove all existing script_sigs
+            2. Put the script_pubkey from referenced output in the script_sig for the input.
+            3. Append the sighash byte(s) at the end of the serialized tx data
+            4. Hash the serialized tx data
+        We require the following from the SignatureContext:
+            script_code == scriptpubkey
+
+        """
+        # Get context items
+        tx = Transaction.from_bytes(ctx.tx.to_bytes())  # Create copy of tx
+        input_index = ctx.input_index
+        scriptpubkey = ctx.script_code
+        sighash_num = ctx.sighash_type
+
+        # Verify
+        if any(t is None for t in [tx, input_index, sighash_num, scriptpubkey]):
+            raise SignatureError("Insufficient context items for legacy signature hash")
+
+        # 1, Remove all existing scriptsigs
+        for i in tx.inputs:
+            i.scriptsig = bytes()
+
+        # 2. Put scriptpubkey in the scriptsig for the input
+        tx.inputs[input_index].scriptsig = scriptpubkey
+
+        # 3. Append the sighash byte at the end of the serialized tx data
+        sighash = SigHash(sighash_num)
+        data = tx.to_bytes() + sighash.for_hashing()
+
+        # 4. Return sighash
+        return hash256(data)
+
+    def get_segwit_sighash(self, ctx: SignatureContext):
+        pass
+
+    def get_taproot_sighash(self, ctx: SignatureContext):
+        pass
 
     # --- Schnorr --- #
     def get_schnorr_sig(self, priv_key: int, msg: bytes, aux_bytes: bytes = None) -> bytes:
@@ -21,19 +142,42 @@ class SignatureEngine:
 
     # --- ECDSA --- #
     def get_ecdsa_sig(self, private_key: int, message: bytes):
+        """
+        Returns DER-encoded ECDSA signature
+        """
         # Validation here
-        return ecdsa(private_key, message)
+        r, s = ecdsa(private_key, message)
+        return encode_der_signature(r, s)
 
-    def verify_ecdsa_sig(self, signature: tuple, message: bytes, public_key: Point | tuple):
-        # TODO: Modify signature to be a DER-encoded bytes object
-        # TODO: Modify pubkey to be a bytes object, either compressed, uncompressed, or xonly
-        # Validation here
-        # Modify data here
-        return verify_ecdsa(signature, message, public_key)
+    def verify_ecdsa_sig(self, signature: bytes, message: bytes, public_key: bytes):
+        signature_tuple = decode_der_signature(signature)
+        pubkey = PubKey.from_bytes(public_key)
+        return verify_ecdsa(signature_tuple, message, pubkey.to_point())
 
-    # --- SIGHASH --- #
 
-    # Keep sighash methods:
-    # - get_legacy_sighash()
-    # - get_segwit_sighash()
-    # - get_taproot_sighash()
+# --- TESTING --- #
+if __name__ == "__main__":
+    version = int.from_bytes(bytes.fromhex("01000000"), "little")
+    test_input = TxInput(
+        bytes.fromhex("b7994a0db2f373a29227e1d90da883c6ce1cb0dd2d6812e4558041ebbbcfa54b"),  # txid
+        0,  # vout
+        scriptsig=b'',
+        sequence=bytes.fromhex("ffffffff")
+    )
+    test_output = TxOutput(
+        amount=bytes.fromhex("983a000000000000"),
+        scriptpubkey=bytes.fromhex("76a914b3e2819b6262e0b1f19fc7229d75677f347c91ac88ac")
+    )
+    test_tx = Transaction(inputs=[test_input], outputs=[test_output], version=version, locktime=0)
+    _sighash_num = 1
+    _scriptpubkey = bytes.fromhex("76a9144299ff317fcd12ef19047df66d72454691797bfc88ac")
+    _ctx = SignatureContext(tx=test_tx, input_index=0, sighash_type=_sighash_num, script_code=_scriptpubkey)
+
+    engine = SignatureEngine()
+
+    _privkey = int.from_bytes(bytes.fromhex("f94a840f1e1a901843a75dd07ffcc5c84478dc4f987797474c9393ac53ab55e6"), "big")
+
+    print(f"TEST TX BEFORE SIGNING: {test_tx.to_json()}")
+
+    new_tx = engine.sign_p2pk(test_tx, input_index=0, privkey=_privkey, scriptpubkey=_scriptpubkey)
+    print(f"TEST TX AFTER SIGNING: {new_tx.to_json()}")

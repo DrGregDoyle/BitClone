@@ -67,10 +67,10 @@ class TxInput(Serializable):
     def to_dict(self) -> dict:
         return {
             "txid": self.txid.hex(),
-            "vout": self.vout,
-            "scriptsig_size": len(self.scriptsig),
+            "vout": self.vout.to_bytes(TX.VOUT, "little").hex(),
+            "scriptsig_size": write_compact_size(len(self.scriptsig)).hex(),
             "scriptsig": self.scriptsig.hex(),
-            "sequence": self.sequence
+            "sequence": self.sequence.to_bytes(TX.SEQUENCE, "little").hex()
         }
 
 
@@ -115,8 +115,8 @@ class TxOutput(Serializable):
 
     def to_dict(self) -> dict:
         return {
-            "amount": self.amount,
-            "scriptpubkey_size": len(self.scriptpubkey),
+            "amount": self.amount.to_bytes(TX.AMOUNT, "little").hex(),
+            "scriptpubkey_size": write_compact_size(len(self.scriptpubkey)).hex(),
             "scriptpubkey": self.scriptpubkey.hex()
         }
 
@@ -410,12 +410,12 @@ class Transaction(Serializable):
 
         # Begin dictionary construction
         tx_dict = {
-            "txid": self.txid[::-1].hex(),  # Reverse byte order for display
-            "wtxid": self.wtxid[::-1].hex(),  # Reverse byte order for display
-            "wu": self.wu,
-            "bytes": self.length,
-            "vbytes": self.vbytes,
-            "version": self.version
+            # "txid": self.txid[::-1].hex(),  # Reverse byte order for display
+            # "wtxid": self.wtxid[::-1].hex(),  # Reverse byte order for display
+            # "wu": self.wu,
+            # "bytes": self.length,
+            # "vbytes": self.vbytes,
+            "version": self.version.to_bytes(TX.VERSION, "little").hex()
         }
 
         # Segwit check | add marker and flag
@@ -427,9 +427,9 @@ class Transaction(Serializable):
 
         # Add inputs and outputs
         tx_dict.update({
-            "input_num": len(self.inputs),
+            "input_num": write_compact_size(len(self.inputs)).hex(),
             "inputs": inputs,
-            "output_num": len(self.outputs),
+            "output_num": write_compact_size(len(self.outputs)).hex(),
             "outputs": outputs
         })
 
@@ -442,7 +442,7 @@ class Transaction(Serializable):
 
         # Add locktime and return
         tx_dict.update({
-            "locktime": self.locktime
+            "locktime": self.locktime.to_bytes(TX.LOCKTIME, "little").hex()
         })
         return tx_dict
 

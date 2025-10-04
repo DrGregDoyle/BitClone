@@ -13,7 +13,7 @@ class BLOCK:
     NONCE: Final[int] = VERSION
     BITS: Final[int] = VERSION
     MERKLE_ROOT: Final[int] = PREV_BLOCK
-    TIMESTAMP_FORMAT: Final[str] = "%A, %d %B %Y %H:%M:%S"
+    TIMESTAMP_FORMAT: Final[str] = "%A, %d %B %Y %H:%M:%S"  # Display
 
 
 class DATA:
@@ -102,6 +102,7 @@ class SCRIPT:
         0: b'',
         -1: b'\x81'
     }
+    PUBKEY_LENS: Final[list] = [33, 65]  # Allowable lengths for a public key
 
 
 # --- OPCODES DICT FOR ASM --- #
