@@ -97,7 +97,7 @@ def to_asm(script: SERIALIZED) -> list:
 
         # Known opcodes - use dict.get() with default to avoid KeyError exception overhead
         else:
-            opcode_name = OPCODES.get(opcode_int)
+            opcode_name = OPCODES.get_name(opcode_int)
             if opcode_name:
                 asm_log.append(opcode_name)
             else:

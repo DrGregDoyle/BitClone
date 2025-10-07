@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from src.core import ScriptSigError, SCRIPT
 from src.script.parser import to_asm
 
-__all__ = ["P2PK", "P2PKH", "ScriptSig"]
+__all__ = ["P2PK", "P2PKH", "ScriptSig", 'P2MS']
 
 # --- OPCODES --- #
 OP_PUSHBYTES_33 = b'\x21'
@@ -152,6 +152,6 @@ if __name__ == "__main__":
     # print(f"TEST P2PKH: {test_p2pkh.to_asm()}")
 
     p2ms_bytes = bytes.fromhex(
-        "00483045022100af204ef91b8dba5884df50f87219ccef22014c21dd05aa44470d4ed800b7f6e40220428fe058684db1bb2bfb6061bff67048592c574effc217f0d150daedcf36787601483045022100e8547aa2c2a2761a5a28806d3ae0d1bbf0aeff782f9081dfea67b86cacb321340220771a166929469c34959daf726a2ac0c253f9aff391e58a3c7cb46d8b7e0fdc4801")
+        "00493046022100a41a9015c847f404a14fcc81bf711ee2ce57583987948d54ebe540aafca97e0d022100d4e30d1ca42f77df8290b8975aa8fc0733d7c0cfdd5067ca516bac6c4012b47a01")
     test_p2ms = P2MS.from_bytes(p2ms_bytes)
     print(f"TEST P2MS: {test_p2ms.to_asm()}")

@@ -71,12 +71,14 @@ def decode_base58(data: str) -> bytes:
     return decoded_bytes
 
 
-def encode_base58check(data: bytes) -> str:
+def encode_base58check(data: bytes, prefix_byte: bytes = b'\x00') -> str:
     """
     Given bytes data, we return the base58 encoding along with checksum
+    #TODO: Add the prefix option to generate correct addresses
     """
-    checksum = hash256(data)[:4]  # First 4 bytes of HASH256(data)
-    return encode_base58(data + checksum)
+    _data = prefix_byte + data
+    checksum = hash256(_data)[:4]  # First 4 bytes of HASH256(data)
+    return encode_base58(_data + checksum)
 
 
 def decode_base58check(data: str) -> tuple[bytes, bytes]:
@@ -167,3 +169,11 @@ def decode_der_signature(der_sig: bytes) -> tuple[int, int]:
     Decodes a DER-encoded ECDSA signature back into integers r and s.
     """
     return decode_dss_signature(der_sig)
+
+
+# --- TESTING
+if __name__ == "__main__":
+    random_public_key = bytes.fromhex("0226170fa92dda4aad1fedb26c389116641ddd02e0429868b0ce76e9c8a5d3360f")
+    pubkeyhash = bytes.fromhex("83154903c75b3ac421b16e41aab015c0b98e2649")
+    addy = encode_base58check(pubkeyhash)
+    print(f"ADDRESS: {addy}")
