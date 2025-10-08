@@ -6,7 +6,6 @@ Elliptic curve cryptography and hash functions
 
 from src.cryptography.bech32 import *
 from src.cryptography.ecc import *
-from src.cryptography.ecc_keys import *
 from src.cryptography.ecdsa import *
 from src.cryptography.hash_functions import *
 from src.cryptography.schnorr import *

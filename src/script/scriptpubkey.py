@@ -4,7 +4,7 @@ The ScriptPubKey class and its children
 
 from abc import ABC, abstractmethod
 
-from src.core import ScriptPubKeyError, OPCODES
+from src.core import ScriptPubKeyError, OPCODES, SERIALIZED, get_bytes
 from src.cryptography import hash160
 from src.data import encode_base58check
 from src.script.parser import to_asm
@@ -21,7 +21,7 @@ class ScriptPubKey(ABC):
 
     @classmethod
     @abstractmethod
-    def from_bytes(cls, *args):
+    def from_bytes(cls, byte_stream: SERIALIZED):
         raise NotImplementedError
 
     @property
@@ -37,6 +37,11 @@ class ScriptPubKey(ABC):
 
     def to_asm(self):
         return to_asm(self.script)
+
+    def __eq__(self, other):
+        if isinstance(other, ScriptPubKey):
+            return self.script == other.script
+        raise ScriptPubKeyError(f"Cannot equate ScriptPubKey and {type(other)}")
 
 
 class P2PK(ScriptPubKey):
@@ -85,16 +90,64 @@ class P2PKH(ScriptPubKey):
         -OP_EQUALVERIFY - pop the top two elements and compare them, stop if not equal
         -OP_CHECKSIG - pop the signature and verify it, push 1 if true, 0 otherwise
     """
+    OP_DUP = _OP.get_byte("OP_DUP")
+    OP_HASH160 = _OP.get_byte("OP_HASH160")
+    OP_EQUALVERIFY = _OP.get_byte("OP_EQUALVERIFY")
+    OP_CHECKSIG = _OP.get_byte("OP_CHECKSIG")
+    OP_PUSHBYTES_20 = _OP.get_byte("OP_PUSHBYTES_20")
 
     def __init__(self, pubkey: bytes):
         pubkeyhash = hash160(pubkey)
-        self.script = _OP.OP_DUP + _OP.OP_HASH160 + pubkeyhash + _OP.OP_EQUALVERIFY + _OP.OP_CHECKSIG
+        self.script = (self.OP_DUP + self.OP_HASH160 + self.OP_PUSHBYTES_20 + pubkeyhash + self.OP_EQUALVERIFY +
+                       self.OP_CHECKSIG)
+        self._pubkeyhash = pubkeyhash
+
+    @classmethod
+    def from_bytes(cls, byte_stream: SERIALIZED) -> "P2PKH":
+        script_bytes = get_bytes(byte_stream)
+
+        op_codes_validated = all([
+            bytes([script_bytes[0]]) == cls.OP_DUP,
+            bytes([script_bytes[1]]) == cls.OP_HASH160,
+            bytes([script_bytes[2]]) == cls.OP_PUSHBYTES_20,
+            bytes([script_bytes[-2]]) == cls.OP_EQUALVERIFY,
+            bytes([script_bytes[-1]]) == cls.OP_CHECKSIG
+        ])
+        if op_codes_validated:
+            pubkeyhash = script_bytes[3:-2]
+            print(f"PUBKEYHASH: {pubkeyhash.hex()}")
+            return cls.from_pubkeyhash(pubkeyhash)
+        raise ScriptPubKeyError("Given scriptpubkey doesn't match P2PKH OP_CODE structure")
+
+    @classmethod
+    def from_pubkeyhash(cls, pubkeyhash: bytes) -> "P2PKH":
+        obj = object.__new__(cls)
+        obj.script = (cls.OP_DUP + cls.OP_HASH160 + cls.OP_PUSHBYTES_20 + pubkeyhash + cls.OP_EQUALVERIFY +
+                      cls.OP_CHECKSIG)
+        obj._pubkeyhash = pubkeyhash
+        return obj
+
+    def address(self) -> str:
+        pubkeyhash = self.script[3:-2]
+        return encode_base58check(pubkeyhash)
+
+    def get_pubkeyhash(self):
+        return self._pubkeyhash
 
 
 # ---- TESTING --- #
 if __name__ == "__main__":
-    lmab_p2pk_bytes = bytes.fromhex(
-        "4104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac")
-    lmab_p2pk = P2PK.from_bytes(lmab_p2pk_bytes)
-    print(lmab_p2pk.to_asm())
-    print(f"ADDRESS: {lmab_p2pk.address}")
+    lmab_pubkeyhash_bytes = bytes.fromhex("55f44cf0dba9d62e0538b362c3ce71237e92cd94")
+    lmab_p2pkh = P2PKH.from_pubkeyhash(lmab_pubkeyhash_bytes)
+    print(f"PUBKEYHASH: {lmab_p2pkh.get_pubkeyhash().hex()}")
+    print(f"LMAB ADDRESS: {lmab_p2pkh.address()}")
+    # _privkey = 41
+    # _pubkey = PubKey(_privkey)
+    # print(f"PUBKEY: {_pubkey.to_json()}")
+    #
+    # _test_p2pkh = P2PKH(_pubkey.compressed())
+    # _test_script = _test_p2pkh.script
+    # print(f"TEST SCRIPT: {_test_script.hex()}")
+    # print(f"TO ASM: {to_asm(_test_script)}")
+    # fb_p2pkh = P2PKH.from_bytes(_test_p2pkh.to_bytes())
+    # print(f"SCRIPTPUBKEYS EQUAL: {_test_p2pkh == fb_p2pkh}")

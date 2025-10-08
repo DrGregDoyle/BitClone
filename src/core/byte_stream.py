@@ -8,7 +8,7 @@ from typing import Union, Optional, Literal
 
 from .exceptions import ReadError
 
-__all__ = ["SERIALIZED", "BYTEORDER", "get_stream", "read_stream", "read_little_int", "read_big_int"]
+__all__ = ["SERIALIZED", "BYTEORDER", "get_stream", "read_stream", "read_little_int", "read_big_int", "get_bytes"]
 
 SERIALIZED = Union[bytes, BytesIO]
 BYTEORDER = Literal['big', 'little']
@@ -20,6 +20,16 @@ def get_stream(byte_stream: SERIALIZED):
         return BytesIO(byte_stream)
     elif isinstance(byte_stream, BytesIO):
         return byte_stream
+    else:
+        raise TypeError(f"Expected bytes or BytesIO but received: {type(byte_stream)}")
+
+
+def get_bytes(byte_stream: SERIALIZED) -> bytes:
+    """Convert BytesIO or bytes to bytes object"""
+    if isinstance(byte_stream, bytes):
+        return byte_stream
+    elif isinstance(byte_stream, BytesIO):
+        return byte_stream.getvalue()
     else:
         raise TypeError(f"Expected bytes or BytesIO but received: {type(byte_stream)}")
 

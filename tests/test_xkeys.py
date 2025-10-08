@@ -5,7 +5,7 @@ from random import randint, choice
 from secrets import token_bytes, randbelow
 
 from src.core import XKEYS
-from src.data.keys import PubKey
+from src.data.ecc_keys import PubKey
 from src.wallet import ExtendedKey
 
 

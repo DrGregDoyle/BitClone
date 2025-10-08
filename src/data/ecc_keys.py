@@ -1,12 +1,7 @@
-"""
-Methods for public and private keys in BitClone
-"""
 import json
 
 from src.core import PubKeyError
 from src.cryptography import SECP256K1, Point, hash160
-
-__all__ = ["PubKey"]
 
 
 class PubKey:
@@ -166,10 +161,3 @@ class PubKey:
 
     def to_json(self):
         return json.dumps(self.to_dict(), indent=2)
-
-
-# --- TESTING --- #
-if __name__ == "__main__":
-    known_cpk = bytes.fromhex("02e3af28965693b9ce1228f9d468149b831d6a0540b25e8a9900f71372c11fb277")
-    test_pubkey = PubKey.from_compressed(known_cpk)
-    print(f"TEST PUBKEY: {test_pubkey.to_json()}")

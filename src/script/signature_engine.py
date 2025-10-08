@@ -9,8 +9,9 @@ from enum import IntEnum
 from typing import Optional
 
 from src.core import SignatureError
-from src.cryptography import ecdsa, verify_ecdsa, schnorr_verify, schnorr_sig, hash256, PubKey
-from src.data import encode_der_signature, decode_der_signature, PubKey
+from src.cryptography import ecdsa, verify_ecdsa, schnorr_verify, schnorr_sig, hash256
+from src.data import encode_der_signature, decode_der_signature
+from src.data.ecc_keys import PubKey
 from src.script.script_type import ScriptType
 from src.script.scriptsig import P2PK, P2PKH, P2MS
 from src.tx import Transaction, TxInput, TxOutput

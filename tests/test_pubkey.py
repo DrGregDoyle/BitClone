@@ -3,7 +3,7 @@ We test the serialization methods for the PubKey class
 """
 from secrets import token_bytes
 
-from src.data import PubKey
+from src.data.ecc_keys import PubKey
 
 
 def test_pubkey_recovery():

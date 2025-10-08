@@ -12,7 +12,7 @@ from src.data import encode_base58, decode_base58
 
 __all__ = ["ExtendedKey"]
 
-from src.data.keys import PubKey
+from src.data.ecc_keys import PubKey
 
 BIP44_XPRV = XKEYS.BIP44_XPRV
 BIP44_XPUB = XKEYS.BIP44_XPUB
