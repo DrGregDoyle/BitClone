@@ -136,6 +136,12 @@ class OPCODES:
     # Name -> byte value mapping (reverse lookup)
     _names = {name: bytes([code]) for code, name in _codes.items()}
 
+    def get_code_dict(self):
+        return self._codes
+
+    def get_code_names(self):
+        return self._names
+
     @classmethod
     def get_name(cls, byte_value: int) -> str:
         """Get opcode name from byte value"""

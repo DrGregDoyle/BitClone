@@ -44,30 +44,31 @@ class ScriptPubKey(ABC):
         raise ScriptPubKeyError(f"Cannot equate ScriptPubKey and {type(other)}")
 
 
-class P2PK(ScriptPubKey):
+class P2PK_Key(ScriptPubKey):
     __slots__ = ("script",)
 
     def __init__(self, pubkey: bytes):
         # --- Pubkey validation --- #
         if len(pubkey) not in (33, 65):
-            raise ScriptPubKeyError(f"P2PK pubkey not of correct length: {len(pubkey)}. Expected one of 33, 65.")
+            raise ScriptPubKeyError(f"P2PK_Sig pubkey not of correct length: {len(pubkey)}. Expected one of 33, 65.")
 
-        push_byte = _OP.OP_PUSHBYTES_33 if len(pubkey) == 33 else _OP.OP_PUSHBYTES_33
-        self.script = push_byte + pubkey + _OP.OP_CHECKSIG
+        push_byte = _OP.get_byte("OP_PUSHBYTES_65") if len(pubkey) == 65 else _OP.get_byte("OP_PUSHBYTES_33")
+        self.script = push_byte + pubkey + _OP.get_byte("OP_CHECKSIG")
 
     @classmethod
     def from_bytes(cls, scriptpubkey: bytes):
         lead = scriptpubkey[0]
         tail = scriptpubkey[-1]
-        if tail == _OP.OP_CHECKSIG[0] and lead in (_OP.OP_PUSHBYTES_33[0], _OP.OP_PUSHBYTES_65[0]):
+        if tail == _OP.get_byte("OP_CHECKSIG")[0] and lead in (_OP.get_byte("OP_PUSHBYTES_33")[0],
+                                                               _OP.get_byte("OP_PUSHBYTES_65")[0]):
             pubkey = scriptpubkey[1:-1]
             return cls(pubkey)
-        raise ScriptPubKeyError("P2PK failed byte constructino")
+        raise ScriptPubKeyError("P2PK_Sig failed byte constructino")
 
     @property
     def address(self) -> str:
         """
-        We hash160 the public key in the script and convert to base58, similar to P2PKH
+        We hash160 the public key in the script and convert to base58, similar to P2PKH_Sig
         """
         pubkey = self.script[1:-1]
         pubkey_hash = hash160(pubkey)
@@ -75,7 +76,7 @@ class P2PK(ScriptPubKey):
         return encode_base58check(pubkey_hash)
 
 
-class P2PKH(ScriptPubKey):
+class P2PKH_Key(ScriptPubKey):
     """
     ScriptPubKey:
         OP_DUP || OP_HASH160 || pubkeyhash || OP_EQUALVERIFY || CHECKSIG
@@ -103,7 +104,7 @@ class P2PKH(ScriptPubKey):
         self._pubkeyhash = pubkeyhash
 
     @classmethod
-    def from_bytes(cls, byte_stream: SERIALIZED) -> "P2PKH":
+    def from_bytes(cls, byte_stream: SERIALIZED) -> "P2PKH_Key":
         script_bytes = get_bytes(byte_stream)
 
         op_codes_validated = all([
@@ -117,10 +118,10 @@ class P2PKH(ScriptPubKey):
             pubkeyhash = script_bytes[3:-2]
             print(f"PUBKEYHASH: {pubkeyhash.hex()}")
             return cls.from_pubkeyhash(pubkeyhash)
-        raise ScriptPubKeyError("Given scriptpubkey doesn't match P2PKH OP_CODE structure")
+        raise ScriptPubKeyError("Given scriptpubkey doesn't match P2PKH_Sig OP_CODE structure")
 
     @classmethod
-    def from_pubkeyhash(cls, pubkeyhash: bytes) -> "P2PKH":
+    def from_pubkeyhash(cls, pubkeyhash: bytes) -> "P2PKH_Key":
         obj = object.__new__(cls)
         obj.script = (cls.OP_DUP + cls.OP_HASH160 + cls.OP_PUSHBYTES_20 + pubkeyhash + cls.OP_EQUALVERIFY +
                       cls.OP_CHECKSIG)
@@ -139,7 +140,7 @@ class P2PKH(ScriptPubKey):
 # ---- TESTING --- #
 if __name__ == "__main__":
     lmab_pubkeyhash_bytes = bytes.fromhex("55f44cf0dba9d62e0538b362c3ce71237e92cd94")
-    lmab_p2pkh = P2PKH.from_pubkeyhash(lmab_pubkeyhash_bytes)
+    lmab_p2pkh = P2PKH_Key.from_pubkeyhash(lmab_pubkeyhash_bytes)
     print(f"PUBKEYHASH: {lmab_p2pkh.get_pubkeyhash().hex()}")
     print(f"LMAB ADDRESS: {lmab_p2pkh.address()}")
     print(f"LMAB ADDRESS TESTNET: {lmab_p2pkh.address(testnet=True)}")
@@ -147,9 +148,9 @@ if __name__ == "__main__":
     # _pubkey = PubKey(_privkey)
     # print(f"PUBKEY: {_pubkey.to_json()}")
     #
-    # _test_p2pkh = P2PKH(_pubkey.compressed())
+    # _test_p2pkh = P2PKH_Sig(_pubkey.compressed())
     # _test_script = _test_p2pkh.script
     # print(f"TEST SCRIPT: {_test_script.hex()}")
     # print(f"TO ASM: {to_asm(_test_script)}")
-    # fb_p2pkh = P2PKH.from_bytes(_test_p2pkh.to_bytes())
+    # fb_p2pkh = P2PKH_Sig.from_bytes(_test_p2pkh.to_bytes())
     # print(f"SCRIPTPUBKEYS EQUAL: {_test_p2pkh == fb_p2pkh}")

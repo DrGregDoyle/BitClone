@@ -27,8 +27,8 @@ class ScriptPubKey:
 
         # Map script types to their handler functions
         handlers = {
-            ScriptType.P2PK: self._handle_p2pk,
-            ScriptType.P2PKH: self._handle_p2pkh,
+            ScriptType.P2PK_Sig: self._handle_p2pk,
+            ScriptType.P2PKH_Sig: self._handle_p2pkh,
             ScriptType.P2MS: self._handle_p2ms,
             ScriptType.P2SH: self._handle_p2sh,
             ScriptType.P2WPKH: self._handle_p2wpkh,
@@ -68,14 +68,14 @@ class ScriptPubKey:
         Attempts to classify a raw script into a known ScriptType.
         Returns ScriptType or None if detection fails.
         """
-        # P2PKH
+        # P2PKH_Sig
         if (len(script) == 25 and
                 script[0] == _op.OP_DUP[0] and
                 script[1] == _op.OP_HASH160[0] and
                 script[2] == _op.OP_PUSHBYTES_20[0] and
                 script[-2] == _op.OP_EQUALVERIFY[0] and
                 script[-1] == _op.OP_CHECKSIG[0]):
-            return ScriptType.P2PKH
+            return ScriptType.P2PKH_Sig
 
         # P2SH
         if (len(script) == 23 and
@@ -102,12 +102,12 @@ class ScriptPubKey:
                 script[1] == _op.OP_PUSHBYTES_32[0]):
             return ScriptType.P2TR
 
-        # P2PK
+        # P2PK_Sig
         if script[-1:] == _op.OP_CHECKSIG:
             pubkey_len = len(script[1:-1])
             op_code = script[0]
             if op_code == pubkey_len:
-                return ScriptType.P2PK
+                return ScriptType.P2PK_Sig
 
         # Custom
         return ScriptType.CUSTOM
@@ -116,7 +116,7 @@ class ScriptPubKey:
         """
         Returns the version prefix byte for the given address type.
         """
-        if self.script_type == ScriptType.P2PK or self.script_type == ScriptType.P2PKH:
+        if self.script_type == ScriptType.P2PK_Sig or self.script_type == ScriptType.P2PKH_Sig:
             return b'\x6f' if self.testnet else b'\x00'
         elif self.script_type == ScriptType.P2SH:
             return b'\xc4' if self.testnet else b'\x05'
@@ -144,7 +144,7 @@ class ScriptPubKey:
     # --- HANDLERS
     def _handle_p2pk(self, pubkey: bytes):
         """
-        P2PK | OP_PUSHBYTES_ + pubkey + OP_CHECKSIG
+        P2PK_Sig | OP_PUSHBYTES_ + pubkey + OP_CHECKSIG
         """
         # Validate pubkey
         pubkey_len = len(pubkey)
@@ -162,7 +162,7 @@ class ScriptPubKey:
 
     def _handle_p2pkh(self, pubkey: bytes):
         """
-        P2PKH | OP_DUP + OP_HASH160 + OP_PUSHBYTES_20 + pubkeyhash + OP_EQUALVERIFY + OP_CHECKSIG
+        P2PKH_Sig | OP_DUP + OP_HASH160 + OP_PUSHBYTES_20 + pubkeyhash + OP_EQUALVERIFY + OP_CHECKSIG
         """
         # Script
         pubkeyhash = hash160(pubkey)
@@ -288,11 +288,11 @@ class ScriptPubKey:
 class ScriptPubKeyFactory:
     @staticmethod
     def p2pk(pubkey: bytes, testnet: bool = False) -> ScriptPubKey:
-        return ScriptPubKey(ScriptType.P2PK, pubkey, testnet=testnet)
+        return ScriptPubKey(ScriptType.P2PK_Sig, pubkey, testnet=testnet)
 
     @staticmethod
     def p2pkh(pubkey: bytes, testnet: bool = False) -> ScriptPubKey:
-        return ScriptPubKey(ScriptType.P2PKH, pubkey, testnet=testnet)
+        return ScriptPubKey(ScriptType.P2PKH_Sig, pubkey, testnet=testnet)
 
     @staticmethod
     def p2ms(pubkeys: list[bytes], signum: int = None, testnet: bool = False) -> ScriptPubKey:

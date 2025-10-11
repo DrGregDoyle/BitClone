@@ -123,7 +123,7 @@ class ScriptValidator:
                     logger.error("P2WPKH pubkey hash mismatch")
                     return False
 
-                # Build implied P2PKH script
+                # Build implied P2PKH_Sig script
                 p2pkh_scriptpubkey = ScriptPubKeyFactory.p2pkh(pubkey)
                 # pubkey_engine = ScriptPubKeyEngine()
                 # script_code = pubkey_engine.p2pkh(pubkey).scriptpubkey

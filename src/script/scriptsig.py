@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from src.core import ScriptSigError, SCRIPT
 from src.script.parser import to_asm
 
-__all__ = ["P2PK", "P2PKH", "ScriptSig", 'P2MS']
+__all__ = ["P2PK_Sig", "P2PKH_Sig", "ScriptSig", 'P2MS']
 
 # --- OPCODES --- #
 OP_PUSHBYTES_33 = b'\x21'
@@ -20,6 +20,12 @@ class ScriptSig(ABC):
     Base class for scriptSigs
     """
     script = None
+
+    @classmethod
+    @abstractmethod
+    def from_bytes(cls, scriptsig: bytes):
+        """All subclasses must implement this"""
+        raise NotImplementedError("Missing from_bytes construction")
 
     def pushdata(self, item: bytes):
         """
@@ -45,7 +51,7 @@ class ScriptSig(ABC):
         return to_asm(self.script)
 
 
-class P2PK(ScriptSig):
+class P2PK_Sig(ScriptSig):
     """
     Script = OP_PUSHBYTES + signature
 
@@ -57,7 +63,6 @@ class P2PK(ScriptSig):
         self.script = self.pushdata(sig)
 
     @classmethod
-    @abstractmethod
     def from_bytes(cls, scriptsig: bytes):
         leading_byte = scriptsig[0]
         actual_siglen = len(scriptsig[1:])
@@ -67,10 +72,10 @@ class P2PK(ScriptSig):
             return cls(scriptsig[1:])
 
         raise ScriptSigError(
-            f"Incorrect format for P2PK ScriptSig (expected length {leading_byte}, got {actual_siglen})")
+            f"Incorrect format for P2PK_Sig ScriptSig (expected length {leading_byte}, got {actual_siglen})")
 
 
-class P2PKH(ScriptSig):
+class P2PKH_Sig(ScriptSig):
     """
     Script = OP_PUSHBYTES + signature + OP_PUSHBYTES + public_key
 
@@ -148,8 +153,8 @@ class P2MS(ScriptSig):
 if __name__ == "__main__":
     # p2pkh_bytes = bytes.fromhex(
     #     "483045022100c233c3a8a510e03ad18b0a24694ef00c78101bfd5ac075b8c1037952ce26e91e02205aa5f8f88f29bb4ad5808ebc12abfd26bd791256f367b04c6d955f01f28a7724012103f0609c81a45f8cab67fc2d050c21b1acd3d37c7acfd54041be6601ab4cef4f31")
-    # test_p2pkh = P2PKH.from_bytes(p2pkh_bytes)
-    # print(f"TEST P2PKH: {test_p2pkh.to_asm()}")
+    # test_p2pkh = P2PKH_Sig.from_bytes(p2pkh_bytes)
+    # print(f"TEST P2PKH_Sig: {test_p2pkh.to_asm()}")
 
     p2ms_bytes = bytes.fromhex(
         "00493046022100a41a9015c847f404a14fcc81bf711ee2ce57583987948d54ebe540aafca97e0d022100d4e30d1ca42f77df8290b8975aa8fc0733d7c0cfdd5067ca516bac6c4012b47a01")

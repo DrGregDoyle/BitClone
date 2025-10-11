@@ -98,9 +98,9 @@ def add_scriptsig(tx: Transaction, script_sig: bytes, input_index: int = 0) -> T
 # -- TESTS
 def test_p2pk(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
-    Minimal flow for P2PK test:
+    Minimal flow for P2PK_Sig test:
         - Generate keypair
-        - Build P2PK scriptPubKey
+        - Build P2PK_Sig scriptPubKey
         - Create UTXO with that scriptPubKey
         - Create tx spending that UTXO and sign it
         - Build scriptSig: push signature
@@ -111,7 +111,7 @@ def test_p2pk(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_fact
     # 1. Generate keypair
     private_key, compressed_pubkey = generate_keypair()
 
-    # 2. Get P2PK scriptPubKey
+    # 2. Get P2PK_Sig scriptPubKey
     p2pk_scriptpubkey = pubkey_factory.p2pk(compressed_pubkey)
 
     # 3. Create UTXO with that scriptPubKey
@@ -134,7 +134,7 @@ def test_p2pk(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_fact
     # 7. Validate
     final_script = p2pk_scriptsig.script + p2pk_scriptpubkey.script
     asm = parser.parse_script(final_script)
-    print(f"P2PK ASM: {asm}")
+    print(f"P2PK_Sig ASM: {asm}")
     assert validator.validate_utxo(final_tx, 0)
     assert script_engine.eval_script(
         script=final_script,
@@ -155,7 +155,7 @@ def test_p2pkh(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_fac
     """
     Minimal flow for p2pkh test:
         -Generate pubkey
-        -Build P2PKH scriptPubKey (will automatically hash160 the pubkey)
+        -Build P2PKH_Sig scriptPubKey (will automatically hash160 the pubkey)
         -Create UTXO with that scriptPubKey
         -Create tx with that utxo and sign it
         -Build scriptSig: push signature, then pubkey
@@ -189,7 +189,7 @@ def test_p2pkh(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_fac
     # 8. Validate
     final_script = p2pkh_scriptsig.script + p2pkh_scriptpubkey.script
     asm = parser.parse_script(final_script)
-    print(f"P2PKH ASM: {asm}")
+    print(f"P2PKH_Sig ASM: {asm}")
     assert validator.validate_utxo(final_tx, 0), "p2pkh scriptSig + scriptpubkey failed"
     assert script_engine.eval_script(final_script, final_tx, utxo=p2pkh_utxo, input_index=0), "p2pkh scriptSig + " \
                                                                                               "scriptpubkey failed"
@@ -270,8 +270,8 @@ def test_p2sh_p2pk(test_db, script_engine, sig_engine, scriptsig_factory, pubkey
     # 7. Validate
     full_script = scriptsig.script + p2sh_scriptpubkey.script
     asm = parser.parse_script(full_script)
-    print(f"P2SH(P2PK) ASM: {asm}")
-    assert validator.validate_utxo(final_tx, 0), "P2SH(P2PK) failed"
+    print(f"P2SH(P2PK_Sig) ASM: {asm}")
+    assert validator.validate_utxo(final_tx, 0), "P2SH(P2PK_Sig) failed"
 
 
 def test_p2sh_p2pkh(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
@@ -304,8 +304,8 @@ def test_p2sh_p2pkh(test_db, script_engine, sig_engine, scriptsig_factory, pubke
     # 7. Validate
     full_script = scriptsig.script + p2sh_scriptpubkey.script
     asm = parser.parse_script(full_script)
-    print(f"P2SH(P2PKH) ASM: {asm}")
-    assert validator.validate_utxo(final_tx, 0), "P2SH(P2PK) failed"
+    print(f"P2SH(P2PKH_Sig) ASM: {asm}")
+    assert validator.validate_utxo(final_tx, 0), "P2SH(P2PK_Sig) failed"
 
 
 def test_p2sh_p2ms(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
@@ -440,7 +440,7 @@ def test_p2wsh_p2pk(test_db, script_engine, sig_engine, scriptsig_factory, pubke
 
 def test_p2wsh_p2pkh(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
-    Test P2WSH where the redeem script is a P2PKH.
+    Test P2WSH where the redeem script is a P2PKH_Sig.
     """
     script_engine.clear_stacks()
     test_db._clear_db()
@@ -448,7 +448,7 @@ def test_p2wsh_p2pkh(test_db, script_engine, sig_engine, scriptsig_factory, pubk
     # 1. Generate keypair
     privkey, compressed_pubkey = generate_keypair()
 
-    # 2. Create redeem script (P2PKH)
+    # 2. Create redeem script (P2PKH_Sig)
     redeem_scriptpubkey = pubkey_factory.p2pkh(compressed_pubkey)
 
     # 3. Create P2WSH scriptpubkey
@@ -472,9 +472,9 @@ def test_p2wsh_p2pkh(test_db, script_engine, sig_engine, scriptsig_factory, pubk
     tx.witnesses = [Witness(witness_items)]
 
     # 8. Validate
-    print(f"P2WSH(P2PKH) SCRIPTPUBKEY: {parser.parse_script(p2wsh_scriptpubkey.script)}")
-    print(f"P2WSH(P2PKH) REDEEM SCRIPT: {parser.parse_script(redeem_scriptpubkey.script)}")
-    assert validator.validate_utxo(tx, 0), "P2WSH(P2PKH) Failed assertion"
+    print(f"P2WSH(P2PKH_Sig) SCRIPTPUBKEY: {parser.parse_script(p2wsh_scriptpubkey.script)}")
+    print(f"P2WSH(P2PKH_Sig) REDEEM SCRIPT: {parser.parse_script(redeem_scriptpubkey.script)}")
+    assert validator.validate_utxo(tx, 0), "P2WSH(P2PKH_Sig) Failed assertion"
 
 
 def test_p2wsh_p2ms(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
@@ -569,7 +569,7 @@ def test_p2tr_keypath(test_db, script_engine, sig_engine, scriptsig_factory, pub
 def test_p2tr_scriptpath_simple(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
     Taproot script path spending:
-        - Create internal key + leaf script (e.g., P2PK)
+        - Create internal key + leaf script (e.g., P2PK_Sig)
         - Compute TapLeaf hash
         - Tweak internal key using leaf hash
         - Build control block (version + internal key)
@@ -720,7 +720,7 @@ def test_p2tr_scriptpath_sig_example(test_db, script_engine, sig_engine, scripts
 def test_p2tr_scriptpath_sig(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
     Taproot script path spending:
-        - Create internal key + leaf script (e.g., P2PK)
+        - Create internal key + leaf script (e.g., P2PK_Sig)
         - Compute TapLeaf hash
         - Tweak internal key using leaf hash
         - Build control block (version + internal key)
@@ -784,7 +784,7 @@ def test_p2tr_scriptpath_sig(test_db, script_engine, sig_engine, scriptsig_facto
 def test_p2tr_scriptpath_tree_example(test_db, script_engine, sig_engine, scriptsig_factory, pubkey_factory, parser):
     """
     Taproot script path spending:
-        - Create internal key + leaf script (e.g., P2PK)
+        - Create internal key + leaf script (e.g., P2PK_Sig)
         - Compute TapLeaf hash
         - Tweak internal key using leaf hash
         - Build control block (version + internal key)

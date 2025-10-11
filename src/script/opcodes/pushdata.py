@@ -4,31 +4,15 @@ Basic Push operations for BitCoin, including True/False
 """
 from src.script import BitStack, BitNum
 
-__all__ = ["op_zero", "op_false", "op_one", "op_true"]
-
-
-def op_zero(main_stack: BitStack):
-    """
-    OP_0 | 0x00
-    Push empty byte array to stack
-    """
-    main_stack.pushbool(False)
+__all__ = ["op_false", "op_true"]
 
 
 def op_false(main_stack: BitStack):
     """
-    OP_FALSE | 0x00
+    OP_0, OP_FALSE, OP_PUSHBYTES_0 | 0x00
     Push empty byte array to stack
     """
     main_stack.pushbool(False)
-
-
-def op_one(main_stack: BitStack):
-    """
-    OP_1, OP_TRUE | 0x51
-    Push 1 to the stack
-    """
-    main_stack.pushbool(True)
 
 
 def op_true(main_stack: BitStack):

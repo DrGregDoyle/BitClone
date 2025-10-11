@@ -13,7 +13,7 @@ from src.cryptography import ecdsa, verify_ecdsa, schnorr_verify, schnorr_sig, h
 from src.data import encode_der_signature, decode_der_signature
 from src.data.ecc_keys import PubKey
 from src.script.script_type import ScriptType
-from src.script.scriptsig import P2PK, P2PKH, P2MS
+from src.script.scriptsig import P2PK_Sig, P2PKH_Sig, P2MS
 from src.tx import Transaction, TxInput, TxOutput
 
 
@@ -86,12 +86,12 @@ class SignatureEngine:
             tx: The transaction to sign
             input_index: Index of the input being signed
             script_code: The scriptPubKey being spent (or redeem script for P2SH)
-            script_type: Type of script (P2PK, P2PKH, P2MS, etc.)
+            script_type: Type of script (P2PK_Sig, P2PKH_Sig, P2MS, etc.)
             sighash_num: Sighash type
-            privkey: Single private key (for P2PK, P2PKH)
+            privkey: Single private key (for P2PK_Sig, P2PKH_Sig)
             privkeys: List of private keys (for P2MS)
             **kwargs: Additional parameters for specific script types
-                - pubkey: Public key bytes (optional for P2PKH, will derive if not provided)
+                - pubkey: Public key bytes (optional for P2PKH_Sig, will derive if not provided)
 
         Returns:
             The transaction with the signed input
@@ -123,7 +123,7 @@ class SignatureEngine:
         # Build scriptsig based on script type
         if script_type == ScriptType.P2PK:
             full_sig = create_full_sig(privkey, sighash_num)
-            scriptsig = P2PK(full_sig).script
+            scriptsig = P2PK_Sig(full_sig).script
 
         elif script_type == ScriptType.P2PKH:
             full_sig = create_full_sig(privkey, sighash_num)
@@ -134,7 +134,7 @@ class SignatureEngine:
                 pubkey = PubKey(privkey).compressed() if isinstance(privkey, int) else PubKey.from_bytes(
                     privkey).compressed()
 
-            scriptsig = P2PKH(full_sig, pubkey).script
+            scriptsig = P2PKH_Sig(full_sig, pubkey).script
 
         elif script_type == ScriptType.P2MS:
             # Generate multiple signatures from the same sighash

@@ -9,14 +9,14 @@ NOTE: SQLITE supports signed 64-bit integers, hence the maximum random value for
 from random import randint
 from secrets import token_bytes, randbits, randbelow
 
+from src import Input, Output, WitnessItem, Witness, Transaction, PrefilledTransaction
 from src.backup.block import Block, BlockHeader
 from src.backup.data import InvType
-from src import Input, Output, WitnessItem, Witness, Transaction, PrefilledTransaction
 
 
 def get_random_scriptpubkey(scriptpubkey_type: str = None):
     r = randbelow(100)
-    if r < 40:  # P2WPKH, P2PKH, P2SH (most common, 22-25 bytes)
+    if r < 40:  # P2WPKH, P2PKH_Sig, P2SH (most common, 22-25 bytes)
         return token_bytes(randbelow(4) + 22)
     elif r < 80:  # P2WSH, P2TR (next most common, 34 bytes)
         return token_bytes(34)
@@ -38,7 +38,7 @@ def get_random_scriptsig(scriptsig_type: str = None):
     """
     # Choose a size based on common scriptSig lengths
     r = randbelow(100)
-    if r < 60:  # P2PKH (most common, ~106-107 bytes)
+    if r < 60:  # P2PKH_Sig (most common, ~106-107 bytes)
         return token_bytes(randbelow(5) + 105)
     elif r < 85:  # P2SH (typically between 23-150 bytes)
         return token_bytes(randbelow(128) + 23)

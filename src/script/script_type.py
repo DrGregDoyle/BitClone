@@ -7,8 +7,8 @@ __all__ = ["ScriptType"]
 
 
 class ScriptType(Enum):
-    P2PK = "P2PK"
-    P2PKH = "P2PKH"
+    P2PK = "P2PK_Sig"
+    P2PKH = "P2PKH_Sig"
     P2MS = "P2MS"
     P2SH = "P2SH"
     P2SH_P2WPkH = "P2SH_P2WPKH"

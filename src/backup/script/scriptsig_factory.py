@@ -4,7 +4,7 @@ The ScriptSig class that provides factory methods for different script types.
 NOTES:
     -The ScripSig is the UNLOCKING code for a previous output
     -The ScriptSig is tied to particular ScriptPubKey on an output
-    -ScriptSig is used to unlock legacy ScriptPubKey types, e.g: P2PK, P2PKH, P2MS, P2SH
+    -ScriptSig is used to unlock legacy ScriptPubKey types, e.g: P2PK_Sig, P2PKH_Sig, P2MS, P2SH
 """
 from src.backup.data import ScriptType
 from src.backup.logger import get_logger
@@ -29,8 +29,8 @@ class ScriptSig:
 
         # Map script types to their handler functions
         handlers = {
-            ScriptType.P2PK: self._handle_p2pk,
-            ScriptType.P2PKH: self._handle_p2pkh,
+            ScriptType.P2PK_Sig: self._handle_p2pk,
+            ScriptType.P2PKH_Sig: self._handle_p2pkh,
             ScriptType.P2MS: self._handle_p2ms,
             ScriptType.P2SH: self._handle_p2sh,
         }
@@ -64,13 +64,13 @@ class ScriptSig:
 
     def _handle_p2pk(self, sig: bytes):
         """
-        P2PK | OP_PUSHBYTES + SIGNATURE
+        P2PK_Sig | OP_PUSHBYTES + SIGNATURE
         """
         return self._pushdata(sig)
 
     def _handle_p2pkh(self, sig: bytes, pubkey: bytes):
         """
-        P2PKH | OP_PUSHBYTES + SIGNATURE + OP_PUSHBYTES + PUBKEY
+        P2PKH_Sig | OP_PUSHBYTES + SIGNATURE + OP_PUSHBYTES + PUBKEY
         """
         return self._pushdata(sig) + self._pushdata(pubkey)
 
@@ -108,11 +108,11 @@ class ScriptSig:
 class ScriptSigFactory:
     @staticmethod
     def p2pk(sig: bytes) -> ScriptSig:
-        return ScriptSig(ScriptType.P2PK, sig)
+        return ScriptSig(ScriptType.P2PK_Sig, sig)
 
     @staticmethod
     def p2pkh(sig: bytes, pubkey: bytes) -> ScriptSig:
-        return ScriptSig(ScriptType.P2PKH, sig, pubkey)
+        return ScriptSig(ScriptType.P2PKH_Sig, sig, pubkey)
 
     @staticmethod
     def p2ms(signatures: list[bytes]) -> ScriptSig:
@@ -129,4 +129,4 @@ if __name__ == "__main__":
     test_uncompressed_pubkey = bytes.fromhex(
         "049464205950188c29d377eebca6535e0f3699ce4069ecd77ffebfbd0bcf95e3c134cb7d2742d800a12df41413a09ef87a80516353a2f0a280547bb5512dc03da8")
     p2pk_scriptsig = ss_factory.p2pk(test_uncompressed_pubkey)
-    print(f"P2PK SCRIPTSIG: {p2pk_scriptsig.asm}")
+    print(f"P2PK_Sig SCRIPTSIG: {p2pk_scriptsig.asm}")
