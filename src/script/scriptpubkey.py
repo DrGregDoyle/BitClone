@@ -127,9 +127,10 @@ class P2PKH(ScriptPubKey):
         obj._pubkeyhash = pubkeyhash
         return obj
 
-    def address(self) -> str:
+    def address(self, testnet: bool = False) -> str:
+        prefix_byte = b'\x6f' if testnet else b'\x00'
         pubkeyhash = self.script[3:-2]
-        return encode_base58check(pubkeyhash)
+        return encode_base58check(pubkeyhash, prefix_byte)
 
     def get_pubkeyhash(self):
         return self._pubkeyhash
@@ -141,6 +142,7 @@ if __name__ == "__main__":
     lmab_p2pkh = P2PKH.from_pubkeyhash(lmab_pubkeyhash_bytes)
     print(f"PUBKEYHASH: {lmab_p2pkh.get_pubkeyhash().hex()}")
     print(f"LMAB ADDRESS: {lmab_p2pkh.address()}")
+    print(f"LMAB ADDRESS TESTNET: {lmab_p2pkh.address(testnet=True)}")
     # _privkey = 41
     # _pubkey = PubKey(_privkey)
     # print(f"PUBKEY: {_pubkey.to_json()}")
