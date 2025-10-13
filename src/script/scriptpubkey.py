@@ -9,6 +9,8 @@ from src.cryptography import hash160
 from src.data import encode_base58check
 from src.script.parser import to_asm
 
+__all__ = ["ScriptPubKey", "P2PKH_Key", "P2PK_Key"]
+
 # --- OPCODES --- #
 _OP = OPCODES
 

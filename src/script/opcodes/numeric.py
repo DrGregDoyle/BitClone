@@ -27,7 +27,7 @@ Numerical Operations for BitCoin script
 """
 
 from src.core import BitStackError
-from src.script import BitStack, BitNum
+from src.script.stack import BitStack, BitNum
 
 __all__ = ["op_size", "op_equal", "op_equalverify", "op_1add", "op_1sub", "op_negate", "op_abs", "op_not",
            "op_0notequal", "op_add", "op_sub", "op_booland", "op_boolor", "op_numequal", "op_numequalverify",

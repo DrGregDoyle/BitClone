@@ -2,7 +2,7 @@
 Basic Push operations for BitCoin, including True/False
     0x00 -- 0x60
 """
-from src.script import BitStack, BitNum
+from src.script.stack import BitStack, BitNum
 
 __all__ = ["op_false", "op_true"]
 

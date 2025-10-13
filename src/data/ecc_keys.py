@@ -108,10 +108,10 @@ class PubKey:
         Proceed based on length of pubkey
         """
         # Compressed
-        if len(pubkey_bytes) == 65 and pubkey_bytes[0] == b'\x04':
+        if len(pubkey_bytes) == 65 and pubkey_bytes[0] == 4:
             return cls.from_uncompressed(pubkey_bytes)
         # Uncompresed
-        elif len(pubkey_bytes) == 33 and pubkey_bytes[0] in (b'\x02', b'\x03'):
+        elif len(pubkey_bytes) == 33 and pubkey_bytes[0] in (2, 3):
             return cls.from_compressed(pubkey_bytes)
         # X-only
         elif len(pubkey_bytes) == 32:
