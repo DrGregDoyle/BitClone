@@ -9,10 +9,12 @@ from src.core.exceptions import ScriptEngineError
 from src.core.opcodes import OPCODES
 from src.script.context import ExecutionContext
 from src.script.opcode_map import OPCODE_MAP
-from src.script.scriptpubkey import ScriptPubKey, P2PK_Key
-from src.script.scriptsig import ScriptSig, P2PK_Sig
-from src.script.signature_engine import SignatureEngine, SigHash, SignatureContext
+from src.script.scriptpubkey import ScriptPubKey, P2PKH_Key
+from src.script.scriptsig import ScriptSig, P2PKH_Sig
+from src.script.signature_engine import SignatureEngine, SignatureContext
 from src.script.stack import BitStack
+from src.tx.tx import Transaction
+from src.tx.utxo import UTXO
 
 __all__ = ["ScriptEngine"]
 
@@ -86,9 +88,6 @@ class ScriptEngine:
         # Signature should be DER-encoded with sighash num
         der_sig = sig[:-1]
         sighash_num = sig[-1]
-
-        print(f"DER SIG: {der_sig.hex()}")
-        print(f"SIGHASH TYPE: SIGHASH_{SigHash(sighash_num).name}")
 
         # Get legacy sighash
         sig_ctx = SignatureContext(tx=tx, input_index=input_index, sighash_type=sighash_num,
@@ -172,31 +171,42 @@ class ScriptEngine:
 
 
 # --- TESTING --- #
-from src.tx.tx import Transaction
-from src.tx.utxo import UTXO
 
 if __name__ == "__main__":
-    # LMAB ELEMENTS:
+    # P2PKH - Setup
+    _test_p2pkh_key = P2PKH_Key.from_bytes(bytes.fromhex("76a91455ae51684c43435da751ac8d2173b2652eb6410588ac"))
+    _test_p2pkh_sig = P2PKH_Sig.from_bytes(bytes.fromhex(
+        "483045022100c233c3a8a510e03ad18b0a24694ef00c78101bfd5ac075b8c1037952ce26e91e02205aa5f8f88f29bb4ad5808ebc12abfd26bd791256f367b04c6d955f01f28a7724012103f0609c81a45f8cab67fc2d050c21b1acd3d37c7acfd54041be6601ab4cef4f31"))
 
-    # Transaction - contains the ScriptSig
-    test_tx = Transaction.from_bytes(bytes.fromhex(
-        "01000000019d7a3553c3faec3d88d18b36ec3bfcdf00c7639ea161205a02e7fc9a1a25b61d0100000049483045022100c219a522e65ca8500ebe05a70d5a49d840ccc15f2afa4ee9df783f06b2a322310220489a46c37feb33f52c586da25c70113b8eea41216440eb84771cb67a67fdb68c01ffffffff0200f2052a010000001976a914e32acf8e6718a32029dc395cca1e0ac45c33f14188ac00c817a8040000004341049464205950188c29d377eebca6535e0f3699ce4069ecd77ffebfbd0bcf95e3c134cb7d2742d800a12df41413a09ef87a80516353a2f0a280547bb5512dc03da8ac00000000"))
-    print(f"TEST TX: {test_tx.to_json()}")
+    # Display
+    print(f"--- P2PKH --- ")
+    print(f"SCRIPT PUBKEY: {_test_p2pkh_key.to_asm()}")
+    print(f"SCRIPT SIG: {_test_p2pkh_sig.to_asm()}")
 
-    # UTXO - References the tx containing the scriptpubkey, e.g, the TxOutput being spent
-    test_utxo = UTXO(txid=bytes.fromhex("1db6251a9afce7025a2061a19e63c700dffc3bec368bd1883decfac353357a9d")[::-1],
-                     vout=1, amount=25000000000, scriptpubkey=bytes.fromhex(
-            "41049464205950188c29d377eebca6535e0f3699ce4069ecd77ffebfbd0bcf95e3c134cb7d2742d800a12df41413a09ef87a80516353a2f0a280547bb5512dc03da8ac"),
-                     block_height=140496)
+    # Context
+    # Transaction where the script sig occurs
+    current_tx = Transaction.from_bytes(
+        bytes.fromhex(
+            "0100000001a4e61ed60e66af9f7ca4f2eb25234f6e32e0cb8f6099db21a2462c42de61640b010000006b483045022100c233c3a8a510e03ad18b0a24694ef00c78101bfd5ac075b8c1037952ce26e91e02205aa5f8f88f29bb4ad5808ebc12abfd26bd791256f367b04c6d955f01f28a7724012103f0609c81a45f8cab67fc2d050c21b1acd3d37c7acfd54041be6601ab4cef4f31feffffff02f9243751130000001976a9140c443537e6e31f06e6edb2d4bb80f8481e2831ac88ac14206c00000000001976a914d807ded709af8893f02cdc30a37994429fa248ca88ac751a0600")
+    )
 
-    test_ctx = ExecutionContext(tx=test_tx, utxo=test_utxo, input_index=0)
+    # Transaction referenced by the utxo
+    _test_utxo = UTXO(
+        # Reverse display bytes for txid
+        txid=bytes.fromhex("0b6461de422c46a221db99608fcbe0326e4f2325ebf2a47c9faf660ed61ee6a4")[::-1],
+        vout=1,
+        amount=82974043165,
+        scriptpubkey=_test_p2pkh_key.to_bytes(),
+        block_height=399983
+    )
 
-    _test_p2pk_key = P2PK_Key.from_bytes(bytes.fromhex(
-        "41049464205950188c29d377eebca6535e0f3699ce4069ecd77ffebfbd0bcf95e3c134cb7d2742d800a12df41413a09ef87a80516353a2f0a280547bb5512dc03da8ac"))
-    _test_p2pk_sig = P2PK_Sig.from_bytes(bytes.fromhex(
-        "483045022100c219a522e65ca8500ebe05a70d5a49d840ccc15f2afa4ee9df783f06b2a322310220489a46c37feb33f52c586da25c70113b8eea41216440eb84771cb67a67fdb68c01"))
-    print(f"P2PK KEY: {_test_p2pk_key.to_asm()}")
-    print(f"P2PK SIG: {_test_p2pk_sig.to_asm()}")
+    p2pkh_context = ExecutionContext(
+        tx=current_tx,
+        utxo=_test_utxo,
+        input_index=0
+    )
+
+    # Validate
     engine = ScriptEngine()
-    pair_validated = engine.validate_script_pair(_test_p2pk_key, _test_p2pk_sig, test_ctx)
-    print(f"P2PK Script Validated: {pair_validated}")
+    script_valid = engine.validate_script_pair(_test_p2pkh_key, _test_p2pkh_sig, p2pkh_context)
+    print(f"Validate P2PKH Script Pair: {script_valid}")

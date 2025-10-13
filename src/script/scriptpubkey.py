@@ -1,7 +1,7 @@
 """
 The ScriptPubKey class and its children
 """
-
+import json
 from abc import ABC, abstractmethod
 
 from src.core import ScriptPubKeyError, OPCODES, SERIALIZED, get_bytes
@@ -39,6 +39,15 @@ class ScriptPubKey(ABC):
 
     def to_asm(self):
         return to_asm(self.script)
+
+    def to_dict(self):
+        return {
+            "asm": json.loads(json.dumps(self.to_asm())),
+            "address": self.address
+        }
+
+    def to_json(self):
+        return json.dumps(self.to_dict(), indent=2)
 
     def __eq__(self, other):
         if isinstance(other, ScriptPubKey):
