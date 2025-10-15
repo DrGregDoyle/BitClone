@@ -13,7 +13,7 @@ from src.cryptography import ecdsa, verify_ecdsa, schnorr_verify, schnorr_sig, h
 from src.data import encode_der_signature, decode_der_signature
 from src.data.ecc_keys import PubKey
 from src.script.script_type import ScriptType
-from src.script.scriptsig import P2PK_Sig, P2PKH_Sig, P2MS
+from src.script.scriptsig import P2PK_Sig, P2PKH_Sig
 from src.tx import Transaction, TxInput, TxOutput
 
 

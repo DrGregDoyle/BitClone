@@ -4,12 +4,12 @@ The ScriptPubKey class and its children
 import json
 from abc import ABC, abstractmethod
 
-from src.core import ScriptPubKeyError, OPCODES, SERIALIZED, get_bytes
+from src.core import ScriptPubKeyError, OPCODES, SERIALIZED, get_bytes, get_stream, read_little_int, read_stream
 from src.cryptography import hash160
 from src.data import encode_base58check
 from src.script.parser import to_asm
 
-__all__ = ["ScriptPubKey", "P2PKH_Key", "P2PK_Key"]
+__all__ = ["ScriptPubKey", "P2PKH_Key", "P2PK_Key", "P2MS_Key"]
 
 # --- OPCODES --- #
 _OP = OPCODES
@@ -148,20 +148,86 @@ class P2PKH_Key(ScriptPubKey):
         return self._pubkeyhash
 
 
+class P2MS_Key(ScriptPubKey):
+    """
+    Pay 2 multisig | format:
+        - a number k indicating number of required signatures
+        - repeated pushbytes for all available keys
+        - a number n indicating total number of keys
+        - op_checkmultisig
+    """
+    OP_PUSHBYTES_65 = _OP.get_byte("OP_PUSHBYTES_65")
+    OP_PUSHBYTES_33 = _OP.get_byte("OP_PUSHBYTES_33")
+    OP_CHECKMULTISIG = _OP.get_byte("OP_CHECKMULTISIG")
+
+    def __init__(self, pubkey_list: list, req_num: int = 0):
+        total_keys = len(pubkey_list)
+        req_num = req_num if req_num > 0 else total_keys  # Defaults to total number for 0 value
+
+        # Add required_num
+        script_parts = [
+            _OP.get_byte(f"OP_{req_num}")
+        ]
+
+        # Add pubkeys
+        for pubkey in pubkey_list:
+            script_parts.append(self.OP_PUSHBYTES_33) if len(pubkey) == 33 else script_parts.append(
+                self.OP_PUSHBYTES_65)
+            script_parts.append(pubkey)
+
+        # Finish up
+        script_parts.extend([_OP.get_byte(f"OP_{total_keys}"), self.OP_CHECKMULTISIG])
+        self.script = b''.join(script_parts)
+
+    @classmethod
+    def from_bytes(cls, byte_stream: SERIALIZED):
+        script_bytes = get_bytes(byte_stream)
+
+        # Confirm leading and tail
+        lead_byte = script_bytes[0]
+        tail_byte = script_bytes[-1]
+        tail2_byte = script_bytes[-2]
+
+        # OP_num (required)
+        if not 0x51 <= lead_byte <= 0x60:
+            raise ScriptPubKeyError("Failed OP_num leading byte opcode check for P2MS")
+        # OP_num (total)
+        if not 0x51 <= tail2_byte <= 0x60:
+            raise ScriptPubKeyError("Failed OP_num penultimate byte opcode check for P2MS")
+        # OP_CHECKMULTISIG
+        if not bytes([tail_byte]) == cls.OP_CHECKMULTISIG:
+            raise ScriptPubKeyError("Failed OP_CHECKMULTISIG at end of scriptpubkey")
+
+        req_num = lead_byte - 0x50
+        sig_num = tail2_byte - 0x50
+        pubkey_list = []
+        stream = get_stream(script_bytes[1:-2])  # Stream remaining pubkeys
+        for x in range(sig_num):
+            pubkey_type = read_little_int(stream, 1)
+            if pubkey_type not in (33, 65):
+                raise ScriptPubKeyError("Pubkey in list not of correct length")
+            pubkey = read_stream(stream, pubkey_type)
+            pubkey_list.append(pubkey)
+
+        return cls(pubkey_list, req_num)
+
+    @property
+    def address(self) -> str:
+        return ""
+
+
 # ---- TESTING --- #
 if __name__ == "__main__":
-    lmab_pubkeyhash_bytes = bytes.fromhex("55f44cf0dba9d62e0538b362c3ce71237e92cd94")
-    lmab_p2pkh = P2PKH_Key.from_pubkeyhash(lmab_pubkeyhash_bytes)
-    print(f"PUBKEYHASH: {lmab_p2pkh.get_pubkeyhash().hex()}")
-    print(f"LMAB ADDRESS: {lmab_p2pkh.address()}")
-    print(f"LMAB ADDRESS TESTNET: {lmab_p2pkh.address(testnet=True)}")
-    # _privkey = 41
-    # _pubkey = PubKey(_privkey)
-    # print(f"PUBKEY: {_pubkey.to_json()}")
-    #
-    # _test_p2pkh = P2PKH_Sig(_pubkey.compressed())
-    # _test_script = _test_p2pkh.script
-    # print(f"TEST SCRIPT: {_test_script.hex()}")
-    # print(f"TO ASM: {to_asm(_test_script)}")
-    # fb_p2pkh = P2PKH_Sig.from_bytes(_test_p2pkh.to_bytes())
-    # print(f"SCRIPTPUBKEYS EQUAL: {_test_p2pkh == fb_p2pkh}")
+    pubkey1 = bytes.fromhex(
+        "04d81fd577272bbe73308c93009eec5dc9fc319fc1ee2e7066e17220a5d47a18314578be2faea34b9f1f8ca078f8621acd4bc22897b03daa422b9bf56646b342a2")
+    pubkey2 = bytes.fromhex(
+        "04ec3afff0b2b66e8152e9018fe3be3fc92b30bf886b3487a525997d00fd9da2d012dce5d5275854adc3106572a5d1e12d4211b228429f5a7b2f7ba92eb0475bb1")
+    pubkey3 = bytes.fromhex(
+        "04b49b496684b02855bc32f5daefa2e2e406db4418f3b86bca5195600951c7d918cdbe5e6d3736ec2abf2dd7610995c3086976b2c0c7b4e459d10b34a316d5a5e7")
+    _test_p2ms = P2MS_Key(pubkey_list=[pubkey1, pubkey2, pubkey3], req_num=2)
+    print(f"P2MS FROM INIT: {_test_p2ms.to_asm()}")
+
+    lmab_p2ms_key_bytes = bytes.fromhex(
+        "524104d81fd577272bbe73308c93009eec5dc9fc319fc1ee2e7066e17220a5d47a18314578be2faea34b9f1f8ca078f8621acd4bc22897b03daa422b9bf56646b342a24104ec3afff0b2b66e8152e9018fe3be3fc92b30bf886b3487a525997d00fd9da2d012dce5d5275854adc3106572a5d1e12d4211b228429f5a7b2f7ba92eb0475bb14104b49b496684b02855bc32f5daefa2e2e406db4418f3b86bca5195600951c7d918cdbe5e6d3736ec2abf2dd7610995c3086976b2c0c7b4e459d10b34a316d5a5e753ae")
+    _test_p2ms_key = P2MS_Key.from_bytes(lmab_p2ms_key_bytes)
+    print(f"P2MS KEY FROM BYTES: {_test_p2ms_key.to_asm()}")

@@ -9,10 +9,10 @@ from src.core.exceptions import ScriptEngineError
 from src.core.opcodes import OPCODES
 from src.script.context import ExecutionContext
 from src.script.opcode_map import OPCODE_MAP
-from src.script.scriptpubkey import ScriptPubKey, P2PKH_Key
-from src.script.scriptsig import ScriptSig, P2PKH_Sig
+from src.script.scriptpubkey import ScriptPubKey, P2MS_Key
+from src.script.scriptsig import ScriptSig, P2MS_Sig
 from src.script.signature_engine import SignatureEngine, SignatureContext
-from src.script.stack import BitStack
+from src.script.stack import BitStack, BitNum
 from src.tx.tx import Transaction
 from src.tx.utxo import UTXO
 
@@ -69,6 +69,15 @@ class ScriptEngine:
             # OP_CHECKSIG
             case 0xac:
                 self._handle_checksig(ctx)
+            # OP_CHECKSIGVERIFY
+            case 0xad:
+                self._handle_checksig(ctx)
+                verified = self._op_verify()
+                if not verified:
+                    raise ScriptEngineError("Script failed OP_VERIFY call in OP_CHECKSIGVERIFY")
+            # OP_CHECKMULTISIG
+            case 0xae:
+                self._handle_multisig(ctx)
             case _:
                 print(f"OPCODE: {opcode}")
 
@@ -95,6 +104,56 @@ class ScriptEngine:
         message_hash = self.sig_engine.get_legacy_sighash(sig_ctx)
         signature_verified = self.sig_engine.verify_ecdsa_sig(der_sig, message_hash, pubkey)
         self.stack.pushbool(signature_verified)
+
+    def _handle_multisig(self, ctx: ExecutionContext):
+        """
+        OP_CHECKMULTISIG:
+            1) pop n, then pop that number of public keys
+            2) pop m, then pop that number of signatures
+            3) compare each signature with the corresponding public key
+        """
+        # Step 1: Extract values
+        pubkeynum = self.stack.popnum()
+        pubkeys = [self.stack.pop() for _ in range(pubkeynum)]
+        signum = self.stack.popnum()
+        sigs = [self.stack.pop() for _ in range(signum)]
+        empty_byte = self.stack.pop()
+
+        # Validate
+        if empty_byte != b'':
+            raise ScriptEngineError("Missing NULLDUMMY at bottom of stack for OP_CHECKMULTISIG")
+
+        # Step 2: Initialize indexes
+        sig_index = 0
+        key_index = 0
+        matches = 0
+
+        # Step 3: Try to match signatures to public keys
+        while sig_index < len(sigs) and key_index < len(pubkeys):
+            sig = sigs[sig_index]
+            pub = pubkeys[key_index]
+
+            # Signature should be DER-encoded with sighash num
+            der_sig = sig[:-1]
+            sighash_num = sig[-1]
+
+            # Get legacy sighash
+            sig_ctx = SignatureContext(tx=ctx.tx, input_index=ctx.input_index, sighash_type=sighash_num,
+                                       script_code=ctx.utxo.scriptpubkey)
+            message_hash = self.sig_engine.get_legacy_sighash(sig_ctx)
+
+            if self.sig_engine.verify_ecdsa_sig(signature=der_sig, message=message_hash, public_key=pub):
+                matches += 1
+                sig_index += 1
+
+            key_index += 1  # always advance key_index
+
+        # Push bool
+        self.stack.pushbool(matches == len(sigs))
+
+    def _op_verify(self):
+        top = self.stack.pop()
+        return top != b''  # Returns False whenever top of stack is b''
 
     def validate_script_pair(self, scriptpubkey: ScriptPubKey, scriptsig: ScriptSig, ctx: ExecutionContext = None):
         """
@@ -139,10 +198,14 @@ class ScriptEngine:
                         n = 4
                 self._handle_pushdata_n(n, stream)
 
+            # Handle OP_num
+            elif 0x51 <= opcode <= 0x60:
+                num = opcode - 0x50
+                self.stack.push(BitNum(num).to_bytes())
+
             # Handle checksigs
             elif 0xab <= opcode <= 0xba:
                 self._handle_signatures(opcode, stream, ctx)
-
             # Get function for operation
             else:
                 func = OPCODE_MAP[opcode]
@@ -152,6 +215,11 @@ class ScriptEngine:
                     func(self.stack, self.alt_stack)
                 else:
                     func(self.stack)
+
+        # --- LOGGING --- #
+        print("--- VALIDATE STACK ---")
+        print(f"MAIN STACK: {self.stack.to_json()}")
+        print(f"OPS LOG: {self.ops_log}")
 
         return self.validate_stack()
 
@@ -173,40 +241,37 @@ class ScriptEngine:
 # --- TESTING --- #
 
 if __name__ == "__main__":
-    # P2PKH - Setup
-    _test_p2pkh_key = P2PKH_Key.from_bytes(bytes.fromhex("76a91455ae51684c43435da751ac8d2173b2652eb6410588ac"))
-    _test_p2pkh_sig = P2PKH_Sig.from_bytes(bytes.fromhex(
-        "483045022100c233c3a8a510e03ad18b0a24694ef00c78101bfd5ac075b8c1037952ce26e91e02205aa5f8f88f29bb4ad5808ebc12abfd26bd791256f367b04c6d955f01f28a7724012103f0609c81a45f8cab67fc2d050c21b1acd3d37c7acfd54041be6601ab4cef4f31"))
+    # P2MS - Setup
+    test_p2ms_sig = P2MS_Sig.from_bytes(bytes.fromhex(
+        "00483045022100af204ef91b8dba5884df50f87219ccef22014c21dd05aa44470d4ed800b7f6e40220428fe058684db1bb2bfb6061bff67048592c574effc217f0d150daedcf36787601483045022100e8547aa2c2a2761a5a28806d3ae0d1bbf0aeff782f9081dfea67b86cacb321340220771a166929469c34959daf726a2ac0c253f9aff391e58a3c7cb46d8b7e0fdc4801"))
+    test_p2ms_key = P2MS_Key.from_bytes(bytes.fromhex(
+        "524104d81fd577272bbe73308c93009eec5dc9fc319fc1ee2e7066e17220a5d47a18314578be2faea34b9f1f8ca078f8621acd4bc22897b03daa422b9bf56646b342a24104ec3afff0b2b66e8152e9018fe3be3fc92b30bf886b3487a525997d00fd9da2d012dce5d5275854adc3106572a5d1e12d4211b228429f5a7b2f7ba92eb0475bb14104b49b496684b02855bc32f5daefa2e2e406db4418f3b86bca5195600951c7d918cdbe5e6d3736ec2abf2dd7610995c3086976b2c0c7b4e459d10b34a316d5a5e753ae"))
 
-    # Display
-    print(f"--- P2PKH --- ")
-    print(f"SCRIPT PUBKEY: {_test_p2pkh_key.to_asm()}")
-    print(f"SCRIPT SIG: {_test_p2pkh_sig.to_asm()}")
+    print(f"P2MS SIG: {test_p2ms_sig.to_json()}")
+    print(f"P2MS KEY: {test_p2ms_key.to_json()}")
 
     # Context
-    # Transaction where the script sig occurs
     current_tx = Transaction.from_bytes(
         bytes.fromhex(
-            "0100000001a4e61ed60e66af9f7ca4f2eb25234f6e32e0cb8f6099db21a2462c42de61640b010000006b483045022100c233c3a8a510e03ad18b0a24694ef00c78101bfd5ac075b8c1037952ce26e91e02205aa5f8f88f29bb4ad5808ebc12abfd26bd791256f367b04c6d955f01f28a7724012103f0609c81a45f8cab67fc2d050c21b1acd3d37c7acfd54041be6601ab4cef4f31feffffff02f9243751130000001976a9140c443537e6e31f06e6edb2d4bb80f8481e2831ac88ac14206c00000000001976a914d807ded709af8893f02cdc30a37994429fa248ca88ac751a0600")
+            "010000000110a5fee9786a9d2d72c25525e52dd70cbd9035d5152fac83b62d3aa7e2301d58000000009300483045022100af204ef91b8dba5884df50f87219ccef22014c21dd05aa44470d4ed800b7f6e40220428fe058684db1bb2bfb6061bff67048592c574effc217f0d150daedcf36787601483045022100e8547aa2c2a2761a5a28806d3ae0d1bbf0aeff782f9081dfea67b86cacb321340220771a166929469c34959daf726a2ac0c253f9aff391e58a3c7cb46d8b7e0fdc4801ffffffff0180a21900000000001976a914971802edf585cdbc4e57017d6e5142515c1e502888ac00000000")
+    )
+    current_input_index = 0
+    test_utxo = UTXO(
+        # Reverse display txid
+        txid=bytes.fromhex("581d30e2a73a2db683ac2f15d53590bd0cd72de52555c2722d9d6a78e9fea510")[::-1],
+        vout=0,
+        amount=1690000,
+        scriptpubkey=test_p2ms_key.script,
+        block_height=442241
     )
 
-    # Transaction referenced by the utxo
-    _test_utxo = UTXO(
-        # Reverse display bytes for txid
-        txid=bytes.fromhex("0b6461de422c46a221db99608fcbe0326e4f2325ebf2a47c9faf660ed61ee6a4")[::-1],
-        vout=1,
-        amount=82974043165,
-        scriptpubkey=_test_p2pkh_key.to_bytes(),
-        block_height=399983
-    )
-
-    p2pkh_context = ExecutionContext(
+    p2ms_context = ExecutionContext(
         tx=current_tx,
-        utxo=_test_utxo,
-        input_index=0
+        input_index=current_input_index,
+        utxo=test_utxo
     )
 
     # Validate
     engine = ScriptEngine()
-    script_valid = engine.validate_script_pair(_test_p2pkh_key, _test_p2pkh_sig, p2pkh_context)
-    print(f"Validate P2PKH Script Pair: {script_valid}")
+    script_valid = engine.validate_script_pair(test_p2ms_key, test_p2ms_sig, p2ms_context)
+    print(f"Validate P2MS Script Pair: {script_valid}")
