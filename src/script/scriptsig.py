@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from src.core import ScriptSigError, SCRIPT
 from src.script.parser import to_asm
 
-__all__ = ["P2PK_Sig", "P2PKH_Sig", "ScriptSig", 'P2MS_Sig']
+__all__ = ["P2PK_Sig", "P2PKH_Sig", "ScriptSig", 'P2MS_Sig', "P2SH_Sig"]
 
 # --- OPCODES --- #
 OP_PUSHBYTES_33 = b'\x21'
@@ -163,6 +163,80 @@ class P2MS_Sig(ScriptSig):
         return cls(signatures)
 
 
+class P2SH_Sig(ScriptSig):
+    """
+    The P2SH consists of two parts:
+        -The signature(s) necessary to unlock the redeem script (which gets hash160'ed in the scriptpubkey)
+        -A data push of the redeem script
+    """
+
+    def __init__(self, scriptsig: bytes | ScriptSig, redeem_script: bytes):
+        scriptsig_bytes = scriptsig.script if isinstance(scriptsig, ScriptSig) else scriptsig
+        self.script = scriptsig_bytes + self.pushdata(redeem_script)
+
+    @classmethod
+    def from_bytes(cls, scriptsig: bytes):
+        if len(scriptsig) == 0:
+            raise ScriptSigError("Empty P2SH ScriptSig")
+
+        # Search backwards for the last valid OP_PUSHBYTES operation
+        # The redeem script is the last data push in a P2SH scriptSig
+        for i in range(len(scriptsig) - 1, -1, -1):
+            push_len = scriptsig[i]
+
+            # Check if this is a valid OP_PUSHBYTES opcode
+            if 0x01 <= push_len <= 0x4b:
+                # Check if the remaining bytes match the push length
+                remaining_bytes = len(scriptsig) - (i + 1)
+
+                if remaining_bytes == push_len:
+                    # Found it! This is where the redeem script starts
+                    redeem_script = scriptsig[i + 1:]
+                    unlocking_scriptsig = scriptsig[:i]
+                    return cls(unlocking_scriptsig, redeem_script)
+
+        raise ScriptSigError("Could not find valid redeem script push in P2SH ScriptSig")
+
+
+def parse_scriptsig(scriptsig_bytes: bytes) -> ScriptSig:
+    """
+    We read in the bytes and return one of the above ScriptSig, or empty object if it doesn't match.
+    """
+    # P2PK
+    try:
+        p2pk = P2PK_Sig.from_bytes(scriptsig_bytes)
+        return p2pk
+    except ScriptSigError:
+        print("ScriptSig does not match p2pk format")
+        pass
+
+    # P2PKH
+    try:
+        p2pkh = P2PKH_Sig.from_bytes(scriptsig_bytes)
+        return p2pkh
+    except ScriptSigError:
+        print("ScriptSig does not match p2pkh format")
+        pass
+
+    # P2MS
+    try:
+        p2ms = P2MS_Sig.from_bytes(scriptsig_bytes)
+        return p2ms
+    except ScriptSigError:
+        print("ScriptSig does not match p2ms format")
+        pass
+
+    # P2SH
+    try:
+        p2sh = P2SH_Sig.from_bytes(scriptsig_bytes)
+        return p2sh
+    except ScriptSigError:
+        print("ScriptSig does not match p2sh format")
+        pass
+
+    return ScriptSig()
+
+
 # --- TESTING --- #
 if __name__ == "__main__":
     # p2pkh_bytes = bytes.fromhex(
@@ -174,3 +248,8 @@ if __name__ == "__main__":
         "00483045022100af204ef91b8dba5884df50f87219ccef22014c21dd05aa44470d4ed800b7f6e40220428fe058684db1bb2bfb6061bff67048592c574effc217f0d150daedcf36787601483045022100e8547aa2c2a2761a5a28806d3ae0d1bbf0aeff782f9081dfea67b86cacb321340220771a166929469c34959daf726a2ac0c253f9aff391e58a3c7cb46d8b7e0fdc4801")
     test_p2ms = P2MS_Sig.from_bytes(p2ms_bytes)
     print(f"TEST P2MS: {test_p2ms.to_asm()}")
+
+    p2sh_bytes = bytes.fromhex(
+        "00473044022100d0ed946330182916da16a6149cd313a4b1a7b41591ee52fb3e79d64e36139d66021f6ccf173040ef24cb45c4db3e9c771c938a1ba2cf8d2404416f70886e360af401475121022afc20bf379bc96a2f4e9e63ffceb8652b2b6a097f63fbee6ecec2a49a48010e2103a767c7221e9f15f870f1ad9311f5ab937d79fcaeee15bb2c722bca515581b4c052ae")
+    test_p2sh = P2SH_Sig.from_bytes(p2sh_bytes)
+    print(f"TEST P2SH: {test_p2sh.to_asm()}")

@@ -1,5 +1,6 @@
 """
 The ScriptPubKey class and its children
+SCRIPTPUBKEY = LOCKING SCRIPT
 """
 import json
 from abc import ABC, abstractmethod
@@ -9,7 +10,7 @@ from src.cryptography import hash160
 from src.data import encode_base58check
 from src.script.parser import to_asm
 
-__all__ = ["ScriptPubKey", "P2PKH_Key", "P2PK_Key", "P2MS_Key"]
+__all__ = ["ScriptPubKey", "P2PKH_Key", "P2PK_Key", "P2MS_Key", "P2SH_Key"]
 
 # --- OPCODES --- #
 _OP = OPCODES
@@ -216,18 +217,61 @@ class P2MS_Key(ScriptPubKey):
         return ""
 
 
+class P2SH_Key(ScriptPubKey):
+    """
+    P2SH ScriptPubKey contains the HASH of another locking script, surrounded by HASH160 and EQUAL opcodes
+    OP_HASH160 || OP_PUSHBYTES_20 || HASH || OP_EQUAL
+    """
+    OP_HASH160 = _OP.get_byte("OP_HASH160")
+    OP_PUSHBYTES_20 = _OP.get_byte("OP_PUSHBYTES_20")
+    OP_EQUAL = _OP.get_byte("OP_EQUAL")
+
+    def __init__(self, hash_data: bytes):
+        # Validate data is 20 byte digest
+        if len(hash_data) != 20:
+            raise ScriptPubKeyError("Given hash data not a 20-byte digest")
+
+        self.script = self.OP_HASH160 + self.OP_PUSHBYTES_20 + hash_data + self.OP_EQUAL
+
+    @classmethod
+    def from_bytes(cls, byte_stream: SERIALIZED):
+        script_bytes = get_bytes(byte_stream)
+
+        # Verify
+        lead_byte = script_bytes[0]
+        second_byte = script_bytes[1]
+        last_byte = script_bytes[-1]
+
+        if not all([lead_byte == cls.OP_HASH160[0], second_byte == cls.OP_PUSHBYTES_20[0], last_byte == cls.OP_EQUAL[
+            0]]):
+            raise ScriptPubKeyError("Failed OP_Code structure for P2SH ScriptPubKey")
+
+        return cls(script_bytes[2:-1])
+
+    @property
+    def address(self) -> str:
+        script_hash = self.script[2:-1]
+        prefix = b'\x05'
+
+        return encode_base58check(script_hash, prefix)
+
+
 # ---- TESTING --- #
 if __name__ == "__main__":
-    pubkey1 = bytes.fromhex(
-        "04d81fd577272bbe73308c93009eec5dc9fc319fc1ee2e7066e17220a5d47a18314578be2faea34b9f1f8ca078f8621acd4bc22897b03daa422b9bf56646b342a2")
-    pubkey2 = bytes.fromhex(
-        "04ec3afff0b2b66e8152e9018fe3be3fc92b30bf886b3487a525997d00fd9da2d012dce5d5275854adc3106572a5d1e12d4211b228429f5a7b2f7ba92eb0475bb1")
-    pubkey3 = bytes.fromhex(
-        "04b49b496684b02855bc32f5daefa2e2e406db4418f3b86bca5195600951c7d918cdbe5e6d3736ec2abf2dd7610995c3086976b2c0c7b4e459d10b34a316d5a5e7")
-    _test_p2ms = P2MS_Key(pubkey_list=[pubkey1, pubkey2, pubkey3], req_num=2)
-    print(f"P2MS FROM INIT: {_test_p2ms.to_asm()}")
+    p2sh_bytes = bytes.fromhex("a914748284390f9e263a4b766a75d0633c50426eb87587")
+    test_p2sh_key = P2SH_Key.from_bytes(p2sh_bytes)
+    print(f"P2SH KEY: {test_p2sh_key.to_json()}")
 
-    lmab_p2ms_key_bytes = bytes.fromhex(
-        "524104d81fd577272bbe73308c93009eec5dc9fc319fc1ee2e7066e17220a5d47a18314578be2faea34b9f1f8ca078f8621acd4bc22897b03daa422b9bf56646b342a24104ec3afff0b2b66e8152e9018fe3be3fc92b30bf886b3487a525997d00fd9da2d012dce5d5275854adc3106572a5d1e12d4211b228429f5a7b2f7ba92eb0475bb14104b49b496684b02855bc32f5daefa2e2e406db4418f3b86bca5195600951c7d918cdbe5e6d3736ec2abf2dd7610995c3086976b2c0c7b4e459d10b34a316d5a5e753ae")
-    _test_p2ms_key = P2MS_Key.from_bytes(lmab_p2ms_key_bytes)
-    print(f"P2MS KEY FROM BYTES: {_test_p2ms_key.to_asm()}")
+    # pubkey1 = bytes.fromhex(
+    #     "04d81fd577272bbe73308c93009eec5dc9fc319fc1ee2e7066e17220a5d47a18314578be2faea34b9f1f8ca078f8621acd4bc22897b03daa422b9bf56646b342a2")
+    # pubkey2 = bytes.fromhex(
+    #     "04ec3afff0b2b66e8152e9018fe3be3fc92b30bf886b3487a525997d00fd9da2d012dce5d5275854adc3106572a5d1e12d4211b228429f5a7b2f7ba92eb0475bb1")
+    # pubkey3 = bytes.fromhex(
+    #     "04b49b496684b02855bc32f5daefa2e2e406db4418f3b86bca5195600951c7d918cdbe5e6d3736ec2abf2dd7610995c3086976b2c0c7b4e459d10b34a316d5a5e7")
+    # _test_p2ms = P2MS_Key(pubkey_list=[pubkey1, pubkey2, pubkey3], req_num=2)
+    # print(f"P2MS FROM INIT: {_test_p2ms.to_asm()}")
+    #
+    # lmab_p2ms_key_bytes = bytes.fromhex(
+    #     "524104d81fd577272bbe73308c93009eec5dc9fc319fc1ee2e7066e17220a5d47a18314578be2faea34b9f1f8ca078f8621acd4bc22897b03daa422b9bf56646b342a24104ec3afff0b2b66e8152e9018fe3be3fc92b30bf886b3487a525997d00fd9da2d012dce5d5275854adc3106572a5d1e12d4211b228429f5a7b2f7ba92eb0475bb14104b49b496684b02855bc32f5daefa2e2e406db4418f3b86bca5195600951c7d918cdbe5e6d3736ec2abf2dd7610995c3086976b2c0c7b4e459d10b34a316d5a5e753ae")
+    # _test_p2ms_key = P2MS_Key.from_bytes(lmab_p2ms_key_bytes)
+    # print(f"P2MS KEY FROM BYTES: {_test_p2ms_key.to_asm()}")
