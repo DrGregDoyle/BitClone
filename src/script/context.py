@@ -14,3 +14,4 @@ class ExecutionContext:
     script_code: Optional[bytes] = None  # For P2SH/witness
     tapscript: bool = False
     sig_engine: Optional['SignatureEngine'] = None
+    is_p2sh: bool = False

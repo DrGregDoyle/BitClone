@@ -35,6 +35,12 @@ class ScriptPubKey(ABC):
         """
         raise NotImplementedError
 
+    @classmethod
+    @abstractmethod
+    def matches(cls, b: bytes) -> bool:
+        "Return True if the given script matches this type"
+        raise NotImplementedError
+
     def to_bytes(self):
         return self.script
 
@@ -57,6 +63,13 @@ class ScriptPubKey(ABC):
 
 
 class P2PK_Key(ScriptPubKey):
+    """
+    OP_PUSHBYTES_33/65 || pubkey || OP_CHECKSIG
+    *pubkey is either 33 bytes compressed or 65 bytes uncompressed
+    """
+    OP_PUSHBYTES_33 = _OP.get_byte("OP_PUSHBYTES_33")
+    OP_PUSHBYTES_65 = _OP.get_byte("OP_PUSHBYTES_65")
+    OP_CHECKSIG = _OP.get_byte("OP_CHECKSIG")
     __slots__ = ("script",)
 
     def __init__(self, pubkey: bytes):
@@ -69,13 +82,11 @@ class P2PK_Key(ScriptPubKey):
 
     @classmethod
     def from_bytes(cls, scriptpubkey: bytes):
-        lead = scriptpubkey[0]
-        tail = scriptpubkey[-1]
-        if tail == _OP.get_byte("OP_CHECKSIG")[0] and lead in (_OP.get_byte("OP_PUSHBYTES_33")[0],
-                                                               _OP.get_byte("OP_PUSHBYTES_65")[0]):
+        # Check type
+        if cls.matches(scriptpubkey):
             pubkey = scriptpubkey[1:-1]
             return cls(pubkey)
-        raise ScriptPubKeyError("P2PK_Sig failed byte constructino")
+        raise ScriptPubKeyError("Given script doesn't match P2PK")
 
     @property
     def address(self) -> str:
@@ -86,6 +97,16 @@ class P2PK_Key(ScriptPubKey):
         pubkey_hash = hash160(pubkey)
         print(f"PUBKEY HASH: {pubkey_hash.hex()}")
         return encode_base58check(pubkey_hash)
+
+    @classmethod
+    def matches(cls, b: bytes) -> bool:
+
+        truth_list = [
+            len(b) in (35, 67),  # Check length
+            b[0] in (cls.OP_PUSHBYTES_33[0], cls.OP_PUSHBYTES_65[0]),  # Check OP_PUSHBYTES
+            b[-1] == cls.OP_CHECKSIG[0]  # Check OP_CHECKSIG
+        ]
+        return all(truth_list)
 
 
 class P2PKH_Key(ScriptPubKey):
@@ -109,6 +130,8 @@ class P2PKH_Key(ScriptPubKey):
     OP_CHECKSIG = _OP.get_byte("OP_CHECKSIG")
     OP_PUSHBYTES_20 = _OP.get_byte("OP_PUSHBYTES_20")
 
+    __slots__ = ("script",)
+
     def __init__(self, pubkey: bytes):
         pubkeyhash = hash160(pubkey)
         self.script = (self.OP_DUP + self.OP_HASH160 + self.OP_PUSHBYTES_20 + pubkeyhash + self.OP_EQUALVERIFY +
@@ -116,19 +139,9 @@ class P2PKH_Key(ScriptPubKey):
         self._pubkeyhash = pubkeyhash
 
     @classmethod
-    def from_bytes(cls, byte_stream: SERIALIZED) -> "P2PKH_Key":
-        script_bytes = get_bytes(byte_stream)
-
-        op_codes_validated = all([
-            bytes([script_bytes[0]]) == cls.OP_DUP,
-            bytes([script_bytes[1]]) == cls.OP_HASH160,
-            bytes([script_bytes[2]]) == cls.OP_PUSHBYTES_20,
-            bytes([script_bytes[-2]]) == cls.OP_EQUALVERIFY,
-            bytes([script_bytes[-1]]) == cls.OP_CHECKSIG
-        ])
-        if op_codes_validated:
+    def from_bytes(cls, script_bytes: bytes) -> "P2PKH_Key":
+        if cls.matches(script_bytes):
             pubkeyhash = script_bytes[3:-2]
-            print(f"PUBKEYHASH: {pubkeyhash.hex()}")
             return cls.from_pubkeyhash(pubkeyhash)
         raise ScriptPubKeyError("Given scriptpubkey doesn't match P2PKH_Sig OP_CODE structure")
 
@@ -140,6 +153,7 @@ class P2PKH_Key(ScriptPubKey):
         obj._pubkeyhash = pubkeyhash
         return obj
 
+    @property
     def address(self, testnet: bool = False) -> str:
         prefix_byte = b'\x6f' if testnet else b'\x00'
         pubkeyhash = self.script[3:-2]
@@ -147,6 +161,17 @@ class P2PKH_Key(ScriptPubKey):
 
     def get_pubkeyhash(self):
         return self._pubkeyhash
+
+    @classmethod
+    def matches(cls, b: bytes) -> bool:
+        truth_list = [
+            b[0] == cls.OP_DUP[0],
+            b[1] == cls.OP_HASH160[0],
+            b[2] == cls.OP_PUSHBYTES_20[0],
+            b[-2] == cls.OP_EQUALVERIFY[0],
+            b[-1] == cls.OP_CHECKSIG[0]
+        ]
+        return all(truth_list)
 
 
 class P2MS_Key(ScriptPubKey):
@@ -160,6 +185,8 @@ class P2MS_Key(ScriptPubKey):
     OP_PUSHBYTES_65 = _OP.get_byte("OP_PUSHBYTES_65")
     OP_PUSHBYTES_33 = _OP.get_byte("OP_PUSHBYTES_33")
     OP_CHECKMULTISIG = _OP.get_byte("OP_CHECKMULTISIG")
+
+    __slots__ = ("script",)
 
     def __init__(self, pubkey_list: list, req_num: int = 0):
         total_keys = len(pubkey_list)
@@ -184,23 +211,11 @@ class P2MS_Key(ScriptPubKey):
     def from_bytes(cls, byte_stream: SERIALIZED):
         script_bytes = get_bytes(byte_stream)
 
-        # Confirm leading and tail
-        lead_byte = script_bytes[0]
-        tail_byte = script_bytes[-1]
-        tail2_byte = script_bytes[-2]
+        if not cls.matches(script_bytes):
+            raise ScriptPubKeyError("Failed to match P2MS structure")
 
-        # OP_num (required)
-        if not 0x51 <= lead_byte <= 0x60:
-            raise ScriptPubKeyError("Failed OP_num leading byte opcode check for P2MS")
-        # OP_num (total)
-        if not 0x51 <= tail2_byte <= 0x60:
-            raise ScriptPubKeyError("Failed OP_num penultimate byte opcode check for P2MS")
-        # OP_CHECKMULTISIG
-        if not bytes([tail_byte]) == cls.OP_CHECKMULTISIG:
-            raise ScriptPubKeyError("Failed OP_CHECKMULTISIG at end of scriptpubkey")
-
-        req_num = lead_byte - 0x50
-        sig_num = tail2_byte - 0x50
+        req_num = script_bytes[0] - 0x50  # Required number of signatures
+        sig_num = script_bytes[-2] - 0x50  # Total number of signatures
         pubkey_list = []
         stream = get_stream(script_bytes[1:-2])  # Stream remaining pubkeys
         for x in range(sig_num):
@@ -216,6 +231,21 @@ class P2MS_Key(ScriptPubKey):
     def address(self) -> str:
         return ""
 
+    @classmethod
+    def matches(cls, b: bytes) -> bool:
+        # Confirm leading and tail
+        lead_byte = b[0]
+        tail_byte = b[-1]
+        tail2_byte = b[-2]
+
+        truth_list = [
+            0x51 <= lead_byte <= 0x60,  # OP_num (required)
+            0x51 <= tail2_byte <= 0x60,  # OP_num (total)
+            bytes([tail_byte]) == cls.OP_CHECKMULTISIG  # OP_CHECKMULTISIG
+        ]
+
+        return all(truth_list)
+
 
 class P2SH_Key(ScriptPubKey):
     """
@@ -225,6 +255,8 @@ class P2SH_Key(ScriptPubKey):
     OP_HASH160 = _OP.get_byte("OP_HASH160")
     OP_PUSHBYTES_20 = _OP.get_byte("OP_PUSHBYTES_20")
     OP_EQUAL = _OP.get_byte("OP_EQUAL")
+
+    __slots__ = ("script",)
 
     def __init__(self, hash_data: bytes):
         # Validate data is 20 byte digest
@@ -255,23 +287,48 @@ class P2SH_Key(ScriptPubKey):
 
         return encode_base58check(script_hash, prefix)
 
+    @classmethod
+    def matches(cls, b: bytes) -> bool:
+        truth_list = [
+            b[0] == cls.OP_HASH160[0],  # OP_HASH160
+            b[1] == cls.OP_PUSHBYTES_20[0],  # OP_PUSHBYTES_20
+            b[-1] == cls.OP_EQUAL[0],  # OP_EQUAL
+            len(b) == 23  # ScriptPubKey has expected hash length
+        ]
+        return all(truth_list)
+
 
 # ---- TESTING --- #
 if __name__ == "__main__":
-    p2sh_bytes = bytes.fromhex("a914748284390f9e263a4b766a75d0633c50426eb87587")
-    test_p2sh_key = P2SH_Key.from_bytes(p2sh_bytes)
-    print(f"P2SH KEY: {test_p2sh_key.to_json()}")
+    sep = "---" * 80
 
-    # pubkey1 = bytes.fromhex(
-    #     "04d81fd577272bbe73308c93009eec5dc9fc319fc1ee2e7066e17220a5d47a18314578be2faea34b9f1f8ca078f8621acd4bc22897b03daa422b9bf56646b342a2")
-    # pubkey2 = bytes.fromhex(
-    #     "04ec3afff0b2b66e8152e9018fe3be3fc92b30bf886b3487a525997d00fd9da2d012dce5d5275854adc3106572a5d1e12d4211b228429f5a7b2f7ba92eb0475bb1")
-    # pubkey3 = bytes.fromhex(
-    #     "04b49b496684b02855bc32f5daefa2e2e406db4418f3b86bca5195600951c7d918cdbe5e6d3736ec2abf2dd7610995c3086976b2c0c7b4e459d10b34a316d5a5e7")
-    # _test_p2ms = P2MS_Key(pubkey_list=[pubkey1, pubkey2, pubkey3], req_num=2)
-    # print(f"P2MS FROM INIT: {_test_p2ms.to_asm()}")
-    #
-    # lmab_p2ms_key_bytes = bytes.fromhex(
-    #     "524104d81fd577272bbe73308c93009eec5dc9fc319fc1ee2e7066e17220a5d47a18314578be2faea34b9f1f8ca078f8621acd4bc22897b03daa422b9bf56646b342a24104ec3afff0b2b66e8152e9018fe3be3fc92b30bf886b3487a525997d00fd9da2d012dce5d5275854adc3106572a5d1e12d4211b228429f5a7b2f7ba92eb0475bb14104b49b496684b02855bc32f5daefa2e2e406db4418f3b86bca5195600951c7d918cdbe5e6d3736ec2abf2dd7610995c3086976b2c0c7b4e459d10b34a316d5a5e753ae")
-    # _test_p2ms_key = P2MS_Key.from_bytes(lmab_p2ms_key_bytes)
-    # print(f"P2MS KEY FROM BYTES: {_test_p2ms_key.to_asm()}")
+    # P2PK
+    lmab_p2pk_bytes = bytes.fromhex(
+        "41049464205950188c29d377eebca6535e0f3699ce4069ecd77ffebfbd0bcf95e3c134cb7d2742d800a12df41413a09ef87a80516353a2f0a280547bb5512dc03da8ac")
+    is_p2pk = P2PK_Key.matches(lmab_p2pk_bytes)
+    test_p2pk = P2PK_Key.from_bytes(lmab_p2pk_bytes)
+    print(f"LMAB P2PK: {test_p2pk.to_json()}")
+    print(f"MATCHES: {is_p2pk}")
+    print(sep)
+
+    # P2PKH
+    lmab_p2pkh_bytes = bytes.fromhex("76a91455ae51684c43435da751ac8d2173b2652eb6410588ac")
+    is_p2pkh = P2PKH_Key.matches(lmab_p2pkh_bytes)
+    test_p2pkh = P2PKH_Key.from_bytes(lmab_p2pkh_bytes)
+    print(f"LMAB P2PKH: {test_p2pkh.to_json()}")
+    print(f"MATCHES: {is_p2pkh}")
+
+    # P2MS
+    lmab_p2ms_bytes = bytes.fromhex(
+        "524104d81fd577272bbe73308c93009eec5dc9fc319fc1ee2e7066e17220a5d47a18314578be2faea34b9f1f8ca078f8621acd4bc22897b03daa422b9bf56646b342a24104ec3afff0b2b66e8152e9018fe3be3fc92b30bf886b3487a525997d00fd9da2d012dce5d5275854adc3106572a5d1e12d4211b228429f5a7b2f7ba92eb0475bb14104b49b496684b02855bc32f5daefa2e2e406db4418f3b86bca5195600951c7d918cdbe5e6d3736ec2abf2dd7610995c3086976b2c0c7b4e459d10b34a316d5a5e753ae")
+    is_p2ms = P2MS_Key.matches(lmab_p2ms_bytes)
+    test_p2ms = P2MS_Key.from_bytes(lmab_p2ms_bytes)
+    print(f"LMAB P2MS: {test_p2ms.to_json()}")
+    print(f"MATCHES: {is_p2ms}")
+
+    # P2SH
+    lmab_p2sh_bytes = bytes.fromhex("a914748284390f9e263a4b766a75d0633c50426eb87587")
+    is_p2sh = P2SH_Key.matches(lmab_p2sh_bytes)
+    test_p2sh = P2SH_Key.from_bytes(lmab_p2sh_bytes)
+    print(f"LMAB P2SH: {test_p2sh.to_json()}")
+    print(f"MATCHES: {is_p2sh}")

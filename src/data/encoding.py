@@ -76,9 +76,9 @@ def encode_base58check(data: bytes, prefix_byte: bytes = b'\x00') -> str:
     Given bytes data, we return the base58 encoding along with checksum
     """
     _data = prefix_byte + data
-    print(f"DATA: {_data.hex()}")
+    # print(f"DATA: {_data.hex()}")
     checksum = hash256(_data)[:4]  # First 4 bytes of HASH256(data)
-    print(f"CHECKSUM: {checksum.hex()}")
+    # print(f"CHECKSUM: {checksum.hex()}")
     return encode_base58(_data + checksum)
 
 
