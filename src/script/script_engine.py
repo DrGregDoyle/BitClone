@@ -9,11 +9,12 @@ from src.core.exceptions import ScriptEngineError
 from src.core.opcodes import OPCODES
 from src.script.context import ExecutionContext
 from src.script.opcode_map import OPCODE_MAP
-from src.script.scriptpubkey import ScriptPubKey, P2SH_Key
-from src.script.scriptsig import ScriptSig, P2SH_Sig
+from src.script.scriptpubkey import ScriptPubKey, P2SH_Key, P2WPKH_Key, P2PKH_Key
+from src.script.scriptsig import ScriptSig
 from src.script.signature_engine import SignatureEngine, SignatureContext
 from src.script.stack import BitStack, BitNum
-from src.tx import UTXO, Transaction
+from src.tx.tx import WitnessField, Transaction
+from src.tx.utxo import UTXO
 
 __all__ = ["ScriptEngine"]
 
@@ -100,10 +101,13 @@ class ScriptEngine:
         # Use script_code from context if available (for P2SH), otherwise use scriptpubkey
         script_code = ctx.script_code if hasattr(ctx, 'script_code') and ctx.script_code else utxo.scriptpubkey
 
-        # Get legacy sighash
+        # Get sighash
         sig_ctx = SignatureContext(tx=tx, input_index=input_index, sighash_type=sighash_num,
-                                   script_code=script_code)
-        message_hash = self.sig_engine.get_legacy_sighash(sig_ctx)
+                                   script_code=script_code, amount=utxo.amount)
+        if ctx.is_segwit:
+            message_hash = self.sig_engine.get_segwit_sighash(sig_ctx)
+        else:
+            message_hash = self.sig_engine.get_legacy_sighash(sig_ctx)
         signature_verified = self.sig_engine.verify_ecdsa_sig(der_sig, message_hash, pubkey)
         self.stack.pushbool(signature_verified)
 
@@ -160,6 +164,47 @@ class ScriptEngine:
         top = self.stack.pop()
         return top != b''  # Returns False whenever top of stack is b''
 
+    def validate_segwit(self, scriptpubkey: ScriptPubKey, ctx: ExecutionContext) -> bool:
+        """
+        For use with P2WPKH and P2WSH
+        """
+        # Clear stacks
+        self.clear_stacks()
+
+        # Find type
+        if P2WPKH_Key.matches(scriptpubkey.script):
+            is_p2wpkh = True
+        else:
+            is_p2wpkh = False
+
+        # Handle P2WPKH
+        if is_p2wpkh:
+            # Get WitnessField from context
+            tx = ctx.tx
+            input_index = ctx.input_index
+            witness_field: WitnessField = tx.witness[input_index]
+
+            if len(witness_field.items) != 2:
+                raise ScriptEngineError("Expected 2 stackitems for P2WPKH Witness")
+
+            # Push Signature and public key to stack
+            sig = witness_field.items[0]
+            pubkey = witness_field.items[1]
+            self.stack.push(sig)
+            self.stack.push(pubkey)
+
+            # Get pubkeyhash from ScriptPubKey and create P2PKH script
+            pubkeyhash = scriptpubkey.script[2:]
+            p2pkh_script = P2PKH_Key.from_pubkeyhash(pubkeyhash)
+
+            # Execute the P2PKH script
+            self.execute_script(p2pkh_script.script, ctx)
+
+            # Validate the stack
+            return self.validate_stack()
+
+        return True
+
     def validate_script_pair(self, scriptpubkey: ScriptPubKey, scriptsig: ScriptSig, ctx: ExecutionContext = None) -> \
             bool:
         """
@@ -201,7 +246,7 @@ class ScriptEngine:
 
     def execute_script(self, script: bytes, ctx: ExecutionContext = None):
         """
-        We only execute the given script with the accompanying ExecutionContext. We do NOT managed or validate the
+        We only execute the given script with the accompanying ExecutionContext. We do NOT manage or validate the
         stacks.
         """
 
@@ -288,33 +333,36 @@ class ScriptEngine:
 # --- TESTING --- #
 
 if __name__ == "__main__":
-    # P2SH
-    test_p2sh_key = P2SH_Key.from_bytes(bytes.fromhex("a914748284390f9e263a4b766a75d0633c50426eb87587"))
-    test_p2sh_key_utxo = UTXO(
-        # reverse display bytes for internal use
-        txid=bytes.fromhex("450c309b70fb3f71b63b10ce60af17499bd21b1db39aa47b19bf22166ee67144")[::-1],
-        vout=1,
-        amount=10000000,
-        scriptpubkey=test_p2sh_key.script,
-        block_height=183729
+    # P2WPKH
+    test_p2wpkh_key = P2WPKH_Key.from_bytes(bytes.fromhex("0014841b80d2cc75f5345c482af96294d04fdd66b2b7"))
+    witness_signature = bytes.fromhex(
+        "3045022100c7fb3bd38bdceb315a28a0793d85f31e4e1d9983122b4a5de741d6ddca5caf8202207b2821abd7a1a2157a9d5e69d2fdba3502b0a96be809c34981f8445555bdafdb01")
+    witness_pubkey = bytes.fromhex("03f465315805ed271eb972e43d84d2a9e19494d10151d9f6adb32b8534bfd764ab")
+    test_witness = WitnessField(items=[witness_signature, witness_pubkey])
+    # print(f"TEST WITNESS: {test_witness.to_json()}")
+
+    # Known data:
+    current_tx = Transaction.from_bytes(bytes.fromhex(
+        "020000000001013aa815ace3c5751ee6c325d614044ad58c18ed2858a44f9d9f98fbcddad878c10000000000ffffffff01344d10000000000016001430cd68883f558464ec7939d9f960956422018f0702483045022100c7fb3bd38bdceb315a28a0793d85f31e4e1d9983122b4a5de741d6ddca5caf8202207b2821abd7a1a2157a9d5e69d2fdba3502b0a96be809c34981f8445555bdafdb012103f465315805ed271eb972e43d84d2a9e19494d10151d9f6adb32b8534bfd764ab00000000"
+    ))
+    # print(f"CURRENT TX: {current_tx.to_json()}")
+
+    test_utxo = UTXO(
+        # Reverse display bytes for txid
+        txid=bytes.fromhex("c178d8dacdfb989f9d4fa45828ed188cd54a0414d625c3e61e75c5e3ac15a83a")[::-1],
+        vout=0,
+        amount=1083200,
+        scriptpubkey=test_p2wpkh_key.script
     )
 
-    test_p2sh_sig = P2SH_Sig.from_bytes(
-        bytes.fromhex(
-            "00473044022100d0ed946330182916da16a6149cd313a4b1a7b41591ee52fb3e79d64e36139d66021f6ccf173040ef24cb45c4db3e9c771c938a1ba2cf8d2404416f70886e360af401475121022afc20bf379bc96a2f4e9e63ffceb8652b2b6a097f63fbee6ecec2a49a48010e2103a767c7221e9f15f870f1ad9311f5ab937d79fcaeee15bb2c722bca515581b4c052ae")
-    )
-    test_p2sh_sig_tx = Transaction.from_bytes(
-        bytes.fromhex(
-            "010000000c3e10e0814786d6e02dfab4e2569d01a63191b8449bb0f5b9af580fc754ae83b9000000006c493046022100b387bc213db8a333f737e7e6b47ac5e56ba707e97682c1d6ae1d01e28fcfba620221009b7651bbf054babce6884937d598f845f533bac5dc0ec235b0e3408532b9c6e101210308b4492122999b36c09e50121544aa402cef45cd41970f1be6b71dcbd092a35effffffff40629a5c656e8a9fb80ae8a5d55b80fbb598a059bad06c50fcddf404e932d59e000000006a473044022011097b0f58e39fe1f0df7b3159456b12c3b244dcdf6a0fd138ec17d76d41eb5c02202fb5e7cec4f2efbcc90989693b7b6309fcaa27d6aac71eb3dcef60e27a7e7357012103c241a14762ef670d96c0afa470463512f5f356e0752216d34d55b6bfa38acd93ffffffff5763070e224f18dbc8211e60c05ae31543958b248eb08c9e5989167c60b3c570000000006c49304602210088db31bb970f2e77a745d15b8a31d64734c8a9eca3a24540ffa850c90f8a6f50022100bc43eb2a20d70da74cfb2be8eee69c0c1adf741130792aa882a0cda9f7df4b6f012102b5e2177732d3f19abd0e15ac5ff2d5546f70e3f91674b110ccdee8458554f1acffffffff5b4e96a245f6fbc2efb910e25e9dd7a26e0ef8486eebd50dc658ae7d9719e5fd000000006a4730440220656be7132d238e4a848f0da1c3bdc0e22b475e1b66011e1b0536e18cbfe553f502205c89da6c8dad09f5e171404bf66fc19c7d5d2066d4ff4eff3f0766d31688cc4d012102086323b48e87d7fcacb014a58889f20a9881956bf46898c4ffda84b23c965d31ffffffff6889fe551cb869bf20284c64fc3adc229fded6e11fc8b79ec11bb2e499bd0d6c290000006a4730440220226d97d92d855bb2dad731b0cf339727e0f4449c89b1cc1cff7a9432db2a53fb02203478f549e5997b0dccd6abbc5bb206ce40f706672e27b58e3bab210da105dbcf012103c241a14762ef670d96c0afa470463512f5f356e0752216d34d55b6bfa38acd93ffffffff6a1c310490053bfc791ec646907941d3df59bfa8db1b21789d8780c7489695c1000000006a473044022079913e50a223d46c3800f33a6071651aabeecbcc7c726a78aca04dd2832ebe92022075275dbfadcfcca48fa834e7130d24b1055e9ee1470e0bf7ecdf0d9091b27fdc012102fbb8f0fcb28163dd56e26fd7d4b85b71016e62696e577057ddeac36d08a03e26ffffffff79d87f7daedaee7c6e80059b38cde214fec5e4546fbdccc7c24c01c47dce1c23200000008c493046022100ec02daed0c2ab978f588a0486deef52e62b6aa82297b994fe5486d79f8457acb02210098750e260959d6bbd4d47a018b27ea15493d4cd4cb7c96136282745c41aa1c9b014104658e3e86e3740257ebf67085deb14b877955aac502a6b5dcec0cfe1f3026f27b3a772a189b1bb2c28d026bc626a48710edffa9d40830286b80b3ac5709509974ffffffff9a19e8ede8836c192fe816d80d392bb7bb5453f320a78854a83e46bd9f27bf1e000000006c4930460221008b06d1813afd4f368a9570405df7978dca0b4400d173c937931942d88776bfa4022100a7a85b09e50e12e474b634a22fbe6645227dc13cbba2aaa2a84bb1da5e1dc2f1012103c241a14762ef670d96c0afa470463512f5f356e0752216d34d55b6bfa38acd93ffffffffd3090eb0855eee3d1dba53d68edeca6c368a37d3bba9579da3ac675ece42d7680e0000008a47304402204e2518419626eb846e0ef96fb7eda1d7b954b2821482b771f372484c0e327e560220370108f1a7b4676973585c861f5365d8fc2b2b170d922d6fccb15216976a82f80141044884e2974c370394aae8121735a56eaa7215a6a46661f1ca9454c1b99611ae34903e9515b2902f2a22104d10bfd1c2303b38a14be5f2b62b0591ca0d8bbb6864fffffffff61ff40c78b3e12e7d1f9a9db04a7b7736510014fc15a950d575c159b4b0b7a5000000008c493046022100b9b7c3ac969ee98295ec063c84f05c4bf4ee0d4c25448847d44c8e4af3425af7022100cfc90b396f524c366d66a44fa77502dd6f338a584ce653332bcb8909d14360c00141048501beadf835ce4da4078dce8a9dd57964f91da9d675b3d23d45f0de71a03b24d0daf75f29cd521531d5b4389331fe6891e7e1214710cf73e7dbc91cd41cfcecffffffff4471e66e1622bf197ba49ab31d1bd29b4917af60ce103bb6713ffb709b300c45000000006b483045022100a84f83410eb3b40959830b444a85dc1251486afa6e27288bd22fb5771d09795302207d604b1d1c3f8f2d3a9c2ee1007f6b034f69339d0de4f567c12f54af14e208b6012102cbac13c0b22e24ab33131c69e36bdbbe0218cd7f43dcbf9a4b488aadc8ac23b4ffffffff4471e66e1622bf197ba49ab31d1bd29b4917af60ce103bb6713ffb709b300c45010000009100473044022100d0ed946330182916da16a6149cd313a4b1a7b41591ee52fb3e79d64e36139d66021f6ccf173040ef24cb45c4db3e9c771c938a1ba2cf8d2404416f70886e360af401475121022afc20bf379bc96a2f4e9e63ffceb8652b2b6a097f63fbee6ecec2a49a48010e2103a767c7221e9f15f870f1ad9311f5ab937d79fcaeee15bb2c722bca515581b4c052aeffffffff0196e756080000000017a914748284390f9e263a4b766a75d0633c50426eb8758700000000")
-    )
-    test_p2sh_sig_input_index = 11
-
-    ctx = ExecutionContext(
-        tx=test_p2sh_sig_tx,
-        input_index=test_p2sh_sig_input_index,
-        utxo=test_p2sh_key_utxo
+    p2wpkh_context = ExecutionContext(
+        tx=current_tx,
+        utxo=test_utxo,
+        input_index=0,
+        is_segwit=True,
+        script_code=bytes.fromhex("841b80d2cc75f5345c482af96294d04fdd66b2b7")
     )
 
     engine = ScriptEngine()
-    p2sh_validated = engine.validate_script_pair(test_p2sh_key, test_p2sh_sig, ctx)
-    print(f"P2SH VALIDATED: {p2sh_validated}")
+    sig_validated = engine.validate_segwit(test_p2wpkh_key, p2wpkh_context)
+    print(f"P2WPKH VALIDATED: {sig_validated}")

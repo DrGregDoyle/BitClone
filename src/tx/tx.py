@@ -38,6 +38,10 @@ class TxInput(Serializable):
         self.scriptsig = scriptsig
         self.sequence = sequence if isinstance(sequence, int) else int.from_bytes(sequence, "little")
 
+    @property
+    def outpoint(self):
+        return self.txid + self.vout.to_bytes(TX.VOUT, "little")
+
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):
         stream = get_stream(byte_stream)
@@ -166,13 +170,13 @@ class WitnessField(Serializable):
 
     def to_dict(self) -> dict:
         witness_dict = {
-            "stack_items": len(self.items)
+            "stack_items": write_compact_size(len(self.items)).hex()
         }
         for x in range(len(self.items)):
             temp_item = self.items[x]
             witness_dict.update({
                 x: {
-                    "size": len(temp_item),
+                    "size": write_compact_size(len(temp_item)).hex(),
                     "item": temp_item.hex()
                 }
             })

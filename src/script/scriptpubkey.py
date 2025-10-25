@@ -9,7 +9,7 @@ from src.core import ScriptPubKeyError, OPCODES, SERIALIZED, get_bytes, get_stre
 from src.data import encode_base58check, encode_bech32, PubKey, hash160
 from src.script.parser import to_asm
 
-__all__ = ["ScriptPubKey", "P2PKH_Key", "P2PK_Key", "P2MS_Key", "P2SH_Key"]
+__all__ = ["ScriptPubKey", "P2PKH_Key", "P2PK_Key", "P2MS_Key", "P2SH_Key", "P2WPKH_Key"]
 
 # --- OPCODES --- #
 _OP = OPCODES

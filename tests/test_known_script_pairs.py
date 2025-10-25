@@ -8,9 +8,9 @@ created from a previous transactions data + a specific TxOutput.
 # from src.script import ExecutionContext, P2PK_Sig, P2PK_Key, ScriptEngine
 from src.script.context import ExecutionContext
 from src.script.script_engine import ScriptEngine
-from src.script.scriptpubkey import P2PK_Key, P2PKH_Key, P2MS_Key, P2SH_Key
+from src.script.scriptpubkey import P2PK_Key, P2PKH_Key, P2MS_Key, P2SH_Key, P2WPKH_Key
 from src.script.scriptsig import P2PK_Sig, P2PKH_Sig, P2MS_Sig, P2SH_Sig
-from src.tx import Transaction, UTXO
+from src.tx import Transaction, UTXO, WitnessField
 
 # --- HEX Strings for Known elements --- #
 # P2PK
@@ -151,3 +151,39 @@ def test_p2sh_p2ms_pair():
     engine = ScriptEngine()
     assert engine.validate_script_pair(test_p2sh_key, test_p2sh_sig, test_ctx), \
         "Failed to validate known P2SH Script pair"
+
+
+def test_p2wpkh():
+    """
+    We test a known P2WPKH script
+    """
+    # P2WPKH
+    test_p2wpkh_key = P2WPKH_Key.from_bytes(bytes.fromhex("0014841b80d2cc75f5345c482af96294d04fdd66b2b7"))
+    witness_signature = bytes.fromhex(
+        "3045022100c7fb3bd38bdceb315a28a0793d85f31e4e1d9983122b4a5de741d6ddca5caf8202207b2821abd7a1a2157a9d5e69d2fdba3502b0a96be809c34981f8445555bdafdb01")
+    witness_pubkey = bytes.fromhex("03f465315805ed271eb972e43d84d2a9e19494d10151d9f6adb32b8534bfd764ab")
+    test_witness = WitnessField(items=[witness_signature, witness_pubkey])
+
+    # Known data:
+    current_tx = Transaction.from_bytes(bytes.fromhex(
+        "020000000001013aa815ace3c5751ee6c325d614044ad58c18ed2858a44f9d9f98fbcddad878c10000000000ffffffff01344d10000000000016001430cd68883f558464ec7939d9f960956422018f0702483045022100c7fb3bd38bdceb315a28a0793d85f31e4e1d9983122b4a5de741d6ddca5caf8202207b2821abd7a1a2157a9d5e69d2fdba3502b0a96be809c34981f8445555bdafdb012103f465315805ed271eb972e43d84d2a9e19494d10151d9f6adb32b8534bfd764ab00000000"
+    ))
+
+    test_utxo = UTXO(
+        # Reverse display bytes for txid
+        txid=bytes.fromhex("c178d8dacdfb989f9d4fa45828ed188cd54a0414d625c3e61e75c5e3ac15a83a")[::-1],
+        vout=0,
+        amount=1083200,
+        scriptpubkey=test_p2wpkh_key.script
+    )
+
+    p2wpkh_context = ExecutionContext(
+        tx=current_tx,
+        utxo=test_utxo,
+        input_index=0,
+        is_segwit=True,
+        script_code=bytes.fromhex("841b80d2cc75f5345c482af96294d04fdd66b2b7")
+    )
+
+    engine = ScriptEngine()
+    assert engine.validate_segwit(test_p2wpkh_key, p2wpkh_context), "Failed to validate known P2WPKH key"

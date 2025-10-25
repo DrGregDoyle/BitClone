@@ -15,3 +15,4 @@ class ExecutionContext:
     tapscript: bool = False
     sig_engine: Optional['SignatureEngine'] = None
     is_p2sh: bool = False
+    is_segwit: bool = False
