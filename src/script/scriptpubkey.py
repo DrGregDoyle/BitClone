@@ -6,8 +6,7 @@ import json
 from abc import ABC, abstractmethod
 
 from src.core import ScriptPubKeyError, OPCODES, SERIALIZED, get_bytes, get_stream, read_little_int, read_stream
-from src.cryptography import hash160
-from src.data import encode_base58check
+from src.data import encode_base58check, encode_bech32, PubKey, hash160
 from src.script.parser import to_asm
 
 __all__ = ["ScriptPubKey", "P2PKH_Key", "P2PK_Key", "P2MS_Key", "P2SH_Key"]
@@ -298,37 +297,89 @@ class P2SH_Key(ScriptPubKey):
         return all(truth_list)
 
 
+class P2WPKH_Key(ScriptPubKey):
+    """
+    For use in P2SH-P2WPKH and P2WPKH itself
+    """
+    OP_0 = b'\x00'  # Version byte
+    OP_PUSHBYTES_20 = _OP.get_byte("OP_PUSHBYTES_20")
+
+    def __init__(self, pubkeyhash: bytes):
+        # Validate
+        if len(pubkeyhash) != 20:
+            raise ScriptPubKeyError("Given pubkeyhash not 20 bytes")
+        self.script = self.OP_0 + self.OP_PUSHBYTES_20 + pubkeyhash
+
+    @classmethod
+    def from_bytes(cls, byte_stream: SERIALIZED):
+        script_bytes = get_bytes(byte_stream)
+
+        if cls.matches(script_bytes):
+            return cls(script_bytes[2:])
+        raise ScriptPubKeyError("Given byte digest doesn't match P2WPKH opcode structure")
+
+    @classmethod
+    def matches(cls, b: bytes) -> bool:
+        truthlist = [
+            b[0] == cls.OP_0[0],
+            b[1] == cls.OP_PUSHBYTES_20[0],
+            len(b[2:]) == 20
+        ]
+        return all(truthlist)
+
+    @classmethod
+    def from_pubkey(cls, pubkey: PubKey):
+        """
+        Given a Pubkey obj, we can hash the compressed pubkey and return the instance
+        """
+        pubkeyhash = hash160(pubkey.compressed())
+        return cls(pubkeyhash)
+
+    @property
+    def address(self) -> str:
+        # The encode_bech32 function only takes the SCRIPTPUBKEY, and the witness version is submitted separately
+        scriptpubkey = self.script[2:]
+        return encode_bech32(scriptpubkey, witver=0)
+
+
 # ---- TESTING --- #
 if __name__ == "__main__":
     sep = "---" * 80
 
-    # P2PK
-    lmab_p2pk_bytes = bytes.fromhex(
-        "41049464205950188c29d377eebca6535e0f3699ce4069ecd77ffebfbd0bcf95e3c134cb7d2742d800a12df41413a09ef87a80516353a2f0a280547bb5512dc03da8ac")
-    is_p2pk = P2PK_Key.matches(lmab_p2pk_bytes)
-    test_p2pk = P2PK_Key.from_bytes(lmab_p2pk_bytes)
-    print(f"LMAB P2PK: {test_p2pk.to_json()}")
-    print(f"MATCHES: {is_p2pk}")
-    print(sep)
+    # # P2PK
+    # lmab_p2pk_bytes = bytes.fromhex(
+    #     "41049464205950188c29d377eebca6535e0f3699ce4069ecd77ffebfbd0bcf95e3c134cb7d2742d800a12df41413a09ef87a80516353a2f0a280547bb5512dc03da8ac")
+    # is_p2pk = P2PK_Key.matches(lmab_p2pk_bytes)
+    # test_p2pk = P2PK_Key.from_bytes(lmab_p2pk_bytes)
+    # print(f"LMAB P2PK: {test_p2pk.to_json()}")
+    # print(f"MATCHES: {is_p2pk}")
+    # print(sep)
+    #
+    # # P2PKH
+    # lmab_p2pkh_bytes = bytes.fromhex("76a91455ae51684c43435da751ac8d2173b2652eb6410588ac")
+    # is_p2pkh = P2PKH_Key.matches(lmab_p2pkh_bytes)
+    # test_p2pkh = P2PKH_Key.from_bytes(lmab_p2pkh_bytes)
+    # print(f"LMAB P2PKH: {test_p2pkh.to_json()}")
+    # print(f"MATCHES: {is_p2pkh}")
+    #
+    # # P2MS
+    # lmab_p2ms_bytes = bytes.fromhex(
+    #     "524104d81fd577272bbe73308c93009eec5dc9fc319fc1ee2e7066e17220a5d47a18314578be2faea34b9f1f8ca078f8621acd4bc22897b03daa422b9bf56646b342a24104ec3afff0b2b66e8152e9018fe3be3fc92b30bf886b3487a525997d00fd9da2d012dce5d5275854adc3106572a5d1e12d4211b228429f5a7b2f7ba92eb0475bb14104b49b496684b02855bc32f5daefa2e2e406db4418f3b86bca5195600951c7d918cdbe5e6d3736ec2abf2dd7610995c3086976b2c0c7b4e459d10b34a316d5a5e753ae")
+    # is_p2ms = P2MS_Key.matches(lmab_p2ms_bytes)
+    # test_p2ms = P2MS_Key.from_bytes(lmab_p2ms_bytes)
+    # print(f"LMAB P2MS: {test_p2ms.to_json()}")
+    # print(f"MATCHES: {is_p2ms}")
+    #
+    # # P2SH
+    # lmab_p2sh_bytes = bytes.fromhex("a914748284390f9e263a4b766a75d0633c50426eb87587")
+    # is_p2sh = P2SH_Key.matches(lmab_p2sh_bytes)
+    # test_p2sh = P2SH_Key.from_bytes(lmab_p2sh_bytes)
+    # print(f"LMAB P2SH: {test_p2sh.to_json()}")
+    # print(f"MATCHES: {is_p2sh}")
 
-    # P2PKH
-    lmab_p2pkh_bytes = bytes.fromhex("76a91455ae51684c43435da751ac8d2173b2652eb6410588ac")
-    is_p2pkh = P2PKH_Key.matches(lmab_p2pkh_bytes)
-    test_p2pkh = P2PKH_Key.from_bytes(lmab_p2pkh_bytes)
-    print(f"LMAB P2PKH: {test_p2pkh.to_json()}")
-    print(f"MATCHES: {is_p2pkh}")
-
-    # P2MS
-    lmab_p2ms_bytes = bytes.fromhex(
-        "524104d81fd577272bbe73308c93009eec5dc9fc319fc1ee2e7066e17220a5d47a18314578be2faea34b9f1f8ca078f8621acd4bc22897b03daa422b9bf56646b342a24104ec3afff0b2b66e8152e9018fe3be3fc92b30bf886b3487a525997d00fd9da2d012dce5d5275854adc3106572a5d1e12d4211b228429f5a7b2f7ba92eb0475bb14104b49b496684b02855bc32f5daefa2e2e406db4418f3b86bca5195600951c7d918cdbe5e6d3736ec2abf2dd7610995c3086976b2c0c7b4e459d10b34a316d5a5e753ae")
-    is_p2ms = P2MS_Key.matches(lmab_p2ms_bytes)
-    test_p2ms = P2MS_Key.from_bytes(lmab_p2ms_bytes)
-    print(f"LMAB P2MS: {test_p2ms.to_json()}")
-    print(f"MATCHES: {is_p2ms}")
-
-    # P2SH
-    lmab_p2sh_bytes = bytes.fromhex("a914748284390f9e263a4b766a75d0633c50426eb87587")
-    is_p2sh = P2SH_Key.matches(lmab_p2sh_bytes)
-    test_p2sh = P2SH_Key.from_bytes(lmab_p2sh_bytes)
-    print(f"LMAB P2SH: {test_p2sh.to_json()}")
-    print(f"MATCHES: {is_p2sh}")
+    # P2WPKH
+    lmab_p2wpkh_bytes = bytes.fromhex("0014841b80d2cc75f5345c482af96294d04fdd66b2b7")
+    is_p2wpkh = P2WPKH_Key.matches(lmab_p2wpkh_bytes)
+    test_p2wpkh = P2WPKH_Key.from_bytes(lmab_p2wpkh_bytes)
+    print(f"LMAB P2WPKH: {test_p2wpkh.to_json()}")
+    print(f"MATCHES: {is_p2wpkh}")

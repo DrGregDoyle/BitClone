@@ -449,8 +449,11 @@ class Transaction(Serializable):
 
 # -- TESTING ---
 if __name__ == "__main__":
-    # Read in known tx
-    known_tx_bytes = bytes.fromhex(
-        "01000000000101dd40a8d7f105055e781afa632207f5d3c4b4f4cad9f0fb320d0f0aa8e1ba904b0000000000ffffffff021027000000000000160014858e1f88ff6f383f45a75088e15a095f20fc663f841c0000000000001976a9142241a6c3d4cc3367efaa88b58d24748caef79a7288ac02483045022100d66341c3e6ce846b92bedcf9bc673ab8e47b770c616618eb91009e44816f4c2f0220622b5ebf6afabee3f4255bbcb84609e1185d4b6b1055602f5eed2541e26324620121022ed6c7d33a59cc16d37ad9ba54230696bd5424b8931c2a68ce76b0dbbc222f6500000000")
-    known_tx = Transaction.from_bytes(known_tx_bytes)
-    print(f"KNOWN TX: {known_tx.to_json()}")
+    test_input = TxInput(txid=bytes.fromhex("deadbeef"), vout=0, scriptsig=b'', sequence=0xffffffff)
+    print(f"TEST INPUT: {test_input.to_json()}")
+    print(f"SERIALIZED: {test_input.to_bytes().hex()}")
+    # # Read in known tx
+    # known_tx_bytes = bytes.fromhex(
+    #     "01000000000101dd40a8d7f105055e781afa632207f5d3c4b4f4cad9f0fb320d0f0aa8e1ba904b0000000000ffffffff021027000000000000160014858e1f88ff6f383f45a75088e15a095f20fc663f841c0000000000001976a9142241a6c3d4cc3367efaa88b58d24748caef79a7288ac02483045022100d66341c3e6ce846b92bedcf9bc673ab8e47b770c616618eb91009e44816f4c2f0220622b5ebf6afabee3f4255bbcb84609e1185d4b6b1055602f5eed2541e26324620121022ed6c7d33a59cc16d37ad9ba54230696bd5424b8931c2a68ce76b0dbbc222f6500000000")
+    # known_tx = Transaction.from_bytes(known_tx_bytes)
+    # print(f"KNOWN TX: {known_tx.to_json()}")

@@ -1,6 +1,7 @@
 """
 The OPCODES class with bidirectional lookup
 """
+# TODO: Make b'\x00' resolve to OP_0 for use in P2WPKH
 
 __all__ = ["OPCODES"]
 

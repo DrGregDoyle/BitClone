@@ -4,7 +4,14 @@ The custom exceptions used throughout BitClone
 __all__ = ["ReadError", "StreamError", "ECDSAError", "SchnorrError", "ECCPrivateKeyError", "ECCError", "WalletError",
            "ExtendedKeyError", "PubKeyError", "WriteError", "BitNumError", "BitStackError", "OpCodeError",
            "ScriptPubKeyError", "ScriptSigError", "TargetBitsError", "MerkleError", "SignatureError",
-           "ScriptEngineError"]
+           "ScriptEngineError", "DataEncodingError"]
+
+
+class DataEncodingError(Exception):
+    """
+    For use in encoding/decoding algorithms
+    """
+    pass
 
 
 class ScriptEngineError(Exception):

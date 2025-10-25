@@ -8,13 +8,13 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Optional
 
-from src.core import SignatureError
+from src.core import SignatureError, TX
 from src.cryptography import ecdsa, verify_ecdsa, schnorr_verify, schnorr_sig, hash256
 from src.data import encode_der_signature, decode_der_signature
 from src.data.ecc_keys import PubKey
 from src.script.script_type import ScriptType
-from src.script.scriptsig import P2PK_Sig, P2PKH_Sig
-from src.tx import Transaction, TxInput, TxOutput
+from src.script.scriptsig import P2PK_Sig, P2PKH_Sig, P2MS_Sig
+from src.tx import Transaction, TxInput, TxOutput, WitnessField
 
 
 class SigHash(IntEnum):
@@ -143,13 +143,59 @@ class SignatureEngine:
                 full_sig = create_full_sig(pk, sighash_num)
                 signatures.append(full_sig)
 
-            scriptsig = P2MS(signatures).script
+            scriptsig = P2MS_Sig(signatures).script
 
         else:
             raise SignatureError(f"Unsupported script type for legacy signing: {script_type}")
 
         # Update the transaction
         tx.inputs[input_index].scriptsig = scriptsig
+        return tx
+
+    def sign_segwit_tx(
+            self,
+            tx: Transaction,
+            input_index: int,
+            script_code: bytes,
+            amount: int,
+            privkey: int | bytes,
+            sighash_num: int = 1,
+            nonce: int = None
+    ) -> Transaction:
+        """
+        The algorithm for signing a segwit transaction
+        """
+        # Setup
+        privkey_int = int.from_bytes(privkey, 'big') if isinstance(privkey, bytes) else privkey
+
+        # Validation
+        # TODO: Add validation here
+
+        # Step 1. Construct the preimage hash
+        ctx = SignatureContext(
+            tx=tx,
+            input_index=input_index,
+            sighash_type=sighash_num,
+            script_code=script_code,
+            amount=amount
+        )
+        preimage_hash = self.get_segwit_sighash(ctx)
+
+        # Step 2. Sign the preimage hash | method returns DER encoded signature
+        preimage_sig = self.get_ecdsa_sig(privkey_int, preimage_hash)
+
+        # Step 3. Append sighash type to der_sig
+        segwit_sig = preimage_sig + SigHash(sighash_num).to_byte()
+
+        # Step 4. Construct WitnessField = [signature, compressed public key]
+        cpk = PubKey(privkey_int).compressed()
+        witness_field = WitnessField(items=[segwit_sig, cpk])
+
+        # Step 5. Insert witness into the Tx
+        if not tx.witness:
+            tx.witness.append(witness_field)
+        else:
+            tx.witness[input_index] = witness_field
         return tx
 
     # --- SIGHASH ALGORITHMS --- #
@@ -190,7 +236,72 @@ class SignatureEngine:
         return hash256(data)
 
     def get_segwit_sighash(self, ctx: SignatureContext):
-        pass
+        """
+        """
+        # 1. Get tx from context
+        # Get context items
+        tx = ctx.tx
+        # tx = Transaction.from_bytes(ctx.tx.to_bytes())  # Create copy of tx
+        input_index = ctx.input_index
+        pubkeyhash = ctx.script_code
+        sighash_num = ctx.sighash_type
+        amount = ctx.amount
+
+        # 2. Construct the preimage and preimage hash
+        # 2-1. version
+        serialized_version = tx.version.to_bytes(TX.VERSION, "little")
+
+        # 2-2. hash256(serialized txid+vout for all the inputs in the tx)
+        serialized_inputs = b''.join([txin.outpoint for txin in tx.inputs])
+        hashed_inputs = hash256(serialized_inputs)
+
+        # 2-3. Serialize and hash the sequence of each input
+        serialized_sequences = b''.join([txin.sequence.to_bytes(TX.SEQUENCE, "little") for txin in tx.inputs])
+        hashed_sequences = hash256(serialized_sequences)
+
+        # 2-4. Serialize the outpoint for the input we're signing
+        my_input = tx.inputs[input_index]
+        my_input_outpoint = my_input.outpoint
+
+        # 2-5. Create script for the input we're signing
+        # Script = OP_PUSHBYTES_25 + OP_DUP + OP_HASH160 + OP_PUSHBYTES_20 + pubkeyhash + OP_EQUALVERIFY + OP_CHECKSIG
+        scriptcode = b'\x19\x76\xa9\x14' + pubkeyhash + b'\x88\xac'
+
+        # 2-6. Amount
+        serialized_amount = amount.to_bytes(TX.AMOUNT, "little")
+
+        # 2-7. My Sequence
+        my_sequence = my_input.sequence.to_bytes(TX.SEQUENCE, "little")
+
+        # 2-8. Serialized and hash all outputs
+        serialized_outputs = b''.join([txout.to_bytes() for txout in tx.outputs])
+        hashed_outputs = hash256(serialized_outputs)
+
+        # 2-9. Locktime
+        serialized_locktime = tx.locktime.to_bytes(TX.LOCKTIME, "little")
+
+        # 2.10 Construct pre-image
+        preimage = (
+                serialized_version + hashed_inputs + hashed_sequences + my_input_outpoint + scriptcode +
+                serialized_amount + my_sequence + hashed_outputs + serialized_locktime
+        )
+
+        # 2-11. Add signature hash type
+        preimage_sighash = preimage + SigHash(sighash_num).for_hashing()
+
+        # --- LOGGING --- #
+        print(" --- SEGWIT SIGHASH ---")
+        print("---" * 80)
+        print(f"VERSION: {serialized_version.hex()}")
+        print(f"HASHED INPUTS: {hashed_inputs.hex()}")
+        print(f"HASHED SEQUENCES: {hashed_sequences.hex()}")
+        print(f"INPUT: {my_input_outpoint.hex()}")
+        print(f"SCRIPTCODE: {scriptcode.hex()}")
+        print(f"AMOUNT: {serialized_amount.hex()}")
+        print(f"SEQUENCE: {my_sequence.hex()}")
+        print(f"HASHED OUTPUTS: {hashed_outputs.hex()}")
+        print(f"LOCKTIME: {serialized_locktime.hex()}")
+        return hash256(preimage_sighash)
 
     def get_taproot_sighash(self, ctx: SignatureContext):
         pass

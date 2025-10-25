@@ -134,7 +134,7 @@ def encode_bech32(pubkeydata: bytes, hrp: str = "bc", witver: int = 0) -> str:
 
     # Decode the address to verify checksum
     decoded_hrp, decoded_data, dec_spec = bech32_decode(bech32_address)
-    if decoded_hrp != hrp or decoded_data is None or dec_spec != spec:
+    if decoded_hrp != hrp or decoded_data is None or dec_spec.value != spec:
         raise ValueError("Checksum verification failed. The generated Bech32 address is invalid.")
 
     return bech32_address
@@ -151,7 +151,7 @@ def decode_bech32(bech32_address: str) -> bytes:
     del decoded_data[0]
 
     # Convert 5-bit data to 8-bit using the reference convertbits function
-    converted_data = convertbits(decoded_data, 5, 8, pad=False)
+    converted_data = convertbits(decoded_data, 5, 8, pad=True)
 
     # Return byte encoded pubkeyhash
     return bytes(converted_data)
