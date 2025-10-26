@@ -5,15 +5,18 @@ The ScriptSig class and its children
 import json
 from abc import ABC, abstractmethod
 
-from src.core import ScriptSigError, SCRIPT
+from src.core import ScriptSigError, SCRIPT, OPCODES
 from src.script.parser import to_asm
+from src.script.scriptpubkey import P2WPKH_Key
 
-__all__ = ["P2PK_Sig", "P2PKH_Sig", "ScriptSig", 'P2MS_Sig', "P2SH_Sig"]
+__all__ = ["P2PK_Sig", "P2PKH_Sig", "ScriptSig", 'P2MS_Sig', "P2SH_Sig", "P2SH_P2WPKH_Sig"]
 
 # --- OPCODES --- #
 OP_PUSHBYTES_33 = b'\x21'
 OP_PUSHBYTES_65 = b'\x41'
 OP_CHECKSIG = b'\xac'
+
+_OP = OPCODES
 
 
 class ScriptSig(ABC):
@@ -198,58 +201,29 @@ class P2SH_Sig(ScriptSig):
         raise ScriptSigError("Could not find valid redeem script push in P2SH ScriptSig")
 
 
-def parse_scriptsig(scriptsig_bytes: bytes) -> ScriptSig:
+class P2SH_P2WPKH_Sig(ScriptSig):
     """
-    We read in the bytes and return one of the above ScriptSig, or empty object if it doesn't match.
+    ScriptPubKey = P2SH_Key
+    But we unlock using both ScriptSig and WitnessField
     """
-    # P2PK
-    try:
-        p2pk = P2PK_Sig.from_bytes(scriptsig_bytes)
-        return p2pk
-    except ScriptSigError:
-        print("ScriptSig does not match p2pk format")
-        pass
+    OP_PUSHBYTES_22 = _OP.get_byte("OP_PUSHBYTES_22")
 
-    # P2PKH
-    try:
-        p2pkh = P2PKH_Sig.from_bytes(scriptsig_bytes)
-        return p2pkh
-    except ScriptSigError:
-        print("ScriptSig does not match p2pkh format")
-        pass
+    def __init__(self, p2wpkh_key: bytes | P2WPKH_Key):
+        self.script = self.OP_PUSHBYTES_22 + (p2wpkh_key.script if isinstance(p2wpkh_key, P2WPKH_Key) else p2wpkh_key)
 
-    # P2MS
-    try:
-        p2ms = P2MS_Sig.from_bytes(scriptsig_bytes)
-        return p2ms
-    except ScriptSigError:
-        print("ScriptSig does not match p2ms format")
-        pass
+    @classmethod
+    def from_bytes(cls, scriptsig: bytes):
+        # Check leading bytee
+        lead_byte = scriptsig[0]
 
-    # P2SH
-    try:
-        p2sh = P2SH_Sig.from_bytes(scriptsig_bytes)
-        return p2sh
-    except ScriptSigError:
-        print("ScriptSig does not match p2sh format")
-        pass
-
-    return ScriptSig()
+        if lead_byte == cls.OP_PUSHBYTES_22[0]:
+            return cls(scriptsig[1:])
+        raise ScriptSigError("Given data does not match P2SH-P2WPKH opcode syntax")
 
 
 # --- TESTING --- #
 if __name__ == "__main__":
-    # p2pkh_bytes = bytes.fromhex(
-    #     "483045022100c233c3a8a510e03ad18b0a24694ef00c78101bfd5ac075b8c1037952ce26e91e02205aa5f8f88f29bb4ad5808ebc12abfd26bd791256f367b04c6d955f01f28a7724012103f0609c81a45f8cab67fc2d050c21b1acd3d37c7acfd54041be6601ab4cef4f31")
-    # test_p2pkh = P2PKH_Sig.from_bytes(p2pkh_bytes)
-    # print(f"TEST P2PKH_Sig: {test_p2pkh.to_asm()}")
-
-    p2ms_bytes = bytes.fromhex(
-        "00483045022100af204ef91b8dba5884df50f87219ccef22014c21dd05aa44470d4ed800b7f6e40220428fe058684db1bb2bfb6061bff67048592c574effc217f0d150daedcf36787601483045022100e8547aa2c2a2761a5a28806d3ae0d1bbf0aeff782f9081dfea67b86cacb321340220771a166929469c34959daf726a2ac0c253f9aff391e58a3c7cb46d8b7e0fdc4801")
-    test_p2ms = P2MS_Sig.from_bytes(p2ms_bytes)
-    print(f"TEST P2MS: {test_p2ms.to_asm()}")
-
-    p2sh_bytes = bytes.fromhex(
-        "00473044022100d0ed946330182916da16a6149cd313a4b1a7b41591ee52fb3e79d64e36139d66021f6ccf173040ef24cb45c4db3e9c771c938a1ba2cf8d2404416f70886e360af401475121022afc20bf379bc96a2f4e9e63ffceb8652b2b6a097f63fbee6ecec2a49a48010e2103a767c7221e9f15f870f1ad9311f5ab937d79fcaeee15bb2c722bca515581b4c052ae")
-    test_p2sh = P2SH_Sig.from_bytes(p2sh_bytes)
-    print(f"TEST P2SH: {test_p2sh.to_asm()}")
+    # P2SH-P2WPKH
+    test_p2sh_p2wpkh_bytes = bytes.fromhex("16001402c8147af586cace7589672191bb1c790e9e9a72")
+    test_key = P2SH_P2WPKH_Sig.from_bytes(test_p2sh_p2wpkh_bytes)
+    print(f"P2SH-P2WPKH: {test_key.to_json()}")
