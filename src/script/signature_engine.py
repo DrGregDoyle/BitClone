@@ -243,7 +243,8 @@ class SignatureEngine:
         tx = ctx.tx
         # tx = Transaction.from_bytes(ctx.tx.to_bytes())  # Create copy of tx
         input_index = ctx.input_index
-        pubkeyhash = ctx.script_code
+        # pubkeyhash = ctx.script_code
+        script_code = ctx.script_code
         sighash_num = ctx.sighash_type
         amount = ctx.amount
 
@@ -264,8 +265,7 @@ class SignatureEngine:
         my_input_outpoint = my_input.outpoint
 
         # 2-5. Create script for the input we're signing
-        # Script = OP_PUSHBYTES_25 + OP_DUP + OP_HASH160 + OP_PUSHBYTES_20 + pubkeyhash + OP_EQUALVERIFY + OP_CHECKSIG
-        scriptcode = b'\x19\x76\xa9\x14' + pubkeyhash + b'\x88\xac'
+        scriptcode = script_code  # Either P2WPKH or P2WSH. The latter is a witness script, the former is P2PKH
 
         # 2-6. Amount
         serialized_amount = amount.to_bytes(TX.AMOUNT, "little")

@@ -6,10 +6,10 @@ import json
 from abc import ABC, abstractmethod
 
 from src.core import ScriptPubKeyError, OPCODES, SERIALIZED, get_bytes, get_stream, read_little_int, read_stream
-from src.data import encode_base58check, encode_bech32, PubKey, hash160
+from src.data import encode_base58check, encode_bech32, hash160
 from src.script.parser import to_asm
 
-__all__ = ["ScriptPubKey", "P2PKH_Key", "P2PK_Key", "P2MS_Key", "P2SH_Key", "P2WPKH_Key"]
+__all__ = ["ScriptPubKey", "P2PKH_Key", "P2PK_Key", "P2MS_Key", "P2SH_Key", "P2WPKH_Key", "P2WSH_Key"]
 
 # --- OPCODES --- #
 _OP = OPCODES
@@ -37,7 +37,7 @@ class ScriptPubKey(ABC):
     @classmethod
     @abstractmethod
     def matches(cls, b: bytes) -> bool:
-        "Return True if the given script matches this type"
+        """Return True if the given script matches this type"""
         raise NotImplementedError
 
     def to_bytes(self):
@@ -328,16 +328,59 @@ class P2WPKH_Key(ScriptPubKey):
         return all(truthlist)
 
     @classmethod
-    def from_pubkey(cls, pubkey: PubKey):
+    def from_pubkey(cls, pubkey: bytes):
         """
         Given a Pubkey obj, we can hash the compressed pubkey and return the instance
         """
-        pubkeyhash = hash160(pubkey.compressed())
+        # Pubkey must be a 33 byte compressed public key
+        if len(pubkey) != 33:
+            raise ScriptPubKeyError("P2WPKH only uses compressed public keys")
+        pubkeyhash = hash160(pubkey)
         return cls(pubkeyhash)
 
     @property
     def address(self) -> str:
         # The encode_bech32 function only takes the SCRIPTPUBKEY, and the witness version is submitted separately
+        scriptpubkey = self.script[2:]
+        return encode_bech32(scriptpubkey, witver=0)
+
+
+class P2WSH_Key(ScriptPubKey):
+    """
+    Pay To Witness Script Hash
+    """
+    OP_0 = b'\x00'
+    OP_PUSHBYTES_32 = _OP.get_byte("OP_PUSHBYTES_32")
+
+    def __init__(self, script_hash: bytes):
+        # Validation
+        if len(script_hash) != 32:
+            raise ScriptPubKeyError("P2WSH Key must be 32 bytes")
+
+        self.script = self.OP_0 + self.OP_PUSHBYTES_32 + script_hash
+
+    @classmethod
+    def matches(cls, b: bytes) -> bool:
+        lead_byte = b[0]
+        first_byte = b[1]
+        scripthash_len = len(b[2:])
+        truth_list = [
+            lead_byte == cls.OP_0[0],
+            first_byte == cls.OP_PUSHBYTES_32[0],
+            scripthash_len == 32
+        ]
+        return all(truth_list)
+
+    @classmethod
+    def from_bytes(cls, byte_stream: SERIALIZED):
+        script_bytes = get_bytes(byte_stream)
+
+        if cls.matches(script_bytes):
+            return cls(script_bytes[2:])
+        raise ScriptPubKeyError("Data failed P2WSH opcode structure")
+
+    @property
+    def address(self) -> str:
         scriptpubkey = self.script[2:]
         return encode_bech32(scriptpubkey, witver=0)
 
@@ -378,8 +421,14 @@ if __name__ == "__main__":
     # print(f"MATCHES: {is_p2sh}")
 
     # P2WPKH
-    lmab_p2wpkh_bytes = bytes.fromhex("0014841b80d2cc75f5345c482af96294d04fdd66b2b7")
-    is_p2wpkh = P2WPKH_Key.matches(lmab_p2wpkh_bytes)
-    test_p2wpkh = P2WPKH_Key.from_bytes(lmab_p2wpkh_bytes)
-    print(f"LMAB P2WPKH: {test_p2wpkh.to_json()}")
-    print(f"MATCHES: {is_p2wpkh}")
+    # lmab_p2wpkh_bytes = bytes.fromhex("0014841b80d2cc75f5345c482af96294d04fdd66b2b7")
+    # is_p2wpkh = P2WPKH_Key.matches(lmab_p2wpkh_bytes)
+    # test_p2wpkh = P2WPKH_Key.from_bytes(lmab_p2wpkh_bytes)
+    # print(f"LMAB P2WPKH: {test_p2wpkh.to_json()}")
+    # print(f"MATCHES: {is_p2wpkh}")
+
+    lmab_p2wsh_bytes = bytes.fromhex("002065f91a53cb7120057db3d378bd0f7d944167d43a7dcbff15d6afc4823f1d3ed3")
+    is_p2wsh = P2WSH_Key.matches(lmab_p2wsh_bytes)
+    test_p2wsh = P2WSH_Key.from_bytes(lmab_p2wsh_bytes)
+    print(f"LMAB P2WSH: {test_p2wsh.to_json()}")
+    print(f"MATCHES: {is_p2wsh}")

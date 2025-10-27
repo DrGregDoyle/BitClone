@@ -4,7 +4,6 @@ Methods for creating a Schnorr signature and verifying
 from src.core import ECC, SchnorrError
 from src.cryptography.ecc import SECP256K1, Point
 from src.cryptography.hash_functions import schnorr_aux_hash, schnorr_challenge_hash, schnorr_nonce_hash
-from src.data.ecc_keys import PubKey
 
 #  --- CONSTANTS
 BYTE_LEN = ECC.COORD_BYTES
@@ -213,16 +212,3 @@ def schnorr_verify(xonly_pubkey: int | bytes, msg: bytes, sig: bytes) -> bool:
     pt3 = curve.add_points(pt1, pt2)
 
     return pt3.x == r
-
-
-# --- TESTING --- #
-if __name__ == "__main__":
-    _priv_key = 0xb7e151628aed2a6abf7158809cf4f3c762e7160f38b4da56a784d9045190cfef
-    _pubkey = PubKey(_priv_key, is_even_y=True)  # Take even y coordinate for BIP0340
-    print(f"XONLY PUBKEY: {_pubkey.serial_xonly().hex()}")
-
-    # for x in range(100, 150):
-    #     temp_priv_key = x
-    #     msg = bytes.fromhex('deadbeef' * 8)
-    #     schnorr_sig(temp_priv_key, msg)
-    #     print(f'--- Test {x + 1} ---', end='\n')
