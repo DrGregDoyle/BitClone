@@ -8,7 +8,7 @@ import unicodedata
 
 __all__ = ["hash160", "hash256", "hmac_sha512", "pbkdf2", "ripemd160", "sha1", "sha256", "sha512", "schnorr_aux_hash",
            "schnorr_challenge_hash", "schnorr_nonce_hash", "tagged_sha256", "tapbranch_hash", "tapleaf_hash",
-           "taptweak_hash"]
+           "taptweak_hash", "tapsighash_hash"]
 
 
 # --- SHA --- #
@@ -97,6 +97,10 @@ def tapbranch_hash(data: bytes) -> bytes:
 
 def taptweak_hash(data: bytes) -> bytes:
     return tagged_sha256(b'TapTweak', data)
+
+
+def tapsighash_hash(data: bytes) -> bytes:
+    return tagged_sha256(b'TapSighash', data)
 
 
 # --- SCHNORR BIP0340 TAGGED HASH FUNCTIONS --- #

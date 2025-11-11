@@ -146,6 +146,14 @@ class PubKey:
     def pubkey_hash(self):
         return hash160(self.compressed())
 
+    # --- TAPROOT TWEAK
+    def tweak_pubkey(self, tweak: int | bytes) -> 'PubKey':
+        # Calculate tweak
+        tweak_int = int.from_bytes(tweak, "big") if isinstance(tweak, bytes) else tweak
+        tweak_point = SECP256K1.multiply_generator(tweak_int)
+        new_pubkey_point = SECP256K1.add_points(self.to_point(), tweak_point)
+        return PubKey.from_point(new_pubkey_point)
+
     # --- DISPLAY --- #
     def to_dict(self):
         """

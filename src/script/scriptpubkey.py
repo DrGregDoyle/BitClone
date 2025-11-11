@@ -5,11 +5,14 @@ SCRIPTPUBKEY = LOCKING SCRIPT
 import json
 from abc import ABC, abstractmethod
 
-from src.core import ScriptPubKeyError, OPCODES, SERIALIZED, get_bytes, get_stream, read_little_int, read_stream
-from src.data import encode_base58check, encode_bech32, hash160
+from src.core import ScriptPubKeyError, OPCODES, SERIALIZED, get_bytes, get_stream, read_little_int, read_stream, \
+    PubKeyError
+from src.cryptography import taptweak_hash
+from src.data import encode_base58check, encode_bech32, hash160, PubKey
 from src.script.parser import to_asm
+from src.script.taproot import get_unbalanced_merkle_root
 
-__all__ = ["ScriptPubKey", "P2PKH_Key", "P2PK_Key", "P2MS_Key", "P2SH_Key", "P2WPKH_Key", "P2WSH_Key"]
+__all__ = ["ScriptPubKey", "P2PKH_Key", "P2PK_Key", "P2MS_Key", "P2SH_Key", "P2WPKH_Key", "P2WSH_Key", "P2TR_Key"]
 
 # --- OPCODES --- #
 _OP = OPCODES
@@ -385,9 +388,95 @@ class P2WSH_Key(ScriptPubKey):
         return encode_bech32(scriptpubkey, witver=0)
 
 
-# ---- TESTING --- #
+class P2TR_Key(ScriptPubKey):
+    """
+    A ScriptPubKey for the Key Path Spend method in Taproot
+    """
+    OP_1 = _OP.get_byte("OP_1")
+    OP_PUSHBYTES_32 = _OP.get_byte("OP_PUSHBYTES_32")
+
+    # TODO: Add version_byte = b'\xc0 to formats.py
+
+    def __init__(self, xonly_pubkey: bytes, scripts: list[bytes] = None, leaf_version: bytes = b'\xc0'):
+        # Validation
+        try:
+            valid_pubkey = PubKey.from_xonly(xonly_pubkey)
+        except PubKeyError as e:
+            raise f"Invalid x-only pubkey: {e}"
+
+        # Check for key-path or script path
+        self._scripts = scripts
+        if scripts is None:
+            # Key-path
+            self._merkle_root = b''
+        else:
+            # Script-path
+            self._merkle_root = get_unbalanced_merkle_root(scripts, version_byte=leaf_version)
+        self._tweak = taptweak_hash(valid_pubkey.x_bytes() + self._merkle_root)
+        self._tweaked_pubkey = valid_pubkey.tweak_pubkey(self._tweak)
+
+        self.script = self.OP_1 + self.OP_PUSHBYTES_32 + self._tweaked_pubkey.x_bytes()
+
+    def get_tweak(self):
+        return self._tweak
+
+    def get_merkle_root(self):
+        return self._merkle_root
+
+    def get_tweaked_pubkey(self):
+        return self._tweaked_pubkey
+
+    @classmethod
+    def matches(cls, b: bytes) -> bool:
+        truth_list = [
+            b[0] == cls.OP_1[0],
+            b[1] == cls.OP_PUSHBYTES_32[0],
+            len(b[2:]) == 32
+        ]
+        return all(truth_list)
+
+    @classmethod
+    def from_bytes(cls, byte_stream: SERIALIZED):
+        script_bytes = get_bytes(byte_stream)
+
+        if cls.matches(script_bytes):
+            try:
+                _ = PubKey.from_xonly(script_bytes[2:])
+            except PubKeyError as e:
+                raise f"Given script fails x-only public key validation: {e}"
+
+            obj = object.__new__(cls)
+            obj.script = script_bytes
+            return obj
+        raise PubKeyError("Script bytes do not match opcode syntax for P2TR")
+
+    @property
+    def address(self) -> str:
+        return encode_bech32(self.script[2:], hrp='bc', witver=1)  # OP_1
+
+    # ---- TESTING --- #
+
+
 if __name__ == "__main__":
     sep = "---" * 80
+    # P2TR testing
+    test_xonly_pubkey = bytes.fromhex("a2fc329a085d8cfc4fa28795993d7b666cee024e94c40115141b8e9be4a29fa4")
+    _scripts = [
+        bytes.fromhex("5187"),
+        bytes.fromhex("5287"),
+        bytes.fromhex("5387"),
+        bytes.fromhex("5487"),
+        bytes.fromhex("5587")
+    ]
+    test_p2tr = P2TR_Key(xonly_pubkey=test_xonly_pubkey, scripts=_scripts)
+    print(f"TEST P2TR FROM SCRIPTS: {test_p2tr.to_json()}")
+
+    # # P2TR - Key Path
+    # lmab_p2tr_bytes = bytes.fromhex("5120562529047f476b9a833a5a780a75845ec32980330d76d1ac9f351dc76bce5d72")
+    # is_p2tr = P2TR_Key.matches(lmab_p2tr_bytes)
+    # test_p2tr = P2TR_Key.from_bytes(lmab_p2tr_bytes)
+    # print(f"LMAB P2TR: {test_p2tr.to_json()}")
+    # print(f"MATCHES: {is_p2tr}")
 
     # # P2PK
     # lmab_p2pk_bytes = bytes.fromhex(
@@ -427,8 +516,8 @@ if __name__ == "__main__":
     # print(f"LMAB P2WPKH: {test_p2wpkh.to_json()}")
     # print(f"MATCHES: {is_p2wpkh}")
 
-    lmab_p2wsh_bytes = bytes.fromhex("002065f91a53cb7120057db3d378bd0f7d944167d43a7dcbff15d6afc4823f1d3ed3")
-    is_p2wsh = P2WSH_Key.matches(lmab_p2wsh_bytes)
-    test_p2wsh = P2WSH_Key.from_bytes(lmab_p2wsh_bytes)
-    print(f"LMAB P2WSH: {test_p2wsh.to_json()}")
-    print(f"MATCHES: {is_p2wsh}")
+    # lmab_p2wsh_bytes = bytes.fromhex("002065f91a53cb7120057db3d378bd0f7d944167d43a7dcbff15d6afc4823f1d3ed3")
+    # is_p2wsh = P2WSH_Key.matches(lmab_p2wsh_bytes)
+    # test_p2wsh = P2WSH_Key.from_bytes(lmab_p2wsh_bytes)
+    # print(f"LMAB P2WSH: {test_p2wsh.to_json()}")
+    # print(f"MATCHES: {is_p2wsh}")

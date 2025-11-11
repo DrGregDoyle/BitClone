@@ -3,7 +3,12 @@ The Bitcoin standard formats
 """
 from typing import Final
 
-__all__ = ["ECC", "WALLET", "XKEYS", "BECH32CODE", "DATA", "TX", "SCRIPT", "BLOCK"]
+__all__ = ["ECC", "WALLET", "XKEYS", "BECH32CODE", "DATA", "TX", "SCRIPT", "BLOCK", "TAPROOT"]
+
+
+class TAPROOT:
+    VERSION: Final[bytes] = b'\xc0'
+    SIGHASH_EPOCH: Final[bytes] = b'\x00'
 
 
 class BLOCK:
@@ -90,6 +95,7 @@ class TX:
     LOCKTIME: Final[int] = 4
     BIP68: Final[int] = 2  # Tx.version
     MARKERFLAG: Final[int] = 2
+    INDEX: Final[int] = 4
 
 
 class SCRIPT:

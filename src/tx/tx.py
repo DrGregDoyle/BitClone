@@ -95,6 +95,13 @@ class TxOutput(Serializable):
         self.amount = amount if isinstance(amount, int) else int.from_bytes(amount, "little")
         self.scriptpubkey = scriptpubkey
 
+    @property
+    def serial_scriptpubkey(self) -> bytes:
+        """
+        We return the formatted scriptpubkey_size + scriptpubkey
+        """
+        return write_compact_size(len(self.scriptpubkey)) + self.scriptpubkey
+
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):
         stream = get_stream(byte_stream)
@@ -110,12 +117,7 @@ class TxOutput(Serializable):
         Serializt the TxOutput
         amount || scriptpubkey_size || scriptpubkey
         """
-        parts = [
-            self.amount.to_bytes(TX.AMOUNT, "little"),
-            write_compact_size(len(self.scriptpubkey)),
-            self.scriptpubkey
-        ]
-        return b''.join(parts)
+        return self.amount.to_bytes(TX.AMOUNT, "little") + self.serial_scriptpubkey
 
     def to_dict(self) -> dict:
         return {

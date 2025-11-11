@@ -82,37 +82,43 @@ def schnorr_sig(priv_key: int, msg: bytes, aux_bytes: bytes = None) -> bytes:
     # --- Main algorithm --- #
 
     # 1. Calculate the public key and ensure an even y-coordinate
-    schnorr_pubkey = curve.multiply_generator(priv_key)
-    if schnorr_pubkey.y % 2 != 0:
+    schnorr_point = curve.multiply_generator(priv_key)
+    if schnorr_point.y % 2 != 0:
         # If private key yields odd y, we negate the private key for use in the algorithm
         priv_key = n - priv_key
-    schnorr_xbytes = schnorr_pubkey.x.to_bytes(BYTE_LEN, "big")
+    schnorr_xbytes = schnorr_point.x.to_bytes(BYTE_LEN, "big")
 
     # 2. Compute deterministic (private) nonce
-    while True:
-        aux_hash = schnorr_aux_hash(aux_bytes)
-        temp_entropy = priv_key ^ int.from_bytes(aux_hash, "big")  # XOR
-        k_prime = int.from_bytes(
-            schnorr_nonce_hash(temp_entropy.to_bytes(BYTE_LEN, "big")) + schnorr_xbytes + msg, "big") % n
-        if k_prime == 0:
-            continue
-        break
+    aux_rand_hash = schnorr_aux_hash(aux_bytes)
+    temp_entropy = priv_key ^ int.from_bytes(aux_rand_hash, "big")  # XOR
+    hash_data = temp_entropy.to_bytes(BYTE_LEN, "big") + schnorr_xbytes + msg
+    k_prime = int.from_bytes(schnorr_nonce_hash(hash_data), "big") % n
+
+    # Check k_prime isn't zero
+    if k_prime == 0:
+        raise SchnorrError("Generated 0-nonce for Schnorr signature")
 
     # 3. Calculate public nonce
-    public_nonce = curve.multiply_generator(k_prime)
-    if public_nonce.y % 2 == 0:
+    nonce_point = curve.multiply_generator(k_prime)
+    if nonce_point.y % 2 != 0:
         k_prime = n - k_prime
+    nonce_xbytes = nonce_point.x.to_bytes(BYTE_LEN, "big")
 
     # 4. Calculate challenge
-    challenge_hash = schnorr_challenge_hash(public_nonce.x.to_bytes(BYTE_LEN, "big") + schnorr_xbytes + msg)
+    challenge_hash = schnorr_challenge_hash(nonce_xbytes + schnorr_xbytes + msg)
     challenge = int.from_bytes(challenge_hash, "big") % n
 
     # 5. Construct signature
-    r = public_nonce.x
+    r = nonce_point.x
     s = (k_prime + challenge * priv_key) % n
 
-    # Return 64 byte signature
-    return r.to_bytes(BYTE_LEN, "big") + s.to_bytes(BYTE_LEN, "big")
+    # 6. Validate and return 64 byte signature
+    sig = r.to_bytes(BYTE_LEN, "big") + s.to_bytes(BYTE_LEN, "big")
+    valid = schnorr_verify(schnorr_point.x, msg, sig)
+    if not valid:
+        raise SchnorrError("Generated invalid signature.")
+
+    return sig
 
 
 def schnorr_verify(xonly_pubkey: int | bytes, msg: bytes, sig: bytes) -> bool:
@@ -212,3 +218,12 @@ def schnorr_verify(xonly_pubkey: int | bytes, msg: bytes, sig: bytes) -> bool:
     pt3 = curve.add_points(pt1, pt2)
 
     return pt3.x == r
+
+
+# --- TESTING ---
+if __name__ == "__main__":
+    tweaked_privkey = int.from_bytes(bytes.fromhex(
+        "37f0f35933e8b52e6210dca589523ea5b66827b4749c49456e62fae4c89c6469"), "big")
+    test_msg = bytes.fromhex("a7b390196945d71549a2454f0185ece1b47c56873cf41789d78926852c355132")
+    test_sig = schnorr_sig(tweaked_privkey, test_msg)
+    print(f"TEST SIG: {test_sig.hex()}")
