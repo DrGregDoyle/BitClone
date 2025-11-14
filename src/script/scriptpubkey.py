@@ -6,16 +6,17 @@ import json
 from abc import ABC, abstractmethod
 
 from src.core import ScriptPubKeyError, OPCODES, SERIALIZED, get_bytes, get_stream, read_little_int, read_stream, \
-    PubKeyError
+    PubKeyError, TAPROOT
 from src.cryptography import taptweak_hash
 from src.data import encode_base58check, encode_bech32, hash160, PubKey
+from src.data.taproot import get_unbalanced_merkle_root
 from src.script.parser import to_asm
-from src.script.taproot import get_unbalanced_merkle_root
 
 __all__ = ["ScriptPubKey", "P2PKH_Key", "P2PK_Key", "P2MS_Key", "P2SH_Key", "P2WPKH_Key", "P2WSH_Key", "P2TR_Key"]
 
-# --- OPCODES --- #
+# --- CONSTANTS --- #
 _OP = OPCODES
+LEAF_VERSION = TAPROOT.VERSION
 
 
 class ScriptPubKey(ABC):
@@ -52,7 +53,8 @@ class ScriptPubKey(ABC):
     def to_dict(self):
         return {
             "asm": json.loads(json.dumps(self.to_asm())),
-            "address": self.address
+            "address": self.address,
+            "script": self.script.hex()
         }
 
     def to_json(self):
@@ -395,9 +397,7 @@ class P2TR_Key(ScriptPubKey):
     OP_1 = _OP.get_byte("OP_1")
     OP_PUSHBYTES_32 = _OP.get_byte("OP_PUSHBYTES_32")
 
-    # TODO: Add version_byte = b'\xc0 to formats.py
-
-    def __init__(self, xonly_pubkey: bytes, scripts: list[bytes] = None, leaf_version: bytes = b'\xc0'):
+    def __init__(self, xonly_pubkey: bytes, scripts: list[bytes] = None, leaf_version: bytes = LEAF_VERSION):
         # Validation
         try:
             valid_pubkey = PubKey.from_xonly(xonly_pubkey)
@@ -454,22 +454,46 @@ class P2TR_Key(ScriptPubKey):
     def address(self) -> str:
         return encode_bech32(self.script[2:], hrp='bc', witver=1)  # OP_1
 
+    def to_dict(self):
+        base_dict = super().to_dict()  # Optional: get parent dict first
+        # Add P2TR-specific fields
+        base_dict.update({
+            "tweak": self._tweak.hex() if hasattr(self, '_tweak') else None,
+            "merkle_root": self._merkle_root.hex() if hasattr(self, '_merkle_root') else None,
+            "tweaked_pubkey": self._tweaked_pubkey.x_bytes().hex() if hasattr(self, '_tweaked_pubkey') else None,
+            "has_scripts": self._scripts is not None if hasattr(self, '_scripts') else None
+        })
+        return base_dict
+
     # ---- TESTING --- #
 
 
 if __name__ == "__main__":
     sep = "---" * 80
-    # P2TR testing
-    test_xonly_pubkey = bytes.fromhex("a2fc329a085d8cfc4fa28795993d7b666cee024e94c40115141b8e9be4a29fa4")
-    _scripts = [
-        bytes.fromhex("5187"),
-        bytes.fromhex("5287"),
-        bytes.fromhex("5387"),
-        bytes.fromhex("5487"),
-        bytes.fromhex("5587")
-    ]
-    test_p2tr = P2TR_Key(xonly_pubkey=test_xonly_pubkey, scripts=_scripts)
-    print(f"TEST P2TR FROM SCRIPTS: {test_p2tr.to_json()}")
+
+    # --- P2TR Script-Path spend --- #
+    test_pubkeyx = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
+    test_p2tr = P2TR_Key(xonly_pubkey=test_pubkeyx, scripts=[bytes.fromhex("5887")])
+    print(f"TEST P2TR: {test_p2tr.to_json()}")
+
+    # Spend
+    merkle_path = b''
+
+    # leaf_version = LEAF_VERSION
+    # leaf_script = bytes.fromhex("5887")
+    # leaf_hash = bytes.fromhex("e4b47d76d2f78791323a035811c350bb7875568006cb60f0e171efb70c11bda4")
+
+    # # P2TR testing
+    # test_xonly_pubkey = bytes.fromhex("a2fc329a085d8cfc4fa28795993d7b666cee024e94c40115141b8e9be4a29fa4")
+    # _scripts = [
+    #     bytes.fromhex("5187"),
+    #     bytes.fromhex("5287"),
+    #     bytes.fromhex("5387"),
+    #     bytes.fromhex("5487"),
+    #     bytes.fromhex("5587")
+    # ]
+    # test_p2tr = P2TR_Key(xonly_pubkey=test_xonly_pubkey, scripts=_scripts)
+    # print(f"TEST P2TR FROM SCRIPTS: {test_p2tr.to_json()}")
 
     # # P2TR - Key Path
     # lmab_p2tr_bytes = bytes.fromhex("5120562529047f476b9a833a5a780a75845ec32980330d76d1ac9f351dc76bce5d72")

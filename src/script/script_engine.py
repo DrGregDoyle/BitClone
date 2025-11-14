@@ -10,7 +10,7 @@ from src.core.opcodes import OPCODES
 from src.cryptography import sha256
 from src.script.context import ExecutionContext
 from src.script.opcode_map import OPCODE_MAP
-from src.script.scriptpubkey import ScriptPubKey, P2SH_Key, P2WPKH_Key, P2PKH_Key, P2WSH_Key
+from src.script.scriptpubkey import ScriptPubKey, P2SH_Key, P2WPKH_Key, P2PKH_Key, P2WSH_Key, P2TR_Key
 from src.script.scriptsig import ScriptSig
 from src.script.signature_engine import SignatureEngine, SignatureContext
 from src.script.stack import BitStack, BitNum
@@ -180,15 +180,19 @@ class ScriptEngine:
         tx = ctx.tx
         input_index = ctx.input_index
         witness_field: WitnessField = tx.witness[input_index]
+        utxo = ctx.utxo
 
         # Find type
         is_p2wpkh = False
         is_p2wsh = False
+        is_p2tr = False
 
         if P2WPKH_Key.matches(scriptpubkey.script):
             is_p2wpkh = True
         if P2WSH_Key.matches(scriptpubkey.script):
             is_p2wsh = True
+        if P2TR_Key.matches(scriptpubkey.script):
+            is_p2tr = True
 
         # Handle P2WPKH
         if is_p2wpkh:
@@ -234,6 +238,37 @@ class ScriptEngine:
 
             # Execute the P2WSH script
             self.execute_script(script, ctx)
+
+        # Handle P2TR
+        if is_p2tr:
+            # Sort into key-path or spend-path
+            stackitems = len(witness_field.items)
+            if stackitems == 1:
+                # Key-path
+                sig = witness_field.items[0]
+                if len(sig) == 65:
+                    # Get hash_type
+                    hash_type = sig[-1]
+                    sig = sig[:-1]
+                else:
+                    hash_type = 0
+                sig_ctx = SignatureContext(
+                    tx=tx,
+                    input_index=input_index,
+                    amount=utxo.amount,
+                    script_code=scriptpubkey.script,
+                    sighash_type=hash_type,
+                    annex=None,
+                    ext_flag=0
+                )
+
+                tweaked_pubkey = scriptpubkey.script[2:]
+                sighash = self.sig_engine.get_taproot_sighash(sig_ctx)
+                valid_sig = self.sig_engine.verify_schnorr_sig(tweaked_pubkey, msg=sighash, sig=sig)
+                return valid_sig
+            else:
+                # Script-path
+                pass
 
         # Validate the stack
         return self.validate_stack()
@@ -384,3 +419,43 @@ class ScriptEngine:
 
 if __name__ == "__main__":
     sep = "---" * 80
+
+    print("--- P2TR SCRIPT-PATH SPEND --- ")
+
+    test_pubkeyx = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
+    simple_script = bytes.fromhex("5887")
+    test_p2tr_key = P2TR_Key(xonly_pubkey=test_pubkeyx, scripts=[simple_script])
+    print(f"SCRIPTPUBKEY: {test_p2tr_key.to_json()}")
+
+    # print("--- P2TR KEY-PATH SPEND TESTING ---")
+    # # Use P2TR ScriptPubkey with x-only publickey to generate scriptpubkey
+    # test_p2tr_key = P2TR_Key(
+    #     xonly_pubkey=bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
+    # )
+    # # print(f"TEST P2TR KEY: {test_p2tr_key.to_json()}")
+    #
+    # test_p2tr_utxo = UTXO(
+    #     # reverse display bytes
+    #     txid=bytes.fromhex("a7115c7267dbb4aab62b37818d431b784fe731f4d2f9fa0939a9980d581690ec")[::-1],
+    #     vout=0,
+    #     amount=20000,
+    #     scriptpubkey=test_p2tr_key.script,
+    #     block_height=861957
+    # )
+    #
+    # test_p2tr_tx = Transaction.from_bytes(bytes.fromhex(
+    #     "02000000000101ec9016580d98a93909faf9d2f431e74f781b438d81372bb6aab4db67725c11a70000000000ffffffff0110270000000000001600144e44ca792ce545acba99d41304460dd1f53be3840141b693a0797b24bae12ed0516a2f5ba765618dca89b75e498ba5b745b71644362298a45ca39230d10a02ee6290a91cebf9839600f7e35158a447ea182ea0e022ae0100000000"
+    # ))
+    #
+    # script_ctx = ExecutionContext(
+    #     tx=test_p2tr_tx,
+    #     input_index=0,
+    #     utxo=test_p2tr_utxo,
+    #     amount=20000,
+    #     is_segwit=True,
+    #     tapscript=True
+    # )
+    #
+    # engine = ScriptEngine()
+    # valid_script = engine.validate_segwit(scriptpubkey=test_p2tr_key, ctx=script_ctx)
+    # print(f"VALID SCRIPT: {valid_script}")

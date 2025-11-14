@@ -59,6 +59,50 @@ class Branch:
         return json.dumps(self.to_dict(), indent=2)
 
 
+class Tree:
+    """
+    The class associated with the Merkle tree of a list of leaf scripts
+    """
+
+    def __init__(self, scripts: list[bytes], tree_type: int = 0):
+        """
+        Default construction is a list of scripts in op-code formatting
+        """
+        self.leaves = [Leaf(s) for s in scripts]
+        self.branches = self._get_sequential_branches(self.leaves)
+        self.merkle_root = self.branches[-1].branch_hash if self.branches else self.leaves[-1].leaf_hash
+
+    def _get_sequential_branches(self, leaves: list[Leaf]) -> list:
+        if len(leaves) < 2:
+            return []
+
+        leaf1 = leaves.pop(0)
+        leaf2 = leaves.pop(0)
+        branches = [Branch(leaf1.leaf_hash, leaf2.leaf_hash)]
+        while len(leaves) > 0:
+            last_branch = branches[-1]
+            next_leaf = leaves.pop(0)
+            branches.append(Branch(last_branch.branch_hash, next_leaf.leaf_hash))
+
+        return branches
+
+    def to_dict(self):
+        leaf_dict = {
+            f"leaf_{x}": self.leaves[x].to_dict() for x in range(len(self.leaves))
+        }
+        branch_dict = {
+            f"branch_{y}": self.branches[y].to_dict() for y in range(len(self.branches))
+        }
+        return {
+            "leaves": leaf_dict,
+            "branches": branch_dict,
+            "merkle_root": self.merkle_root.hex()
+        }
+
+    def to_json(self):
+        return json.dumps(self.to_dict(), indent=2)
+
+
 def get_unbalanced_merkle_root(scripts: list[bytes], version_byte: bytes = VERSION) -> bytes:
     """
     Given a list of scripts, we perform the following:
@@ -94,34 +138,37 @@ if __name__ == "__main__":
 
     _scripts = [
         bytes.fromhex("5187"),
-        bytes.fromhex("5287"),
-        bytes.fromhex("5387"),
-        bytes.fromhex("5487"),
-        bytes.fromhex("5587")
+        # bytes.fromhex("5287"),
+        # bytes.fromhex("5387"),
+        # bytes.fromhex("5487"),
+        # bytes.fromhex("5587")
     ]
 
-    _leaf1 = Leaf(bytes.fromhex("5187"))
-    _leaf2 = Leaf(bytes.fromhex("5287"))
-    _leaf3 = Leaf(bytes.fromhex("5387"))
-    _leaf4 = Leaf(bytes.fromhex("5487"))
-    _leaf5 = Leaf(bytes.fromhex("5587"))
-    _leaves = [_leaf1, _leaf2, _leaf3, _leaf4, _leaf5]
+    test_tree = Tree(_scripts)
+    print(test_tree.to_json())
 
-    _branch1 = Branch(_leaf1.leaf_hash, _leaf2.leaf_hash)
-    _branch2 = Branch(_branch1.branch_hash, _leaf3.leaf_hash)
-    _branch3 = Branch(_branch2.branch_hash, _leaf4.leaf_hash)
-    _branch4 = Branch(_branch3.branch_hash, _leaf5.leaf_hash)
-    _branches = [_branch1, _branch2, _branch3, _branch4]
-
-    for leaf in _leaves:
-        print(f" --- LEAF {_leaves.index(leaf) + 1} ---")
-        print(leaf.to_json())
-        print(sep)
-
-    for branch in _branches:
-        print(f" --- BRANCH {_branches.index(branch) + 1} ---")
-        print(branch.to_json())
-        print(sep)
-
-    test_merkle_root = get_unbalanced_merkle_root(scripts=_scripts)
-    print(f"TEST MERKLE ROOT: {test_merkle_root.hex()}")
+    # _leaf1 = Leaf(bytes.fromhex("5187"))
+    # _leaf2 = Leaf(bytes.fromhex("5287"))
+    # _leaf3 = Leaf(bytes.fromhex("5387"))
+    # _leaf4 = Leaf(bytes.fromhex("5487"))
+    # _leaf5 = Leaf(bytes.fromhex("5587"))
+    # _leaves = [_leaf1, _leaf2, _leaf3, _leaf4, _leaf5]
+    #
+    # _branch1 = Branch(_leaf1.leaf_hash, _leaf2.leaf_hash)
+    # _branch2 = Branch(_branch1.branch_hash, _leaf3.leaf_hash)
+    # _branch3 = Branch(_branch2.branch_hash, _leaf4.leaf_hash)
+    # _branch4 = Branch(_branch3.branch_hash, _leaf5.leaf_hash)
+    # _branches = [_branch1, _branch2, _branch3, _branch4]
+    #
+    # for leaf in _leaves:
+    #     print(f" --- LEAF {_leaves.index(leaf) + 1} ---")
+    #     print(leaf.to_json())
+    #     print(sep)
+    #
+    # for branch in _branches:
+    #     print(f" --- BRANCH {_branches.index(branch) + 1} ---")
+    #     print(branch.to_json())
+    #     print(sep)
+    #
+    # test_merkle_root = get_unbalanced_merkle_root(scripts=_scripts)
+    # print(f"TEST MERKLE ROOT: {test_merkle_root.hex()}")
