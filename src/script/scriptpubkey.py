@@ -7,16 +7,28 @@ from abc import ABC, abstractmethod
 
 from src.core import ScriptPubKeyError, OPCODES, SERIALIZED, get_bytes, get_stream, read_little_int, read_stream, \
     PubKeyError, TAPROOT
-from src.cryptography import taptweak_hash
 from src.data import encode_base58check, encode_bech32, hash160, PubKey
-from src.data.taproot import get_unbalanced_merkle_root
+from src.data.taproot import get_unbalanced_merkle_root, TweakPubkey
 from src.script.parser import to_asm
 
 __all__ = ["ScriptPubKey", "P2PKH_Key", "P2PK_Key", "P2MS_Key", "P2SH_Key", "P2WPKH_Key", "P2WSH_Key", "P2TR_Key"]
 
 # --- CONSTANTS --- #
 _OP = OPCODES
-LEAF_VERSION = TAPROOT.VERSION
+OP_PUSHBYTES_33 = _OP.get_byte("OP_PUSHBYTES_33")
+OP_PUSHBYTES_65 = _OP.get_byte("OP_PUSHBYTES_65")
+OP_CHECKSIG = _OP.get_byte("OP_CHECKSIG")
+OP_DUP = _OP.get_byte("OP_DUP")
+OP_HASH160 = _OP.get_byte("OP_HASH160")
+OP_EQUALVERIFY = _OP.get_byte("OP_EQUALVERIFY")
+OP_PUSHBYTES_20 = _OP.get_byte("OP_PUSHBYTES_20")
+OP_CHECKMULTISIG = _OP.get_byte("OP_CHECKMULTISIG")
+OP_EQUAL = _OP.get_byte("OP_EQUAL")
+OP_0 = b'\x00'  # Version byte
+OP_PUSHBYTES_32 = _OP.get_byte("OP_PUSHBYTES_32")
+OP_1 = _OP.get_byte("OP_1")
+
+LEAF_VERSION = TAPROOT.VERSION_BYTE
 
 
 class ScriptPubKey(ABC):
@@ -71,9 +83,7 @@ class P2PK_Key(ScriptPubKey):
     OP_PUSHBYTES_33/65 || pubkey || OP_CHECKSIG
     *pubkey is either 33 bytes compressed or 65 bytes uncompressed
     """
-    OP_PUSHBYTES_33 = _OP.get_byte("OP_PUSHBYTES_33")
-    OP_PUSHBYTES_65 = _OP.get_byte("OP_PUSHBYTES_65")
-    OP_CHECKSIG = _OP.get_byte("OP_CHECKSIG")
+
     __slots__ = ("script",)
 
     def __init__(self, pubkey: bytes):
@@ -107,8 +117,8 @@ class P2PK_Key(ScriptPubKey):
 
         truth_list = [
             len(b) in (35, 67),  # Check length
-            b[0] in (cls.OP_PUSHBYTES_33[0], cls.OP_PUSHBYTES_65[0]),  # Check OP_PUSHBYTES
-            b[-1] == cls.OP_CHECKSIG[0]  # Check OP_CHECKSIG
+            b[0] in (OP_PUSHBYTES_33[0], OP_PUSHBYTES_65[0]),  # Check OP_PUSHBYTES
+            b[-1] == OP_CHECKSIG[0]  # Check OP_CHECKSIG
         ]
         return all(truth_list)
 
@@ -128,19 +138,12 @@ class P2PKH_Key(ScriptPubKey):
         -OP_EQUALVERIFY - pop the top two elements and compare them, stop if not equal
         -OP_CHECKSIG - pop the signature and verify it, push 1 if true, 0 otherwise
     """
-    OP_DUP = _OP.get_byte("OP_DUP")
-    OP_HASH160 = _OP.get_byte("OP_HASH160")
-    OP_EQUALVERIFY = _OP.get_byte("OP_EQUALVERIFY")
-    OP_CHECKSIG = _OP.get_byte("OP_CHECKSIG")
-    OP_PUSHBYTES_20 = _OP.get_byte("OP_PUSHBYTES_20")
 
     __slots__ = ("script",)
 
     def __init__(self, pubkey: bytes):
         pubkeyhash = hash160(pubkey)
-        self.script = (self.OP_DUP + self.OP_HASH160 + self.OP_PUSHBYTES_20 + pubkeyhash + self.OP_EQUALVERIFY +
-                       self.OP_CHECKSIG)
-        self._pubkeyhash = pubkeyhash
+        self.script = OP_DUP + OP_HASH160 + OP_PUSHBYTES_20 + pubkeyhash + OP_EQUALVERIFY + OP_CHECKSIG
 
     @classmethod
     def from_bytes(cls, script_bytes: bytes) -> "P2PKH_Key":
@@ -152,9 +155,7 @@ class P2PKH_Key(ScriptPubKey):
     @classmethod
     def from_pubkeyhash(cls, pubkeyhash: bytes) -> "P2PKH_Key":
         obj = object.__new__(cls)
-        obj.script = (cls.OP_DUP + cls.OP_HASH160 + cls.OP_PUSHBYTES_20 + pubkeyhash + cls.OP_EQUALVERIFY +
-                      cls.OP_CHECKSIG)
-        obj._pubkeyhash = pubkeyhash
+        obj.script = OP_DUP + OP_HASH160 + OP_PUSHBYTES_20 + pubkeyhash + OP_EQUALVERIFY + OP_CHECKSIG
         return obj
 
     @property
@@ -164,16 +165,16 @@ class P2PKH_Key(ScriptPubKey):
         return encode_base58check(pubkeyhash, prefix_byte)
 
     def get_pubkeyhash(self):
-        return self._pubkeyhash
+        return self.script[3:24]
 
     @classmethod
     def matches(cls, b: bytes) -> bool:
         truth_list = [
-            b[0] == cls.OP_DUP[0],
-            b[1] == cls.OP_HASH160[0],
-            b[2] == cls.OP_PUSHBYTES_20[0],
-            b[-2] == cls.OP_EQUALVERIFY[0],
-            b[-1] == cls.OP_CHECKSIG[0]
+            b[0] == OP_DUP[0],
+            b[1] == OP_HASH160[0],
+            b[2] == OP_PUSHBYTES_20[0],
+            b[-2] == OP_EQUALVERIFY[0],
+            b[-1] == OP_CHECKSIG[0]
         ]
         return all(truth_list)
 
@@ -186,9 +187,6 @@ class P2MS_Key(ScriptPubKey):
         - a number n indicating total number of keys
         - op_checkmultisig
     """
-    OP_PUSHBYTES_65 = _OP.get_byte("OP_PUSHBYTES_65")
-    OP_PUSHBYTES_33 = _OP.get_byte("OP_PUSHBYTES_33")
-    OP_CHECKMULTISIG = _OP.get_byte("OP_CHECKMULTISIG")
 
     __slots__ = ("script",)
 
@@ -203,12 +201,12 @@ class P2MS_Key(ScriptPubKey):
 
         # Add pubkeys
         for pubkey in pubkey_list:
-            script_parts.append(self.OP_PUSHBYTES_33) if len(pubkey) == 33 else script_parts.append(
-                self.OP_PUSHBYTES_65)
+            script_parts.append(OP_PUSHBYTES_33) if len(pubkey) == 33 else script_parts.append(
+                OP_PUSHBYTES_65)
             script_parts.append(pubkey)
 
         # Finish up
-        script_parts.extend([_OP.get_byte(f"OP_{total_keys}"), self.OP_CHECKMULTISIG])
+        script_parts.extend([_OP.get_byte(f"OP_{total_keys}"), OP_CHECKMULTISIG])
         self.script = b''.join(script_parts)
 
     @classmethod
@@ -245,7 +243,7 @@ class P2MS_Key(ScriptPubKey):
         truth_list = [
             0x51 <= lead_byte <= 0x60,  # OP_num (required)
             0x51 <= tail2_byte <= 0x60,  # OP_num (total)
-            bytes([tail_byte]) == cls.OP_CHECKMULTISIG  # OP_CHECKMULTISIG
+            bytes([tail_byte]) == OP_CHECKMULTISIG  # OP_CHECKMULTISIG
         ]
 
         return all(truth_list)
@@ -256,9 +254,6 @@ class P2SH_Key(ScriptPubKey):
     P2SH ScriptPubKey contains the HASH of another locking script, surrounded by HASH160 and EQUAL opcodes
     OP_HASH160 || OP_PUSHBYTES_20 || HASH || OP_EQUAL
     """
-    OP_HASH160 = _OP.get_byte("OP_HASH160")
-    OP_PUSHBYTES_20 = _OP.get_byte("OP_PUSHBYTES_20")
-    OP_EQUAL = _OP.get_byte("OP_EQUAL")
 
     __slots__ = ("script",)
 
@@ -267,7 +262,7 @@ class P2SH_Key(ScriptPubKey):
         if len(hash_data) != 20:
             raise ScriptPubKeyError("Given hash data not a 20-byte digest")
 
-        self.script = self.OP_HASH160 + self.OP_PUSHBYTES_20 + hash_data + self.OP_EQUAL
+        self.script = OP_HASH160 + OP_PUSHBYTES_20 + hash_data + OP_EQUAL
 
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):
@@ -278,7 +273,7 @@ class P2SH_Key(ScriptPubKey):
         second_byte = script_bytes[1]
         last_byte = script_bytes[-1]
 
-        if not all([lead_byte == cls.OP_HASH160[0], second_byte == cls.OP_PUSHBYTES_20[0], last_byte == cls.OP_EQUAL[
+        if not all([lead_byte == OP_HASH160[0], second_byte == OP_PUSHBYTES_20[0], last_byte == OP_EQUAL[
             0]]):
             raise ScriptPubKeyError("Failed OP_Code structure for P2SH ScriptPubKey")
 
@@ -294,9 +289,9 @@ class P2SH_Key(ScriptPubKey):
     @classmethod
     def matches(cls, b: bytes) -> bool:
         truth_list = [
-            b[0] == cls.OP_HASH160[0],  # OP_HASH160
-            b[1] == cls.OP_PUSHBYTES_20[0],  # OP_PUSHBYTES_20
-            b[-1] == cls.OP_EQUAL[0],  # OP_EQUAL
+            b[0] == OP_HASH160[0],  # OP_HASH160
+            b[1] == OP_PUSHBYTES_20[0],  # OP_PUSHBYTES_20
+            b[-1] == OP_EQUAL[0],  # OP_EQUAL
             len(b) == 23  # ScriptPubKey has expected hash length
         ]
         return all(truth_list)
@@ -306,14 +301,12 @@ class P2WPKH_Key(ScriptPubKey):
     """
     For use in P2SH-P2WPKH and P2WPKH itself
     """
-    OP_0 = b'\x00'  # Version byte
-    OP_PUSHBYTES_20 = _OP.get_byte("OP_PUSHBYTES_20")
 
     def __init__(self, pubkeyhash: bytes):
         # Validate
         if len(pubkeyhash) != 20:
             raise ScriptPubKeyError("Given pubkeyhash not 20 bytes")
-        self.script = self.OP_0 + self.OP_PUSHBYTES_20 + pubkeyhash
+        self.script = OP_0 + OP_PUSHBYTES_20 + pubkeyhash
 
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):
@@ -326,8 +319,8 @@ class P2WPKH_Key(ScriptPubKey):
     @classmethod
     def matches(cls, b: bytes) -> bool:
         truthlist = [
-            b[0] == cls.OP_0[0],
-            b[1] == cls.OP_PUSHBYTES_20[0],
+            b[0] == OP_0[0],
+            b[1] == OP_PUSHBYTES_20[0],
             len(b[2:]) == 20
         ]
         return all(truthlist)
@@ -354,15 +347,13 @@ class P2WSH_Key(ScriptPubKey):
     """
     Pay To Witness Script Hash
     """
-    OP_0 = b'\x00'
-    OP_PUSHBYTES_32 = _OP.get_byte("OP_PUSHBYTES_32")
 
     def __init__(self, script_hash: bytes):
         # Validation
         if len(script_hash) != 32:
             raise ScriptPubKeyError("P2WSH Key must be 32 bytes")
 
-        self.script = self.OP_0 + self.OP_PUSHBYTES_32 + script_hash
+        self.script = OP_0 + OP_PUSHBYTES_32 + script_hash
 
     @classmethod
     def matches(cls, b: bytes) -> bool:
@@ -370,8 +361,8 @@ class P2WSH_Key(ScriptPubKey):
         first_byte = b[1]
         scripthash_len = len(b[2:])
         truth_list = [
-            lead_byte == cls.OP_0[0],
-            first_byte == cls.OP_PUSHBYTES_32[0],
+            lead_byte == OP_0[0],
+            first_byte == OP_PUSHBYTES_32[0],
             scripthash_len == 32
         ]
         return all(truth_list)
@@ -394,43 +385,18 @@ class P2TR_Key(ScriptPubKey):
     """
     A ScriptPubKey for the Key Path Spend method in Taproot
     """
-    OP_1 = _OP.get_byte("OP_1")
-    OP_PUSHBYTES_32 = _OP.get_byte("OP_PUSHBYTES_32")
 
-    def __init__(self, xonly_pubkey: bytes, scripts: list[bytes] = None, leaf_version: bytes = LEAF_VERSION):
-        # Validation
-        try:
-            valid_pubkey = PubKey.from_xonly(xonly_pubkey)
-        except PubKeyError as e:
-            raise f"Invalid x-only pubkey: {e}"
+    def __init__(self, xonly_pubkey: bytes, scripts: list[bytes] = None):
+        merkle_root = get_unbalanced_merkle_root(scripts) if scripts else b''
+        tweakpubkey = TweakPubkey(xonly_pubkey, merkle_root)
 
-        # Check for key-path or script path
-        self._scripts = scripts
-        if scripts is None:
-            # Key-path
-            self._merkle_root = b''
-        else:
-            # Script-path
-            self._merkle_root = get_unbalanced_merkle_root(scripts, version_byte=leaf_version)
-        self._tweak = taptweak_hash(valid_pubkey.x_bytes() + self._merkle_root)
-        self._tweaked_pubkey = valid_pubkey.tweak_pubkey(self._tweak)
-
-        self.script = self.OP_1 + self.OP_PUSHBYTES_32 + self._tweaked_pubkey.x_bytes()
-
-    def get_tweak(self):
-        return self._tweak
-
-    def get_merkle_root(self):
-        return self._merkle_root
-
-    def get_tweaked_pubkey(self):
-        return self._tweaked_pubkey
+        self.script = OP_1 + OP_PUSHBYTES_32 + tweakpubkey.tweaked_pubkey.x_bytes()
 
     @classmethod
     def matches(cls, b: bytes) -> bool:
         truth_list = [
-            b[0] == cls.OP_1[0],
-            b[1] == cls.OP_PUSHBYTES_32[0],
+            b[0] == OP_1[0],
+            b[1] == OP_PUSHBYTES_32[0],
             len(b[2:]) == 32
         ]
         return all(truth_list)
@@ -453,17 +419,6 @@ class P2TR_Key(ScriptPubKey):
     @property
     def address(self) -> str:
         return encode_bech32(self.script[2:], hrp='bc', witver=1)  # OP_1
-
-    def to_dict(self):
-        base_dict = super().to_dict()  # Optional: get parent dict first
-        # Add P2TR-specific fields
-        base_dict.update({
-            "tweak": self._tweak.hex() if hasattr(self, '_tweak') else None,
-            "merkle_root": self._merkle_root.hex() if hasattr(self, '_merkle_root') else None,
-            "tweaked_pubkey": self._tweaked_pubkey.x_bytes().hex() if hasattr(self, '_tweaked_pubkey') else None,
-            "has_scripts": self._scripts is not None if hasattr(self, '_scripts') else None
-        })
-        return base_dict
 
     # ---- TESTING --- #
 
@@ -492,7 +447,7 @@ if __name__ == "__main__":
     #     bytes.fromhex("5487"),
     #     bytes.fromhex("5587")
     # ]
-    # test_p2tr = P2TR_Key(xonly_pubkey=test_xonly_pubkey, scripts=_scripts)
+    # test_p2tr = P2TR_Key(xonly_pubkey_bytes=test_xonly_pubkey, scripts=_scripts)
     # print(f"TEST P2TR FROM SCRIPTS: {test_p2tr.to_json()}")
 
     # # P2TR - Key Path

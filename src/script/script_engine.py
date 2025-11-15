@@ -8,6 +8,7 @@ from src.core.byte_stream import get_stream
 from src.core.exceptions import ScriptEngineError
 from src.core.opcodes import OPCODES
 from src.cryptography import sha256
+from src.data.taproot import Leaf, Tree
 from src.script.context import ExecutionContext
 from src.script.opcode_map import OPCODE_MAP
 from src.script.scriptpubkey import ScriptPubKey, P2SH_Key, P2WPKH_Key, P2PKH_Key, P2WSH_Key, P2TR_Key
@@ -422,7 +423,15 @@ if __name__ == "__main__":
 
     print("--- P2TR SCRIPT-PATH SPEND --- ")
 
-    test_pubkeyx = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
-    simple_script = bytes.fromhex("5887")
-    test_p2tr_key = P2TR_Key(xonly_pubkey=test_pubkeyx, scripts=[simple_script])
-    print(f"SCRIPTPUBKEY: {test_p2tr_key.to_json()}")
+    test_pubkey_xonly = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
+    test_leaf = Leaf(
+        script=bytes.fromhex("5887")
+    )
+    test_tree = Tree([test_leaf.script])
+    test_p2tr_pubkey = P2TR_Key(xonly_pubkey=test_pubkey_xonly, scripts=[test_leaf.script])
+
+    # --- LOGGING
+
+    print(f"TEST LEAF: {test_leaf.to_json()}")
+    print(f"TEST TREE: {test_tree.to_json()}")
+    print(f"TEST P2TR PUBKEY: {test_p2tr_pubkey.to_json()}")

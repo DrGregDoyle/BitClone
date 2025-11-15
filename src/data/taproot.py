@@ -3,10 +3,15 @@ Helper functions and classes for P2TR
 """
 import json
 
-from src.cryptography import tapleaf_hash, tapbranch_hash
-from src.data import write_compact_size
+from src.core import TaprootError, TAPROOT
+from src.cryptography import tapleaf_hash, tapbranch_hash, taptweak_hash, Point
+from src.data.compact_size import write_compact_size
+from src.data.ecc_keys import PubKey
 
-VERSION = b'\xc0'
+VERSION_BYTE = TAPROOT.VERSION_BYTE
+PUBKEY_BYTELEN = TAPROOT.PUBKEY_BYTELEN
+
+__all__ = ["Leaf", "Branch", "Tree", "TweakPubkey", "get_unbalanced_merkle_root"]
 
 
 class Leaf:
@@ -15,9 +20,9 @@ class Leaf:
     """
     __slots__ = ("script", "serialized", "leaf_hash")
 
-    def __init__(self, script: bytes, version_byte: bytes = VERSION):
+    def __init__(self, script: bytes):
         self.script = script
-        self.serialized = version_byte + write_compact_size(len(script)) + self.script
+        self.serialized = VERSION_BYTE + write_compact_size(len(script)) + self.script
         self.leaf_hash = tapleaf_hash(self.serialized)
 
     def to_dict(self):
@@ -103,14 +108,42 @@ class Tree:
         return json.dumps(self.to_dict(), indent=2)
 
 
-def get_unbalanced_merkle_root(scripts: list[bytes], version_byte: bytes = VERSION) -> bytes:
+class TweakPubkey:
+    """
+    Given an x-only pubkey, we calculate the tweak and tweaked pubkey
+    """
+
+    def __init__(self, xonly_pubkey: bytes, merkle_root: bytes = b''):
+        # --- Validation --- #
+        try:
+            self.internal_pubkey = PubKey.from_xonly(xonly_pubkey)
+        except TaprootError as e:
+            raise f"Invalid x-only pubkey: {e}"
+
+        self.merkle_root = merkle_root
+        self.tweak = taptweak_hash(xonly_pubkey + merkle_root)
+        self.tweaked_pubkey = self.internal_pubkey.tweak_pubkey(self.tweak)
+
+    def to_dict(self):
+        return {
+            "internal_pubkey": self.internal_pubkey.to_dict(),
+            "merkle_root": self.merkle_root.hex(),
+            "tweak": self.tweak.hex(),
+            "tweaked_pubkey": self.tweaked_pubkey.to_dict()
+        }
+
+    def to_json(self):
+        return json.dumps(self.to_dict(), indent=2)
+
+
+def get_unbalanced_merkle_root(scripts: list[bytes]) -> bytes:
     """
     Given a list of scripts, we perform the following:
         1) Create Leaf objects from each script
         2) Recursively create branches starting from an initial leaf pair, and then adding a subsequent leaf hash
         3) Final branch hash is the merkle root
     """
-    leaves = [Leaf(s, version_byte) for s in scripts]
+    leaves = [Leaf(s) for s in scripts]
 
     # If only 1 leaf, return empty bytes object
     if len(leaves) == 1:
@@ -130,45 +163,26 @@ def get_unbalanced_merkle_root(scripts: list[bytes], version_byte: bytes = VERSI
     return branches[-1].branch_hash
 
 
+def get_control_byte(pubkey_point: Point) -> bytes:
+    parity_bit = pubkey_point.y % 2
+    return bytes([int.from_bytes(VERSION_BYTE, "big") + parity_bit])
+
+
+def get_control_block(xonly_pubkey_bytes: bytes, merkle_path: bytes = b'') -> bytes:
+    # Get tweaked_pubkey
+    tweaked_pubkey = TweakPubkey(xonly_pubkey=xonly_pubkey_bytes)
+    # Get control byte
+    control_byte = get_control_byte(tweaked_pubkey.tweaked_pubkey.to_point())
+    # control block = control_byte + internal xonly pubkey + merkle_path
+    return control_byte + xonly_pubkey_bytes + merkle_path
+
+
 # --- TESTING ---
 if __name__ == "__main__":
     sep = "---" * 50
-    print(" --- TAPROOT --- ")
-    print(sep, end="\n")
 
-    _scripts = [
-        bytes.fromhex("5187"),
-        # bytes.fromhex("5287"),
-        # bytes.fromhex("5387"),
-        # bytes.fromhex("5487"),
-        # bytes.fromhex("5587")
-    ]
-
-    test_tree = Tree(_scripts)
-    print(test_tree.to_json())
-
-    # _leaf1 = Leaf(bytes.fromhex("5187"))
-    # _leaf2 = Leaf(bytes.fromhex("5287"))
-    # _leaf3 = Leaf(bytes.fromhex("5387"))
-    # _leaf4 = Leaf(bytes.fromhex("5487"))
-    # _leaf5 = Leaf(bytes.fromhex("5587"))
-    # _leaves = [_leaf1, _leaf2, _leaf3, _leaf4, _leaf5]
-    #
-    # _branch1 = Branch(_leaf1.leaf_hash, _leaf2.leaf_hash)
-    # _branch2 = Branch(_branch1.branch_hash, _leaf3.leaf_hash)
-    # _branch3 = Branch(_branch2.branch_hash, _leaf4.leaf_hash)
-    # _branch4 = Branch(_branch3.branch_hash, _leaf5.leaf_hash)
-    # _branches = [_branch1, _branch2, _branch3, _branch4]
-    #
-    # for leaf in _leaves:
-    #     print(f" --- LEAF {_leaves.index(leaf) + 1} ---")
-    #     print(leaf.to_json())
-    #     print(sep)
-    #
-    # for branch in _branches:
-    #     print(f" --- BRANCH {_branches.index(branch) + 1} ---")
-    #     print(branch.to_json())
-    #     print(sep)
-    #
-    # test_merkle_root = get_unbalanced_merkle_root(scripts=_scripts)
-    # print(f"TEST MERKLE ROOT: {test_merkle_root.hex()}")
+    test_pubkey_bytes = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
+    test_leaf = Leaf(bytes.fromhex("5887"))
+    test_tweakpubkey = TweakPubkey(test_pubkey_bytes, test_leaf.leaf_hash)
+    print(f"TEST LEAF: {test_leaf.to_json()}")
+    print(f"TWEAK PUBKEY: {test_tweakpubkey.to_json()}")

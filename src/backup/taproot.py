@@ -3,6 +3,7 @@ We create the utility class Taproot, for use in taproot signature schemes
 """
 from src.backup.crypto.curve_utils import get_y_from_x, get_pt_from_x, generator_exponent, add_points, ORDER
 from src.backup.crypto.hash_functions import tagged_hash_function, HashType
+
 from src.backup.data.varint import write_compact_size
 
 __all__ = ["Taproot"]
@@ -19,7 +20,7 @@ class Taproot:
 
     def _get_curve_pt(self, xonly_pubkey: bytes):
         """
-        Returns a point on the curve for the xonly_pubkey
+        Returns a point on the curve for the xonly_pubkey_bytes
         """
         x = int.from_bytes(xonly_pubkey, "big")
         try:

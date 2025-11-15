@@ -83,7 +83,7 @@ class PubKey:
             raise PubKeyError("Given x coordinate not on curve")
 
         y = SECP256K1.find_y_from_x(x)
-        if y % 2 != 0:
+        if y % 2 != 0:  # Take -y (mod p) if y is odd
             y = SECP256K1.p - y
 
         obj = object.__new__(cls)  # bypass __init__
@@ -162,6 +162,8 @@ class PubKey:
         return {
             "x": self.x,
             "y": self.y,
+            "x_bytes": self.x_bytes().hex(),
+            "y_bytes": self.y_bytes().hex(),
             "uncomressed": self.uncompressed().hex(),
             "compressed": self.compressed().hex(),
             "pubkey_hash": self.pubkey_hash().hex()

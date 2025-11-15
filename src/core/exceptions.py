@@ -4,7 +4,7 @@ The custom exceptions used throughout BitClone
 __all__ = ["ReadError", "StreamError", "ECDSAError", "SchnorrError", "ECCPrivateKeyError", "ECCError", "WalletError",
            "ExtendedKeyError", "PubKeyError", "WriteError", "BitNumError", "BitStackError", "OpCodeError",
            "ScriptPubKeyError", "ScriptSigError", "TargetBitsError", "MerkleError", "SignatureError",
-           "ScriptEngineError", "DataEncodingError"]
+           "ScriptEngineError", "DataEncodingError", "TaprootError"]
 
 
 class DataEncodingError(Exception):
@@ -141,5 +141,12 @@ class ExtendedKeyError(Exception):
 class PubKeyError(Exception):
     """
     Used for Pubkey errors
+    """
+    pass
+
+
+class TaprootError(Exception):
+    """
+    For use in Taproot elements
     """
     pass

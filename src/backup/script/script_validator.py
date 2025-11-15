@@ -190,7 +190,7 @@ class ScriptValidator:
                     control_byte = control_block[0]
                     leaf_version = control_byte & 0xfe  # bitwise & operator, 0xfe = 0x1111 1110.
                     parity = control_byte & 0x01  # bitwise & operator, 0x01 = 0x0000 0001
-                    internal_key = control_block[1:33]  # xonly_pubkey
+                    internal_key = control_block[1:33]  # xonly_pubkey_bytes
                     merkle_path = control_block[33:]  # No merkle path for a single leaft
 
                     # Compute leaf hash

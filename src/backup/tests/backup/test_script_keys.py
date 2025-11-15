@@ -694,7 +694,7 @@ def test_p2tr_scriptpath_sig_example(test_db, script_engine, sig_engine, scripts
     # print("\n" + ("---" * 80))
     # print(f"P2TR(SCRIPT) SCRIPTPUBKEY: {parser.parse_script(p2tr_scriptpubkey.script)}")
     # print(f"LEAF SCRIPT: {parser.parse_script(leaf_script)}")
-    # print(f"XONLY PUBKEY: {xonly_pubkey.hex()}")
+    # print(f"XONLY PUBKEY: {xonly_pubkey_bytes.hex()}")
     # print(f"TWEAK: {tweak.hex()}")
     # print(f"TWEAKED PUBKEY: {tweaked_pubkey.hex()}")
     # print(f"MERKLE ROOT: {merkle_root.hex()}")
@@ -901,7 +901,7 @@ def test_p2tr_scriptpath_tree(test_db, script_engine, sig_engine, scriptsig_fact
     internal_privkey, internal_pubkey = generate_keypair(xonly=True)  # Keypair for the Script Path
     leaf_keys = [generate_keypair(xonly=True) for _ in range(5)]  # Keys for the leaves of the tree
 
-    # 2. Leaf scripts = OP_PUSHBYTES_32 <xonly_pubkey> OP_CHECKSIG
+    # 2. Leaf scripts = OP_PUSHBYTES_32 <xonly_pubkey_bytes> OP_CHECKSIG
     leaf_scripts = [b'\x20' + pubkey + b'\xac' for (_, pubkey) in leaf_keys]
 
     # 3. Build a linear script tree and get its root

@@ -7,8 +7,9 @@ __all__ = ["ECC", "WALLET", "XKEYS", "BECH32CODE", "DATA", "TX", "SCRIPT", "BLOC
 
 
 class TAPROOT:
-    VERSION: Final[bytes] = b'\xc0'
+    VERSION_BYTE: Final[bytes] = b'\xc0'
     SIGHASH_EPOCH: Final[bytes] = b'\x00'
+    PUBKEY_BYTELEN: Final[int] = 32
 
 
 class BLOCK:
