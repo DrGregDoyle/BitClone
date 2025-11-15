@@ -426,36 +426,3 @@ if __name__ == "__main__":
     simple_script = bytes.fromhex("5887")
     test_p2tr_key = P2TR_Key(xonly_pubkey=test_pubkeyx, scripts=[simple_script])
     print(f"SCRIPTPUBKEY: {test_p2tr_key.to_json()}")
-
-    # print("--- P2TR KEY-PATH SPEND TESTING ---")
-    # # Use P2TR ScriptPubkey with x-only publickey to generate scriptpubkey
-    # test_p2tr_key = P2TR_Key(
-    #     xonly_pubkey=bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
-    # )
-    # # print(f"TEST P2TR KEY: {test_p2tr_key.to_json()}")
-    #
-    # test_p2tr_utxo = UTXO(
-    #     # reverse display bytes
-    #     txid=bytes.fromhex("a7115c7267dbb4aab62b37818d431b784fe731f4d2f9fa0939a9980d581690ec")[::-1],
-    #     vout=0,
-    #     amount=20000,
-    #     scriptpubkey=test_p2tr_key.script,
-    #     block_height=861957
-    # )
-    #
-    # test_p2tr_tx = Transaction.from_bytes(bytes.fromhex(
-    #     "02000000000101ec9016580d98a93909faf9d2f431e74f781b438d81372bb6aab4db67725c11a70000000000ffffffff0110270000000000001600144e44ca792ce545acba99d41304460dd1f53be3840141b693a0797b24bae12ed0516a2f5ba765618dca89b75e498ba5b745b71644362298a45ca39230d10a02ee6290a91cebf9839600f7e35158a447ea182ea0e022ae0100000000"
-    # ))
-    #
-    # script_ctx = ExecutionContext(
-    #     tx=test_p2tr_tx,
-    #     input_index=0,
-    #     utxo=test_p2tr_utxo,
-    #     amount=20000,
-    #     is_segwit=True,
-    #     tapscript=True
-    # )
-    #
-    # engine = ScriptEngine()
-    # valid_script = engine.validate_segwit(scriptpubkey=test_p2tr_key, ctx=script_ctx)
-    # print(f"VALID SCRIPT: {valid_script}")

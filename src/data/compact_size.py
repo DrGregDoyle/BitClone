@@ -3,7 +3,7 @@ Methods for writing and reading compact size data
 """
 from src.core import get_stream, read_little_int, SERIALIZED, ReadError, WriteError, DATA
 
-__all__ = ["read_compact_size", "write_compact_size"]
+__all__ = ["read_compact_size", "write_compact_size", "serialize_data"]
 
 
 def read_compact_size(byte_stream: SERIALIZED) -> int:
@@ -44,3 +44,10 @@ def write_compact_size(num: int) -> bytes:
         return b'\xfe' + num.to_bytes(4, "little")
     else:  # Eight bytes
         return b'\xff' + num.to_bytes(8, "little")
+
+
+def serialize_data(data: bytes) -> bytes:
+    """
+    Returns compact size encoding of the size of the given data plus the data
+    """
+    return write_compact_size(len(data)) + data

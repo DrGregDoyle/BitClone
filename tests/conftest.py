@@ -4,7 +4,10 @@ Fixtures used in the tests
 from random import randint
 from secrets import token_bytes
 
+import pytest
+
 from src.core import TX
+from src.script import ScriptEngine
 from src.tx import TxInput, TxOutput, WitnessField, Transaction
 
 __all__ = ["getrand_txinput", "getrand_witnessfield", "getrand_txoutput", "getrand_tx"]
@@ -45,3 +48,8 @@ def getrand_tx(segwit: bool = True):
         witness = None
     locktime = int.from_bytes(token_bytes(TX.LOCKTIME), "little")
     return Transaction(inputs, outputs, witness, locktime)
+
+
+@pytest.fixture()
+def script_engine():
+    return ScriptEngine()
