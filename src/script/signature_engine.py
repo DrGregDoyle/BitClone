@@ -1,5 +1,6 @@
 """
 The SignatureEngine class, used to create signatures for transactions
+#TODO: Add docstrings to each function stating the algorithm and references
 """
 
 from __future__ import annotations
@@ -11,8 +12,8 @@ from typing import Optional
 from src.core import SignatureError, TX, TAPROOT
 from src.cryptography import ecdsa, verify_ecdsa, schnorr_verify, schnorr_sig, hash256, sha256, tapsighash_hash, \
     SECP256K1
-from src.data import encode_der_signature, decode_der_signature, write_compact_size
-from src.data.ecc_keys import PubKey
+from src.data import encode_der_signature, decode_der_signature, write_compact_size, Leaf, PubKey, TweakPubkey, \
+    get_tweak, get_control_byte, get_control_block, get_unbalanced_merkle_root
 from src.script.script_type import ScriptType
 from src.script.scriptpubkey import P2TR_Key
 from src.script.scriptsig import P2PK_Sig, P2PKH_Sig, P2MS_Sig
@@ -257,6 +258,48 @@ class SignatureEngine:
         # Return tx with withness signature element
         return tx
 
+    def sign_taproot_scriptpath(self, tx: Transaction, input_index: int, privkey: int | bytes, amount: int,
+                                xonly_pubkey: bytes, scripts: list[bytes], script_index: int = 0, sighash_type: int = 1,
+                                aux_rand: bytes = None) -> Transaction:
+        # --- Step 1: Get the P2TR ScriptPubKey and merkle root
+        p2tr_key = P2TR_Key(xonly_pubkey=xonly_pubkey, scripts=scripts)
+        merkle_root = get_unbalanced_merkle_root(scripts=scripts)
+
+        # --- Step 2: Construct the message sighash
+        ctx = SignatureContext(
+            tx=tx, input_index=input_index, sighash_type=sighash_type, ext_flag=1, amounts=[amount],
+            prev_scriptpubkeys=[p2tr_key.script], amount=amount, merkle_root=merkle_root
+        )
+        taproot_sighash = self.get_taproot_sighash(ctx)
+        print(f"TAPFOOT SIGHASH: {taproot_sighash.hex()}")
+
+        # --- Step 3: Sign the sighash using Schnorr signatures
+        privkey_int = int.from_bytes(privkey, "big") if isinstance(privkey, bytes) else privkey
+        taproot_sig = self.get_schnorr_sig(privkey_int, taproot_sighash, aux_rand)
+        print(f"SIGNATURE: {taproot_sig.hex()}")
+
+        # --- Step 4: Add the hash byte
+        taproot_sigand = taproot_sig + SigHash(sighash_type).to_byte()
+        print(f"SIGNATURE WITH HASH BYTE: {taproot_sigand.hex()}")
+
+        # --- Step 5: Get merkle path and control block
+        if len(scripts) > 1:
+            # Todo: Get merkle path here
+            merkle_path = b''
+        else:
+            merkle_path = b''
+        control_block = get_control_block(xonly_pubkey, merkle_root, merkle_path)
+
+        # --- Step 6: Get leaf script and create WitnessField
+        leaf_script = scripts[script_index]
+        witness = WitnessField(items=[taproot_sigand, leaf_script, control_block])
+        print(f"WITNESS: {witness.to_json()}")
+        print(f"WITNESS SERIALIZED: {witness.to_bytes().hex()}")
+
+        # --- Step 7: Add witness to witness list in tx and return it
+        tx.witness[input_index] = witness
+        return tx
+
     # --- SIGHASH ALGORITHMS --- #
 
     def get_legacy_sighash(self, ctx: SignatureContext):
@@ -361,6 +404,7 @@ class SignatureEngine:
         return hash256(preimage_sighash)
 
     def get_taproot_sighash(self, ctx: SignatureContext):
+        # TODO: Use extension flag to separate into key-path and spend-path
         # 1. Get context elements
         tx = ctx.tx
         input_index = ctx.input_index
@@ -441,16 +485,17 @@ class SignatureEngine:
         # Get sighash_epoch and create extension if necessary
         extension = b''
         if extension_flag:
-            extension = ctx.leaf_hash + ctx.pubkey_version + ctx.codesep_pos
+            leaf_hash = ctx.merkle_root if ctx.leaf_hash is None else ctx.leaf_hash
+            extension = leaf_hash + ctx.pubkey_version + ctx.codesep_pos
 
         sighash_epoch = TAPROOT.SIGHASH_EPOCH
 
-        # --- TESTING
-        print(f"SHA PREVOUTS: {hash_prevouts.hex()}")
-        print(f"SHA AMOUNTS: {hash_amounts.hex()}")
-        print(f"SHA SEQUENCES: {hash_sequences.hex()}")
-        print(f"SHA SCRIPTPUBKEYS: {hash_pubkeys.hex()}")
-        print(f"SHA OUTPUTS: {hash_outputs.hex()}")
+        # # --- TESTING
+        # print(f"SHA PREVOUTS: {hash_prevouts.hex()}")
+        # print(f"SHA AMOUNTS: {hash_amounts.hex()}")
+        # print(f"SHA SEQUENCES: {hash_sequences.hex()}")
+        # print(f"SHA SCRIPTPUBKEYS: {hash_pubkeys.hex()}")
+        # print(f"SHA OUTPUTS: {hash_outputs.hex()}")
 
         return tapsighash_hash(sighash_epoch + message + extension)
 
@@ -482,49 +527,71 @@ class SignatureEngine:
 if __name__ == "__main__":
     curve = SECP256K1
     sep = "---" * 50
+    print(sep)
     print(f" --- TAPROOT SIGNATURE TESTING ---")
+    print(sep)
+    # Get script elements
+    test_leaf_script = bytes.fromhex("206d4ddc0e47d2e8f82cbe2fc2d0d749e7bd3338112cecdc76d8f831ae6620dbe0ac")
+    test_leaf = Leaf(test_leaf_script)
+    test_merkle_root = test_leaf.leaf_hash
+    # Get pubkey
+    test_xonly_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
+    test_p2tr_key = P2TR_Key(xonly_pubkey=test_xonly_pubkey, scripts=[test_leaf_script])
+    # Get tweaked pubkey
+    test_p2tr_tweak = get_tweak(test_xonly_pubkey, test_merkle_root)
+    test_p2tr_tweaked_pubkey = TweakPubkey(xonly_pubkey=test_xonly_pubkey, merkle_root=test_merkle_root)
 
-    privkey_bytes = bytes.fromhex("55d7c5a9ce3d2b15a62434d01205f3e59077d51316f5c20628b3a4b8b2a76f4c")
-    test_privkey_int = int.from_bytes(privkey_bytes, "big")
+    # --- Construct spend elements
+    test_privkey = bytes.fromhex("9b8de5d7f20a8ebb026a82babac3aa47a008debbfde5348962b2c46520bd5189")
+    test_control_byte = get_control_byte(test_p2tr_tweaked_pubkey.tweaked_pubkey.to_point())
+    test_control_block = get_control_block(test_xonly_pubkey, test_merkle_root)
 
-    pubkey_obj = PubKey(test_privkey_int)
+    test_hashtype = 1  # SIGHASH_ALL
+    test_hashbyte = SigHash(test_hashtype).to_byte()
+    ext_flag = 1
+    annex_present = False
+    spend_type = bytes.fromhex("02")
 
-    # Negatve private key if necessary before tweak
-    temp_privkey_int = curve.order - test_privkey_int if pubkey_obj.y % 2 != 0 else test_privkey_int
-    pubkey_obj = PubKey(temp_privkey_int)
-
-    # Get tweak
-    test_p2tr = P2TR_Key(pubkey_obj.x_bytes())
-    test_tweak = test_p2tr.get_tweak()
-    tweak_int = int.from_bytes(test_tweak, "big")
-    tweak_privkey_int = (tweak_int + temp_privkey_int) % curve.order
-    tweak_privkey = tweak_privkey_int.to_bytes(32, "big")
-    tweak_pubkey = pubkey_obj.tweak_pubkey(tweak_int)
-
-    # Construct context for sighash function
-    test_txt = Transaction.from_bytes(bytes.fromhex(
-        "02000000000101ec9016580d98a93909faf9d2f431e74f781b438d81372bb6aab4db67725c11a70000000000ffffffff0110270000000000001600144e44ca792ce545acba99d41304460dd1f53be3840000000000"))
+    test_tx = Transaction.from_bytes(bytes.fromhex(
+        "020000000001013cfe8b95d22502698fd98837f83d8d4be31ee3eddd9d1ab1a95654c64604c4d10000000000ffffffff01983a0000000000001600140de745dc58d8e62e6f47bde30cd5804a82016f9e034101769105cbcbdcaaee5e58cd201ba3152477fda31410df8b91b4aee2c4864c7700615efb425e002f146a39ca0a4f2924566762d9213bd33f825fad83977fba7f0122206d4ddc0e47d2e8f82cbe2fc2d0d749e7bd3338112cecdc76d8f831ae6620dbe0ac21c0924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a332900000000"
+    ))
+    backup_tx = Transaction.from_bytes(bytes.fromhex(
+        "020000000001013cfe8b95d22502698fd98837f83d8d4be31ee3eddd9d1ab1a95654c64604c4d10000000000ffffffff01983a0000000000001600140de745dc58d8e62e6f47bde30cd5804a82016f9e034101769105cbcbdcaaee5e58cd201ba3152477fda31410df8b91b4aee2c4864c7700615efb425e002f146a39ca0a4f2924566762d9213bd33f825fad83977fba7f0122206d4ddc0e47d2e8f82cbe2fc2d0d749e7bd3338112cecdc76d8f831ae6620dbe0ac21c0924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a332900000000"
+    ))
+    test_tx.witness[0] = WitnessField(items=[])
 
     sig_ctx = SignatureContext(
-        tx=test_txt,
+        tx=test_tx,
         input_index=0,
+        sighash_type=test_hashtype,
         amount=20000,
-        script_code=test_p2tr.script,
-        sighash_type=1,
-        annex=None,
-        ext_flag=0
+        amounts=[20000],
+        prev_scriptpubkeys=[test_p2tr_key.script],
+        ext_flag=ext_flag,
+        merkle_root=test_merkle_root,
+        # leaf_hash=test_leaf.leaf_hash
     )
 
-    print(f"PRIVKEY: {privkey_bytes.hex()}")
-    print(f"PUBKEY: {pubkey_obj.x_bytes().hex()}")
-    print(f"TWEAK: {test_tweak.hex()}")
-    print(f"TWEAKED PRIVKEY: {tweak_privkey.hex()}")
-    print(f"TWEAKED PUBKEY: {tweak_pubkey.x_bytes().hex()}")
-    print(f"MERKLE ROOT: {test_p2tr.get_merkle_root().hex()}")
-    print(f"SCRIPTPUBKYEY: {test_p2tr.script.hex()}")
-    print(f'UNSIGNED TX: {test_txt.to_json()}')
+    # --- Signature Engine
+    sig_engine = SignatureEngine()
+    signed_tx = sig_engine.sign_taproot_scriptpath(
+        tx=test_tx,
+        input_index=0,
+        privkey=test_privkey,  # internal privkey
+        amount=20000,
+        xonly_pubkey=test_xonly_pubkey,
+        scripts=[test_leaf_script]
+    )
 
-    # Get sighash
-    engine = SignatureEngine()
-    test_signature_tx = engine.sign_taproot_keypath(test_txt, 0, test_p2tr.script, 20000, tweak_privkey_int)
-    print(f"SIGNATURE: {test_signature_tx.to_json()}")
+    # Test witnesses
+    witnesses_agree = signed_tx.witness[0] == backup_tx.witness[0]
+
+    # --- LOGGING
+    # print(f"LEAF: {test_leaf.to_json()}")
+    # print(f"TWEAKED PUBKEY: {test_p2tr_tweaked_pubkey.to_json()}")
+    # print(f"TWEAK: {test_p2tr_tweak.hex()}")
+    print(f"SCRIPTPUBKEY: {test_p2tr_key.to_json()}")
+    # print(f"CONTROL BYTE: {test_control_byte.hex()}")
+    # print(f"CONTROL BLOCK: {test_control_block.hex()}")
+    # print(f"TEST SIGHASH: {test_sighash.hex()}")
+    print(f"WITNESSES AGREE: {witnesses_agree}")

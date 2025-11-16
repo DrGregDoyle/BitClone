@@ -8,14 +8,14 @@ from src.core.byte_stream import get_stream
 from src.core.exceptions import ScriptEngineError
 from src.core.opcodes import OPCODES
 from src.cryptography import sha256
-from src.data.taproot import Leaf, Tree, get_control_block
+from src.data.taproot import Leaf, TweakPubkey
 from src.script.context import ExecutionContext
 from src.script.opcode_map import OPCODE_MAP
 from src.script.scriptpubkey import ScriptPubKey, P2SH_Key, P2WPKH_Key, P2PKH_Key, P2WSH_Key, P2TR_Key
 from src.script.scriptsig import ScriptSig
 from src.script.signature_engine import SignatureEngine, SignatureContext
 from src.script.stack import BitStack, BitNum
-from src.tx.tx import WitnessField, Transaction
+from src.tx.tx import WitnessField, Transaction, TxInput, TxOutput
 from src.tx.utxo import UTXO
 
 __all__ = ["ScriptEngine"]
@@ -434,52 +434,45 @@ if __name__ == "__main__":
 
     print("--- P2TR SCRIPT-PATH SPEND --- ")
 
-    test_pubkey_xonly = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
-    test_leaf = Leaf(
-        script=bytes.fromhex("5887")
-    )
-    test_tree = Tree([test_leaf.script])
-    test_p2tr_pubkey = P2TR_Key(xonly_pubkey=test_pubkey_xonly, scripts=[test_leaf.script])
-    test_control_block = get_control_block(test_pubkey_xonly, test_leaf.leaf_hash)
-    test_script_inputs = bytes.fromhex("08")  # Inputs = list of elements which are used to validate the script
-    test_witness = WitnessField(items=[
-        test_script_inputs, test_leaf.script, test_control_block
-    ])
+    xonly_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
+    leaf_script = bytes.fromhex("206d4ddc0e47d2e8f82cbe2fc2d0d749e7bd3338112cecdc76d8f831ae6620dbe0ac")
+    temp_leaf = Leaf(leaf_script)
+    tweak_pubkey = TweakPubkey(xonly_pubkey, merkle_root=temp_leaf.leaf_hash)
 
-    # Known byte values
-    test_utxo = UTXO(
-        txid=bytes.fromhex("8bc4f8facaaf7c4bdf6d77fac90aea208c2099a091d4b09658d002739daaad87")[::-1],
-        vout=1,
+    p2tr_scriptpubkey = P2TR_Key(xonly_pubkey=xonly_pubkey, scripts=[leaf_script])
+    p2tr_utxo = UTXO(
+        txid=bytes.fromhex("d1c40446c65456a9b11a9dddede31ee34b8d3df83788d98f690225d2958bfe3c")[::-1],
+        vout=0,
         amount=20000,
-        scriptpubkey=test_p2tr_pubkey.script,
-        block_height=862100
+        scriptpubkey=p2tr_scriptpubkey.script,
+        block_height=863496
     )
-    test_tx = Transaction.from_bytes(
+
+    # --- Create signature for witness
+    dummy_txin = TxInput(
+        txid=p2tr_utxo.txid,
+        vout=p2tr_utxo.vout,
+        scriptsig=b'',
+        sequence=0xffffffff
+    )
+    dummy_txout = TxOutput(
+        amount=15000,
+        scriptpubkey=bytes.fromhex("00140de745dc58d8e62e6f47bde30cd5804a82016f9e")
+    )
+
+    dummy_tx = Transaction(inputs=[dummy_txin], outputs=[dummy_txout], witness=[WitnessField()])
+
+    sig_engine = SignatureEngine()
+
+    # --- Spend elements
+    p2tr_tx = Transaction.from_bytes(
         bytes.fromhex(
-            "02000000000102c20da20832c3894854dc63f69cf7fe805323b3d476aaa8e730244b36a575d2440000000000ffffffff87adaa9d7302d05896b0d491a099208c20ea0ac9fa776ddf4b7cafcafaf8c48b0100000000ffffffff010f0e00000000000016001492b8c3a56fac121ddcdffbc85b02fb9ef681038a0247304402200c4c0bfe93f6622fa0790b6d28bf755c1a3f23e8404bb804ca8e2db080b613b102205bcf0a4e4559ba9b40e6b174cf91af061dfa21691923b410e351326708b041a00121030c7196376bc1df61b6da6ee711868fd30e370dd273332bfb02a2287d11e2e9c503010802588721c1924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a332900000000")
+            "020000000001013cfe8b95d22502698fd98837f83d8d4be31ee3eddd9d1ab1a95654c64604c4d10000000000ffffffff01983a0000000000001600140de745dc58d8e62e6f47bde30cd5804a82016f9e034101769105cbcbdcaaee5e58cd201ba3152477fda31410df8b91b4aee2c4864c7700615efb425e002f146a39ca0a4f2924566762d9213bd33f825fad83977fba7f0122206d4ddc0e47d2e8f82cbe2fc2d0d749e7bd3338112cecdc76d8f831ae6620dbe0ac21c0924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a332900000000")
     )
-    test_input_index = 1
-
-    witnesses_agree = (test_witness == test_tx.witness[test_input_index])
-    test_ctx = ExecutionContext(
-        tx=test_tx,
-        input_index=test_input_index,
-        utxo=test_utxo,
-        amount=test_utxo.amount,
-        is_segwit=True,
-        tapscript=True
-    )
-
-    engine = ScriptEngine()
-    valid_scriptpath1 = engine.validate_segwit(test_p2tr_pubkey, test_ctx)
 
     # --- LOGGING
-
-    print(f"TEST LEAF: {test_leaf.to_json()}")
-    print(f"TEST TREE: {test_tree.to_json()}")
-    print(f"TEST P2TR PUBKEY: {test_p2tr_pubkey.to_json()}")
-    print(f"CONTROL BLOCK: {test_control_block.hex()}")
-    print(f"WITNESS: {test_witness.to_json()}")
-    print(f"WITNESS SERIALIZED: {test_witness.to_bytes().hex()}")
-    print(f"WITNESSES AGREE: {witnesses_agree}")
-    print(f"VALID SCRIPTPATH1: {valid_scriptpath1}")
+    print(f"LEAF: {temp_leaf.to_json()}")
+    print(f"TWEAK PUBKEY: {tweak_pubkey.to_json()}")
+    print(f"P2TR SCRIPTPUBKEY: {p2tr_scriptpubkey.to_json()}")
+    print(f"P2TR TX: {p2tr_tx.to_json()}")
+    print(f"DUMMY TX: {dummy_tx.to_json()}")

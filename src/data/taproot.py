@@ -12,7 +12,7 @@ VERSION_BYTE = TAPROOT.VERSION_BYTE
 PUBKEY_BYTELEN = TAPROOT.PUBKEY_BYTELEN
 
 __all__ = ["Leaf", "Branch", "Tree", "TweakPubkey", "get_unbalanced_merkle_root", "get_control_byte",
-           "get_control_block"]
+           "get_control_block", "get_tweak"]
 
 
 class Leaf:
@@ -176,6 +176,11 @@ def get_control_block(xonly_pubkey_bytes: bytes, merkle_root: bytes, merkle_path
     control_byte = get_control_byte(tweaked_pubkey.tweaked_pubkey.to_point())
     # control block = control_byte + internal xonly pubkey + merkle_path
     return control_byte + xonly_pubkey_bytes + merkle_path
+
+
+def get_tweak(xonly_pubkey: bytes, merkle_root: bytes) -> bytes:
+    # TODO: Add common validation methods for common datatypes, e.g, xonly_pubkey, etc..
+    return taptweak_hash(xonly_pubkey + merkle_root)
 
 
 # --- TESTING ---

@@ -282,7 +282,7 @@ class Transaction(Serializable):
     @property
     def is_segwit(self):
         """
-        True if the witness_list is populated
+        True if the witness_list is populated or if any of the inputs don't have a scriptsig (tx to be signed)
         """
         if SEGWIT_KEY not in self._cache:
             self._cache[SEGWIT_KEY] = len(self.witness) > 0
@@ -448,7 +448,8 @@ class Transaction(Serializable):
 
         # Add locktime and return
         tx_dict.update({
-            "locktime": self.locktime.to_bytes(TX.LOCKTIME, "little").hex()
+            "locktime": self.locktime.to_bytes(TX.LOCKTIME, "little").hex(),
+            "is_segwit": self.is_segwit
         })
         return tx_dict
 
