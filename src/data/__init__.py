@@ -7,5 +7,6 @@ from src.data.compact_size import *
 from src.data.ecc_keys import *
 from src.data.encoding import *
 from src.data.merkle_trees import *
+from src.data.taproot import *
 from src.data.target_bits import *
 from src.data.wordlist import *

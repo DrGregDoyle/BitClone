@@ -6,7 +6,7 @@ created from a previous transactions data + a specific TxOutput.
 
 """
 from src.core import OPCODES
-from src.data import serialize_data
+from src.data import serialize_data, Leaf, get_control_block
 from src.script.context import ExecutionContext
 from src.script.scriptpubkey import P2PK_Key, P2PKH_Key, P2MS_Key, P2SH_Key, P2WPKH_Key, P2WSH_Key, P2TR_Key
 from src.script.scriptsig import P2PK_Sig, P2PKH_Sig, P2MS_Sig, P2SH_Sig, P2SH_P2WPKH_Sig
@@ -309,3 +309,40 @@ def test_keypath(script_engine):
     # --- Validate script
     valid_spend = script_engine.validate_segwit(scriptpubkey=p2tr_key, ctx=p2tr_ctx)
     assert valid_spend, "Failed to validate known key-path spend"
+
+
+def test_simple_spendpath(script_engine):
+    # --- Known byte values
+    p2tr_xonly_pubkey_bytes = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
+    p2tr_leaf_script = bytes.fromhex("5887")
+    p2tr_leaf_inputs = bytes.fromhex("08")
+    p2tr_tx_bytes = bytes.fromhex(
+        "02000000000102c20da20832c3894854dc63f69cf7fe805323b3d476aaa8e730244b36a575d2440000000000ffffffff87adaa9d7302d05896b0d491a099208c20ea0ac9fa776ddf4b7cafcafaf8c48b0100000000ffffffff010f0e00000000000016001492b8c3a56fac121ddcdffbc85b02fb9ef681038a0247304402200c4c0bfe93f6622fa0790b6d28bf755c1a3f23e8404bb804ca8e2db080b613b102205bcf0a4e4559ba9b40e6b174cf91af061dfa21691923b410e351326708b041a00121030c7196376bc1df61b6da6ee711868fd30e370dd273332bfb02a2287d11e2e9c503010802588721c1924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a332900000000")
+    p2tr_txid_display_bytes = bytes.fromhex("8bc4f8facaaf7c4bdf6d77fac90aea208c2099a091d4b09658d002739daaad87")
+
+    # --- Construct elements
+    p2tr_leaf = Leaf(p2tr_leaf_script)
+    p2tr_key = P2TR_Key(p2tr_xonly_pubkey_bytes, [p2tr_leaf_script])
+    p2tr_control_block = get_control_block(p2tr_xonly_pubkey_bytes, p2tr_leaf.leaf_hash)
+    p2tr_witness = WitnessField(items=[p2tr_leaf_inputs, p2tr_leaf_script, p2tr_control_block])
+    p2tr_tx = Transaction.from_bytes(p2tr_tx_bytes)
+    p2tr_utxo = UTXO(
+        txid=p2tr_txid_display_bytes[::-1],
+        vout=1,
+        amount=20000,
+        scriptpubkey=p2tr_key.script,
+        block_height=862100
+    )
+    p2tr_context = ExecutionContext(
+        tx=p2tr_tx,
+        input_index=1,
+        utxo=p2tr_utxo,
+        amount=p2tr_utxo.amount,
+        is_segwit=True,
+        tapscript=True
+    )
+
+    # Validate
+    assert p2tr_witness == p2tr_tx.witness[1], "Failed to construct correct known WitnessField"
+    assert script_engine.validate_segwit(p2tr_key, p2tr_context), "Failed to validate known simple script-path spend."
+

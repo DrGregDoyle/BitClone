@@ -11,7 +11,8 @@ from src.data.ecc_keys import PubKey
 VERSION_BYTE = TAPROOT.VERSION_BYTE
 PUBKEY_BYTELEN = TAPROOT.PUBKEY_BYTELEN
 
-__all__ = ["Leaf", "Branch", "Tree", "TweakPubkey", "get_unbalanced_merkle_root"]
+__all__ = ["Leaf", "Branch", "Tree", "TweakPubkey", "get_unbalanced_merkle_root", "get_control_byte",
+           "get_control_block"]
 
 
 class Leaf:
@@ -168,9 +169,9 @@ def get_control_byte(pubkey_point: Point) -> bytes:
     return bytes([int.from_bytes(VERSION_BYTE, "big") + parity_bit])
 
 
-def get_control_block(xonly_pubkey_bytes: bytes, merkle_path: bytes = b'') -> bytes:
+def get_control_block(xonly_pubkey_bytes: bytes, merkle_root: bytes, merkle_path: bytes = b'') -> bytes:
     # Get tweaked_pubkey
-    tweaked_pubkey = TweakPubkey(xonly_pubkey=xonly_pubkey_bytes)
+    tweaked_pubkey = TweakPubkey(xonly_pubkey=xonly_pubkey_bytes, merkle_root=merkle_root)
     # Get control byte
     control_byte = get_control_byte(tweaked_pubkey.tweaked_pubkey.to_point())
     # control block = control_byte + internal xonly pubkey + merkle_path

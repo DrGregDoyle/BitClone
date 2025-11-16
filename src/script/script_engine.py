@@ -8,14 +8,15 @@ from src.core.byte_stream import get_stream
 from src.core.exceptions import ScriptEngineError
 from src.core.opcodes import OPCODES
 from src.cryptography import sha256
-from src.data.taproot import Leaf, Tree
+from src.data.taproot import Leaf, Tree, get_control_block
 from src.script.context import ExecutionContext
 from src.script.opcode_map import OPCODE_MAP
 from src.script.scriptpubkey import ScriptPubKey, P2SH_Key, P2WPKH_Key, P2PKH_Key, P2WSH_Key, P2TR_Key
 from src.script.scriptsig import ScriptSig
 from src.script.signature_engine import SignatureEngine, SignatureContext
 from src.script.stack import BitStack, BitNum
-from src.tx.tx import WitnessField
+from src.tx.tx import WitnessField, Transaction
+from src.tx.utxo import UTXO
 
 __all__ = ["ScriptEngine"]
 
@@ -195,6 +196,8 @@ class ScriptEngine:
         if P2TR_Key.matches(scriptpubkey.script):
             is_p2tr = True
 
+        # TODO: Add validation here for ScriptPubKey type for mandatory spend fields
+
         # Handle P2WPKH
         if is_p2wpkh:
             # Validation
@@ -268,8 +271,16 @@ class ScriptEngine:
                 valid_sig = self.sig_engine.verify_schnorr_sig(tweaked_pubkey, msg=sighash, sig=sig)
                 return valid_sig
             else:
-                # Script-path
-                pass
+                # Script-path | All witness elements are datapushes
+                witness_items = witness_field.items
+                control_block = witness_items.pop(-1)  # Last element of witness is control block
+                leaf_script = witness_items.pop(-1)  # second last element is leaf script
+
+                # TODO: Add control_block validation methods
+
+                # Push remaining witness items and execute leaf_script
+                self.stack.pushlist(witness_items)
+                self.execute_script(leaf_script, ctx)
 
         # Validate the stack
         return self.validate_stack()
@@ -429,9 +440,46 @@ if __name__ == "__main__":
     )
     test_tree = Tree([test_leaf.script])
     test_p2tr_pubkey = P2TR_Key(xonly_pubkey=test_pubkey_xonly, scripts=[test_leaf.script])
+    test_control_block = get_control_block(test_pubkey_xonly, test_leaf.leaf_hash)
+    test_script_inputs = bytes.fromhex("08")  # Inputs = list of elements which are used to validate the script
+    test_witness = WitnessField(items=[
+        test_script_inputs, test_leaf.script, test_control_block
+    ])
+
+    # Known byte values
+    test_utxo = UTXO(
+        txid=bytes.fromhex("8bc4f8facaaf7c4bdf6d77fac90aea208c2099a091d4b09658d002739daaad87")[::-1],
+        vout=1,
+        amount=20000,
+        scriptpubkey=test_p2tr_pubkey.script,
+        block_height=862100
+    )
+    test_tx = Transaction.from_bytes(
+        bytes.fromhex(
+            "02000000000102c20da20832c3894854dc63f69cf7fe805323b3d476aaa8e730244b36a575d2440000000000ffffffff87adaa9d7302d05896b0d491a099208c20ea0ac9fa776ddf4b7cafcafaf8c48b0100000000ffffffff010f0e00000000000016001492b8c3a56fac121ddcdffbc85b02fb9ef681038a0247304402200c4c0bfe93f6622fa0790b6d28bf755c1a3f23e8404bb804ca8e2db080b613b102205bcf0a4e4559ba9b40e6b174cf91af061dfa21691923b410e351326708b041a00121030c7196376bc1df61b6da6ee711868fd30e370dd273332bfb02a2287d11e2e9c503010802588721c1924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a332900000000")
+    )
+    test_input_index = 1
+
+    witnesses_agree = (test_witness == test_tx.witness[test_input_index])
+    test_ctx = ExecutionContext(
+        tx=test_tx,
+        input_index=test_input_index,
+        utxo=test_utxo,
+        amount=test_utxo.amount,
+        is_segwit=True,
+        tapscript=True
+    )
+
+    engine = ScriptEngine()
+    valid_scriptpath1 = engine.validate_segwit(test_p2tr_pubkey, test_ctx)
 
     # --- LOGGING
 
     print(f"TEST LEAF: {test_leaf.to_json()}")
     print(f"TEST TREE: {test_tree.to_json()}")
     print(f"TEST P2TR PUBKEY: {test_p2tr_pubkey.to_json()}")
+    print(f"CONTROL BLOCK: {test_control_block.hex()}")
+    print(f"WITNESS: {test_witness.to_json()}")
+    print(f"WITNESS SERIALIZED: {test_witness.to_bytes().hex()}")
+    print(f"WITNESSES AGREE: {witnesses_agree}")
+    print(f"VALID SCRIPTPATH1: {valid_scriptpath1}")
