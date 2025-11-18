@@ -16,3 +16,4 @@ class ExecutionContext:
     sig_engine: Optional['SignatureEngine'] = None
     is_p2sh: bool = False
     is_segwit: bool = False
+    merkle_root: bytes = None

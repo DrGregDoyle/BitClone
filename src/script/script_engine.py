@@ -15,7 +15,7 @@ from src.script.scriptpubkey import ScriptPubKey, P2SH_Key, P2WPKH_Key, P2PKH_Ke
 from src.script.scriptsig import ScriptSig
 from src.script.signature_engine import SignatureEngine, SignatureContext
 from src.script.stack import BitStack, BitNum
-from src.tx.tx import WitnessField, Transaction, TxInput, TxOutput
+from src.tx.tx import WitnessField, Transaction
 from src.tx.utxo import UTXO
 
 __all__ = ["ScriptEngine"]
@@ -103,14 +103,28 @@ class ScriptEngine:
         # Use script_code from context if available (for P2SH), otherwise use scriptpubkey
         script_code = ctx.script_code if hasattr(ctx, 'script_code') and ctx.script_code else utxo.scriptpubkey
 
-        # Get sighash
+        # Get sighash | Parse context to figure out what goes in the context
         sig_ctx = SignatureContext(tx=tx, input_index=input_index, sighash_type=sighash_num,
                                    script_code=script_code, amount=utxo.amount)
-        if ctx.is_segwit:
+
+        # Taproot
+        if ctx.tapscript:
+            sig_ctx.amounts = [utxo.amount]
+            sig_ctx.prev_scriptpubkeys = [script_code]
+            sig_ctx.merkle_root = ctx.merkle_root
+            sig_ctx.ext_flag = 1
+            message_hash = self.sig_engine.get_taproot_sighash(sig_ctx)
+        # Segwit but not taproot
+        elif ctx.is_segwit:
             message_hash = self.sig_engine.get_segwit_sighash(sig_ctx)
+        # Legacy
         else:
             message_hash = self.sig_engine.get_legacy_sighash(sig_ctx)
-        signature_verified = self.sig_engine.verify_ecdsa_sig(der_sig, message_hash, pubkey)
+        print(f"MESSAGE HASH: {message_hash.hex()}")
+        if ctx.tapscript:
+            signature_verified = self.sig_engine.verify_schnorr_sig(xonly_pubkey=pubkey, msg=message_hash, sig=der_sig)
+        else:
+            signature_verified = self.sig_engine.verify_ecdsa_sig(der_sig, message_hash, pubkey)
         self.stack.pushbool(signature_verified)
 
     def _handle_multisig(self, ctx: ExecutionContext):
@@ -448,31 +462,27 @@ if __name__ == "__main__":
         block_height=863496
     )
 
-    # --- Create signature for witness
-    dummy_txin = TxInput(
-        txid=p2tr_utxo.txid,
-        vout=p2tr_utxo.vout,
-        scriptsig=b'',
-        sequence=0xffffffff
-    )
-    dummy_txout = TxOutput(
-        amount=15000,
-        scriptpubkey=bytes.fromhex("00140de745dc58d8e62e6f47bde30cd5804a82016f9e")
-    )
-
-    dummy_tx = Transaction(inputs=[dummy_txin], outputs=[dummy_txout], witness=[WitnessField()])
-
-    sig_engine = SignatureEngine()
-
     # --- Spend elements
     p2tr_tx = Transaction.from_bytes(
         bytes.fromhex(
             "020000000001013cfe8b95d22502698fd98837f83d8d4be31ee3eddd9d1ab1a95654c64604c4d10000000000ffffffff01983a0000000000001600140de745dc58d8e62e6f47bde30cd5804a82016f9e034101769105cbcbdcaaee5e58cd201ba3152477fda31410df8b91b4aee2c4864c7700615efb425e002f146a39ca0a4f2924566762d9213bd33f825fad83977fba7f0122206d4ddc0e47d2e8f82cbe2fc2d0d749e7bd3338112cecdc76d8f831ae6620dbe0ac21c0924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a332900000000")
     )
+    ptr2_context = ExecutionContext(
+        tx=p2tr_tx,
+        input_index=0,
+        amount=20000,
+        utxo=p2tr_utxo,
+        is_segwit=True,
+        tapscript=True,
+        merkle_root=temp_leaf.leaf_hash
+    )
+
+    engine = ScriptEngine()
+    valid_spend = engine.validate_segwit(p2tr_scriptpubkey, ptr2_context)
 
     # --- LOGGING
     print(f"LEAF: {temp_leaf.to_json()}")
     print(f"TWEAK PUBKEY: {tweak_pubkey.to_json()}")
     print(f"P2TR SCRIPTPUBKEY: {p2tr_scriptpubkey.to_json()}")
     print(f"P2TR TX: {p2tr_tx.to_json()}")
-    print(f"DUMMY TX: {dummy_tx.to_json()}")
+    print(f"VALID SPEND: {valid_spend}")
