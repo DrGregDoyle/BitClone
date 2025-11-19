@@ -19,6 +19,8 @@ from src.script.scriptpubkey import P2TR_Key
 from src.script.scriptsig import P2PK_Sig, P2PKH_Sig, P2MS_Sig
 from src.tx import Transaction, WitnessField
 
+__all__ = ["SigHash", "SignatureContext", "SignatureEngine"]
+
 
 class SigHash(IntEnum):
     DEFAULT = 0x00

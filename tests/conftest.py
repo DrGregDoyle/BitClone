@@ -7,7 +7,7 @@ from secrets import token_bytes
 import pytest
 
 from src.core import TX
-from src.script import ScriptEngine
+from src.script import ScriptEngine, SignatureEngine
 from src.tx import TxInput, TxOutput, WitnessField, Transaction
 
 __all__ = ["getrand_txinput", "getrand_witnessfield", "getrand_txoutput", "getrand_tx"]
@@ -53,3 +53,8 @@ def getrand_tx(segwit: bool = True):
 @pytest.fixture()
 def script_engine():
     return ScriptEngine()
+
+
+@pytest.fixture()
+def sig_engine():
+    return SignatureEngine()

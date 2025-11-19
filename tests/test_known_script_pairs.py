@@ -6,7 +6,7 @@ created from a previous transactions data + a specific TxOutput.
 
 """
 from src.core import OPCODES
-from src.data import serialize_data, Leaf, get_control_block
+from src.data import serialize_data, Leaf, get_control_block, TweakPubkey
 from src.script.context import ExecutionContext
 from src.script.scriptpubkey import P2PK_Key, P2PKH_Key, P2MS_Key, P2SH_Key, P2WPKH_Key, P2WSH_Key, P2TR_Key
 from src.script.scriptsig import P2PK_Sig, P2PKH_Sig, P2MS_Sig, P2SH_Sig, P2SH_P2WPKH_Sig
@@ -346,3 +346,41 @@ def test_simple_spendpath(script_engine):
     assert p2tr_witness == p2tr_tx.witness[1], "Failed to construct correct known WitnessField"
     assert script_engine.validate_segwit(p2tr_key, p2tr_context), "Failed to validate known simple script-path spend."
 
+
+def test_simple_sig_spendpath(script_engine):
+    xonly_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
+    leaf_script = bytes.fromhex("206d4ddc0e47d2e8f82cbe2fc2d0d749e7bd3338112cecdc76d8f831ae6620dbe0ac")
+    temp_leaf = Leaf(leaf_script)
+    tweak_pubkey = TweakPubkey(xonly_pubkey, merkle_root=temp_leaf.leaf_hash)
+
+    p2tr_scriptpubkey = P2TR_Key(xonly_pubkey=xonly_pubkey, scripts=[leaf_script])
+    p2tr_utxo = UTXO(
+        txid=bytes.fromhex("d1c40446c65456a9b11a9dddede31ee34b8d3df83788d98f690225d2958bfe3c")[::-1],
+        vout=0,
+        amount=20000,
+        scriptpubkey=p2tr_scriptpubkey.script,
+        block_height=863496
+    )
+
+    # --- Spend elements
+    p2tr_tx = Transaction.from_bytes(
+        bytes.fromhex(
+            "020000000001013cfe8b95d22502698fd98837f83d8d4be31ee3eddd9d1ab1a95654c64604c4d10000000000ffffffff01983a0000000000001600140de745dc58d8e62e6f47bde30cd5804a82016f9e034101769105cbcbdcaaee5e58cd201ba3152477fda31410df8b91b4aee2c4864c7700615efb425e002f146a39ca0a4f2924566762d9213bd33f825fad83977fba7f0122206d4ddc0e47d2e8f82cbe2fc2d0d749e7bd3338112cecdc76d8f831ae6620dbe0ac21c0924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a332900000000")
+    )
+    ptr2_context = ExecutionContext(
+        tx=p2tr_tx,
+        input_index=0,
+        amount=20000,
+        utxo=p2tr_utxo,
+        is_segwit=True,
+        tapscript=True,
+        merkle_root=temp_leaf.leaf_hash
+    )
+
+    # --- Validation
+    # Tweaked pubkeys agree
+    assert tweak_pubkey.tweaked_pubkey.x_bytes() == p2tr_scriptpubkey.script[2:], "Failed to create known tweaked " \
+                                                                                  "pubkey"
+
+    assert script_engine.validate_segwit(p2tr_scriptpubkey,
+                                         ptr2_context), "Failed to validate known simple signature script-path spend."
