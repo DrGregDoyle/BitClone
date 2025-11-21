@@ -2,8 +2,8 @@
 These tests are to verify the signature algorithm against known sighash values
 """
 from src.data.taproot import Leaf, TweakPubkey, get_control_block, get_control_byte, get_tweak
+from src.script.context import SignatureContext
 from src.script.scriptpubkey import P2TR_Key
-from src.script.signature_engine import SignatureContext
 from src.tx.tx import Transaction, WitnessField
 
 

@@ -8,15 +8,14 @@ from src.core.byte_stream import get_stream
 from src.core.exceptions import ScriptEngineError
 from src.core.opcodes import OPCODES
 from src.cryptography import sha256
-from src.data.taproot import Leaf, TweakPubkey
-from src.script.context import ExecutionContext
+from src.data.taproot import Leaf, Tree, get_tweak, TweakPubkey
+from src.script.context import ExecutionContext, SignatureContext
 from src.script.opcode_map import OPCODE_MAP
 from src.script.scriptpubkey import ScriptPubKey, P2SH_Key, P2WPKH_Key, P2PKH_Key, P2WSH_Key, P2TR_Key
 from src.script.scriptsig import ScriptSig
-from src.script.signature_engine import SignatureEngine, SignatureContext
+from src.script.signature_engine import SignatureEngine
 from src.script.stack import BitStack, BitNum
-from src.tx.tx import WitnessField, Transaction
-from src.tx.utxo import UTXO
+from src.tx.tx import WitnessField
 
 __all__ = ["ScriptEngine"]
 
@@ -446,43 +445,26 @@ class ScriptEngine:
 if __name__ == "__main__":
     sep = "---" * 80
 
-    print("--- P2TR SCRIPT-PATH SPEND --- ")
+    print("--- P2TR SCRIPT-PATH (Tree) SPEND --- ")
 
     xonly_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
-    leaf_script = bytes.fromhex("206d4ddc0e47d2e8f82cbe2fc2d0d749e7bd3338112cecdc76d8f831ae6620dbe0ac")
-    temp_leaf = Leaf(leaf_script)
-    tweak_pubkey = TweakPubkey(xonly_pubkey, merkle_root=temp_leaf.leaf_hash)
+    leaf_scripts = [
+        bytes.fromhex("5187"),
+        bytes.fromhex("5287"),
+        bytes.fromhex("5387"),
+        bytes.fromhex("5487"),
+        bytes.fromhex("5587")
+    ]
+    leaves = [Leaf(s) for s in leaf_scripts]
+    tree = Tree(leaf_scripts)
+    tweak = get_tweak(xonly_pubkey, tree.merkle_root)
+    tweak_pubkey = TweakPubkey(xonly_pubkey, tree.merkle_root)
 
-    p2tr_scriptpubkey = P2TR_Key(xonly_pubkey=xonly_pubkey, scripts=[leaf_script])
-    p2tr_utxo = UTXO(
-        txid=bytes.fromhex("d1c40446c65456a9b11a9dddede31ee34b8d3df83788d98f690225d2958bfe3c")[::-1],
-        vout=0,
-        amount=20000,
-        scriptpubkey=p2tr_scriptpubkey.script,
-        block_height=863496
-    )
-
-    # --- Spend elements
-    p2tr_tx = Transaction.from_bytes(
-        bytes.fromhex(
-            "020000000001013cfe8b95d22502698fd98837f83d8d4be31ee3eddd9d1ab1a95654c64604c4d10000000000ffffffff01983a0000000000001600140de745dc58d8e62e6f47bde30cd5804a82016f9e034101769105cbcbdcaaee5e58cd201ba3152477fda31410df8b91b4aee2c4864c7700615efb425e002f146a39ca0a4f2924566762d9213bd33f825fad83977fba7f0122206d4ddc0e47d2e8f82cbe2fc2d0d749e7bd3338112cecdc76d8f831ae6620dbe0ac21c0924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a332900000000")
-    )
-    ptr2_context = ExecutionContext(
-        tx=p2tr_tx,
-        input_index=0,
-        amount=20000,
-        utxo=p2tr_utxo,
-        is_segwit=True,
-        tapscript=True,
-        merkle_root=temp_leaf.leaf_hash
-    )
-
-    engine = ScriptEngine()
-    valid_spend = engine.validate_segwit(p2tr_scriptpubkey, ptr2_context)
+    test_p2tr_pubkey = P2TR_Key(xonly_pubkey, leaf_scripts)
 
     # --- LOGGING
-    print(f"LEAF: {temp_leaf.to_json()}")
-    print(f"TWEAK PUBKEY: {tweak_pubkey.to_json()}")
-    print(f"P2TR SCRIPTPUBKEY: {p2tr_scriptpubkey.to_json()}")
-    print(f"P2TR TX: {p2tr_tx.to_json()}")
-    print(f"VALID SPEND: {valid_spend}")
+    print(f"TREE: {tree.to_json()}")
+    print(f"MERKLE ROOT: {tree.merkle_root.hex()}")
+    print(f"TWEAK: {tweak.hex()}")
+    print(f"TWEAK PUBKEY: {tweak_pubkey.tweaked_pubkey.x_bytes().hex()}")
+    print(f"SCRIPT PUBKEY: {test_p2tr_pubkey.to_json()}")

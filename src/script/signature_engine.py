@@ -5,21 +5,21 @@ The SignatureEngine class, used to create signatures for transactions
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from enum import IntEnum
 from typing import Optional
 
 from src.core import SignatureError, TX, TAPROOT
 from src.cryptography import ecdsa, verify_ecdsa, schnorr_verify, schnorr_sig, hash256, sha256, tapsighash_hash, \
     SECP256K1
-from src.data import encode_der_signature, decode_der_signature, write_compact_size, Leaf, PubKey, TweakPubkey, \
-    get_tweak, get_control_byte, get_control_block, get_unbalanced_merkle_root
+from src.data import encode_der_signature, decode_der_signature, write_compact_size, PubKey, get_control_block, \
+    get_unbalanced_merkle_root, Leaf, TweakPubkey, Tree, get_tweak
+from src.script.context import SignatureContext
 from src.script.script_type import ScriptType
 from src.script.scriptpubkey import P2TR_Key
 from src.script.scriptsig import P2PK_Sig, P2PKH_Sig, P2MS_Sig
 from src.tx import Transaction, WitnessField
 
-__all__ = ["SigHash", "SignatureContext", "SignatureEngine"]
+__all__ = ["SigHash", "SignatureEngine"]
 
 
 class SigHash(IntEnum):
@@ -42,38 +42,6 @@ class SigHash(IntEnum):
         Encodes the sighash integer using BTCNum encoding and padded to 4 bytes
         """
         return self.value.to_bytes(4, "little")
-
-
-@dataclass(slots=True)
-class SignatureContext:
-    """Holds all data needed to compute a signature hash for a specific input."""
-    # Always needed
-    tx: "Transaction"
-    input_index: int
-    sighash_type: int = SigHash.ALL
-
-    # Legacy / SegWit v0
-    script_code: Optional[bytes] = None  # scriptpubkey for legacy; witness script for v0
-    amount: Optional[int] = None  # satoshis (required for v0 and Taproot)
-
-    # Taproot (BIP341/342)
-    ext_flag: int = 0  # 0=key-path, 1=script-path
-    annex: Optional[bytes] = None  # must start with 0x50 if present
-    merkle_root: Optional[bytes] = None  # leaf_hash if key-path
-    leaf_hash: Optional[bytes] = None  # For use in script-path
-    leaf_version: int = 0xC0  # tapscript v0 default
-    pubkey_version: bytes = b'\x00'  # Available for future update
-    codesep_pos: bytes = b'\xff\xff\xff\xff'  # To be adjusted based on script
-    pubkey: Optional[bytes] = None  # To create extension for script-path
-
-    # Optional caches (pass precomputed hashes to avoid recompute)
-    prevouts_hash: Optional[bytes] = None
-    sequences_hash: Optional[bytes] = None
-    outputs_hash: Optional[bytes] = None
-
-    # Optional for non-ANYONECANPAY global hashes
-    amounts: Optional[list[int]] = None  # len == len(tx.inputs)
-    prev_scriptpubkeys: Optional[list[bytes]] = None  # len == len(tx.inputs)
 
 
 class SignatureEngine:
@@ -532,68 +500,55 @@ if __name__ == "__main__":
     print(sep)
     print(f" --- TAPROOT SIGNATURE TESTING ---")
     print(sep)
-    # Get script elements
-    test_leaf_script = bytes.fromhex("206d4ddc0e47d2e8f82cbe2fc2d0d749e7bd3338112cecdc76d8f831ae6620dbe0ac")
-    test_leaf = Leaf(test_leaf_script)
-    test_merkle_root = test_leaf.leaf_hash
-    # Get pubkey
-    test_xonly_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
-    test_p2tr_key = P2TR_Key(xonly_pubkey=test_xonly_pubkey, scripts=[test_leaf_script])
-    # Get tweaked pubkey
-    test_p2tr_tweak = get_tweak(test_xonly_pubkey, test_merkle_root)
-    test_p2tr_tweaked_pubkey = TweakPubkey(xonly_pubkey=test_xonly_pubkey, merkle_root=test_merkle_root)
 
-    # --- Construct spend elements
-    test_privkey = bytes.fromhex("9b8de5d7f20a8ebb026a82babac3aa47a008debbfde5348962b2c46520bd5189")
-    test_control_byte = get_control_byte(test_p2tr_tweaked_pubkey.tweaked_pubkey.to_point())
-    test_control_block = get_control_block(test_xonly_pubkey, test_merkle_root)
+    xonly_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
+    pubkey_point = PubKey.from_bytes(xonly_pubkey)
+    leaf_scripts = [
+        bytes.fromhex("5187"),
+        bytes.fromhex("5287"),
+        bytes.fromhex("5387"),
+        bytes.fromhex("5487"),
+        bytes.fromhex("5587")
+    ]
+    leaves = [Leaf(s) for s in leaf_scripts]
+    tree = Tree(leaf_scripts)
+    tweak = get_tweak(xonly_pubkey, tree.merkle_root)
+    tweak_pubkey = TweakPubkey(xonly_pubkey, tree.merkle_root)
 
-    test_hashtype = 1  # SIGHASH_ALL
-    test_hashbyte = SigHash(test_hashtype).to_byte()
-    ext_flag = 1
-    annex_present = False
-    spend_type = bytes.fromhex("02")
+    test_p2tr_pubkey = P2TR_Key(xonly_pubkey, leaf_scripts)
 
-    test_tx = Transaction.from_bytes(bytes.fromhex(
-        "020000000001013cfe8b95d22502698fd98837f83d8d4be31ee3eddd9d1ab1a95654c64604c4d10000000000ffffffff01983a0000000000001600140de745dc58d8e62e6f47bde30cd5804a82016f9e034101769105cbcbdcaaee5e58cd201ba3152477fda31410df8b91b4aee2c4864c7700615efb425e002f146a39ca0a4f2924566762d9213bd33f825fad83977fba7f0122206d4ddc0e47d2e8f82cbe2fc2d0d749e7bd3338112cecdc76d8f831ae6620dbe0ac21c0924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a332900000000"
-    ))
-    backup_tx = Transaction.from_bytes(bytes.fromhex(
-        "020000000001013cfe8b95d22502698fd98837f83d8d4be31ee3eddd9d1ab1a95654c64604c4d10000000000ffffffff01983a0000000000001600140de745dc58d8e62e6f47bde30cd5804a82016f9e034101769105cbcbdcaaee5e58cd201ba3152477fda31410df8b91b4aee2c4864c7700615efb425e002f146a39ca0a4f2924566762d9213bd33f825fad83977fba7f0122206d4ddc0e47d2e8f82cbe2fc2d0d749e7bd3338112cecdc76d8f831ae6620dbe0ac21c0924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a332900000000"
-    ))
-    test_tx.witness[0] = WitnessField(items=[])
+    # --- SPEND
+    unsigned_raw_tx = Transaction.from_bytes(bytes.fromhex(
+        "02000000000101d7c0aa93d852c70ed440c5295242c2ac06f41c3a2a174b5a5b112cebdf0f7bec0000000000ffffffff014c1d0000000000001600140de745dc58d8e62e6f47bde30cd5804a82016f9e0000000000"))
 
-    sig_ctx = SignatureContext(
-        tx=test_tx,
-        input_index=0,
-        sighash_type=test_hashtype,
-        amount=20000,
-        amounts=[20000],
-        prev_scriptpubkeys=[test_p2tr_key.script],
-        ext_flag=ext_flag,
-        merkle_root=test_merkle_root,
-        # leaf_hash=test_leaf.leaf_hash
-    )
+    # script_input = bytes.fromhex("03")
+    # leaf_script = bytes.fromhex("5387")
+    # control_byte = get_control_byte(pubkey_point)
+    # merkle_path = bytes.fromhex(
+    #     "1324300a84045033ec539f60c70d582c48b9acf04150da091694d83171b44ec9bf2c4bf1ca72f7b8538e9df9bdfd3ba4c305ad11587f12bbfafa00d58ad6051d54962df196af2827a86f4bde3cf7d7c1a9dcb6e17f660badefbc892309bb145f")
+    # merkle_root = tree.merkle_root
+    # control_block = get_control_block(xonly_pubkey, merkle_root, merkle_path)
+    #
+    # constructed_witness = WitnessField(items=[
+    #     script_input, leaf_script, control_block
+    # ])
 
-    # --- Signature Engine
-    sig_engine = SignatureEngine()
-    signed_tx = sig_engine.sign_taproot_scriptpath(
-        tx=test_tx,
-        input_index=0,
-        privkey=test_privkey,  # internal privkey
-        amount=20000,
-        xonly_pubkey=test_xonly_pubkey,
-        scripts=[test_leaf_script]
-    )
-
-    # Test witnesses
-    witnesses_agree = signed_tx.witness[0] == backup_tx.witness[0]
+    # known_tx = Transaction.from_bytes(bytes.fromhex(
+    #     "02000000000101d7c0aa93d852c70ed440c5295242c2ac06f41c3a2a174b5a5b112cebdf0f7bec0000000000ffffffff01260100000000000016001492b8c3a56fac121ddcdffbc85b02fb9ef681038a03010302538781c0924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a33291324300a84045033ec539f60c70d582c48b9acf04150da091694d83171b44ec9bf2c4bf1ca72f7b8538e9df9bdfd3ba4c305ad11587f12bbfafa00d58ad6051d54962df196af2827a86f4bde3cf7d7c1a9dcb6e17f660badefbc892309bb145f00000000"))
 
     # --- LOGGING
-    # print(f"LEAF: {test_leaf.to_json()}")
-    # print(f"TWEAKED PUBKEY: {test_p2tr_tweaked_pubkey.to_json()}")
-    # print(f"TWEAK: {test_p2tr_tweak.hex()}")
-    print(f"SCRIPTPUBKEY: {test_p2tr_key.to_json()}")
-    # print(f"CONTROL BYTE: {test_control_byte.hex()}")
-    # print(f"CONTROL BLOCK: {test_control_block.hex()}")
-    # print(f"TEST SIGHASH: {test_sighash.hex()}")
-    print(f"WITNESSES AGREE: {witnesses_agree}")
+    print(f"TREE: {tree.to_json()}")
+    print(f"MERKLE ROOT: {tree.merkle_root.hex()}")
+    print(f"TWEAK: {tweak.hex()}")
+    print(f"TWEAK PUBKEY: {tweak_pubkey.tweaked_pubkey.x_bytes().hex()}")
+    print(f"SCRIPT PUBKEY: {test_p2tr_pubkey.to_json()}")
+    print(sep)
+    print("--- SPEND ---")
+    print(sep)
+    print(f"UNSIGNED TX: {unsigned_raw_tx.to_json()}")
+    # print(f"CONTROL BYTE: {control_byte.hex()}")
+    # print(f"PUBKEY: {xonly_pubkey.hex()}")
+    # print(f"CONTROL BLOCK: {control_block.hex()}")
+    # print(f"CONSTRUCTED WITNESS: {constructed_witness.to_json()}")
+    # print(f"KNOWN TX: {known_tx.to_json()}")
+    # print(f"WITNESSES AGREE: {constructed_witness == known_tx.witness[0]}")

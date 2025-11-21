@@ -79,15 +79,18 @@ class Tree:
         self.merkle_root = self.branches[-1].branch_hash if self.branches else self.leaves[-1].leaf_hash
 
     def _get_sequential_branches(self, leaves: list[Leaf]) -> list:
-        if len(leaves) < 2:
+        # Copy list
+        leaves_copy = leaves.copy()
+
+        if len(leaves_copy) < 2:
             return []
 
-        leaf1 = leaves.pop(0)
-        leaf2 = leaves.pop(0)
+        leaf1 = leaves_copy.pop(0)
+        leaf2 = leaves_copy.pop(0)
         branches = [Branch(leaf1.leaf_hash, leaf2.leaf_hash)]
-        while len(leaves) > 0:
+        while len(leaves_copy) > 0:
             last_branch = branches[-1]
-            next_leaf = leaves.pop(0)
+            next_leaf = leaves_copy.pop(0)
             branches.append(Branch(last_branch.branch_hash, next_leaf.leaf_hash))
 
         return branches
@@ -187,8 +190,17 @@ def get_tweak(xonly_pubkey: bytes, merkle_root: bytes) -> bytes:
 if __name__ == "__main__":
     sep = "---" * 50
 
-    test_pubkey_bytes = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
-    test_leaf = Leaf(bytes.fromhex("5887"))
-    test_tweakpubkey = TweakPubkey(test_pubkey_bytes, test_leaf.leaf_hash)
-    print(f"TEST LEAF: {test_leaf.to_json()}")
-    print(f"TWEAK PUBKEY: {test_tweakpubkey.to_json()}")
+    xonly_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
+    pubkey_point = PubKey.from_bytes(xonly_pubkey)
+    leaf_scripts = [
+        bytes.fromhex("5187"),
+        bytes.fromhex("5287"),
+        bytes.fromhex("5387"),
+        bytes.fromhex("5487"),
+        bytes.fromhex("5587")
+    ]
+    leaves = [Leaf(s) for s in leaf_scripts]
+    tree = Tree(leaf_scripts)
+
+    # --- LOGGING
+    print(f'TREE: {tree.to_json()}')
