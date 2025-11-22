@@ -10,6 +10,7 @@ class TAPROOT:
     VERSION_BYTE: Final[bytes] = b'\xc0'
     SIGHASH_EPOCH: Final[bytes] = b'\x00'
     PUBKEY_BYTELEN: Final[int] = 32
+    PUBKEY_VERSION: Final[bytes] = b'\x00'
 
 
 class BLOCK:

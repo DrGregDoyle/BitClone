@@ -21,6 +21,7 @@ class ExecutionContext:
     is_p2sh: bool = False
     is_segwit: bool = False
     merkle_root: bytes = None
+    utxo_list: Optional[list['UTXO']] = None
 
 
 @dataclass(slots=True)

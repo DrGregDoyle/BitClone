@@ -4,7 +4,7 @@ The Database class - holds the UTXO set
 import sqlite3
 from pathlib import Path
 
-from src.tx import UTXO
+from src.tx.tx import UTXO
 
 DB_PATH = Path(__file__).parent / "db_files" / "bitclone.db"
 

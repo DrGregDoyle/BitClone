@@ -15,8 +15,7 @@ from src.script.scriptpubkey import ScriptPubKey, P2SH_Key, P2WPKH_Key, P2PKH_Ke
 from src.script.scriptsig import ScriptSig
 from src.script.signature_engine import SignatureEngine
 from src.script.stack import BitStack, BitNum
-from src.tx.tx import WitnessField, Transaction
-from src.tx.utxo import UTXO
+from src.tx.tx import WitnessField, Transaction, UTXO
 
 __all__ = ["ScriptEngine"]
 
@@ -109,17 +108,32 @@ class ScriptEngine:
 
         # Taproot
         if ctx.tapscript:
-            sig_ctx.amounts = [utxo.amount]
-            sig_ctx.prev_scriptpubkeys = [script_code]
-            sig_ctx.merkle_root = ctx.merkle_root
-            sig_ctx.ext_flag = 1
-            message_hash = self.sig_engine.get_taproot_sighash(sig_ctx)
+            if ctx.utxo_list:
+                utxos = ctx.utxo_list
+            else:
+                utxos = [utxo]
+
+            # sig_ctx.amounts = [utxo.amount]
+            # sig_ctx.prev_scriptpubkeys = [script_code]
+            # sig_ctx.merkle_root = ctx.merkle_root
+            # sig_ctx.ext_flag = 1
+            message_hash = self.sig_engine.get_taproot_sighash(
+                tx=tx, input_index=input_index, utxos=utxos, ext_flag=1, sighash_num=sighash_num,
+                leaf_hash=ctx.merkle_root)
         # Segwit but not taproot
         elif ctx.is_segwit:
-            message_hash = self.sig_engine.get_segwit_sighash(sig_ctx)
+            message_hash = self.sig_engine.get_segwit_sighash(
+                tx=tx,
+                input_index=input_index,
+                amount=utxo.amount,
+                scriptpubkey=script_code,
+                sighash_num=sighash_num
+            )
         # Legacy
         else:
-            message_hash = self.sig_engine.get_legacy_sighash(sig_ctx)
+            message_hash = self.sig_engine.get_legacy_sighash(
+                tx=tx, input_index=input_index, scriptpubkey=utxo.scriptpubkey, sighash_num=sighash_num
+            )
         print(f"MESSAGE HASH: {message_hash.hex()}")
         if ctx.tapscript:
             signature_verified = self.sig_engine.verify_schnorr_sig(xonly_pubkey=pubkey, msg=message_hash, sig=der_sig)
@@ -168,9 +182,12 @@ class ScriptEngine:
 
             # Handle type of signature
             if ctx.is_segwit:
-                message_hash = self.sig_engine.get_segwit_sighash(sig_ctx)
+                message_hash = self.sig_engine.get_segwit_sighash(tx=ctx.tx, input_index=ctx.input_index,
+                                                                  amount=ctx.utxo.amount, scriptpubkey=script_code,
+                                                                  sighash_num=sighash_num)
             else:
-                message_hash = self.sig_engine.get_legacy_sighash(sig_ctx)
+                message_hash = self.sig_engine.get_legacy_sighash(tx=ctx.tx, input_index=ctx.input_index,
+                                                                  scriptpubkey=script_code, sighash_num=sighash_num)
 
             if self.sig_engine.verify_ecdsa_sig(signature=der_sig, message=message_hash, public_key=pub):
                 matches += 1
@@ -270,18 +287,23 @@ class ScriptEngine:
                     sig = sig[:-1]
                 else:
                     hash_type = 0
-                sig_ctx = SignatureContext(
-                    tx=tx,
-                    input_index=input_index,
-                    amount=utxo.amount,
-                    script_code=scriptpubkey.script,
-                    sighash_type=hash_type,
-                    annex=None,
-                    ext_flag=0
-                )
+                # sig_ctx = SignatureContext(
+                #     tx=tx,
+                #     input_index=input_index,
+                #     amount=utxo.amount,
+                #     script_code=scriptpubkey.script,
+                #     sighash_type=hash_type,
+                #     annex=None,
+                #     ext_flag=0
+                # )
 
                 tweaked_pubkey = scriptpubkey.script[2:]
-                sighash = self.sig_engine.get_taproot_sighash(sig_ctx)
+                sighash = self.sig_engine.get_taproot_sighash(
+                    tx=tx,
+                    input_index=input_index,
+                    utxos=[utxo],
+                    sighash_num=hash_type
+                )
                 valid_sig = self.sig_engine.verify_schnorr_sig(tweaked_pubkey, msg=sighash, sig=sig)
                 return valid_sig
             else:

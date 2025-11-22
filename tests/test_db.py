@@ -6,7 +6,7 @@ from random import randint, choice
 from secrets import token_bytes
 
 from src.database import BitCloneDatabase
-from src.tx import UTXO
+from src.tx.tx import UTXO
 
 TESTBD_PATH = Path(__name__).parent / "db_files" / "test_db.db"
 

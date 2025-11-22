@@ -10,7 +10,8 @@ from src.data import serialize_data, Leaf, get_control_block, TweakPubkey
 from src.script.context import ExecutionContext
 from src.script.scriptpubkey import P2PK_Key, P2PKH_Key, P2MS_Key, P2SH_Key, P2WPKH_Key, P2WSH_Key, P2TR_Key
 from src.script.scriptsig import P2PK_Sig, P2PKH_Sig, P2MS_Sig, P2SH_Sig, P2SH_P2WPKH_Sig
-from src.tx import Transaction, UTXO, WitnessField
+from src.tx import Transaction, WitnessField
+from src.tx.tx import UTXO
 
 OP_PUSHBYTES_20 = OPCODES.get_byte("OP_PUSHBYTES_20")
 OP_PUSHBYTES_22 = OPCODES.get_byte("OP_PUSHBYTES_22")
