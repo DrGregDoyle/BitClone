@@ -1,20 +1,12 @@
 """
-data folder used to house all files dealing with data formats, and encoding/decoding various data
+All methods for manipulating and representing data in BitClone
 """
+
 # data/__init__.py
-
-
-from src.data.byte_stream import *
-from src.data.codec import *
-from src.data.data_handling import *
-from src.data.data_types import *
-from src.data.formats import *
-from src.data.ip_utils import *
-from src.data.merkle import *
-from src.data.netparams import *
-from src.data.network_data import *
-from src.data.pubkey_utils import *
-from src.data.serializable import *
-from src.data.utxo import UTXO
-from src.data.varint import *
+from src.data.compact_size import *
+from src.data.ecc_keys import *
+from src.data.encoding import *
+from src.data.merkle_trees import *
+from src.data.taproot import *
+from src.data.target_bits import *
 from src.data.wordlist import *
