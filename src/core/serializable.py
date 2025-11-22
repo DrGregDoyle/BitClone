@@ -9,6 +9,8 @@ from src.core.byte_stream import SERIALIZED
 __all__ = ["Serializable"]
 
 
+# TODO: Updated Serializable to_dict method to be {"serialized": self.to_bytes().hex()} and then update each child
+# class to call super().to_dict before creating their own to_dict
 class Serializable(ABC):
     """
     A base class that defines serialization and deserialization interfaces

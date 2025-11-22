@@ -12,7 +12,7 @@ from src.core import SignatureError, TX, TAPROOT
 from src.cryptography import ecdsa, verify_ecdsa, schnorr_verify, schnorr_sig, hash256, sha256, tapsighash_hash, \
     SECP256K1
 from src.data import encode_der_signature, decode_der_signature, write_compact_size, PubKey, get_control_block, \
-    get_unbalanced_merkle_root, Leaf, TweakPubkey, Tree, get_tweak
+    get_unbalanced_merkle_root, Leaf, TweakPubkey, Tree, get_tweak, get_control_byte
 from src.script.context import SignatureContext
 from src.script.script_type import ScriptType
 from src.script.scriptpubkey import P2TR_Key
@@ -519,22 +519,28 @@ if __name__ == "__main__":
 
     # --- SPEND
     unsigned_raw_tx = Transaction.from_bytes(bytes.fromhex(
-        "02000000000101d7c0aa93d852c70ed440c5295242c2ac06f41c3a2a174b5a5b112cebdf0f7bec0000000000ffffffff014c1d0000000000001600140de745dc58d8e62e6f47bde30cd5804a82016f9e0000000000"))
+        "02000000000101d7c0aa93d852c70ed440c5295242c2ac06f41c3a2a174b5a5b112cebdf0f7bec0000000000ffffffff01260100000000000016001492b8c3a56fac121ddcdffbc85b02fb9ef681038a0000000000"))
 
-    # script_input = bytes.fromhex("03")
-    # leaf_script = bytes.fromhex("5387")
-    # control_byte = get_control_byte(pubkey_point)
-    # merkle_path = bytes.fromhex(
-    #     "1324300a84045033ec539f60c70d582c48b9acf04150da091694d83171b44ec9bf2c4bf1ca72f7b8538e9df9bdfd3ba4c305ad11587f12bbfafa00d58ad6051d54962df196af2827a86f4bde3cf7d7c1a9dcb6e17f660badefbc892309bb145f")
-    # merkle_root = tree.merkle_root
-    # control_block = get_control_block(xonly_pubkey, merkle_root, merkle_path)
-    #
-    # constructed_witness = WitnessField(items=[
-    #     script_input, leaf_script, control_block
-    # ])
+    # --- CREATE CONTROL BLOCK
+    controL_byte = get_control_byte(tweak_pubkey.tweaked_pubkey.to_point())
+    merkle_path = tree.generate_merkle_path(bytes.fromhex("5387"))
+    control_block = get_control_block(xonly_pubkey, tree.merkle_root, merkle_path)
 
-    # known_tx = Transaction.from_bytes(bytes.fromhex(
-    #     "02000000000101d7c0aa93d852c70ed440c5295242c2ac06f41c3a2a174b5a5b112cebdf0f7bec0000000000ffffffff01260100000000000016001492b8c3a56fac121ddcdffbc85b02fb9ef681038a03010302538781c0924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a33291324300a84045033ec539f60c70d582c48b9acf04150da091694d83171b44ec9bf2c4bf1ca72f7b8538e9df9bdfd3ba4c305ad11587f12bbfafa00d58ad6051d54962df196af2827a86f4bde3cf7d7c1a9dcb6e17f660badefbc892309bb145f00000000"))
+    # --- CREATE WITNESS
+    script_inputs = bytes.fromhex("03")
+    script = bytes.fromhex("5387")
+    witness = WitnessField(items=[
+        script_inputs, script, control_block
+    ])
+
+    signed_tx = Transaction.from_bytes(unsigned_raw_tx.to_bytes())
+    signed_tx.witness = [witness]
+
+    # --- VALIDATE AGAINST KNOWN TX
+    known_tx = Transaction.from_bytes(bytes.fromhex(
+        "02000000000101d7c0aa93d852c70ed440c5295242c2ac06f41c3a2a174b5a5b112cebdf0f7bec0000000000ffffffff01260100000000000016001492b8c3a56fac121ddcdffbc85b02fb9ef681038a03010302538781c0924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a33291324300a84045033ec539f60c70d582c48b9acf04150da091694d83171b44ec9bf2c4bf1ca72f7b8538e9df9bdfd3ba4c305ad11587f12bbfafa00d58ad6051d54962df196af2827a86f4bde3cf7d7c1a9dcb6e17f660badefbc892309bb145f00000000"))
+    witnesses_agree = known_tx.witness[0] == witness
+    txs_agree = known_tx == signed_tx
 
     # --- LOGGING
     print(f"TREE: {tree.to_json()}")
@@ -546,9 +552,18 @@ if __name__ == "__main__":
     print("--- SPEND ---")
     print(sep)
     print(f"UNSIGNED TX: {unsigned_raw_tx.to_json()}")
-    # print(f"CONTROL BYTE: {control_byte.hex()}")
-    # print(f"PUBKEY: {xonly_pubkey.hex()}")
-    # print(f"CONTROL BLOCK: {control_block.hex()}")
-    # print(f"CONSTRUCTED WITNESS: {constructed_witness.to_json()}")
-    # print(f"KNOWN TX: {known_tx.to_json()}")
-    # print(f"WITNESSES AGREE: {constructed_witness == known_tx.witness[0]}")
+    print(f"CONTROL BYTE: {controL_byte.hex()}")
+    print(f"MERKLE PATH: {merkle_path.hex()}")
+    print(f"CONTROL BLOCK: {control_block.hex()}")
+    print(f"WITNESS: {witness.to_json()}")
+    print(f"SIGNED TX: {signed_tx.to_json()}")
+    print(sep)
+    print(" --- VALIDATION --- ")
+    print(sep)
+    print(f"WITNESSES AGREE: {witnesses_agree}")
+    print(f"TXS AGREE: {txs_agree}")
+    print(sep)
+    print(f"KNOWN TX: {known_tx.to_json()}")
+    print(f"TX INPUTS AGREE: {known_tx.inputs[0] == signed_tx.inputs[0]}")
+    print(f"TX OUTS AGREE: {known_tx.outputs[0] == signed_tx.outputs[0]}")
+    print(f"UNSIGNED OUTPUTS:{unsigned_raw_tx.outputs[0].to_json()}")

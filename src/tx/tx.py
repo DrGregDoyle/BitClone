@@ -122,6 +122,7 @@ class TxOutput(Serializable):
     def to_dict(self) -> dict:
         return {
             "amount": self.amount.to_bytes(TX.AMOUNT, "little").hex(),
+            "amount_int": self.amount,
             "scriptpubkey_size": write_compact_size(len(self.scriptpubkey)).hex(),
             "scriptpubkey": self.scriptpubkey.hex()
         }
@@ -182,6 +183,7 @@ class WitnessField(Serializable):
                     "item": temp_item.hex()
                 }
             })
+        witness_dict.update({"serialized": self.to_bytes().hex()})
         return witness_dict
 
 

@@ -384,3 +384,39 @@ def test_simple_sig_spendpath(script_engine):
 
     assert script_engine.validate_segwit(p2tr_scriptpubkey,
                                          ptr2_context), "Failed to validate known simple signature script-path spend."
+
+
+def test_scriptpath_spend(script_engine):
+    xonly_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
+    leaf_scripts = [
+        bytes.fromhex("5187"),
+        bytes.fromhex("5287"),
+        bytes.fromhex("5387"),
+        bytes.fromhex("5487"),
+        bytes.fromhex("5587")
+    ]
+
+    test_p2tr_pubkey = P2TR_Key(xonly_pubkey, leaf_scripts)
+    test_p2tr_utxo = UTXO(
+        txid=bytes.fromhex("ec7b0fdfeb2c115b5a4b172a3a1cf406acc2425229c540d40ec752d893aac0d7")[::-1],
+        vout=0,
+        amount=10000,
+        scriptpubkey=test_p2tr_pubkey.script,
+        block_height=863632
+    )
+
+    # --- Known tx
+    known_tx = Transaction.from_bytes(bytes.fromhex(
+        "02000000000101d7c0aa93d852c70ed440c5295242c2ac06f41c3a2a174b5a5b112cebdf0f7bec0000000000ffffffff01260100000000000016001492b8c3a56fac121ddcdffbc85b02fb9ef681038a03010302538781c0924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a33291324300a84045033ec539f60c70d582c48b9acf04150da091694d83171b44ec9bf2c4bf1ca72f7b8538e9df9bdfd3ba4c305ad11587f12bbfafa00d58ad6051d54962df196af2827a86f4bde3cf7d7c1a9dcb6e17f660badefbc892309bb145f00000000"))
+
+    test_ctx = ExecutionContext(
+        tx=known_tx,
+        input_index=0,
+        utxo=test_p2tr_utxo,
+        amount=test_p2tr_utxo.amount,
+        tapscript=True,
+        is_segwit=True
+    )
+
+    script_validated = script_engine.validate_segwit(test_p2tr_pubkey, test_ctx)
+    assert script_validated, "Failed to validate known script path spend (tree)"

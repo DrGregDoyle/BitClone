@@ -74,6 +74,9 @@ class PubKey:
 
     @classmethod
     def from_xonly(cls, xonly_pubkey: bytes):
+        """
+        Any pubkey generated from x-only coordinates is assumed to have even y-coordinate
+        """
         if len(xonly_pubkey) != 32:
             raise PubKeyError("X-only pubkey must be 32 bytes")
         x = int.from_bytes(xonly_pubkey, "big")

@@ -12,7 +12,7 @@ VERSION_BYTE = TAPROOT.VERSION_BYTE
 PUBKEY_BYTELEN = TAPROOT.PUBKEY_BYTELEN
 
 __all__ = ["Leaf", "Branch", "Tree", "TweakPubkey", "get_unbalanced_merkle_root", "get_control_byte",
-           "get_control_block", "get_tweak"]
+           "get_control_block", "get_tweak", "validate_merkle_path"]
 
 
 class Leaf:
@@ -40,6 +40,11 @@ class Leaf:
 
     def to_json(self):
         return json.dumps(self.to_dict(), indent=2)
+
+    def __eq__(self, other):
+        if isinstance(other, Leaf):
+            return self.script == other.script
+        return False
 
 
 class Branch:
@@ -95,6 +100,44 @@ class Tree:
 
         return branches
 
+    def generate_merkle_path(self, leaf_script: bytes):
+        # Create Leaf object
+        leaf = Leaf(leaf_script)
+
+        # Check leaf is in leaves
+        if leaf not in self.leaves:
+            raise TaprootError("Leaf script not found in leaves of tree")
+
+        # Get leaf_index and hash
+        leaf_index = self.leaves.index(leaf)
+        leaf_hash = leaf.leaf_hash
+
+        # Get tree type
+        # TODO: Create MerkleTree type for triage, assume unbalanced for now
+
+        # --- MAIN ALGORITHM --- #
+        merkle_proof = []
+        # Check if index is one of first two leaves
+        if leaf_index <= 1:
+            # Get the opposite leaf for merkle proot
+            leaf_zero = self.leaves[0]
+            leaf_one = self.leaves[1]
+            merkle_proof.append(leaf_zero.leaf_hash) if leaf_hash == leaf_one.leaf_hash else leaf_one.leaf_hash
+            # Now add all remaining branches
+            merkle_proof.extend([b.branch_hash for b in self.branches])
+
+        else:
+            # Add all branches up to leaf_index -1 to account for the first branch
+            for x in range(leaf_index - 1):
+                merkle_proof.append(self.branches[x].branch_hash)
+            # The last branch_hash in merkle_proot + leaf_hash at leaf_index yields the branch at leaf_index
+            # Given unbalanced tree, we need only add the remaining leaves
+            if leaf_index + 1 < len(self.leaves):
+                for y in range(leaf_index + 1, len(self.leaves)):
+                    merkle_proof.append(self.leaves[y].leaf_hash)
+
+        return b''.join(merkle_proof)
+
     def to_dict(self):
         leaf_dict = {
             f"leaf_{x}": self.leaves[x].to_dict() for x in range(len(self.leaves))
@@ -116,6 +159,7 @@ class TweakPubkey:
     """
     Given an x-only pubkey, we calculate the tweak and tweaked pubkey
     """
+    __slots__ = ("internal_pubkey", "merkle_root", "tweak", "tweaked_pubkey")
 
     def __init__(self, xonly_pubkey: bytes, merkle_root: bytes = b''):
         # --- Validation --- #
@@ -186,21 +230,54 @@ def get_tweak(xonly_pubkey: bytes, merkle_root: bytes) -> bytes:
     return taptweak_hash(xonly_pubkey + merkle_root)
 
 
-# --- TESTING ---
+def validate_merkle_path(leaf_hash: bytes, merkle_path: bytes, merkle_root: bytes) -> bool:
+    """
+    Given a leaf_hash, we validate the merkle_root against the merkle_path
+    """
+    # --- Validation
+    if len(leaf_hash) != PUBKEY_BYTELEN:
+        raise TaprootError(f"Leaf hash is not {PUBKEY_BYTELEN} bytes")
+    if len(merkle_path) % PUBKEY_BYTELEN != 0:
+        raise TaprootError(f"Merkle path is not divisble by {PUBKEY_BYTELEN}")
+    if len(merkle_root) != PUBKEY_BYTELEN:
+        raise TaprootError(f"Merkle root is not {PUBKEY_BYTELEN} bytes")
+
+    # --- Divide merkle path
+    hash_list = [merkle_path[x: x + PUBKEY_BYTELEN] for x in range(0, len(merkle_path), PUBKEY_BYTELEN)]
+    print(f"HASH LIST: {[h.hex() for h in hash_list]}")
+
+    # --- Create merkle_root from leaf_hash and hash_list
+    current_branch = Branch(hash_list[0], leaf_hash)
+    for x in range(1, len(hash_list)):
+        next_hash = hash_list[x]
+        current_branch = Branch(next_hash, current_branch.branch_hash)
+
+    # --- Verify last branch with merkle_root
+    return current_branch.branch_hash == merkle_root
+
+
 if __name__ == "__main__":
     sep = "---" * 50
 
-    xonly_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
-    pubkey_point = PubKey.from_bytes(xonly_pubkey)
-    leaf_scripts = [
-        bytes.fromhex("5187"),
-        bytes.fromhex("5287"),
-        bytes.fromhex("5387"),
-        bytes.fromhex("5487"),
-        bytes.fromhex("5587")
-    ]
-    leaves = [Leaf(s) for s in leaf_scripts]
-    tree = Tree(leaf_scripts)
-
-    # --- LOGGING
-    print(f'TREE: {tree.to_json()}')
+    # xonly_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
+    # pubkey_point = PubKey.from_bytes(xonly_pubkey)
+    # leaf_scripts = [
+    #     bytes.fromhex("5187"),
+    #     bytes.fromhex("5287"),
+    #     bytes.fromhex("5387"),
+    #     bytes.fromhex("5487"),
+    #     bytes.fromhex("5587")
+    # ]
+    # leaves = [Leaf(s) for s in leaf_scripts]
+    # tree = Tree(leaf_scripts)
+    #
+    # test_leaf_script = bytes.fromhex("5387")
+    # test_leaf = Leaf(test_leaf_script)
+    # test_mp = tree.generate_merkle_path(test_leaf_script)
+    #
+    # mp_validated = validate_merkle_path(test_leaf.leaf_hash, test_mp, tree.merkle_root)
+    #
+    # # --- LOGGING
+    # print(f'TREE: {tree.to_json()}')
+    # print(f"MERKLE PATH: {test_mp.hex()}")
+    # print(f"MP VALIDATED: {mp_validated}")
