@@ -302,7 +302,6 @@ def test_keypath(script_engine):
         tx=p2tr_tx,
         input_index=0,
         utxo=p2tr_utxo,
-        amount=20000,
         is_segwit=True,
         tapscript=True
     )
@@ -338,7 +337,6 @@ def test_simple_spendpath(script_engine):
         tx=p2tr_tx,
         input_index=1,
         utxo=p2tr_utxo,
-        amount=p2tr_utxo.amount,
         is_segwit=True,
         tapscript=True
     )
@@ -371,7 +369,6 @@ def test_simple_sig_spendpath(script_engine):
     ptr2_context = ExecutionContext(
         tx=p2tr_tx,
         input_index=0,
-        amount=20000,
         utxo=p2tr_utxo,
         is_segwit=True,
         tapscript=True,
@@ -414,7 +411,6 @@ def test_scriptpath_spend(script_engine):
         tx=known_tx,
         input_index=0,
         utxo=test_p2tr_utxo,
-        amount=test_p2tr_utxo.amount,
         tapscript=True,
         is_segwit=True
     )

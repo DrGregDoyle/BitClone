@@ -2,20 +2,20 @@
 The ScriptEngine class
 """
 
+from dataclasses import replace
 from io import BytesIO
 
 from src.core.byte_stream import get_stream
 from src.core.exceptions import ScriptEngineError
 from src.core.opcodes import OPCODES
 from src.cryptography import sha256
-from src.data.taproot import Leaf, Tree, get_tweak, TweakPubkey
-from src.script.context import ExecutionContext, SignatureContext
+from src.script.context import ExecutionContext
 from src.script.opcode_map import OPCODE_MAP
 from src.script.scriptpubkey import ScriptPubKey, P2SH_Key, P2WPKH_Key, P2PKH_Key, P2WSH_Key, P2TR_Key
 from src.script.scriptsig import ScriptSig
 from src.script.signature_engine import SignatureEngine
 from src.script.stack import BitStack, BitNum
-from src.tx.tx import WitnessField, Transaction, UTXO
+from src.tx.tx import WitnessField
 
 __all__ = ["ScriptEngine"]
 
@@ -103,8 +103,8 @@ class ScriptEngine:
         script_code = ctx.script_code if hasattr(ctx, 'script_code') and ctx.script_code else utxo.scriptpubkey
 
         # Get sighash | Parse context to figure out what goes in the context
-        sig_ctx = SignatureContext(tx=tx, input_index=input_index, sighash_type=sighash_num,
-                                   script_code=script_code, amount=utxo.amount)
+        # sig_ctx = SignatureContext(tx=tx, input_index=input_index, sighash_type=sighash_num,
+        #                            script_code=script_code, amount=utxo.amount)
 
         # Taproot
         if ctx.tapscript:
@@ -175,10 +175,6 @@ class ScriptEngine:
             # Signature should be DER-encoded with sighash num
             der_sig = sig[:-1]
             sighash_num = sig[-1]
-
-            # Get legacy sighash
-            sig_ctx = SignatureContext(tx=ctx.tx, input_index=ctx.input_index, sighash_type=sighash_num,
-                                       script_code=script_code, amount=ctx.utxo.amount)
 
             # Handle type of signature
             if ctx.is_segwit:
@@ -287,15 +283,6 @@ class ScriptEngine:
                     sig = sig[:-1]
                 else:
                     hash_type = 0
-                # sig_ctx = SignatureContext(
-                #     tx=tx,
-                #     input_index=input_index,
-                #     amount=utxo.amount,
-                #     script_code=scriptpubkey.script,
-                #     sighash_type=hash_type,
-                #     annex=None,
-                #     ext_flag=0
-                # )
 
                 tweaked_pubkey = scriptpubkey.script[2:]
                 sighash = self.sig_engine.get_taproot_sighash(
@@ -332,7 +319,7 @@ class ScriptEngine:
             return self.validate_script(scriptsig.script + scriptpubkey.script, ctx)
 
         # Assuming P2SH operation
-        ctx.is_p2sh = True
+        # ctx.is_p2sh = True
         self.clear_stacks()  # Clear stacks here for P2SH
 
         # Execute scriptSig
@@ -369,13 +356,10 @@ class ScriptEngine:
             # Execute the P2PKH script
             self.execute_script(p2pkh_script.script, ctx)
         else:
-            ctx.script_code = redeem_script
             # Execute redeem script
-            self.execute_script(redeem_script, ctx)
+            new_ctx = replace(ctx, script_code=redeem_script)  # ExecutionContext is immutable.
+            self.execute_script(redeem_script, new_ctx)
         return self.validate_stack()
-
-        # combined_script = scriptsig.script + scriptpubkey.script
-        # return self.execute_script(combined_script, ctx)
 
     def execute_script(self, script: bytes, ctx: ExecutionContext = None):
         """
@@ -472,51 +456,51 @@ if __name__ == "__main__":
 
     # --- ScriptPubKey and Taproot Tree
 
-    xonly_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
-    leaf_scripts = [
-        bytes.fromhex("5187"),
-        bytes.fromhex("5287"),
-        bytes.fromhex("5387"),
-        bytes.fromhex("5487"),
-        bytes.fromhex("5587")
-    ]
-    leaves = [Leaf(s) for s in leaf_scripts]
-    tree = Tree(leaf_scripts)
-    tweak = get_tweak(xonly_pubkey, tree.merkle_root)
-    tweak_pubkey = TweakPubkey(xonly_pubkey, tree.merkle_root)
-
-    test_p2tr_pubkey = P2TR_Key(xonly_pubkey, leaf_scripts)
-    known_scriptpubkey = bytes.fromhex("5120979cff99636da1b0e49f8711514c642f640d1f64340c3784942296368fadd0a5")
-    test_p2tr_utxo = UTXO(
-        txid=bytes.fromhex("ec7b0fdfeb2c115b5a4b172a3a1cf406acc2425229c540d40ec752d893aac0d7")[::-1],
-        vout=0,
-        amount=10000,
-        scriptpubkey=test_p2tr_pubkey.script,
-        block_height=863632
-    )
-
-    # --- Known tx
-    known_tx = Transaction.from_bytes(bytes.fromhex(
-        "02000000000101d7c0aa93d852c70ed440c5295242c2ac06f41c3a2a174b5a5b112cebdf0f7bec0000000000ffffffff01260100000000000016001492b8c3a56fac121ddcdffbc85b02fb9ef681038a03010302538781c0924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a33291324300a84045033ec539f60c70d582c48b9acf04150da091694d83171b44ec9bf2c4bf1ca72f7b8538e9df9bdfd3ba4c305ad11587f12bbfafa00d58ad6051d54962df196af2827a86f4bde3cf7d7c1a9dcb6e17f660badefbc892309bb145f00000000"))
-
-    test_ctx = ExecutionContext(
-        tx=known_tx,
-        input_index=0,
-        utxo=test_p2tr_utxo,
-        amount=test_p2tr_utxo.amount,
-        tapscript=True,
-        is_segwit=True
-    )
-
-    engine = ScriptEngine()
-    script_validated = engine.validate_segwit(test_p2tr_pubkey, test_ctx)
-
-    # --- LOGGING
-    print(f"TREE: {tree.to_json()}")
-    print(f"MERKLE ROOT: {tree.merkle_root.hex()}")
-    print(f"TWEAK: {tweak.hex()}")
-    print(f"TWEAK PUBKEY: {tweak_pubkey.tweaked_pubkey.x_bytes().hex()}")
-    print(f"SCRIPT PUBKEY: {test_p2tr_pubkey.to_json()}")
-    print(f"KNOWN TX: {known_tx.to_json()}")
-    print(f"PUBKEYS AGREE: {test_p2tr_pubkey.script == known_scriptpubkey}")
-    print(f"VALID SCRIPT: {script_validated}")
+    # xonly_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
+    # leaf_scripts = [
+    #     bytes.fromhex("5187"),
+    #     bytes.fromhex("5287"),
+    #     bytes.fromhex("5387"),
+    #     bytes.fromhex("5487"),
+    #     bytes.fromhex("5587")
+    # ]
+    # leaves = [Leaf(s) for s in leaf_scripts]
+    # tree = Tree(leaf_scripts)
+    # tweak = get_tweak(xonly_pubkey, tree.merkle_root)
+    # tweak_pubkey = TweakPubkey(xonly_pubkey, tree.merkle_root)
+    #
+    # test_p2tr_pubkey = P2TR_Key(xonly_pubkey, leaf_scripts)
+    # known_scriptpubkey = bytes.fromhex("5120979cff99636da1b0e49f8711514c642f640d1f64340c3784942296368fadd0a5")
+    # test_p2tr_utxo = UTXO(
+    #     txid=bytes.fromhex("ec7b0fdfeb2c115b5a4b172a3a1cf406acc2425229c540d40ec752d893aac0d7")[::-1],
+    #     vout=0,
+    #     amount=10000,
+    #     scriptpubkey=test_p2tr_pubkey.script,
+    #     block_height=863632
+    # )
+    #
+    # # --- Known tx
+    # known_tx = Transaction.from_bytes(bytes.fromhex(
+    #     "02000000000101d7c0aa93d852c70ed440c5295242c2ac06f41c3a2a174b5a5b112cebdf0f7bec0000000000ffffffff01260100000000000016001492b8c3a56fac121ddcdffbc85b02fb9ef681038a03010302538781c0924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a33291324300a84045033ec539f60c70d582c48b9acf04150da091694d83171b44ec9bf2c4bf1ca72f7b8538e9df9bdfd3ba4c305ad11587f12bbfafa00d58ad6051d54962df196af2827a86f4bde3cf7d7c1a9dcb6e17f660badefbc892309bb145f00000000"))
+    #
+    # test_ctx = ExecutionContext(
+    #     tx=known_tx,
+    #     input_index=0,
+    #     utxo=test_p2tr_utxo,
+    #     amount=test_p2tr_utxo.amount,
+    #     tapscript=True,
+    #     is_segwit=True
+    # )
+    #
+    # engine = ScriptEngine()
+    # script_validated = engine.validate_segwit(test_p2tr_pubkey, test_ctx)
+    #
+    # # --- LOGGING
+    # print(f"TREE: {tree.to_json()}")
+    # print(f"MERKLE ROOT: {tree.merkle_root.hex()}")
+    # print(f"TWEAK: {tweak.hex()}")
+    # print(f"TWEAK PUBKEY: {tweak_pubkey.tweaked_pubkey.x_bytes().hex()}")
+    # print(f"SCRIPT PUBKEY: {test_p2tr_pubkey.to_json()}")
+    # print(f"KNOWN TX: {known_tx.to_json()}")
+    # print(f"PUBKEYS AGREE: {test_p2tr_pubkey.script == known_scriptpubkey}")
+    # print(f"VALID SCRIPT: {script_validated}")
