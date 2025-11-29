@@ -5,14 +5,14 @@ import secrets
 from typing import Tuple
 
 from src.core.exceptions import ECDSAError
-from src.cryptography.ecc import SECP256K1, EllipticCurve, Point
-
-# TODO: Move curve to Format. Fix curve project-wide in formats
+from src.cryptography.ecc import SECP256K1, Point
 
 __all__ = ["ecdsa", "verify_ecdsa"]
 
+curve = SECP256K1
 
-def ecdsa(private_key: int, message: bytes, curve: EllipticCurve = SECP256K1) -> Tuple[int, int]:
+
+def ecdsa(private_key: int, message: bytes, nonce: int = None) -> Tuple[int, int]:
     """
     Generates an ECDSA signature for a given private_key and message hash on the specified curve.
 
@@ -80,8 +80,7 @@ def ecdsa(private_key: int, message: bytes, curve: EllipticCurve = SECP256K1) ->
     return r, s
 
 
-def verify_ecdsa(signature: tuple, message: bytes, public_key: Point | tuple,
-                 curve: EllipticCurve = SECP256K1) -> bool:
+def verify_ecdsa(signature: tuple, message: bytes, public_key: Point | tuple) -> bool:
     """
     We verify that the given signature corresponds to the correct public_key for the given hex_string.
 
@@ -93,8 +92,6 @@ def verify_ecdsa(signature: tuple, message: bytes, public_key: Point | tuple,
         The hash of the message that was signed.
     public_key : tuple
         The public key used for verification.
-    curve : EllipticCurve (optional)
-        The elliptic curve used for cryptography. Defaults to secp256k1
 
     Returns
     -------
@@ -113,7 +110,6 @@ def verify_ecdsa(signature: tuple, message: bytes, public_key: Point | tuple,
     5) If r = x (mod n), the signature is valid.
     """
     # Setup
-    pk = Point(*public_key) if isinstance(public_key, tuple) else public_key
     n = curve.order
     r, s = signature
 

@@ -10,7 +10,8 @@ class PubKey:
     """
     __slots__ = ("x", "y")
 
-    def __init__(self, private_key: int):
+    def __init__(self, private_key: int | bytes):
+        private_key = int.from_bytes(private_key, "big") if isinstance(private_key, bytes) else private_key
         self.x, self.y = SECP256K1.multiply_generator(private_key)
 
     # --- OVERRIDES --- #
