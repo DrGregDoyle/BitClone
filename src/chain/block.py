@@ -130,26 +130,6 @@ class Block(Serializable):
         self.txs = txs
         self.merkle_tree = MerkleTree([t.txid for t in self.txs])
 
-    # --- BLOCK VALIDATION --- #
-    def validate_block(self):
-        """
-        To be run upon construction. We want to verify the following:
-            - First tx in the list is a coinbase Transaction
-            - Validate each tx itself
-            - The total amount of inputs exceeds the total amount of outputs
-            - Tx Weight doesn't exceed 4 000 000 (4 million)
-        """
-        pass
-
-    def _validate_coinbase(self):
-        pass
-
-    def _validate_txs(self):
-        pass
-
-    def _validate_amount(self):
-        pass
-
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):
         stream = get_stream(byte_stream)

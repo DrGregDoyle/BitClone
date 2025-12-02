@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 
 from src.core import ScriptSigError, SCRIPT, OPCODES
 from src.script.parser import to_asm
-from src.script.scriptpubkey import P2WPKH_Key
+from src.script.script_types import P2WPKH_Key
 
 __all__ = ["P2PK_Sig", "P2PKH_Sig", "ScriptSig", 'P2MS_Sig', "P2SH_Sig", "P2SH_P2WPKH_Sig"]
 
@@ -47,7 +47,7 @@ class ScriptSig(ABC):
             return b'\x4d' + item_len.to_bytes(2, "little") + item
         # OP_PUSHDATA4
         elif item_len <= 0xffffffff:
-            return b'\x4d' + item_len.to_bytes(4, "little") + item
+            return b'\x4e' + item_len.to_bytes(4, "little") + item
         else:
             raise ScriptSigError("Item of incorrect length to be pushed on stack.")
 
@@ -173,9 +173,10 @@ class P2SH_Sig(ScriptSig):
         -A data push of the redeem script
     """
 
-    def __init__(self, scriptsig: bytes | ScriptSig, redeem_script: bytes):
-        scriptsig_bytes = scriptsig.script if isinstance(scriptsig, ScriptSig) else scriptsig
-        self.script = scriptsig_bytes + self.pushdata(redeem_script)
+    def __init__(self, signatures: bytes | list[bytes], redeem_script: bytes):
+        sig_bytes = b''.join([self.pushdata(sig) for sig in signatures]) if isinstance(signatures,
+                                                                                       list) else signatures
+        self.script = sig_bytes + self.pushdata(redeem_script)
 
     @classmethod
     def from_bytes(cls, scriptsig: bytes):

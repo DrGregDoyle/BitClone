@@ -8,7 +8,7 @@ created from a previous transactions data + a specific TxOutput.
 from src.core import OPCODES
 from src.data import serialize_data, Leaf, get_control_block, TweakPubkey
 from src.script.context import ExecutionContext
-from src.script.scriptpubkey import P2PK_Key, P2PKH_Key, P2MS_Key, P2SH_Key, P2WPKH_Key, P2WSH_Key, P2TR_Key
+from src.script.script_types import P2PK_Key, P2PKH_Key, P2MS_Key, P2SH_Key, P2WPKH_Key, P2WSH_Key, P2TR_Key
 from src.script.scriptsig import P2PK_Sig, P2PKH_Sig, P2MS_Sig, P2SH_Sig, P2SH_P2WPKH_Sig
 from src.tx import Transaction, WitnessField
 from src.tx.tx import UTXO

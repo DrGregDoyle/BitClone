@@ -1,34 +1,23 @@
 """
 A method for constructing and signing transactions
 """
+from src.core import SignatureError
+from src.cryptography import hash160
 from src.data import PubKey
 from src.script.parser import to_asm
-from src.script.scriptpubkey import P2PKH_Key
-from src.script.scriptsig import P2PK_Sig, P2PKH_Sig, P2MS_Sig
+from src.script.scriptpubkey import P2PKH_Key, P2SH_Key, P2MS_Key
+from src.script.scriptsig import P2PK_Sig, P2PKH_Sig, P2MS_Sig, P2SH_Sig
 from src.script.signature_engine import SignatureEngine, SigHash
 from src.tx import Transaction
 
 
-def to_int(data: bytes | int | str) -> int:
-    """
-    Returns integer from 3 common data types
+class TxEngine:
 
-    Raises: Value error if data of incorrect format
-    """
-    if isinstance(data, int):
-        return data
-    elif isinstance(data, bytes):
-        return int.from_bytes(data, "big")
-    elif isinstance(data, str):
-        # Assume hex
-        try:
-            return int.from_bytes(bytes.fromhex(data), "big")
-        except ValueError as e:
-            print(e)
-    return -1
+    def __init__(self, sig_engine: SignatureEngine | None = None):
+        self.sig_engine = sig_engine or SignatureEngine()
 
 
-# --- SIGN TRANSACTION TYPES --- #
+# --- DER-ENCODED SIGNATURES --- #
 def get_legacy_sig(private_key: bytes | int, tx: Transaction, input_index: int, scriptpubkey: bytes, sighash_num: int
 = 1) -> bytes:
     """
@@ -51,6 +40,27 @@ def get_legacy_sig(private_key: bytes | int, tx: Transaction, input_index: int, 
     return der_encoding + SigHash(sighash_num).to_byte()
 
 
+def get_segwit_sig(private_key: bytes | int, tx: Transaction, input_index: int, amount: int, scriptpubkey: bytes,
+                   sighash_num: int = 1) -> bytes:
+    """
+    We return the DER-encoded signature using the segwit sighash algorithm
+    """
+    # --- Step 1: Configure SignatureEngine and format variables
+    sig_engine = SignatureEngine()
+    privkey_int = int.from_bytes(private_key, "big") if isinstance(private_key, bytes) else private_key
+
+    # --- Step 2: Get segwit sighash
+    segwit_sighash = sig_engine.get_segwit_sighash(tx, input_index, amount, scriptpubkey, sighash_num)
+
+    # --- Step 3: Sign the segwit sighash and get the DER-encoding of the signature
+    der_encoding = sig_engine.get_ecdsa_sig(privkey_int, segwit_sighash)
+
+    # --- Step 4: Append sighash byte to der-encoded signature and return
+    return der_encoding + SigHash(sighash_num).to_byte()
+
+
+# --- SIGN TRANSACTION TYPES --- #
+
 def sign_p2pk_tx(private_key: bytes | int, tx: Transaction, input_index: int, scriptpubkey: bytes, sighash_num: int
 = 1) -> Transaction:
     """
@@ -58,7 +68,7 @@ def sign_p2pk_tx(private_key: bytes | int, tx: Transaction, input_index: int, sc
     """
     sig = get_legacy_sig(private_key, tx, input_index, scriptpubkey, sighash_num)
     scriptsig = P2PK_Sig(sig)
-    tx.inputs[input_index].scriptsig = scriptsig
+    tx.inputs[input_index].scriptsig = scriptsig.script
     return tx
 
 
@@ -68,10 +78,8 @@ def sign_p2pkh_tx(private_key: bytes | int, tx: Transaction, input_index: int, s
     We get the signature for the given transaction and insert it into the scriptsig of the Transaction input at the
     given input_index
     """
-    # Get private_key as integer
-    privkey_int = int.from_bytes(private_key, "big") if isinstance(private_key, bytes) else private_key
     # Get sig
-    sig = get_legacy_sig(privkey_int, tx, input_index, scriptpubkey, sighash_num)
+    sig = get_legacy_sig(private_key, tx, input_index, scriptpubkey, sighash_num)
     # Get pubkey
     pubkey = PubKey(private_key)
     scriptsig = P2PKH_Sig(sig, pubkey.compressed())
@@ -79,134 +87,74 @@ def sign_p2pkh_tx(private_key: bytes | int, tx: Transaction, input_index: int, s
     return tx
 
 
-def sign_p2ms_tx(
-        private_keys: list[bytes | int],
-        tx: Transaction,
-        input_index: int,
-        scriptpubkey: bytes,
-        sighash_num: int = 1) -> Transaction:
+def sign_p2ms_tx(private_keys: list[bytes | int], tx: Transaction, input_index: int, scriptpubkey: bytes,
+                 sighash_num: int = 1) -> Transaction:
     """
     Pay to MultiScript. Will create the P2MS sighash
     """
-    # Get common sighash to sign
-    sig_engine = SignatureEngine()
-
     # Get signatures for all private keys
-    signatures = []
-    for privkey in private_keys:
-        p2ms_sighash = get_legacy_sig(privkey, tx, input_index, scriptpubkey, sighash_num)
-        signatures.append(
-            sig_engine.get_ecdsa_sig(to_int(privkey), p2ms_sighash)
-        )
-
+    signatures = [get_legacy_sig(privkey, tx, input_index, scriptpubkey, sighash_num) for privkey in private_keys]
     # Create ScriptSig
     p2ms_scriptsig = P2MS_Sig(signatures)
+    # Add scriptsig to tx and return
     tx.inputs[input_index].scriptsig = p2ms_scriptsig.script
     return tx
 
 
-# # elif script_type == ScriptType.P2MS:
-#     #     # Generate multiple signatures from the same sighash
-#     #     signatures = []
-#     #     for pk in privkeys:
-#     #         full_sig = create_full_sig(pk, sighash_num)
-#     #         signatures.append(full_sig)
-#     #
-#     #     scriptsig = P2MS_Sig(signatures).script
+def sign_p2sh_tx(private_key: bytes | int, tx: Transaction, input_index: int, scriptpubkey: bytes,
+                 redeem_script: bytes, sighash_num: int = 1) -> Transaction:
+    """
+    We create the P2SH ScriptSig for a P2SH ScriptPubKey with only one signature
+    """
+    # --- Validation
+    if not P2SH_Key.matches(scriptpubkey):
+        raise SignatureError("Given ScriptPubKey doesn't match P2SH format")
 
-# def sign_legacy_tx(
-#         private_key: bytes | int,
-#         tx: Transaction,
-#         input_index: int,
-#         scriptpubkey: bytes, sighash_num: int = 1
-#
-# ) -> Transaction:
-#     """
-#     Signs a legacy transaction input and updates the transaction.
-#
-#     Args:
-#         private_key: The private key of the user
-#         tx: The transaction to sign
-#         input_index: Index of the input being signed
-#         scriptpubkey: The scriptpubkey referenced by the input
-#         sighash_num: The sighash type to be used in the signature engine
-#
-#     Returns:
-#         The transaction with the signed input
-#     """
+    # --- Get legacy signature
+    legacy_sig = get_legacy_sig(private_key, tx, input_index, redeem_script, sighash_num)
 
-#
-#     # --- Step 5: Construct ScriptSig
-#     is_p2pk = False
-#     is_p2pkh = False
-#     is_p2ms = False
-#     is_p2sh = False
-#
-#     # Figure out ScriptSig based on ScriptPubKey
-#     if P2PK_Key.matches(scriptpubkey):
-#         is_p2pk = True
-#     if P2PKH_Key.matches(scriptpubkey):
-#         is_p2pkh = True
-#     if P2MS_Key.matches(scriptpubkey):
-#         is_p2ms = True
-#     if P2SH_Key.matches(scriptpubkey):
-#         is_p2sh = True
-#
-#     # # Validate input
-#     # if script_type == ScriptType.P2MS:
-#     #     if privkeys is None or len(privkeys) == 0:
-#     #         raise SignatureError("P2MS requires 'privkeys' parameter (list of private keys)")
-#     # else:
-#     #     if privkey is None:
-#     #         raise SignatureError(f"{script_type} requires 'privkey' parameter")
-#     #
-#     # # Create signature context
-#     # legacy_ctx = SignatureContext(
-#     #     tx=tx,
-#     #     input_index=input_index,
-#     #     sighash_type=sighash_num,
-#     #     script_code=script_code
-#     # )
-#     #
-#     # # Get the sighash (same for all signatures)
-#     # legacy_sighash = self.get_legacy_sighash(legacy_ctx)
-#     #
-#     # def create_full_sig(_privkey: int | bytes, _sighash_num: int = 0):
-#     #     privkey_int = int.from_bytes(_privkey, "big") if isinstance(_privkey, bytes) else _privkey
-#     #     der_sig = self.get_ecdsa_sig(privkey_int, legacy_sighash)
-#     #     return der_sig + SigHash(_sighash_num).to_byte()
-#     #
-#     # # Build scriptsig based on script type
-#     # if script_type == ScriptType.P2PK:
-#     #     full_sig = create_full_sig(privkey, sighash_num)
-#     #     scriptsig = P2PK_Sig(full_sig).script
-#     #
-#     # elif script_type == ScriptType.P2PKH:
-#     #     full_sig = create_full_sig(privkey, sighash_num)
-#     #
-#     #     # Get pubkey (either provided or derive from privkey)
-#     #     pubkey = kwargs.get('pubkey')
-#     #     if pubkey is None:
-#     #         pubkey = PubKey(privkey).compressed() if isinstance(privkey, int) else PubKey.from_bytes(
-#     #             privkey).compressed()
-#     #
-#     #     scriptsig = P2PKH_Sig(full_sig, pubkey).script
-#     #
-#     # elif script_type == ScriptType.P2MS:
-#     #     # Generate multiple signatures from the same sighash
-#     #     signatures = []
-#     #     for pk in privkeys:
-#     #         full_sig = create_full_sig(pk, sighash_num)
-#     #         signatures.append(full_sig)
-#     #
-#     #     scriptsig = P2MS_Sig(signatures).script
-#     #
-#     # else:
-#     #     raise SignatureError(f"Unsupported script type for legacy signing: {script_type}")
-#     #
-#     # # Update the transaction
-#     # tx.inputs[input_index].scriptsig = scriptsig
-#     # return tx
+    # --- Create P2SH ScriptSig
+    p2sh_scriptsig = P2SH_Sig(legacy_sig, redeem_script)
+
+    # Add scriptsig to tx and return
+    tx.inputs[input_index].scriptsig = p2sh_scriptsig.script
+    return tx
+
+
+def sign_p2sh_p2ms_tx(
+        private_keys: list[bytes | int],
+        tx: Transaction,
+        input_index: int,
+        scriptpubkey: bytes,
+        redeem_script: bytes,
+        sighash_num: int = 1,
+) -> Transaction:
+    """
+    Sign a P2SH-wrapped multisig (P2SH-P2MS) input.
+    """
+    # --- Validation
+    # Verify ScriptPubKey is a P2SH
+    if not P2SH_Key.matches(scriptpubkey):
+        raise SignatureError("Given ScriptPubKey doesn't match P2SH format")
+    # Verify redeem script is P2MS
+    if not P2MS_Key.matches(redeem_script):
+        raise SignatureError("Given redeem script doesn't match P2MS format")
+    if not P2SH_Key(hash_data=hash160(redeem_script)).script == scriptpubkey:
+        raise SignatureError("Redeem script does not hash to given scriptpubkey")
+
+    # 1) Get legacy signatures using redeem_script as the scriptCode
+    signatures = [
+        get_legacy_sig(privkey, tx, input_index, redeem_script, sighash_num)
+        for privkey in private_keys
+    ]
+
+    # 2) Build P2SH ScriptSig: OP_0 <sig1> ... <sigm> <redeem_script>
+    p2sh_scriptsig = P2SH_Sig(signatures, redeem_script)
+
+    # 3) Attach to tx and return
+    tx.inputs[input_index].scriptsig = b'\x00' + p2sh_scriptsig.script  # Add OP_0 for P2MS nulldata bug
+    return tx
+
 
 # def sign_segwit_tx(
 #         self,

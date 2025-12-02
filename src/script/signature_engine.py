@@ -12,7 +12,7 @@ from src.cryptography import ecdsa, verify_ecdsa, schnorr_verify, schnorr_sig, h
     SECP256K1
 from src.data import encode_der_signature, decode_der_signature, write_compact_size, PubKey, get_control_block, \
     Leaf, TweakPubkey, Tree, get_tweak, get_control_byte
-from src.script.scriptpubkey import P2TR_Key
+from src.script.script_types import P2TR_Key
 from src.tx import Transaction, WitnessField, UTXO
 
 __all__ = ["SigHash", "SignatureEngine"]
@@ -56,21 +56,24 @@ class SignatureEngine:
             script_code == scriptpubkey
 
         """
-
         # Verify
         if any(t is None for t in [tx, input_index, sighash_num, scriptpubkey]):
             raise SignatureError("Insufficient context items for legacy signature hash")
 
+        # Get tx_copy
+        # tx_copy = Transaction.from_bytes(tx.to_bytes())
+        tx_copy = tx.clone()
+
         # 1, Remove all existing scriptsigs
-        for i in tx.inputs:
+        for i in tx_copy.inputs:
             i.scriptsig = bytes()
 
         # 2. Put scriptpubkey in the scriptsig for the input
-        tx.inputs[input_index].scriptsig = scriptpubkey
+        tx_copy.inputs[input_index].scriptsig = scriptpubkey
 
         # 3. Append the sighash byte at the end of the serialized tx data
         sighash = SigHash(sighash_num)
-        data = tx.to_bytes() + sighash.for_hashing()
+        data = tx_copy.to_bytes() + sighash.for_hashing()
 
         # 4. Return sighash
         return hash256(data)
@@ -80,28 +83,23 @@ class SignatureEngine:
         """
         We return the sighash for a segwit Transaction
         """
-        # 1. Get tx from context
-        # Get context items
-        # tx = ctx.tx
-        # input_index = ctx.input_index
-        # script_code = ctx.script_code
-        # sighash_num = ctx.sighash_type
-        # amount = ctx.amount
+        # 1. Get copy of tx
+        tx_copy = Transaction.from_bytes(tx.to_bytes())
 
         # 2. Construct the preimage and preimage hash
         # 2-1. version
-        serialized_version = tx.version.to_bytes(TX.VERSION, "little")
+        serialized_version = tx_copy.version.to_bytes(TX.VERSION, "little")
 
         # 2-2. hash256(serialized txid+vout for all the inputs in the tx)
-        serialized_inputs = b''.join([txin.outpoint for txin in tx.inputs])
+        serialized_inputs = b''.join([txin.outpoint for txin in tx_copy.inputs])
         hashed_inputs = hash256(serialized_inputs)
 
         # 2-3. Serialize and hash the sequence of each input
-        serialized_sequences = b''.join([txin.sequence.to_bytes(TX.SEQUENCE, "little") for txin in tx.inputs])
+        serialized_sequences = b''.join([txin.sequence.to_bytes(TX.SEQUENCE, "little") for txin in tx_copy.inputs])
         hashed_sequences = hash256(serialized_sequences)
 
         # 2-4. Serialize the outpoint for the input we're signing
-        my_input = tx.inputs[input_index]
+        my_input = tx_copy.inputs[input_index]
         my_input_outpoint = my_input.outpoint
 
         # 2-5. Create script for the input we're signing
@@ -114,11 +112,11 @@ class SignatureEngine:
         my_sequence = my_input.sequence.to_bytes(TX.SEQUENCE, "little")
 
         # 2-8. Serialized and hash all outputs
-        serialized_outputs = b''.join([txout.to_bytes() for txout in tx.outputs])
+        serialized_outputs = b''.join([txout.to_bytes() for txout in tx_copy.outputs])
         hashed_outputs = hash256(serialized_outputs)
 
         # 2-9. Locktime
-        serialized_locktime = tx.locktime.to_bytes(TX.LOCKTIME, "little")
+        serialized_locktime = tx_copy.locktime.to_bytes(TX.LOCKTIME, "little")
 
         # 2.10 Construct pre-image
         preimage = (
@@ -129,18 +127,19 @@ class SignatureEngine:
         # 2-11. Add signature hash type
         preimage_sighash = preimage + SigHash(sighash_num).for_hashing()
 
-        # --- LOGGING --- #
-        print(" --- SEGWIT SIGHASH ---")
-        print("---" * 80)
-        print(f"VERSION: {serialized_version.hex()}")
-        print(f"HASHED INPUTS: {hashed_inputs.hex()}")
-        print(f"HASHED SEQUENCES: {hashed_sequences.hex()}")
-        print(f"INPUT: {my_input_outpoint.hex()}")
-        print(f"SCRIPTCODE: {scriptcode.hex()}")
-        print(f"AMOUNT: {serialized_amount.hex()}")
-        print(f"SEQUENCE: {my_sequence.hex()}")
-        print(f"HASHED OUTPUTS: {hashed_outputs.hex()}")
-        print(f"LOCKTIME: {serialized_locktime.hex()}")
+        # # --- LOGGING --- #
+        # print(" --- SEGWIT SIGHASH ---")
+        # print("---" * 80)
+        # print(f"VERSION: {serialized_version.hex()}")
+        # print(f"HASHED INPUTS: {hashed_inputs.hex()}")
+        # print(f"HASHED SEQUENCES: {hashed_sequences.hex()}")
+        # print(f"INPUT: {my_input_outpoint.hex()}")
+        # print(f"SCRIPTCODE: {scriptcode.hex()}")
+        # print(f"AMOUNT: {serialized_amount.hex()}")
+        # print(f"SEQUENCE: {my_sequence.hex()}")
+        # print(f"HASHED OUTPUTS: {hashed_outputs.hex()}")
+        # print(f"LOCKTIME: {serialized_locktime.hex()}")
+        # Return hash of pre-image
         return hash256(preimage_sighash)
 
     def get_taproot_sighash(self,
@@ -157,17 +156,19 @@ class SignatureEngine:
 
         NOTE: We expect the list of utxos to correspond to the list of inputs in the tx
         """
+        # Copy tx
+        tx_copy = Transaction.from_bytes(tx.to_bytes())
 
         #  Get elements for pre-image
         hash_type = SigHash(sighash_num)
         hash_byte = hash_type.to_byte()
-        version = tx.version.to_bytes(TX.VERSION, "little")
-        locktime = tx.locktime.to_bytes(TX.LOCKTIME, "little")
+        version = tx_copy.version.to_bytes(TX.VERSION, "little")
+        locktime = tx_copy.locktime.to_bytes(TX.LOCKTIME, "little")
 
         # --- TX ELEMENTS --- #
-        _prevouts = b''.join([txin.outpoint for txin in tx.inputs])
-        _sequences = b''.join([txin.sequence.to_bytes(TX.SEQUENCE, "little") for txin in tx.inputs])
-        _outputs = b''.join([txout.to_bytes() for txout in tx.outputs])
+        _prevouts = b''.join([txin.outpoint for txin in tx_copy.inputs])
+        _sequences = b''.join([txin.sequence.to_bytes(TX.SEQUENCE, "little") for txin in tx_copy.inputs])
+        _outputs = b''.join([txout.to_bytes() for txout in tx_copy.outputs])
 
         # 1. Get context elements
         if ext_flag == 1:
@@ -196,7 +197,7 @@ class SignatureEngine:
         spend_type = spend_type_int.to_bytes(1, "little")
 
         # Input specific
-        temp_input = tx.inputs[input_index]
+        temp_input = tx_copy.inputs[input_index]
         temp_utxo = utxos[input_index]
         input_outpoint = temp_input.outpoint
         input_amount = temp_utxo.amount.to_bytes(TX.AMOUNT, "little")  # From signature Context
@@ -210,7 +211,7 @@ class SignatureEngine:
                 write_compact_size(len(annex)) + annex
             )
 
-        hash_single_output = sha256(tx.outputs[input_index].to_bytes())
+        hash_single_output = sha256(tx_copy.outputs[input_index].to_bytes())
 
         # 3. Assemble message for TapSighash hash function
         message = hash_byte + version + locktime
@@ -282,8 +283,8 @@ if __name__ == "__main__":
     print(f" --- TAPROOT SIGNATURE TESTING ---")
     print(sep)
 
-    xonly_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
-    pubkey_point = PubKey.from_bytes(xonly_pubkey)
+    _xonly_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
+    pubkey_point = PubKey.from_bytes(_xonly_pubkey)
     leaf_scripts = [
         bytes.fromhex("5187"),
         bytes.fromhex("5287"),
@@ -293,10 +294,10 @@ if __name__ == "__main__":
     ]
     leaves = [Leaf(s) for s in leaf_scripts]
     tree = Tree(leaf_scripts)
-    tweak = get_tweak(xonly_pubkey, tree.merkle_root)
-    tweak_pubkey = TweakPubkey(xonly_pubkey, tree.merkle_root)
+    tweak = get_tweak(_xonly_pubkey, tree.merkle_root)
+    tweak_pubkey = TweakPubkey(_xonly_pubkey, tree.merkle_root)
 
-    test_p2tr_pubkey = P2TR_Key(xonly_pubkey, leaf_scripts)
+    test_p2tr_pubkey = P2TR_Key(_xonly_pubkey, leaf_scripts)
 
     # --- SPEND
     unsigned_raw_tx = Transaction.from_bytes(bytes.fromhex(
@@ -305,7 +306,7 @@ if __name__ == "__main__":
     # --- CREATE CONTROL BLOCK
     controL_byte = get_control_byte(tweak_pubkey.tweaked_pubkey.to_point())
     merkle_path = tree.generate_merkle_path(bytes.fromhex("5387"))
-    control_block = get_control_block(xonly_pubkey, tree.merkle_root, merkle_path)
+    control_block = get_control_block(_xonly_pubkey, tree.merkle_root, merkle_path)
 
     # --- CREATE WITNESS
     script_inputs = bytes.fromhex("03")

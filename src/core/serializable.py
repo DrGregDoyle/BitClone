@@ -3,9 +3,11 @@ The Abstract Base Class for all serializable elements in BitClone
 """
 import json
 from abc import ABC, abstractmethod
+from typing import TypeVar
 
 from src.core.byte_stream import SERIALIZED
 
+T = TypeVar("T", bound="Serializable")
 __all__ = ["Serializable"]
 
 
@@ -43,6 +45,12 @@ class Serializable(ABC):
     def to_json(self) -> str:
         """Return a pretty-printed JSON string of the object."""
         return json.dumps(self.to_dict(), indent=2)
+
+    def clone(self: T) -> T:
+        """
+        Return a deep copy via round-tripping through bytes.
+        """
+        return self.__class__.from_bytes(self.to_bytes())
 
     def __eq__(self, other) -> bool:
         """Compare two Serializable instances based on their byte representation."""

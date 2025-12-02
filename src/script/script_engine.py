@@ -11,7 +11,7 @@ from src.core.opcodes import OPCODES
 from src.cryptography import sha256
 from src.script.context import ExecutionContext
 from src.script.opcode_map import OPCODE_MAP
-from src.script.scriptpubkey import ScriptPubKey, P2SH_Key, P2WPKH_Key, P2PKH_Key, P2WSH_Key, P2TR_Key
+from src.script.script_types import ScriptPubKey, P2SH_Key, P2WPKH_Key, P2PKH_Key, P2WSH_Key, P2TR_Key
 from src.script.scriptsig import ScriptSig
 from src.script.signature_engine import SignatureEngine
 from src.script.stack import BitStack, BitNum
