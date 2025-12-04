@@ -159,7 +159,7 @@ class WitnessField(Serializable):
         witness_items = []
         for _ in range(stack_items):
             item_len = read_compact_size(stream)
-            witness_items.append(read_stream(stream, item_len, "WitnessField item"))
+            witness_items.append(read_stream(stream, item_len, "WitnessField data"))
         return cls(witness_items)
 
     def to_bytes(self) -> bytes:
@@ -181,7 +181,7 @@ class WitnessField(Serializable):
             witness_dict.update({
                 x: {
                     "size": write_compact_size(len(temp_item)).hex(),
-                    "item": temp_item.hex()
+                    "data": temp_item.hex()
                 }
             })
         witness_dict.update({"serialized": self.to_bytes().hex()})

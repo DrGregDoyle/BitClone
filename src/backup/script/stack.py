@@ -159,7 +159,7 @@ class BTCStack(Generic[T]):
 
     Following Bitcoin script conventions:
     - The stack grows upward
-    - Index 0 refers to the top item
+    - Index 0 refers to the top data
     - Higher indices refer to deeper items in the stack
     """
 
@@ -179,7 +179,7 @@ class BTCStack(Generic[T]):
 
         # Add initial items if provided
         if items:
-            # Reverse to maintain expected order (last item in list becomes top of stack)
+            # Reverse to maintain expected order (last data in list becomes top of stack)
             for item in reversed(items):
                 self.push(item)
 
@@ -368,7 +368,7 @@ class BTCStack(Generic[T]):
 
     def dup(self) -> None:
         """
-        Duplicate the top stack item.
+        Duplicate the top stack data.
 
         Raises:
             EmptyStackError: If the stack is empty
@@ -399,7 +399,7 @@ class BTCStack(Generic[T]):
 
     def over(self) -> None:
         """
-        Copy the second stack item to the top.
+        Copy the second stack data to the top.
         a b -> a b a (rightmost element is top of stack)
 
         Raises:
@@ -410,7 +410,7 @@ class BTCStack(Generic[T]):
 
     def pick(self, n: int) -> None:
         """
-        Copy the nth stack item to the top.
+        Copy the nth stack data to the top.
 
         Args:
             n: The stack depth to copy from (0-based)
@@ -422,7 +422,7 @@ class BTCStack(Generic[T]):
 
     def roll(self, n: int) -> None:
         """
-        Move the nth stack item to the top.
+        Move the nth stack data to the top.
 
         Args:
             n: The stack depth to move from (0-based)
@@ -436,7 +436,7 @@ class BTCStack(Generic[T]):
 
     def tuck(self) -> None:
         """
-        Copy the top item and insert it below the second item.
+        Copy the top data and insert it below the second data.
         a b -> b a b (rightmost element is top of stack)
 
         Raises:

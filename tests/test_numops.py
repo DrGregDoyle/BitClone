@@ -245,7 +245,7 @@ def test_underflow_unary():
 
 
 def test_underflow_binary():
-    s = stack_top_nums(1)  # only one item
+    s = stack_top_nums(1)  # only one data
     with pytest.raises(BitStackError):
         op_add(s)
     with pytest.raises(BitStackError):

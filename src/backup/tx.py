@@ -172,7 +172,7 @@ class Output(Serializable):
 
 class WitnessItem(Serializable):
     """
-    Represents a Bitcoin witness item. Contains bytes data and the associated length in compact size encoding
+    Represents a Bitcoin witness data. Contains bytes data and the associated length in compact size encoding
     """
     __slots__ = ('item', 'size')
 
@@ -184,7 +184,7 @@ class WitnessItem(Serializable):
     def from_bytes(cls, byte_stream):
         stream = get_stream(byte_stream)
 
-        # Read compact size and item
+        # Read compact size and data
         item_length = read_compact_size(stream)
         item = read_stream(stream, item_length, "witness_item")
 
@@ -196,7 +196,7 @@ class WitnessItem(Serializable):
     def to_dict(self) -> dict:
         return {
             "size": write_compact_size(self.size).hex(),
-            "item": self.item.hex()
+            "data": self.item.hex()
         }
 
 
@@ -221,7 +221,7 @@ class Witness(Serializable):
         Deserialize witness data from the given byte_stream.
         Example pseudo-steps:
           1. Read a CompactSize indicating the number of stack items
-          2. For each item, read a CompactSize length then read that many bytes
+          2. For each data, read a CompactSize length then read that many bytes
         """
         # Check type
         stream = get_stream(byte_stream)
@@ -239,7 +239,7 @@ class Witness(Serializable):
         Serialize the witness data into bytes.
         Example pseudo-steps:
           1. Write a CompactSize for the number of items
-          2. For each item, write the length as a CompactSize, then the item bytes
+          2. For each data, write the length as a CompactSize, then the data bytes
         """
 
         items_bytes = b""

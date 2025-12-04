@@ -551,7 +551,7 @@ class ScriptEngine:
     def _op_ifdup(self):
         """
         OP_IFDUP |  0x73
-        Duplicates the top item on the stick iff it's non-zero
+        Duplicates the top data on the stick iff it's non-zero
         """
         if self.stack.top != b'':
             self.stack.push(self.stack.top)
@@ -566,35 +566,35 @@ class ScriptEngine:
     def _op_drop(self):
         """
         OP_DROP | 0x75
-        Removes the top stack item.
+        Removes the top stack data.
         """
         self.stack.pop()
 
     def _op_dup(self):
         """
         OP_DUP | 0x76
-        Duplicates the top stack item.
+        Duplicates the top stack data.
         """
         self.stack.push(self.stack.top)
 
     def _op_nip(self):
         """
         OP_NIP | -x77
-        Removes the second-to-top stack item
+        Removes the second-to-top stack data
         """
         self.stack.nip()
 
     def _op_over(self):
         """
         OP_OVER | 0x78
-        Copies the second-to-top stack item to the top.
+        Copies the second-to-top stack data to the top.
         """
         self.stack.over()
 
     def _op_pick(self):
         """
         OP_PICK | 0x79
-        The item n back in the stack is copied to the top.
+        The data n back in the stack is copied to the top.
         """
         n = self.stack.pop_num()  # n is BTCNum object
 
@@ -608,7 +608,7 @@ class ScriptEngine:
     def _op_roll(self):
         """
         OP_ROLL | 0x7a
-        The item n back in the stack is moved to the top.
+        The data n back in the stack is moved to the top.
         """
         n = self.stack.pop_num()  # n is BTCNum object
         self.stack.roll(n.value)
@@ -616,7 +616,7 @@ class ScriptEngine:
     def _op_rot(self):
         """
         OP_ROT | 0x7b
-        The 3rd item down the stack is moved to the top.
+        The 3rd data down the stack is moved to the top.
         """
         self.stack.rot()
 
@@ -630,7 +630,7 @@ class ScriptEngine:
     def _op_tuck(self):
         """
         OP_TUCK | 0x7d
-        The item at the top of the stack is copied and inserted before the second-to-top item.
+        The data at the top of the stack is copied and inserted before the second-to-top data.
         """
         self.stack.tuck()
 
@@ -967,7 +967,7 @@ class ScriptEngine:
     def _op_checklocktimeverify(self):
         """
         OP_CHECKLOCKTIMEVERIFY | 0xb1
-        Marks transaction as invalid if the top stack item is greater than the transaction's nLockTime field.
+        Marks transaction as invalid if the top stack data is greater than the transaction's nLockTime field.
         """
         pass
 
@@ -975,7 +975,7 @@ class ScriptEngine:
         """
         OP_CHECKSEQUENCEVERIFY | 0xb2
         Marks transaction as invalid if the relative lock time of the input (enforced by BIP 68 with nSequence) is
-        not equal to or longer than the value of the top stack item.
+        not equal to or longer than the value of the top stack data.
         """
         pass
 

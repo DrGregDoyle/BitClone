@@ -105,7 +105,7 @@ def op_2swap(main_stack: BitStack):
 def op_ifdup(main_stack: BitStack):
     """
     OP_IFDUP |  0x73
-    Duplicates the top item on the stick iff it's non-zero
+    Duplicates the top data on the stick iff it's non-zero
     """
     if main_stack.top != b'':
         main_stack.push(main_stack.top)
@@ -122,7 +122,7 @@ def op_depth(main_stack: BitStack):
 def op_drop(main_stack: BitStack):
     """
     OP_DROP | 0x75
-    Removes the top stack item.
+    Removes the top stack data.
     """
     main_stack.pop()
 
@@ -130,7 +130,7 @@ def op_drop(main_stack: BitStack):
 def op_dup(main_stack: BitStack):
     """
     OP_DUP | 0x76
-    Duplicates the top stack item. Fail on empty stack
+    Duplicates the top stack data. Fail on empty stack
     """
     if main_stack.is_empty:
         raise BitStackError("Cannot duplicate empty stack")
@@ -140,7 +140,7 @@ def op_dup(main_stack: BitStack):
 def op_nip(main_stack: BitStack):
     """
     OP_NIP | 0x77
-    Removes the second-to-top stack item
+    Removes the second-to-top stack data
     """
     [top, _] = main_stack.popitems(2)
     main_stack.push(top)
@@ -149,7 +149,7 @@ def op_nip(main_stack: BitStack):
 def op_over(main_stack: BitStack):
     """
     OP_OVER | 0x78
-    Copies the second-to-top stack item to the top.
+    Copies the second-to-top stack data to the top.
     """
     [top, second] = main_stack.popitems(2)
     main_stack.pushlist([second, top, second])
@@ -158,7 +158,7 @@ def op_over(main_stack: BitStack):
 def op_pick(main_stack: BitStack):
     """
     OP_PICK | 0x79
-    The item n back in the stack is copied to the top. n is assumed to be on top of stack
+    The data n back in the stack is copied to the top. n is assumed to be on top of stack
     """
     n = main_stack.popnum()
 
@@ -173,7 +173,7 @@ def op_pick(main_stack: BitStack):
 def op_roll(main_stack: BitStack):
     """
     OP_ROLL | 0x7a
-    The item n back in the stack is moved to the top.
+    The data n back in the stack is moved to the top.
     """
     n = main_stack.popnum()
 
@@ -189,7 +189,7 @@ def op_roll(main_stack: BitStack):
 def op_rot(main_stack: BitStack):
     """
     OP_ROT | 0x7b
-    The 3rd item down the stack is moved to the top.
+    The 3rd data down the stack is moved to the top.
     """
     [first, second, third] = main_stack.popitems(3)
     main_stack.pushlist([third, first, second])
@@ -206,7 +206,7 @@ def op_swap(main_stack: BitStack):
 def op_tuck(main_stack: BitStack):
     """
     OP_TUCK | 0x7d
-    The item at the top of the stack is copied and inserted before the second-to-top item.
+    The data at the top of the stack is copied and inserted before the second-to-top data.
     """
     [top, first] = main_stack.popitems(2)  # [top, first]
     main_stack.pushlist([top, first, top])

@@ -8,8 +8,10 @@ created from a previous transactions data + a specific TxOutput.
 from src.core import OPCODES
 from src.data import serialize_data, Leaf, get_control_block, TweakPubkey
 from src.script.context import ExecutionContext
-from src.script.script_types import P2PK_Key, P2PKH_Key, P2MS_Key, P2SH_Key, P2WPKH_Key, P2WSH_Key, P2TR_Key
-from src.script.scriptsig import P2PK_Sig, P2PKH_Sig, P2MS_Sig, P2SH_Sig, P2SH_P2WPKH_Sig
+from src.script.script_types import P2PK_Key, P2PKH_Key, P2MS_Key, P2SH_Key, P2WPKH_Key, P2WSH_Key, P2TR_Key, \
+    P2PK_Sig, \
+    P2PKH_Sig, P2MS_Sig, P2SH_Sig, P2SH_P2WPKH_Sig
+
 from src.tx import Transaction, WitnessField
 from src.tx.tx import UTXO
 
@@ -256,7 +258,7 @@ def test_p2wsh(script_engine):
         bytes.fromhex(
             "04004730440220415899bbee08e42376d06e8f86c92b4987613c2816352fe09cd1479fd639f18c02200db57f508f69e266d76c23891708158bda18690c165a41b0aa88303b97609f780147304402203973de2303e8787767090dd25c8a4dc97ce1aa7eb4c0962f13952ed4e856ff8e02203f1bb425def789eea8be46407d10b3c8730407176aef4dc2c29865eb5e5542bf0169522103848e308569b644372a5eb26665f1a8c34ca393c130b376db2fae75c43500013c2103cec1ee615c17e06d4f4b0a08617dffb8e568936bdff18fb057832a58ad4d1b752103eed7ae80c34d70f5ba93f93965f69f3c691da0f4607f242f4fd6c7a48789233e53ae")
     )
-    p2wsh_witness_script = p2wsh_witness.items[-1]  # Last item in p2wsh witness field is the witness script for hashing
+    p2wsh_witness_script = p2wsh_witness.items[-1]  # Last data in p2wsh witness field is the witness script for hashing
 
     # Tx
     p2wsh_tx = Transaction.from_bytes(

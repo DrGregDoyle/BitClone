@@ -48,7 +48,7 @@ class ScriptSig:
 
     def _pushdata(self, item: bytes) -> bytes:
         """
-        For a given item, return the corresponding OP_CODES + Data for a datapush
+        For a given data, return the corresponding OP_CODES + Data for a datapush
         """
         length = len(item)
         if length <= 75:

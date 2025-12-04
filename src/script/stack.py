@@ -175,7 +175,7 @@ class BitStack:
     def __init__(self, items: list = None, max_size: int = MAX_STACK_ITEMS):
         """
         The stack is ordered so that the right-most element is at the top of the stack.
-        Given a list, we apply the items from left to right, so that the first item will be at the bottom of the stack
+        Given a list, we apply the items from left to right, so that the first data will be at the bottom of the stack
         """
         self.max_size = max_size
         self.stack = deque()
@@ -276,7 +276,7 @@ class BitStack:
         # Empty stack returns empty dict
         if not self.is_empty:
             for i, item in enumerate(self.stack):
-                # Format item | bytes else BitNum
+                # Format data | bytes else BitNum
                 item = item.hex() if isinstance(item, bytes) else item.value
                 stack_dict.update({i: item})
         return stack_dict

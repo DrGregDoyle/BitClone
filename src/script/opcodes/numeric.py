@@ -69,7 +69,7 @@ def op_equalverify(main_stack: BitStack):
 def op_1add(main_stack: BitStack):
     """
     OP_1ADD | 0x8b
-    Add 1 to the top item on the stack.
+    Add 1 to the top data on the stack.
     """
     num = main_stack.popnum()  # int
     main_stack.push(BitNum(num + 1))
@@ -105,7 +105,7 @@ def op_abs(main_stack: BitStack):
 def op_not(main_stack: BitStack):
     """
     OP_NOT | 0x91
-    Pop the top item and push 1 if it is zero; otherwise, push 0
+    Pop the top data and push 1 if it is zero; otherwise, push 0
     """
     num = main_stack.popnum()  # int
     main_stack.pushbool(num == 0)

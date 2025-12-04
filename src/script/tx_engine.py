@@ -5,8 +5,7 @@ from src.core import SignatureError
 from src.cryptography import hash160
 from src.data import PubKey
 from src.script.parser import to_asm
-from src.script.scriptpubkey import P2PKH_Key, P2SH_Key, P2MS_Key
-from src.script.scriptsig import P2PK_Sig, P2PKH_Sig, P2MS_Sig, P2SH_Sig
+from src.script.script_types import P2PKH_Key, P2SH_Key, P2MS_Key, P2PK_Sig, P2PKH_Sig, P2MS_Sig, P2SH_Sig
 from src.script.signature_engine import SignatureEngine, SigHash
 from src.tx import Transaction
 
@@ -240,7 +239,7 @@ def sign_p2sh_p2ms_tx(
 #     valid_sig = self.verify_schnorr_sig(temp_pubkey.x_bytes(), taproot_sighash, keypath_schnorr_sig)
 #     print(f"VALID SIG: {valid_sig}")
 #
-#     # Create and add witness item | signature + sighash_byte
+#     # Create and add witness data | signature + sighash_byte
 #     witness_item = keypath_schnorr_sig + SigHash(sighash_num).to_byte()
 #     keypath_witness = WitnessField(items=[witness_item])
 #

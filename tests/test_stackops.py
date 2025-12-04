@@ -190,9 +190,9 @@ def test_over_copies_second_to_top():
 
 
 def test_pick_valid_and_invalid():
-    # valid: copy item n back to top (n on top)
+    # valid: copy data n back to top (n on top)
     s = stack_top(A, B, C, D)
-    s.push(bn(2).to_bytes())  # n=2 (third item from top -> C)
+    s.push(bn(2).to_bytes())  # n=2 (third data from top -> C)
     op_pick(s)
     assert bytes_view(s) == [C, A, B, C, D]
 

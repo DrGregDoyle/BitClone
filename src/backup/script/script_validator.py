@@ -79,7 +79,7 @@ class ScriptValidator:
                     logger.error("P2WSH witness stack is empty")
                     return False
 
-                # Last item = redeem script
+                # Last data = redeem script
                 redeem_script = witness.items[-1].item
                 redeem_script_hash = sha256(redeem_script)
 
