@@ -11,6 +11,7 @@ from src.core.opcodes import OPCODES
 from src.cryptography import sha256
 from src.script.context import ExecutionContext
 from src.script.opcode_map import OPCODE_MAP
+from src.script.parser import to_asm
 from src.script.script_types import ScriptPubKey, ScriptSig, P2SH_Key, P2WPKH_Key, P2PKH_Key, P2WSH_Key, P2TR_Key
 from src.script.signature_engine import SignatureEngine
 from src.script.stack import BitStack, BitNum
@@ -57,7 +58,7 @@ class ScriptEngine:
         # ops_log
         self.ops_log.extend([num, data.hex()])
 
-    def _handle_signatures(self, opcode: int, stream: BytesIO, ctx: ExecutionContext):
+    def _handle_signatures(self, opcode: int, ctx: ExecutionContext):
         """
         0xab -- 0xba
         """
@@ -403,9 +404,22 @@ class ScriptEngine:
                 num = opcode - 0x50
                 self.stack.push(BitNum(num).to_bytes())
 
+            # Handle OP_VERIFY
+            elif opcode == 0x69:
+                top = self.stack.pop()
+                if top == b'':
+                    valid_script = False
+                continue
+
+            # Handle OP_RETURN or OP_VER
+            elif opcode == 0x6a:
+                valid_script = False
+                continue
+
             # Handle checksigs
             elif 0xab <= opcode <= 0xba:
-                self._handle_signatures(opcode, stream, ctx)
+                self._handle_signatures(opcode, ctx)
+
             # Get function for operation
             else:
                 func = OPCODE_MAP[opcode]
@@ -416,7 +430,12 @@ class ScriptEngine:
                 else:
                     func(self.stack)
 
-        # --- LOGGING --- #
+        # --- Get data after OP_RETURN
+        if not valid_script:
+            self.ops_log.append("Invalid script")
+            self.ops_log.append(to_asm(script))
+
+        # # --- LOGGING --- #
         print("--- VALIDATE STACK ---")
         print(f"MAIN STACK: {self.stack.to_json()}")
         print(f"OPS LOG: {self.ops_log}")
@@ -452,6 +471,10 @@ if __name__ == "__main__":
     sep = "---" * 80
 
     print("--- P2TR SCRIPT-PATH (Tree) SPEND --- ")
+
+    op_return_script = bytes.fromhex("6a144f43423161aa3fd301000000100038008812a6f1")
+    test_engine = ScriptEngine()
+    test_engine.execute_script(op_return_script)
 
     # --- ScriptPubKey and Taproot Tree
 
