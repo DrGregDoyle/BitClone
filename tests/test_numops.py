@@ -9,10 +9,11 @@ from src.core import BitStackError
 from src.script.opcodes.numeric import (
     op_1add, op_1sub, op_negate, op_abs, op_not, op_0notequal,
     op_add, op_sub, op_booland, op_boolor,
-    op_numequal, op_numequalverify, op_numnotequal,
+    op_numequal, op_numnotequal,
     op_lessthan, op_greaterthan, op_lessthanorequal, op_greaterthanorequal,
     op_min, op_max, op_within,
 )
+from src.script.opcodes.verify import op_numequalverify
 from src.script.stack import BitStack, BitNum
 
 

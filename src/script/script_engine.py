@@ -404,12 +404,11 @@ class ScriptEngine:
                 num = opcode - 0x50
                 self.stack.push(BitNum(num).to_bytes())
 
-            # Handle OP_VERIFY
-            elif opcode == 0x69:
-                top = self.stack.pop()
-                if top == b'':
-                    valid_script = False
+            # Handle OP_NOP
+            elif opcode == 0x61:
                 continue
+
+
 
             # Handle OP_RETURN or OP_VER
             elif opcode == 0x6a:
@@ -427,6 +426,12 @@ class ScriptEngine:
                 # Main stack and Alt Stack
                 if opcode in [0x6b, 0x6c]:
                     func(self.stack, self.alt_stack)
+                # Verify stack ops
+                elif opcode in [0x69, 0x88, 0x9d]:
+                    valid_script = func(self.stack)
+                # OP_RETURN (no stack ops)
+                elif opcode in [0x6a]:
+                    valid_script = func()
                 else:
                     func(self.stack)
 
@@ -440,7 +445,7 @@ class ScriptEngine:
         print(f"MAIN STACK: {self.stack.to_json()}")
         print(f"OPS LOG: {self.ops_log}")
 
-    def validate_script(self, script: bytes, ctx: ExecutionContext) -> bool:
+    def validate_script(self, script: bytes, ctx: ExecutionContext = None) -> bool:
         # Clear stacks
         self.clear_stacks()
 
@@ -470,59 +475,10 @@ class ScriptEngine:
 if __name__ == "__main__":
     sep = "---" * 80
 
-    print("--- P2TR SCRIPT-PATH (Tree) SPEND --- ")
+    print("--- CONDITIONAL SCRIPT TESTING ---  ")
 
-    op_return_script = bytes.fromhex("6a144f43423161aa3fd301000000100038008812a6f1")
-    test_engine = ScriptEngine()
-    test_engine.execute_script(op_return_script)
-
-    # --- ScriptPubKey and Taproot Tree
-
-    # xonly_pubkey = bytes.fromhex("924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a3329")
-    # leaf_scripts = [
-    #     bytes.fromhex("5187"),
-    #     bytes.fromhex("5287"),
-    #     bytes.fromhex("5387"),
-    #     bytes.fromhex("5487"),
-    #     bytes.fromhex("5587")
-    # ]
-    # leaves = [Leaf(s) for s in leaf_scripts]
-    # tree = Tree(leaf_scripts)
-    # tweak = get_tweak(xonly_pubkey, tree.merkle_root)
-    # tweak_pubkey = TweakPubkey(xonly_pubkey, tree.merkle_root)
-    #
-    # test_p2tr_pubkey = P2TR_Key(xonly_pubkey, leaf_scripts)
-    # known_scriptpubkey = bytes.fromhex("5120979cff99636da1b0e49f8711514c642f640d1f64340c3784942296368fadd0a5")
-    # test_p2tr_utxo = UTXO(
-    #     txid=bytes.fromhex("ec7b0fdfeb2c115b5a4b172a3a1cf406acc2425229c540d40ec752d893aac0d7")[::-1],
-    #     vout=0,
-    #     amount=10000,
-    #     scriptpubkey=test_p2tr_pubkey.script,
-    #     block_height=863632
-    # )
-    #
-    # # --- Known tx
-    # known_tx = Transaction.from_bytes(bytes.fromhex(
-    #     "02000000000101d7c0aa93d852c70ed440c5295242c2ac06f41c3a2a174b5a5b112cebdf0f7bec0000000000ffffffff01260100000000000016001492b8c3a56fac121ddcdffbc85b02fb9ef681038a03010302538781c0924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a33291324300a84045033ec539f60c70d582c48b9acf04150da091694d83171b44ec9bf2c4bf1ca72f7b8538e9df9bdfd3ba4c305ad11587f12bbfafa00d58ad6051d54962df196af2827a86f4bde3cf7d7c1a9dcb6e17f660badefbc892309bb145f00000000"))
-    #
-    # test_ctx = ExecutionContext(
-    #     tx=known_tx,
-    #     input_index=0,
-    #     utxo=test_p2tr_utxo,
-    #     amount=test_p2tr_utxo.amount,
-    #     tapscript=True,
-    #     is_segwit=True
-    # )
-    #
-    # engine = ScriptEngine()
-    # script_validated = engine.validate_segwit(test_p2tr_pubkey, test_ctx)
-    #
-    # # --- LOGGING
-    # print(f"TREE: {tree.to_json()}")
-    # print(f"MERKLE ROOT: {tree.merkle_root.hex()}")
-    # print(f"TWEAK: {tweak.hex()}")
-    # print(f"TWEAK PUBKEY: {tweak_pubkey.tweaked_pubkey.x_bytes().hex()}")
-    # print(f"SCRIPT PUBKEY: {test_p2tr_pubkey.to_json()}")
-    # print(f"KNOWN TX: {known_tx.to_json()}")
-    # print(f"PUBKEYS AGREE: {test_p2tr_pubkey.script == known_scriptpubkey}")
-    # print(f"VALID SCRIPT: {script_validated}")
+    engine = ScriptEngine()
+    test_script = bytes.fromhex("514f61938b")
+    result = engine.validate_script(test_script)
+    print(f"TEST SCRIPT: {to_asm(test_script)}")
+    print(f"SCRIPT ENGINE STACK RESULT: {result}")

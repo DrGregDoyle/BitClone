@@ -26,13 +26,11 @@ Numerical Operations for BitCoin script
     0xa5 | OP_WITHIN
 """
 
-from src.core import BitStackError
 from src.script.stack import BitStack, BitNum
 
-__all__ = ["op_size", "op_equal", "op_equalverify", "op_1add", "op_1sub", "op_negate", "op_abs", "op_not",
-           "op_0notequal", "op_add", "op_sub", "op_booland", "op_boolor", "op_numequal", "op_numequalverify",
-           "op_numnotequal", "op_lessthan", "op_greaterthan", "op_lessthanorequal", "op_greaterthanorequal", "op_min",
-           "op_max", "op_within"]
+__all__ = ["op_size", "op_equal", "op_1add", "op_1sub", "op_negate", "op_abs", "op_not", "op_0notequal", "op_add",
+           "op_sub", "op_booland", "op_boolor", "op_numequal", "op_numnotequal", "op_lessthan", "op_greaterthan",
+           "op_lessthanorequal", "op_greaterthanorequal", "op_min", "op_max", "op_within"]
 
 
 def op_size(main_stack: BitStack):
@@ -53,17 +51,6 @@ def op_equal(main_stack: BitStack):
     a = main_stack.pop()
     b = main_stack.pop()
     main_stack.pushbool(a == b)
-
-
-def op_equalverify(main_stack: BitStack):
-    """
-    OP_EQUALVERIFY | 0x88
-    Same as OP_EQUAL, but fails script if not equal
-    """
-    op_equal(main_stack)
-    top = main_stack.pop()
-    if top == b'':
-        raise BitStackError("OP_EQUALVERIFY failed")
 
 
 def op_1add(main_stack: BitStack):
@@ -168,17 +155,6 @@ def op_numequal(main_stack: BitStack):
     a = main_stack.popnum()
     b = main_stack.popnum()
     main_stack.pushbool(a == b)
-
-
-def op_numequalverify(main_stack: BitStack):
-    """
-    OP_NUMEQUALVERIFY | 0x9d
-    Same as OP_NUMEQUAL, but runs OP_VERIFY afterward.
-    """
-    op_numequal(main_stack)
-    top = main_stack.pop()
-    if top == b'':
-        raise BitStackError("OP_NUMEQUALVERIFY failed verification")
 
 
 def op_numnotequal(main_stack: BitStack):

@@ -239,7 +239,10 @@ class BitStack:
         self._check_not_empty()
         return self.stack.popleft()
 
-    def popitems(self, n: int):
+    def popitems(self, n: int) -> list:
+        """
+        Pop n items from the stack into a list. Leftmost element is the top
+        """
         self._check_min_height(n)
         return [self.stack.popleft() for _ in range(n)]
 

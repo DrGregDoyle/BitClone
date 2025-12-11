@@ -2,17 +2,24 @@
 Opcode mapping - maps opcode bytes to their implementation functions
 """
 
+from src.script.opcodes.bools import *
 from src.script.opcodes.crypto import *
 from src.script.opcodes.numeric import *
-from src.script.opcodes.pushdata import *
 from src.script.opcodes.stackops import *
+from src.script.opcodes.verify import *
 
 __all__ = ["OPCODE_MAP"]
 # Build the opcode map
 OPCODE_MAP = {
     # Bools
     0x00: op_false,
+    0x4f: op_1negate,
     0x51: op_true,
+
+    # Verify
+    0x69: op_verify,
+    0x88: op_equalverify,
+    0x9d: op_numequalverify,
 
     # StackOps
     0x6b: op_toaltstack,
@@ -52,7 +59,6 @@ OPCODE_MAP = {
     # Numeric
     0x82: op_size,
     0x87: op_equal,
-    0x88: op_equalverify,
     0x8b: op_1add,
     0x8c: op_1sub,
     0x8f: op_negate,
@@ -64,7 +70,6 @@ OPCODE_MAP = {
     0x9a: op_booland,
     0x9b: op_boolor,
     0x9c: op_numequal,
-    0x9d: op_numequalverify,
     0x9e: op_numnotequal,
     0x9f: op_lessthan,
     0xa0: op_greaterthan,
