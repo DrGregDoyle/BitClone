@@ -519,6 +519,26 @@ def test_op_return(engine):
     ]
 
 
+def test_op_verify1(engine):
+    test_script = bytes.fromhex("5169")
+    engine.execute_script(test_script)
+    assert engine.stack.height == 0
+
+
+def test_op_verify2(engine):
+    test_script = bytes.fromhex("515169")
+    assert engine.validate_script(test_script)
+
+
+def test_op_verify3(engine):
+    """
+    Stack = b''
+    OP_VERIFY should pop it and fail the script
+    """
+    test_script = bytes.fromhex("0069")
+    assert not engine.validate_script(test_script)
+
+
 def test_numeq_verify1(engine):
     numeq_verify_hex1 = "51519d"
     engine.execute_script(bytes.fromhex(numeq_verify_hex1))
