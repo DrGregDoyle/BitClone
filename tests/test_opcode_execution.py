@@ -696,3 +696,47 @@ def test_hash256(engine):
     engine.execute_script(bytes.fromhex(hash256_hex))
     items = _pop_all(engine.stack)
     assert items == [bytes.fromhex("5df6e0e2761359d30a8275058e299fcc0381534545f55cf43e41983f5d4c9456")]
+
+
+def test_if1(engine):
+    """
+    OP_1 OP_IF OP_2 OP_ENDIF
+    --> Push 1 to stack, op_if = True, push 2 to stack (1 gets popped with op_if). Final stack = [02]
+    """
+    test_script = bytes.fromhex("51635268")
+    engine.execute_script(test_script)
+    assert engine.stack.stack[0] == b'\x02'
+    assert engine.stack.height == 1
+
+
+def test_if2(engine):
+    """
+    OP_0 OP_IF OP_2 OP_ELSE OP_3 OP_ENDIF
+    --> Push 0 to stack, of_if = False, skip op_2, OP_ELSE = True, push 3 to stack. Final stack [03]
+    """
+    test_script = bytes.fromhex("006352675368")
+    engine.execute_script(test_script)
+    assert engine.stack.stack[0] == b'\x03'
+    assert engine.stack.height == 1
+
+
+def test_notif1(engine):
+    """
+    OP_0 OP_NOTIF OP_2 OP_ENDIF
+    --> Push 0 to stack, op_notif = True, push 2 to stack (1 gets popped with op_if). Final stack = [02]
+    """
+    test_script = bytes.fromhex("00645268")
+    engine.execute_script(test_script)
+    assert engine.stack.stack[0] == b'\x02'
+    assert engine.stack.height == 1
+
+
+def test_notif2(engine):
+    """
+    OP_1 OP_NOTIF OP_2 OP_ELSE OP_3 OP_ENDIF
+    --> Push 1 to stack, of_notif = False, skip op_2, OP_ELSE = True, push 3 to stack. Final stack [03]
+    """
+    test_script = bytes.fromhex("516452675368")
+    engine.execute_script(test_script)
+    assert engine.stack.stack[0] == b'\x03'
+    assert engine.stack.height == 1

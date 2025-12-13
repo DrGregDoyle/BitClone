@@ -41,6 +41,128 @@ class ScriptEngine:
         opcode_byte = stream.read(1)
         return int.from_bytes(opcode_byte, "little") if opcode_byte else None
 
+    def _handle_conditionals(self, opcode: int, stream: BytesIO, ctx: ExecutionContext):
+        """
+        Handle OP_IF (0x63) and OP_NOTIF (0x64) with proper branching logic.
+        Reads stream until OP_ELSE or OP_ENDIF, validates structure, and executes appropriate branch.
+        """
+        # Validate opcode
+        if opcode not in [0x63, 0x64]:  # OP_IF, OP_NOTIF
+            raise ScriptEngineError(f"Invalid opcode for conditional handling: {opcode:#x}")
+
+        # Pop condition from stack
+        condition = self.stack.pop()
+
+        # Determine if condition is true
+        # For OP_IF: execute if condition is true (non-empty, non-zero)
+        # For OP_NOTIF: execute if condition is false (empty or zero)
+        condition_met = condition not in [b'', b'\x00']
+        if opcode == 0x64:  # OP_NOTIF
+            condition_met = not condition_met
+
+        # Read and parse the conditional block structure
+        if_branch, else_branch = self._parse_conditional_block(stream)
+
+        # Determine which branch to execute
+        if condition_met:
+            branch_to_execute = if_branch
+        else:
+            branch_to_execute = else_branch
+
+        # Execute the selected branch
+        self.execute_script(branch_to_execute, ctx)
+
+    def _parse_conditional_block(self, stream: BytesIO) -> tuple[bytes, bytes]:
+        """
+        Parse the conditional block structure from the stream.
+        Returns (if_branch, else_branch) as bytes.
+        Raises ScriptEngineError if OP_ENDIF is missing.
+        """
+        if_branch = BytesIO()
+        else_branch = BytesIO()
+        current_branch = if_branch
+
+        depth = 1  # Track nested conditionals
+        found_endif = False
+
+        while depth > 0:
+            # Save current position in case we need to read data
+            pos = stream.tell()
+            opcode_byte = stream.read(1)
+
+            if not opcode_byte:
+                raise ScriptEngineError("Missing OP_ENDIF: reached end of script without closing conditional")
+
+            opcode = int.from_bytes(opcode_byte, "little")
+
+            # Get opcode name
+            opcode_name = _OP.get_name(opcode)
+            self.ops_log.append(opcode_name)
+
+            # Handle nested conditionals
+            if opcode in [0x63, 0x64]:  # OP_IF, OP_NOTIF
+                depth += 1
+                current_branch.write(opcode_byte)
+
+            elif opcode == 0x67:  # OP_ELSE
+                if depth == 1:
+                    # This is the ELSE for our conditional, switch branches
+                    current_branch = else_branch
+                    continue  # Don't write OP_ELSE to either branch
+                else:
+                    # This is an ELSE for a nested conditional
+                    current_branch.write(opcode_byte)
+
+            elif opcode == 0x68:  # OP_ENDIF
+                depth -= 1
+                if depth == 0:
+                    # Found our matching OP_ENDIF
+                    found_endif = True
+                    break
+                else:
+                    # This is an ENDIF for a nested conditional
+                    current_branch.write(opcode_byte)
+
+            # Handle data push opcodes
+            elif 0x01 <= opcode <= 0x4b:
+                # OP_PUSHDATA: read the specified number of bytes
+                current_branch.write(opcode_byte)
+                data = stream.read(opcode)
+                current_branch.write(data)
+
+            elif opcode == 0x4c:  # OP_PUSHDATA1
+                current_branch.write(opcode_byte)
+                length_byte = stream.read(1)
+                current_branch.write(length_byte)
+                length = int.from_bytes(length_byte, "little")
+                data = stream.read(length)
+                current_branch.write(data)
+
+            elif opcode == 0x4d:  # OP_PUSHDATA2
+                current_branch.write(opcode_byte)
+                length_bytes = stream.read(2)
+                current_branch.write(length_bytes)
+                length = int.from_bytes(length_bytes, "little")
+                data = stream.read(length)
+                current_branch.write(data)
+
+            elif opcode == 0x4e:  # OP_PUSHDATA4
+                current_branch.write(opcode_byte)
+                length_bytes = stream.read(4)
+                current_branch.write(length_bytes)
+                length = int.from_bytes(length_bytes, "little")
+                data = stream.read(length)
+                current_branch.write(data)
+
+            else:
+                # All other opcodes are single bytes
+                current_branch.write(opcode_byte)
+
+        if not found_endif:
+            raise ScriptEngineError("Missing OP_ENDIF: conditional block not properly closed")
+
+        return if_branch.getvalue(), else_branch.getvalue()
+
     def _handle_pushdata(self, opcode: int, stream: BytesIO):
         # Validate
         if not 0x01 <= opcode <= 0x4b:
@@ -333,7 +455,7 @@ class ScriptEngine:
         self.execute_script(scriptpubkey.script, ctx)
 
         # Stack should now have 1 on top of stack and signatures for redeem script
-        if not self._op_verify():
+        if not OPCODE_MAP[0x69](self.stack):  # op_verify
             print("P2SH ScriptPubKey failed OP_EQUAL check for HASH160")
             return False
 
@@ -361,14 +483,14 @@ class ScriptEngine:
             self.execute_script(redeem_script, new_ctx)
         return self.validate_stack()
 
-    def execute_script(self, script: bytes, ctx: ExecutionContext = None):
+    def execute_script(self, script: bytes | BytesIO, ctx: ExecutionContext = None):
         """
         We only execute the given script with the accompanying ExecutionContext. We do NOT manage or validate the
         stacks.
         """
 
         # Get script as byte stream
-        stream = get_stream(script)
+        stream = get_stream(script) if isinstance(script, bytes) else script
 
         # Read script
         valid_script = True
@@ -408,7 +530,10 @@ class ScriptEngine:
             elif opcode == 0x61:
                 continue
 
-
+            # Handle conditionals
+            elif 0x63 <= opcode <= 0x64:  # OP_IF, OP_NOTIF only
+                self._handle_conditionals(opcode, stream, ctx)
+                continue
 
             # Handle OP_RETURN or OP_VER
             elif opcode == 0x6a:
@@ -478,7 +603,7 @@ if __name__ == "__main__":
     print("--- CONDITIONAL SCRIPT TESTING ---  ")
 
     engine = ScriptEngine()
-    test_script = bytes.fromhex("514f61938b")
+    test_script = bytes.fromhex("00645268")
     result = engine.validate_script(test_script)
     print(f"TEST SCRIPT: {to_asm(test_script)}")
     print(f"SCRIPT ENGINE STACK RESULT: {result}")
