@@ -1,11 +1,11 @@
 """
 The ScriptEngine class
 """
-
-from dataclasses import replace
+import json
+from dataclasses import replace, dataclass
 from io import BytesIO
 
-from src.core.byte_stream import get_stream
+from src.core.byte_stream import get_stream, read_stream, read_little_int
 from src.core.exceptions import ScriptEngineError
 from src.core.opcodes import OPCODES
 from src.cryptography import sha256
@@ -20,11 +20,31 @@ from src.tx.tx import WitnessField
 __all__ = ["ScriptEngine"]
 
 _OP = OPCODES()
+op_verify = OPCODE_MAP[0x69]
+
+
+@dataclass(slots=True)
+class Instruction:
+    opcode: int  # numeric opcode value
+    raw: bytes  # exact bytes as they appear in the script
+    is_push: bool  # True for OP_PUSH* opcodes
+    push_data: bytes | None = None
+
+    def to_dict(self):
+        return {
+            "opcode": _OP.get_name(self.opcode),
+            "opcode_num": self.opcode,
+            "opcode_hex": hex(self.opcode),
+            "raw": self.raw.hex(),
+            "is_push": self.is_push,
+            "push_data": self.push_data.hex() if self.push_data else ""
+        }
+
+    def to_json(self):
+        return json.dumps(self.to_dict(), indent=2)
 
 
 class ScriptEngine:
-    opcode_map = OPCODE_MAP
-    opcode_names = _OP.get_code_dict()
 
     def __init__(self):
         self.stack = BitStack()
@@ -37,9 +57,43 @@ class ScriptEngine:
         self.alt_stack.clear()
         self.ops_log = []
 
-    def _read_opcode(self, stream: BytesIO):
+    def _read_instructions(self, stream: BytesIO) -> Instruction | None:
+        """
+        Read a single instruction (opcode + any pushdata) from the stream.
+        Returns None at end of stream.
+        """
         opcode_byte = stream.read(1)
-        return int.from_bytes(opcode_byte, "little") if opcode_byte else None
+        if not opcode_byte:
+            return None
+
+        opcode = opcode_byte[0]
+
+        # OP_PUSHBYTES_n: 0x01..0x4b
+        if 0x01 <= opcode <= 0x4b:
+            data = read_stream(stream, opcode)
+            raw = opcode_byte + data
+            return Instruction(opcode=opcode, raw=raw, is_push=True, push_data=data)
+        # OP_PUSHDATA1
+        if opcode == 0x4c:
+            length = read_little_int(stream, 1)
+            data = read_stream(stream, length)
+            raw = opcode_byte + length.to_bytes(1, "little") + data
+            return Instruction(opcode=opcode, raw=raw, is_push=True, push_data=data)
+        # OP_PUSHDATA2
+        if opcode == 0x4d:
+            length = read_little_int(stream, 2)
+            data = read_stream(stream, length)
+            raw = opcode_byte + length.to_bytes(2, "little") + data
+            return Instruction(opcode=opcode, raw=raw, is_push=True, push_data=data)
+        # OP_PUSHDATA4
+        if opcode == 0x4e:
+            length = read_little_int(stream, 4)
+            data = read_stream(stream, length)
+            raw = opcode_byte + length.to_bytes(4, "little") + data
+            return Instruction(opcode=opcode, raw=raw, is_push=True, push_data=data)
+
+        # Non-push opcodes: single byte
+        return Instruction(opcode=opcode, raw=opcode_byte, is_push=False, push_data=None)
 
     def _handle_conditionals(self, opcode: int, stream: BytesIO, ctx: ExecutionContext):
         """
@@ -56,7 +110,7 @@ class ScriptEngine:
         # Determine if condition is true
         # For OP_IF: execute if condition is true (non-empty, non-zero)
         # For OP_NOTIF: execute if condition is false (empty or zero)
-        condition_met = condition not in [b'', b'\x00']
+        condition_met = self._stack_value_is_true(condition)
         if opcode == 0x64:  # OP_NOTIF
             condition_met = not condition_met
 
@@ -70,7 +124,7 @@ class ScriptEngine:
             branch_to_execute = else_branch
 
         # Execute the selected branch
-        self.execute_script(branch_to_execute, ctx)
+        return self.execute_script(branch_to_execute, ctx)
 
     def _parse_conditional_block(self, stream: BytesIO) -> tuple[bytes, bytes]:
         """
@@ -86,99 +140,48 @@ class ScriptEngine:
         found_endif = False
 
         while depth > 0:
-            # Save current position in case we need to read data
-            pos = stream.tell()
-            opcode_byte = stream.read(1)
-
-            if not opcode_byte:
+            instr = self._read_instructions(stream)
+            if instr is None:
                 raise ScriptEngineError("Missing OP_ENDIF: reached end of script without closing conditional")
 
-            opcode = int.from_bytes(opcode_byte, "little")
-
-            # Get opcode name
-            opcode_name = _OP.get_name(opcode)
-            self.ops_log.append(opcode_name)
+            opcode = instr.opcode
 
             # Handle nested conditionals
-            if opcode in [0x63, 0x64]:  # OP_IF, OP_NOTIF
+            if opcode in (0x63, 0x64):  # OP_IF, OP_NOTIF
                 depth += 1
-                current_branch.write(opcode_byte)
+                # Nested IF/NOTIF live inside the current branch
+                current_branch.write(instr.raw)
 
             elif opcode == 0x67:  # OP_ELSE
                 if depth == 1:
-                    # This is the ELSE for our conditional, switch branches
+                    # This ELSE belongs to the top-level IF/NOTIF:
+                    # switch branches but do NOT write OP_ELSE into either branch.
                     current_branch = else_branch
-                    continue  # Don't write OP_ELSE to either branch
+                    continue
                 else:
-                    # This is an ELSE for a nested conditional
-                    current_branch.write(opcode_byte)
+                    # ELSE for a nested conditional, keep it in the branch
+                    current_branch.write(instr.raw)
 
             elif opcode == 0x68:  # OP_ENDIF
                 depth -= 1
                 if depth == 0:
-                    # Found our matching OP_ENDIF
+                    # Matching ENDIF for our top-level conditional; we stop here
                     found_endif = True
+                    # Do NOT write this ENDIF into any branch
                     break
                 else:
-                    # This is an ENDIF for a nested conditional
-                    current_branch.write(opcode_byte)
-
-            # Handle data push opcodes
-            elif 0x01 <= opcode <= 0x4b:
-                # OP_PUSHDATA: read the specified number of bytes
-                current_branch.write(opcode_byte)
-                data = stream.read(opcode)
-                current_branch.write(data)
-
-            elif opcode == 0x4c:  # OP_PUSHDATA1
-                current_branch.write(opcode_byte)
-                length_byte = stream.read(1)
-                current_branch.write(length_byte)
-                length = int.from_bytes(length_byte, "little")
-                data = stream.read(length)
-                current_branch.write(data)
-
-            elif opcode == 0x4d:  # OP_PUSHDATA2
-                current_branch.write(opcode_byte)
-                length_bytes = stream.read(2)
-                current_branch.write(length_bytes)
-                length = int.from_bytes(length_bytes, "little")
-                data = stream.read(length)
-                current_branch.write(data)
-
-            elif opcode == 0x4e:  # OP_PUSHDATA4
-                current_branch.write(opcode_byte)
-                length_bytes = stream.read(4)
-                current_branch.write(length_bytes)
-                length = int.from_bytes(length_bytes, "little")
-                data = stream.read(length)
-                current_branch.write(data)
+                    # ENDIF for a nested conditional, keep it in the branch
+                    current_branch.write(instr.raw)
 
             else:
-                # All other opcodes are single bytes
-                current_branch.write(opcode_byte)
+                # All other instructions (including all pushdata variants)
+                # are already fully encoded in instr.raw.
+                current_branch.write(instr.raw)
 
         if not found_endif:
             raise ScriptEngineError("Missing OP_ENDIF: conditional block not properly closed")
 
         return if_branch.getvalue(), else_branch.getvalue()
-
-    def _handle_pushdata(self, opcode: int, stream: BytesIO):
-        # Validate
-        if not 0x01 <= opcode <= 0x4b:
-            raise TypeError("Opcode out of bounds for pushdata operation")
-        data = stream.read(opcode)
-        self.stack.push(data)
-        # ops_log
-        self.ops_log.append(data.hex())
-
-    def _handle_pushdata_n(self, n, stream: BytesIO):
-        n_bytes = stream.read(n)
-        num = int.from_bytes(n_bytes, "little")
-        data = stream.read(num)
-        self.stack.push(data)
-        # ops_log
-        self.ops_log.extend([num, data.hex()])
 
     def _handle_signatures(self, opcode: int, ctx: ExecutionContext):
         """
@@ -186,23 +189,91 @@ class ScriptEngine:
         """
         # Parse signature type
         match opcode:
-            # OP_CODESEPARATOR
-            case 0xab:
-                print("OP_CODESEPARATOR")
             # OP_CHECKSIG
             case 0xac:
                 self._handle_checksig(ctx)
-            # OP_CHECKSIGVERIFY
-            case 0xad:
-                self._handle_checksig(ctx)
-                verified = self._op_verify()
-                if not verified:
-                    raise ScriptEngineError("Script failed OP_VERIFY call in OP_CHECKSIGVERIFY")
+            # # OP_CHECKSIGVERIFY
+            # case 0xad:
+            #     self._handle_checksig(ctx)
+            #     verified = op_verify(self.stack)
+            #     if not verified:
+            #         raise ScriptEngineError("Script failed OP_VERIFY call in OP_CHECKSIGVERIFY")
             # OP_CHECKMULTISIG
             case 0xae:
                 self._handle_multisig(ctx)
             case _:
-                print(f"OPCODE: {opcode}")
+                raise ScriptEngineError(f"Unhandled signature opcode: {opcode}")
+
+    def _stack_value_is_true(self, v: bytes) -> bool:
+        """
+        Bitcoin truthiness: false iff the ScriptNum value is 0.
+        """
+        # Empty is false
+        if v == b'':
+            return False
+
+        # Interpret as ScriptNum; zero is false, non-zero is true.
+        return BitNum.from_bytes(v).value != 0
+
+    def _compute_sighash(self, ctx: ExecutionContext, script_code: bytes, sighash_num: int) -> bytes:
+        """
+        Compute the appropriate sighash for the current context (legacy / segwit / tapscript).
+        """
+        tx = ctx.tx
+        utxo = ctx.utxo
+        input_index = ctx.input_index
+
+        if tx is None or utxo is None:
+            raise ScriptEngineError("Missing context elements for sighash computation")
+
+        # Tapscript (script-path Taproot)
+        if getattr(ctx, "tapscript", False):
+            utxos = ctx.utxo_list if getattr(ctx, "utxo_list", None) else [utxo]
+            return self.sig_engine.get_taproot_sighash(
+                tx=tx,
+                input_index=input_index,
+                utxos=utxos,
+                ext_flag=1,
+                sighash_num=sighash_num,
+                leaf_hash=ctx.merkle_root,
+            )
+
+        # Segwit v0 (P2WPKH / P2WSH)
+        if getattr(ctx, "is_segwit", False):
+            return self.sig_engine.get_segwit_sighash(
+                tx=tx,
+                input_index=input_index,
+                amount=utxo.amount,
+                scriptpubkey=script_code,
+                sighash_num=sighash_num,
+            )
+
+        # Legacy
+        return self.sig_engine.get_legacy_sighash(
+            tx=tx,
+            input_index=input_index,
+            scriptpubkey=script_code,
+            sighash_num=sighash_num,
+        )
+
+    def _verify_sig(self, ctx: ExecutionContext, pubkey: bytes, der_sig: bytes, message_hash: bytes) -> bool:
+        """
+        Verify a single signature given the current script context.
+        """
+        # Tapscript uses Schnorr over x-only pubkeys.
+        if getattr(ctx, "tapscript", False):
+            return self.sig_engine.verify_schnorr_sig(
+                xonly_pubkey=pubkey,
+                msg=message_hash,
+                sig=der_sig,
+            )
+
+        # Legacy + segwit v0 use ECDSA.
+        return self.sig_engine.verify_ecdsa_sig(
+            signature=der_sig,
+            message=message_hash,
+            public_key=pubkey,
+        )
 
     def _handle_checksig(self, ctx: ExecutionContext):
         # Get context elements
@@ -218,49 +289,22 @@ class ScriptEngine:
         pubkey, sig = self.stack.popitems(2)
 
         # Signature should be DER-encoded with sighash num
+        if len(sig) < 1:
+            raise ScriptEngineError("Signature stack item too short for OP_CHECKSIG")
+
         der_sig = sig[:-1]
         sighash_num = sig[-1]
 
         # Use script_code from context if available (for P2SH), otherwise use scriptpubkey
-        script_code = ctx.script_code if hasattr(ctx, 'script_code') and ctx.script_code else utxo.scriptpubkey
+        script_code = ctx.script_code if getattr(ctx, "script_code", None) else utxo.scriptpubkey
 
-        # Get sighash | Parse context to figure out what goes in the context
-        # sig_ctx = SignatureContext(tx=tx, input_index=input_index, sighash_type=sighash_num,
-        #                            script_code=script_code, amount=utxo.amount)
+        # Compute sighash based on context (legacy/segwit/tapscript)
+        message_hash = self._compute_sighash(ctx, script_code, sighash_num)
 
-        # Taproot
-        if ctx.tapscript:
-            if ctx.utxo_list:
-                utxos = ctx.utxo_list
-            else:
-                utxos = [utxo]
+        # Verify signature (ECDSA or Schnorr)
+        signature_verified = self._verify_sig(ctx, pubkey, der_sig, message_hash)
 
-            # sig_ctx.amounts = [utxo.amount]
-            # sig_ctx.prev_scriptpubkeys = [script_code]
-            # sig_ctx.merkle_root = ctx.merkle_root
-            # sig_ctx.ext_flag = 1
-            message_hash = self.sig_engine.get_taproot_sighash(
-                tx=tx, input_index=input_index, utxos=utxos, ext_flag=1, sighash_num=sighash_num,
-                leaf_hash=ctx.merkle_root)
-        # Segwit but not taproot
-        elif ctx.is_segwit:
-            message_hash = self.sig_engine.get_segwit_sighash(
-                tx=tx,
-                input_index=input_index,
-                amount=utxo.amount,
-                scriptpubkey=script_code,
-                sighash_num=sighash_num
-            )
-        # Legacy
-        else:
-            message_hash = self.sig_engine.get_legacy_sighash(
-                tx=tx, input_index=input_index, scriptpubkey=utxo.scriptpubkey, sighash_num=sighash_num
-            )
-        print(f"MESSAGE HASH: {message_hash.hex()}")
-        if ctx.tapscript:
-            signature_verified = self.sig_engine.verify_schnorr_sig(xonly_pubkey=pubkey, msg=message_hash, sig=der_sig)
-        else:
-            signature_verified = self.sig_engine.verify_ecdsa_sig(der_sig, message_hash, pubkey)
+        # Push result
         self.stack.pushbool(signature_verified)
 
     def _handle_multisig(self, ctx: ExecutionContext):
@@ -297,15 +341,7 @@ class ScriptEngine:
             # Signature should be DER-encoded with sighash num
             der_sig = sig[:-1]
             sighash_num = sig[-1]
-
-            # Handle type of signature
-            if ctx.is_segwit:
-                message_hash = self.sig_engine.get_segwit_sighash(tx=ctx.tx, input_index=ctx.input_index,
-                                                                  amount=ctx.utxo.amount, scriptpubkey=script_code,
-                                                                  sighash_num=sighash_num)
-            else:
-                message_hash = self.sig_engine.get_legacy_sighash(tx=ctx.tx, input_index=ctx.input_index,
-                                                                  scriptpubkey=script_code, sighash_num=sighash_num)
+            message_hash = self._compute_sighash(ctx, script_code, sighash_num)
 
             if self.sig_engine.verify_ecdsa_sig(signature=der_sig, message=message_hash, public_key=pub):
                 matches += 1
@@ -315,10 +351,6 @@ class ScriptEngine:
 
         # Push bool
         self.stack.pushbool(matches == len(sigs))
-
-    def _op_verify(self) -> bool:
-        top = self.stack.pop()
-        return top != b''  # Returns False whenever top of stack is b''
 
     def validate_segwit(self, scriptpubkey: ScriptPubKey, ctx: ExecutionContext) -> bool:
         """
@@ -417,7 +449,7 @@ class ScriptEngine:
                 return valid_sig
             else:
                 # Script-path | All witness elements are datapushes
-                witness_items = witness_field.items
+                witness_items = list(witness_field.items)  # shallow copy
                 control_block = witness_items.pop(-1)  # Last element of witness is control block
                 leaf_script = witness_items.pop(-1)  # second last element is leaf script
 
@@ -449,14 +481,13 @@ class ScriptEngine:
 
         # Before processing the scriptpubkey we copy the redeem_script
         redeem_script = self.stack.top
-        print(f"REDEEM SCRIPT: {redeem_script.hex()}")
 
         # Execute scriptpubkey
         self.execute_script(scriptpubkey.script, ctx)
 
         # Stack should now have 1 on top of stack and signatures for redeem script
-        if not OPCODE_MAP[0x69](self.stack):  # op_verify
-            print("P2SH ScriptPubKey failed OP_EQUAL check for HASH160")
+        if not op_verify(self.stack):  # op_verify
+            self.ops_log.append("Script Invalid -- P2SH ScriptPubKey failed OP_EQUAL check for HASH160")
             return False
 
         # Handle P2WPKH
@@ -483,7 +514,7 @@ class ScriptEngine:
             self.execute_script(redeem_script, new_ctx)
         return self.validate_stack()
 
-    def execute_script(self, script: bytes | BytesIO, ctx: ExecutionContext = None):
+    def execute_script(self, script: bytes | BytesIO, ctx: ExecutionContext = None) -> bool:
         """
         We only execute the given script with the accompanying ExecutionContext. We do NOT manage or validate the
         stacks.
@@ -495,87 +526,98 @@ class ScriptEngine:
         # Read script
         valid_script = True
         while valid_script:
-            opcode = self._read_opcode(stream)
+
+            # Handle data
+            instr = self._read_instructions(stream)
 
             # Handle end of stream
-            if opcode is None:
+            if instr is None:
                 self.ops_log.append("--- END OF SCRIPT ---")
                 break
+
+            opcode = instr.opcode
 
             # Get opcode name
             opcode_name = _OP.get_name(opcode)
             self.ops_log.append(opcode_name)
 
-            # Handle data
-            if 0x01 <= opcode <= 0x4b:
-                self._handle_pushdata(opcode, stream)
+            # --- Data pushes (all OP_PUSHBYTES / PUSHDATA*) ---
+            if instr.is_push:
+                # push raw data onto the stack
+                self.stack.push(instr.push_data or b"")
+                # log the pushed data as hex for debugging
+                self.ops_log.append((instr.push_data or b"").hex())
+                continue
 
-            # Handle pushdata_n
-            elif 0x4c <= opcode <= 0x4e:
-                match opcode:
-                    case 0x4c:
-                        n = 1
-                    case 0x4d:
-                        n = 2
-                    case _:
-                        n = 4
-                self._handle_pushdata_n(n, stream)
+            # --- OP_0 ---
+            if opcode == 0:
+                self.stack.pushbool(False)
+                continue
 
-            # Handle OP_num
-            elif 0x51 <= opcode <= 0x60:
+            # --- OP_n (1..16) ---
+            if 0x51 <= opcode <= 0x60:
                 num = opcode - 0x50
                 self.stack.push(BitNum(num).to_bytes())
-
-            # Handle OP_NOP
-            elif opcode == 0x61:
                 continue
 
-            # Handle conditionals
-            elif 0x63 <= opcode <= 0x64:  # OP_IF, OP_NOTIF only
-                self._handle_conditionals(opcode, stream, ctx)
+            # --- OP_NOP ---
+            if opcode == 0x61:
                 continue
 
-            # Handle OP_RETURN or OP_VER
-            elif opcode == 0x6a:
+            # --- Conditionals: OP_IF, OP_NOTIF ---
+            if opcode in (0x63, 0x64):
+                valid_script = self._handle_conditionals(opcode, stream, ctx)
+                continue
+
+            # --- OP_RETURN (unconditional failure) ---
+            if opcode == 0x6a:
                 valid_script = False
                 continue
 
-            # Handle checksigs
-            elif 0xab <= opcode <= 0xba:
+            # --- Signature-related opcodes that don't call OP_VERIFY ---
+            if opcode in [0xac, 0xae]:
                 self._handle_signatures(opcode, ctx)
+                continue
 
-            # Get function for operation
+            # --- All remaining opcodes: dispatch via OPCODE_MAP ---
+            func = OPCODE_MAP[opcode]
+
+            # Main stack and Alt stack ops (OP_TOALTSTACK, OP_FROMALTSTACK)
+            if opcode in (0x6b, 0x6c):
+                func(self.stack, self.alt_stack)
+
+            # Verify-style ops that return a bool and may end script (OP_VERIFY, OP_EQUALVERIFY, etc.)
+            elif opcode in (0x69, 0x88, 0x9d):
+                valid_script = func(self.stack)
+
+            # Verify-style ops for verifying a signature (OP_CHECKSIGVERIFY, OP_CHECKMULTISIGVERIFY, etc...)
+            elif opcode in [0xad, 0xaf]:
+                self._handle_checksig(ctx) if opcode == 0xad else self._handle_multisig(ctx)
+                valid_script = op_verify(self.stack)
+
             else:
-                func = OPCODE_MAP[opcode]
-                # --  Call func with various inputs depending on opcode
-                # Main stack and Alt Stack
-                if opcode in [0x6b, 0x6c]:
-                    func(self.stack, self.alt_stack)
-                # Verify stack ops
-                elif opcode in [0x69, 0x88, 0x9d]:
-                    valid_script = func(self.stack)
-                # OP_RETURN (no stack ops)
-                elif opcode in [0x6a]:
-                    valid_script = func()
-                else:
-                    func(self.stack)
+                # Normal stack-only opcodes
+                func(self.stack)
 
         # --- Get data after OP_RETURN
         if not valid_script:
             self.ops_log.append("Invalid script")
             self.ops_log.append(to_asm(script))
 
-        # # --- LOGGING --- #
-        print("--- VALIDATE STACK ---")
-        print(f"MAIN STACK: {self.stack.to_json()}")
-        print(f"OPS LOG: {self.ops_log}")
+        # Return script status
+        return valid_script
 
     def validate_script(self, script: bytes, ctx: ExecutionContext = None) -> bool:
         # Clear stacks
         self.clear_stacks()
 
         # Execute script
-        self.execute_script(script, ctx)
+        if not self.execute_script(script, ctx):
+            return False  # Triggered invalid script
+
+        # Logging
+        print("BEFORE VALIDATING STACK", end="\n====\n")
+        print(f"MAIN STACK: {self.stack.to_json()}")
 
         # Validate stack
         return self.validate_stack()
@@ -592,7 +634,7 @@ class ScriptEngine:
             # Handles empty stack and more than one element left on stack
             return False
         last_element = self.stack.pop()  # Also clears stack for next execution
-        return last_element != b''  # Return True if element is anything other than OP_0
+        return self._stack_value_is_true(last_element)
 
 
 # --- TESTING --- #
