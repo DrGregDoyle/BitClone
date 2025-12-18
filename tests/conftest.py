@@ -1,6 +1,7 @@
 """
 Fixtures used in the tests
 """
+from pathlib import Path
 from random import randint
 from secrets import token_bytes
 
@@ -11,6 +12,7 @@ from src.script import ScriptEngine, SignatureEngine
 from src.tx import TxInput, TxOutput, WitnessField, Transaction
 
 __all__ = ["getrand_txinput", "getrand_witnessfield", "getrand_txoutput", "getrand_tx"]
+TESTBD_PATH = Path(__name__).parent / "db_files" / "test_db.db"
 
 
 # --- Generate Random Tx Elements --- #
