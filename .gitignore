@@ -2,5 +2,12 @@
 *.db
 
 # Database directories
-src/database/db_files/
+db_files/
 tests/db_files/
+
+# Pytest cache
+.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+
