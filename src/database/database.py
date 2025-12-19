@@ -10,7 +10,7 @@ from src.tx.tx import UTXO
 
 DB_PATH = Path(__file__).parent / "db_files" / "bitclone.db"
 
-__all__ = ["BitCloneDatabase"]
+__all__ = ["BitCloneDatabase", "DB_PATH"]
 
 
 class BitCloneDatabase:
@@ -92,7 +92,7 @@ class BitCloneDatabase:
         outpoint, amt, spk, h, cb = row
         txid_b = outpoint[:32]
         vout_i = int.from_bytes(outpoint[-4:], "little")
-        return UTXO(txid_b, vout_i, amt, spk, h, False if cb else True)
+        return UTXO(txid_b, vout_i, amt, spk, h, bool(cb))
 
     def remove_utxo(self, outpoint: bytes):
         """Remove a UTXO from the set"""

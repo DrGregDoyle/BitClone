@@ -60,3 +60,8 @@ def script_engine():
 @pytest.fixture()
 def sig_engine():
     return SignatureEngine()
+
+
+@pytest.fixture()
+def test_db_path():
+    return TESTBD_PATH
