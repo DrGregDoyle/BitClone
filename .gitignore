@@ -1,2 +1,6 @@
-"*.db"
-"./db_files/*"
+# Database files
+*.db
+
+# Database directories
+src/database/db_files/
+tests/db_files/
