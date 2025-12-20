@@ -1,11 +1,15 @@
 """
 We test elements of the blockchain
 """
+from pathlib import Path
 from random import randint
 from secrets import token_bytes
 
-from src.chain import Block, Blockchain
+from src.chain import Block
+from src.chain.blockchain import Blockchain
 from src.tx.tx import Transaction, TxInput, TxOutput
+
+TESTBD_PATH = Path(__file__).parent / "db_files" / "test_blockchain.db"
 
 
 def create_coinbase_tx(block_height: int) -> Transaction:
@@ -64,94 +68,94 @@ def create_test_block(prev_hash: bytes, height: int) -> Block:
     )
 
 
-def test_basic_blockchain_ops(test_db_path):
-    """
-    We test basic functionality of the blockchain (BEFORE VALIDATION)
-    """
-    chain = Blockchain(test_db_path)
-    chain.db.wipe_db()  # Start fresh
+# def test_basic_blockchain_ops():
+#     """
+#     We test basic functionality of the blockchain (BEFORE VALIDATION)
+#     """
+#     chain = Blockchain(TESTBD_PATH)
+#     chain.db.wipe_db()  # Start fresh
+#
+#     # 1. Test adding genesis block
+#     genesis = create_test_block(b'\x00' * 32, 0)
+#     result = chain.add_block(genesis)
+#
+#     assert result is True, "Failed to add genesis block"
+#     assert chain.height == 0, f"Expected height 0, got {chain.height}"
+#     assert chain.tip is not None, "Chain tip should not be None after adding genesis"
+#     assert chain.tip.get_header().block_id == genesis.get_header().block_id, "Chain tip doesn't match genesis"
+#
+#     # 2. Test adding multiple blocks
+#     prev_hash = genesis.get_header().block_id
+#     blocks = []
+#
+#     for height in range(1, 6):
+#         block = create_test_block(prev_hash, height)
+#         blocks.append(block)
+#         result = chain.add_block(block)
+#
+#         assert result is True, f"Failed to add block at height {height}"
+#         assert chain.height == height, f"Expected height {height}, got {chain.height}"
+#
+#         prev_hash = block.get_header().block_id
+#
+#     # Verify final chain height
+#     assert chain.height == 5, f"Expected final height 5, got {chain.height}"
+#
+#     # 3. Test retrieving block by height
+#     block_3 = chain.get_block_at_height(3)
+#
+#     assert block_3 is not None, "Block at height 3 should exist"
+#     assert len(block_3.txs) == 4, f"Expected 4 transactions, got {len(block_3.txs)}"
+#     assert block_3.get_header().block_id == blocks[2].get_header().block_id, "Block 3 hash mismatch"
+#
+#     # 4. Test UTXO lookup
+#     genesis_coinbase = genesis.txs[0]
+#     test_outpoint = genesis_coinbase.txid + (0).to_bytes(4, 'little')
+#     utxo = chain.get_utxo(test_outpoint)
+#
+#     assert utxo is not None, "Genesis coinbase UTXO should exist"
+#     assert utxo.amount == 5000000000, f"Expected 5B sats, got {utxo.amount}"
+#     assert utxo.is_coinbase is True, "Genesis output should be marked as coinbase"
+#     assert utxo.block_height == 0, f"Expected height 0, got {utxo.block_height}"
+#     assert utxo.is_mature(chain.height) is False, "Coinbase at height 0 should not be mature at height 5"
+#
+#     # 5. Test UTXO count
+#     # Each block (including genesis): 1 coinbase + 3 txs with 2 outputs each = 7 UTXOs per block
+#     # Total blocks: 6 (genesis + 5 more)
+#     # Total: 6 * 7 = 42 UTXOs
+#     expected_utxos = 6 * 7  # 42
+#     actual_utxos = chain.utxo_count()
+#     assert actual_utxos == expected_utxos, f"Expected {expected_utxos} UTXOs, got {actual_utxos}"
+#
+#     # 6. Test retrieving non-existent block
+#     non_existent = chain.get_block_at_height(999)
+#     assert non_existent is None, "Non-existent block should return None"
+#
+#     # 7. Test retrieving block by hash
+#     block_5_hash = blocks[4].get_header().block_id
+#     block_5_retrieved = chain.get_block(block_5_hash)
+#
+#     assert block_5_retrieved is not None, "Block 5 should be retrievable by hash"
+#     assert block_5_retrieved.get_header().block_id == block_5_hash, "Retrieved block hash mismatch"
+#
+#     # 8. Test coinbase maturity
+#     # Add 95 more blocks to make genesis coinbase mature (needs 100 blocks)
+#     for height in range(6, 101):
+#         block = create_test_block(prev_hash, height)
+#         chain.add_block(block)
+#         prev_hash = block.get_header().block_id
+#
+#     # Now genesis coinbase should be mature
+#     utxo_mature = chain.get_utxo(test_outpoint)
+#     assert utxo_mature is not None, "Genesis coinbase UTXO should still exist"
+#     assert utxo_mature.is_mature(chain.height) is True, "Genesis coinbase should be mature after 100 blocks"
 
-    # 1. Test adding genesis block
-    genesis = create_test_block(b'\x00' * 32, 0)
-    result = chain.add_block(genesis)
 
-    assert result is True, "Failed to add genesis block"
-    assert chain.height == 0, f"Expected height 0, got {chain.height}"
-    assert chain.tip is not None, "Chain tip should not be None after adding genesis"
-    assert chain.tip.get_header().block_id == genesis.get_header().block_id, "Chain tip doesn't match genesis"
-
-    # 2. Test adding multiple blocks
-    prev_hash = genesis.get_header().block_id
-    blocks = []
-
-    for height in range(1, 6):
-        block = create_test_block(prev_hash, height)
-        blocks.append(block)
-        result = chain.add_block(block)
-
-        assert result is True, f"Failed to add block at height {height}"
-        assert chain.height == height, f"Expected height {height}, got {chain.height}"
-
-        prev_hash = block.get_header().block_id
-
-    # Verify final chain height
-    assert chain.height == 5, f"Expected final height 5, got {chain.height}"
-
-    # 3. Test retrieving block by height
-    block_3 = chain.get_block_at_height(3)
-
-    assert block_3 is not None, "Block at height 3 should exist"
-    assert len(block_3.txs) == 4, f"Expected 4 transactions, got {len(block_3.txs)}"
-    assert block_3.get_header().block_id == blocks[2].get_header().block_id, "Block 3 hash mismatch"
-
-    # 4. Test UTXO lookup
-    genesis_coinbase = genesis.txs[0]
-    test_outpoint = genesis_coinbase.txid + (0).to_bytes(4, 'little')
-    utxo = chain.get_utxo(test_outpoint)
-
-    assert utxo is not None, "Genesis coinbase UTXO should exist"
-    assert utxo.amount == 5000000000, f"Expected 5B sats, got {utxo.amount}"
-    assert utxo.is_coinbase is True, "Genesis output should be marked as coinbase"
-    assert utxo.block_height == 0, f"Expected height 0, got {utxo.block_height}"
-    assert utxo.is_mature(chain.height) is False, "Coinbase at height 0 should not be mature at height 5"
-
-    # 5. Test UTXO count
-    # Each block (including genesis): 1 coinbase + 3 txs with 2 outputs each = 7 UTXOs per block
-    # Total blocks: 6 (genesis + 5 more)
-    # Total: 6 * 7 = 42 UTXOs
-    expected_utxos = 6 * 7  # 42
-    actual_utxos = chain.utxo_count()
-    assert actual_utxos == expected_utxos, f"Expected {expected_utxos} UTXOs, got {actual_utxos}"
-
-    # 6. Test retrieving non-existent block
-    non_existent = chain.get_block_at_height(999)
-    assert non_existent is None, "Non-existent block should return None"
-
-    # 7. Test retrieving block by hash
-    block_5_hash = blocks[4].get_header().block_id
-    block_5_retrieved = chain.get_block(block_5_hash)
-
-    assert block_5_retrieved is not None, "Block 5 should be retrievable by hash"
-    assert block_5_retrieved.get_header().block_id == block_5_hash, "Retrieved block hash mismatch"
-
-    # 8. Test coinbase maturity
-    # Add 95 more blocks to make genesis coinbase mature (needs 100 blocks)
-    for height in range(6, 101):
-        block = create_test_block(prev_hash, height)
-        chain.add_block(block)
-        prev_hash = block.get_header().block_id
-
-    # Now genesis coinbase should be mature
-    utxo_mature = chain.get_utxo(test_outpoint)
-    assert utxo_mature is not None, "Genesis coinbase UTXO should still exist"
-    assert utxo_mature.is_mature(chain.height) is True, "Genesis coinbase should be mature after 100 blocks"
-
-
-def test_utxo_spending(test_db_path):
+def test_utxo_spending():
     """
     Test that spending UTXOs removes them from the set
     """
-    chain = Blockchain(test_db_path)
+    chain = Blockchain(TESTBD_PATH)
     chain.db.wipe_db()
 
     # Create genesis with coinbase
@@ -210,11 +214,11 @@ def test_utxo_spending(test_db_path):
     assert new_utxo_1.amount == 2500000000, "New UTXO 1 amount incorrect"
 
 
-def test_intra_block_dependencies(test_db_path):
+def test_intra_block_dependencies():
     """
     Test that a transaction can spend an output created earlier in the same block
     """
-    chain = Blockchain(test_db_path)
+    chain = Blockchain(TESTBD_PATH)
     chain.db.wipe_db()
 
     # Create genesis

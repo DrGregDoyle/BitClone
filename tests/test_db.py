@@ -5,10 +5,10 @@ from pathlib import Path
 from random import randint, choice
 from secrets import token_bytes
 
-from src.database import BitCloneDatabase
+from src.database.database import BitCloneDatabase
 from src.tx.tx import UTXO
 
-TESTBD_PATH = Path(__name__).parent / "db_files" / "test_db.db"
+TESTBD_PATH = Path(__file__).parent / "db_files" / "test_db.db"
 
 
 # --- HELPER --- #
