@@ -94,7 +94,7 @@ class TxOutput(Serializable):
     __slots__ = ("amount", "scriptpubkey")
 
     def __init__(self, amount: int | bytes, scriptpubkey: bytes):
-        self.amount = amount if isinstance(amount, int) else int.from_bytes(amount, "little")
+        self.amount: int = amount if isinstance(amount, int) else int.from_bytes(amount, "little")
         self.scriptpubkey = scriptpubkey
 
     @property

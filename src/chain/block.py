@@ -156,6 +156,10 @@ class Block(Serializable):
             txs=txs
         )
 
+    @property
+    def block_id(self):
+        return self.get_header().block_id
+
     def get_header(self) -> BlockHeader:
         """
         Return the block header

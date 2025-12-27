@@ -4,12 +4,19 @@ The custom exceptions used throughout BitClone
 __all__ = ["ReadError", "StreamError", "ECDSAError", "SchnorrError", "ECCPrivateKeyError", "ECCError", "WalletError",
            "ExtendedKeyError", "PubKeyError", "WriteError", "BitNumError", "BitStackError", "OpCodeError",
            "ScriptPubKeyError", "ScriptSigError", "TargetBitsError", "MerkleError", "SignatureError",
-           "ScriptEngineError", "DataEncodingError", "TaprootError"]
+           "ScriptEngineError", "DataEncodingError", "TaprootError", "CoinbaseError"]
 
 
 class DataEncodingError(Exception):
     """
     For use in encoding/decoding algorithms
+    """
+    pass
+
+
+class CoinbaseError(Exception):
+    """
+    For use in Coinbase class validation
     """
     pass
 
