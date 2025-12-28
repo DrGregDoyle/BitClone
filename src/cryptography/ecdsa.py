@@ -12,7 +12,7 @@ __all__ = ["ecdsa", "verify_ecdsa"]
 curve = SECP256K1
 
 
-def ecdsa(private_key: int, message: bytes, nonce: int = None) -> Tuple[int, int]:
+def ecdsa(private_key: int, message: bytes) -> Tuple[int, int]:
     """
     Generates an ECDSA signature for a given private_key and message hash on the specified curve.
 

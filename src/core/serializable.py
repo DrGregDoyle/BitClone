@@ -12,6 +12,7 @@ __all__ = ["Serializable"]
 
 
 # TODO: Updated Serializable to_dict method to be {"serialized": self.to_bytes().hex()} and then update each child
+# TODO: Add format option for to_dict and to_json - so that values are either raw or BTC formatted
 # class to call super().to_dict before creating their own to_dict
 class Serializable(ABC):
     """
