@@ -4,6 +4,7 @@
 # Database directories
 db_files/
 tests/db_files/
+tests/db_files/blocks
 
 # Pytest cache
 .pytest_cache/
