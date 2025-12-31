@@ -77,23 +77,12 @@ class Mnemonic:
             phrase.insert(0, wordlist[word_index])  # Insert at beginning
             ent_check >>= WORD_BITS  # Shift right by 11 bits
 
-        # # --- TESTING
-        # print("--- GENERATE PHRASE --- ")
-        # print("===" * 60)
-        # print(f"ENTROPY: {entropy.hex()}")
-        # print(f"ENTROPY INTEGER: {entropy_int}")
-        # print(f"CHECKSUM INTEGER: {checksum_int}")
-        # print(f"ENT CHECK: {ent_check}")
-        # print(f"PHRASE: {phrase}")
-
         return phrase
 
     def _get_checksum_from_entropy(self, entropy: bytes) -> int:
         """
         Return the integer associated with the checksum for the given entropy
         """
-        # # TESTING
-        # print(f"ENTROPY BEFORE CHECKSUM: {entropy.hex()}")
         # Get integer value of the hash
         entropy_hash = sha256(entropy)
         entropy_hash_int = int.from_bytes(entropy_hash, "big")
@@ -128,7 +117,6 @@ class Mnemonic:
         # Get configuration for this entropy length
         mnemonic_dict = WALLET.MNEMONIC.get(entropy_bytelen)
         checksum_bitlen = mnemonic_dict.get(CHECKSUM_KEY)
-        entropy_bitlen = mnemonic_dict.get(BITLEN_KEY)
 
         # Convert phrase to combined integer
         ent_check = 0

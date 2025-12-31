@@ -1,5 +1,5 @@
 """
-We test elements of the blockchain
+We test elements of the blockchain | Vibecoded
 """
 from pathlib import Path
 from random import randint

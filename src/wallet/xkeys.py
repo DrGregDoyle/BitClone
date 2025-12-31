@@ -70,7 +70,6 @@ class ExtendedKey:
         self.key_data = key_data
 
     # --- OVERRIDES --- #
-    # Add these methods to your ExtendedKey class
 
     def __eq__(self, other) -> bool:
         """
