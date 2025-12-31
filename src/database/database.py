@@ -4,7 +4,7 @@ The Database class - holds the UTXO set
 import sqlite3
 from pathlib import Path
 
-from src.chain.block import Block
+from src.blockchain.block import Block
 from src.database.block_files import BlockFileManager
 from src.tx.tx import UTXO
 
@@ -116,7 +116,7 @@ class BitCloneDatabase:
 
         Args:
             block: Block object
-            block_height: Height in the chain
+            block_height: Height in the blockchain
         """
         # Serialize block
         block_bytes = block.to_bytes()
@@ -182,7 +182,7 @@ class BitCloneDatabase:
             return row[0] if row[0] is not None else -1
 
     def get_latest_block(self):
-        """Get the tip of the chain"""
+        """Get the tip of the blockchain"""
         height = self.get_chain_height()
         if height < 0:
             return None

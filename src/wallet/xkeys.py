@@ -99,7 +99,7 @@ class ExtendedKey:
         # 1. Run the HMAC-512
         seed_hash = hmac_sha512(key=SEED_KEY, message=seed)
 
-        # 2. Get private_key in bytes and chain code
+        # 2. Get private_key in bytes and blockchain code
         privkey, chain_code = seed_hash[:32], seed_hash[32:]
 
         # 3. Use 0 values for remaining params
@@ -166,7 +166,7 @@ class ExtendedKey:
     def to_bytes(self):
         """
         returns the serialized version of the key
-        version || depth || parent fingerprint || index || chain code || key data || checksum
+        version || depth || parent fingerprint || index || blockchain code || key data || checksum
         """
         key_data = b'\x00' + self.key_data if self.is_private else self.key_data
         parts = [

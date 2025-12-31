@@ -3,7 +3,7 @@ The Blockchain class
 """
 from pathlib import Path
 
-from src.chain.block import Block
+from src.blockchain.block import Block
 from src.database.database import BitCloneDatabase, DB_PATH
 from src.tx.tx import UTXO
 
@@ -12,7 +12,7 @@ __all__ = ["Blockchain"]
 
 class Blockchain:
     """
-    Manages the blockchain: blocks, UTXO set, and chain state
+    Manages the blockchain: blocks, UTXO set, and blockchain state
     """
 
     def __init__(self, db_path: Path = DB_PATH):
@@ -25,7 +25,7 @@ class Blockchain:
 
     @property
     def tip(self) -> Block | None:
-        """Get the latest block (chain tip)"""
+        """Get the latest block (blockchain tip)"""
         return self.db.get_latest_block()
 
     def get_block(self, block_hash: bytes) -> Block | None:
@@ -69,7 +69,7 @@ class Blockchain:
 
         Args:
             block: Block whose transactions to process
-            block_height: Height of the block in the chain
+            block_height: Height of the block in the blockchain
         """
         for tx in block.txs:
             # Step 1: Remove spent UTXOs (skip for coinbase)

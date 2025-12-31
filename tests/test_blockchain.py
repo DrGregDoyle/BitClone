@@ -5,7 +5,7 @@ from pathlib import Path
 from random import randint
 from secrets import token_bytes
 
-from src.chain import Block, Blockchain
+from src.blockchain import Block, Blockchain
 from src.tx.tx import Transaction, TxInput, TxOutput
 
 TESTBD_PATH = Path(__file__).parent / "db_files" / "test_blockchain.db"
@@ -97,7 +97,7 @@ def test_basic_blockchain_ops():
 
         prev_hash = block.get_header().block_id
 
-    # Verify final chain height
+    # Verify final blockchain height
     assert chain.height == 5, f"Expected final height 5, got {chain.height}"
 
     # 3. Test retrieving block by height

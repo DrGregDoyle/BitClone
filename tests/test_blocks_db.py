@@ -6,7 +6,7 @@ from pathlib import Path
 from random import randint
 from secrets import token_bytes
 
-from src.chain.block import Block
+from src.blockchain.block import Block
 from src.database import BitCloneDatabase
 from src.tx.tx import Transaction, TxInput, TxOutput
 
@@ -108,7 +108,7 @@ def test_multiple_blocks():
     test_db = BitCloneDatabase(TEST_DB_PATH)
     test_db.wipe_db()
 
-    # Create a chain of blocks
+    # Create a blockchain of blocks
     num_blocks = 10
     blocks = []
     prev_hash = b'\x00' * 32  # Genesis
@@ -161,14 +161,14 @@ def test_get_block_by_height():
 
 
 def test_chain_height():
-    """Test getting current chain height"""
+    """Test getting current blockchain height"""
     print("Testing: Chain height tracking...")
 
     test_db = BitCloneDatabase(TEST_DB_PATH)
     test_db.wipe_db()
 
-    # Empty chain
-    assert test_db.get_chain_height() == -1, "Empty chain should have height -1"
+    # Empty blockchain
+    assert test_db.get_chain_height() == -1, "Empty blockchain should have height -1"
 
     # Add blocks
     for height in range(10):
@@ -180,14 +180,14 @@ def test_chain_height():
 
 
 def test_latest_block():
-    """Test getting the latest block (chain tip)"""
+    """Test getting the latest block (blockchain tip)"""
     print("Testing: Latest block retrieval...")
 
     test_db = BitCloneDatabase(TEST_DB_PATH)
     test_db.wipe_db()
 
-    # Empty chain
-    assert test_db.get_latest_block() is None, "Empty chain should return None"
+    # Empty blockchain
+    assert test_db.get_latest_block() is None, "Empty blockchain should return None"
 
     # Add blocks
     last_block = None
