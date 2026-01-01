@@ -1,52 +1,10 @@
 """
 The custom exceptions used throughout BitClone
 """
-__all__ = ["ReadError", "StreamError", "ECDSAError", "SchnorrError", "ECCPrivateKeyError", "ECCError", "WalletError",
-           "ExtendedKeyError", "PubKeyError", "WriteError", "BitNumError", "BitStackError", "OpCodeError",
-           "ScriptPubKeyError", "ScriptSigError", "TargetBitsError", "MerkleError", "SignatureError",
-           "ScriptEngineError", "DataEncodingError", "TaprootError", "CoinbaseError"]
-
-
-class DataEncodingError(Exception):
-    """
-    For use in encoding/decoding algorithms
-    """
-    pass
-
-
-class CoinbaseError(Exception):
-    """
-    For use in Coinbase class validation
-    """
-    pass
-
-
-class ScriptEngineError(Exception):
-    """
-    For use in the script engine, when missing context items, etc...
-    """
-    pass
-
-
-class SignatureError(Exception):
-    """
-    For use in the Signature Engine
-    """
-    pass
-
-
-class MerkleError(Exception):
-    """
-    For use in the MerkleTree class
-    """
-    pass
-
-
-class TargetBitsError(Exception):
-    """
-    For use in target bit encoding and decoding
-    """
-    pass
+__all__ = ['BitNumError', 'BitStackError', 'CoinbaseError', 'DataEncodingError', 'ECCError', 'ECCPrivateKeyError',
+           'ECDSAError', 'ExtendedKeyError', 'MerkleError', 'NetworkError', 'OpCodeError', 'PubKeyError', 'ReadError',
+           'SchnorrError', 'ScriptEngineError', 'ScriptPubKeyError', 'ScriptSigError', 'SignatureError', 'StreamError',
+           'TaprootError', 'TargetBitsError', 'WalletError', 'WriteError']
 
 
 class BitNumError(Exception):
@@ -63,49 +21,21 @@ class BitStackError(Exception):
     pass
 
 
-class ScriptPubKeyError(Exception):
+class CoinbaseError(Exception):
     """
-    For use in ScriptPubKey class and its children
-    """
-    pass
-
-
-class ScriptSigError(Exception):
-    """
-    For use in ScriptSig class and its children
+    For use in Coinbase class validation
     """
     pass
 
 
-class OpCodeError(Exception):
+class DataEncodingError(Exception):
     """
-    For use in various script elements
-    """
-    pass
-
-
-class StreamError(Exception):
-    """
-    Catchall for stream errors
+    For use in encoding/decoding algorithms
     """
     pass
 
 
-class ReadError(StreamError):
-    """
-    For when trying to read data of length n from the stream and receiving data of length < b
-    """
-    pass
-
-
-class WriteError(StreamError):
-    """
-    For when writing data that would be otherwise out of bounds
-    """
-    pass
-
-
-class ECCError(StreamError):
+class ECCError(Exception):
     """
     For use when deserializing pubkeys
     """
@@ -126,9 +56,98 @@ class ECDSAError(Exception):
     pass
 
 
+class ExtendedKeyError(Exception):
+    """Custom exception for extended key operations"""
+    pass
+
+
+class MerkleError(Exception):
+    """
+    For use in the MerkleTree class
+    """
+    pass
+
+
+class NetworkError(Exception):
+    """
+    For use within Networking operations
+    """
+    pass
+
+
+class OpCodeError(Exception):
+    """
+    For use in various script elements
+    """
+    pass
+
+
+class PubKeyError(Exception):
+    """
+    Used for Pubkey errors
+    """
+    pass
+
+
+class ReadError(Exception):
+    """
+    For when trying to read data of length n from the stream and receiving data of length < b
+    """
+    pass
+
+
 class SchnorrError(Exception):
     """
     Raised during Schnorr signatures for out of bound values
+    """
+    pass
+
+
+class ScriptEngineError(Exception):
+    """
+    For use in the script engine, when missing context items, etc...
+    """
+    pass
+
+
+class ScriptPubKeyError(Exception):
+    """
+    For use in ScriptPubKey class and its children
+    """
+    pass
+
+
+class ScriptSigError(Exception):
+    """
+    For use in ScriptSig class and its children
+    """
+    pass
+
+
+class SignatureError(Exception):
+    """
+    For use in the Signature Engine
+    """
+    pass
+
+
+class StreamError(Exception):
+    """
+    Catchall for stream errors
+    """
+    pass
+
+
+class TaprootError(Exception):
+    """
+    For use in Taproot elements
+    """
+    pass
+
+
+class TargetBitsError(Exception):
+    """
+    For use in target bit encoding and decoding
     """
     pass
 
@@ -140,20 +159,8 @@ class WalletError(Exception):
     pass
 
 
-class ExtendedKeyError(Exception):
-    """Custom exception for extended key operations"""
-    pass
-
-
-class PubKeyError(Exception):
+class WriteError(Exception):
     """
-    Used for Pubkey errors
-    """
-    pass
-
-
-class TaprootError(Exception):
-    """
-    For use in Taproot elements
+    For when writing data that would be otherwise out of bounds
     """
     pass
