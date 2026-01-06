@@ -1,12 +1,13 @@
 """
 Utilities for working with IP address objects
 """
-from ipaddress import IPv4Address, IPv6Address
+from ipaddress import IPv4Address, IPv6Address, ip_address
+from typing import Union
 
 V4_PREFIX = b'\x00' * 10 + b'\xff' * 2
-IP_ADDRESS = [IPv4Address, IPv6Address]
+IP_ADDRESS = Union[IPv4Address, IPv6Address]
 
-__all__ = ["IP_ADDRESS", "ip_display", "ip_from_netaddr", "netaddr_bytes"]
+__all__ = ["IP_ADDRESS", "ip_display", "ip_from_netaddr", "netaddr_bytes", "parse_ip_address"]
 
 
 def ip_from_netaddr(raw16: bytes) -> IP_ADDRESS:
@@ -16,6 +17,21 @@ def ip_from_netaddr(raw16: bytes) -> IP_ADDRESS:
     if raw16.startswith(V4_PREFIX):
         return IPv4Address(raw16[12:16])  # last 4 bytes
     return IPv6Address(raw16)
+
+
+def parse_ip_address(ip_addr: IP_ADDRESS | str):
+    """
+    Convert string IP addresses to IPv4Address or IPv6Address objects.
+    Pass through existing IP address objects unchanged.
+    """
+    if isinstance(ip_addr, (IPv4Address, IPv6Address)):
+        return ip_addr
+
+    if isinstance(ip_addr, str):
+        # ip_address() automatically detects IPv4 or IPv6
+        return ip_address(ip_addr)
+
+    raise ValueError(f"Invalid IP address type: {type(ip_addr)}")
 
 
 def netaddr_bytes(ip: IP_ADDRESS) -> bytes:

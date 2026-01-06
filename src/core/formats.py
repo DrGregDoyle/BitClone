@@ -4,7 +4,7 @@ The Bitcoin standard formats
 """
 from typing import Final
 
-__all__ = ["ECC", "WALLET", "XKEYS", "BECH32CODE", "DATA", "TX", "SCRIPT", "BLOCK", "TAPROOT", "MAGICBYTES"]
+__all__ = ["ECC", "WALLET", "XKEYS", "BECH32CODE", "DATA", "TX", "SCRIPT", "BLOCK", "TAPROOT", "MAGICBYTES", "NETWORK"]
 
 
 class TAPROOT:
@@ -116,8 +116,10 @@ class SCRIPT:
 
 class MAGICBYTES:
     MAINNET: Final[bytes] = b'\xf9\xbe\xb4\xd9'
-    TESTNET: Final[bytes] = b'\x0b\x11\x09\x06'
+    TESTNET: Final[bytes] = b'\x0b\x11\x09\x07'
     REGTEST: Final[bytes] = b'\xfa\xbf\xb5\xda'
+    SIGNET: Final[bytes] = b'\x0a\x03\xcf\x40'
+    NAMECOIN: Final[bytes] = b'\xf9\xbe\xb4\xfe'
 
     @classmethod
     def __contains__(cls, item):
@@ -128,3 +130,21 @@ class MAGICBYTES:
     def __iter__(cls):
         """Allow iteration over magic bytes values"""
         return iter([cls.MAINNET, cls.TESTNET, cls.REGTEST])
+
+
+class NETWORK:
+    """
+    Network protocol constants
+    """
+    ALLOWED_COMMANDS: Final[frozenset] = frozenset([
+        "version", "verack", "addr", "inv", "getdata", "getblocks", "getheaders",
+        "tx", "block", "headers", "getaddr", "ping", "pong", "notfound", "mempool",
+        "reject", "filterload", "filteradd", "filterclear", "merkleblock",
+        "sendheaders", "feefilter", "sendcmpct", "cmpctblock", "getblocktxn", "blocktxn", "testing"
+    ])
+
+    DEPRECATED_COMMANDS: Final[frozenset] = frozenset([
+        "submitorder", "checkorder", "reply", "alert"
+    ])
+
+    COMMAND_LENGTH: Final[int] = 12
