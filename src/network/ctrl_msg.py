@@ -7,6 +7,8 @@ from src.network.message import EmptyMessage, Message
 from src.network.network_data import NetAddr
 from src.network.network_types import Services
 
+__all__ = ["Version", "Pong", "Ping", "VerAck"]
+
 
 class Version(Message):
     """
@@ -98,6 +100,26 @@ class Version(Message):
 
 class Ping(Message):
     COMMAND = "ping"
+
+    def __init__(self, nonce: int):
+        super().__init__()
+        self.nonce = nonce
+
+    @classmethod
+    def from_payload(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+        nonce = read_little_int(stream, 8)
+        return cls(nonce)
+
+    def to_payload(self) -> bytes:
+        return self.nonce.to_bytes(8, "little")
+
+    def payload_dict(self) -> dict:
+        return {"nonce": self.nonce}
+
+
+class Pong(Message):
+    COMMAND = "pong"
 
     def __init__(self, nonce: int):
         super().__init__()

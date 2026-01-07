@@ -28,7 +28,7 @@ class Header(Serializable):
         magic_bytes = read_stream(stream, 4)
 
         # Command = 12 encoded ascii bytes, padded with zero bytes
-        command = (read_stream(stream, 12)).lstrip(b'\x00').decode("ascii")
+        command = (read_stream(stream, 12)).strip(b'\x00').decode("ascii")
 
         # size = 4 byte little-endian
         size = read_little_int(stream, 4)

@@ -41,6 +41,11 @@ class Message(Serializable, ABC):
         """Lazily compute payload when accessed"""
         return self.to_payload()
 
+    @property
+    def message(self):
+        """Avoid confusion between to_bytes and to_payload"""
+        return self.to_bytes()
+
     # --- Message registry
     @classmethod
     def get_registered(cls, command: str):
