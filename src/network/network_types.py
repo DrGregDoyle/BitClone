@@ -1,9 +1,9 @@
 """
-The Services enum class
+Various Network type Enum classes
 """
-from enum import IntFlag
+from enum import IntFlag, Enum
 
-__all__ = ["Services", "InvType"]
+__all__ = ["Services", "InvType", "PeerState"]
 
 
 class Services(IntFlag):
@@ -25,3 +25,13 @@ class InvType(IntFlag):
     MSG_WITNESS_TX = 0x40000001
     MSG_WITNESS_BLOCK = 0x40000002
     MSG_FILTERED_WITNESS_BLOCK = 0x40000003
+
+
+class PeerState(Enum):
+    """State of the peer connection"""
+    DISCONNECTED = "disconnected"
+    CONNECTING = "connecting"
+    CONNECTED = "connected"
+    HANDSHAKING = "handshaking"
+    READY = "ready"
+    DISCONNECTING = "disconnecting"
