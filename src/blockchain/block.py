@@ -5,11 +5,11 @@ The Block classes
 import time
 from datetime import datetime
 
-from src.core.byte_stream import SERIALIZED, get_stream, read_stream, read_little_int
+from src.core.byte_stream import SERIALIZED, get_stream, read_stream, read_little_int, read_compact_size
 from src.core.formats import BLOCK
 from src.core.serializable import Serializable
 from src.cryptography import hash256
-from src.data import bits_to_target, MerkleTree, read_compact_size, write_compact_size
+from src.data import bits_to_target, MerkleTree, write_compact_size
 from src.tx import Transaction
 
 

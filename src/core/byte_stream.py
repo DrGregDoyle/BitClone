@@ -8,7 +8,8 @@ from typing import Union, Optional, Literal
 
 from .exceptions import ReadError
 
-__all__ = ["SERIALIZED", "BYTEORDER", "get_stream", "read_stream", "read_little_int", "read_big_int", "get_bytes"]
+__all__ = ["SERIALIZED", "BYTEORDER", "get_stream", "read_stream", "read_little_int", "read_big_int", "get_bytes",
+           "read_compact_size"]
 
 SERIALIZED = Union[bytes, BytesIO]
 BYTEORDER = Literal['big', 'little']
@@ -62,3 +63,25 @@ def read_little_int(stream: BytesIO, length: int, data_type: Optional[str] = Non
 def read_big_int(stream: BytesIO, length: int, data_type: Optional[str] = None) -> int:
     """Read big-endian integer from stream"""
     return _read_int(stream, length, "big", data_type)
+
+
+def read_compact_size(byte_stream: SERIALIZED) -> int:
+    stream = get_stream(byte_stream)
+
+    # Prefix
+    prefix = read_little_int(stream, 1, "Compact Size Prefix")
+
+    # One byte compact size number
+    if prefix <= 0xfc:
+        return prefix
+
+    # Match prefix otherwise
+    match prefix:
+        case 0xfd:
+            return read_little_int(stream, 2, "Compact Size: Oxfd")
+        case 0xfe:
+            return read_little_int(stream, 4, "Compact Size: 0xfe")
+        case 0xff:
+            return read_little_int(stream, 8, "Compact Size: 0xff")
+        case _:
+            raise ReadError(f"Incorrect prefix {hex(prefix)} for CompactSize encoding")

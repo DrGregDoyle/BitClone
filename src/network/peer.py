@@ -4,8 +4,8 @@ The Peer class: Will contain relevant information about Peer status for the netw
 
 from typing import Optional
 
+from src.data.network_data import NetAddr, Services
 from src.network.ctrl_msg import Version
-from src.network.network_data import NetAddr, Services
 from src.network.network_types import PeerState
 
 __all__ = ["Peer"]

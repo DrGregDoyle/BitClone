@@ -5,8 +5,9 @@ import json
 from io import SEEK_CUR
 
 from src.core import Serializable, SERIALIZED, get_stream, read_little_int, read_stream, TX
+from src.core.byte_stream import read_compact_size
 from src.cryptography import hash256
-from src.data import read_compact_size, write_compact_size
+from src.data import write_compact_size
 
 __all__ = ["TxInput", "TxOutput", "WitnessField", "Transaction", "UTXO"]
 

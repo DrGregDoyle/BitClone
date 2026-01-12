@@ -3,7 +3,8 @@ Test for CompactSize encoding
 """
 from random import randint
 
-from src.data import read_compact_size, write_compact_size
+from src.core.byte_stream import read_compact_size
+from src.data import write_compact_size
 
 
 def test_read_compactsize():
