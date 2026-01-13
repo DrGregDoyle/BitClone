@@ -4,11 +4,11 @@ Methods for sending/receiving messages and connecting to peers
 import socket
 import time
 
-from src.data.network_data import NetAddr
 from src.network.ctrl_msg import Version, VerAck
 from src.network.header import Header
 from src.network.message import Message
 from src.network.message_factory import create_version_msg
+from src.network.network_data import NetAddr
 from src.network.network_types import Services
 
 # --- Learn Me A Bitcoin IP

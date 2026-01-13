@@ -4,8 +4,8 @@ Control messages
 from src.core import SERIALIZED, get_stream, read_little_int, read_stream
 from src.core.byte_stream import read_compact_size
 from src.data import write_compact_size
-from src.data.network_data import NetAddr
 from src.network.message import EmptyMessage, Message
+from src.network.network_data import NetAddr
 from src.network.network_types import Services
 
 __all__ = ["Version", "Pong", "Ping", "VerAck"]

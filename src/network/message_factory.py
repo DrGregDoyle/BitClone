@@ -3,8 +3,8 @@ Factory functions for creating network messages
 """
 import time
 
-from src.data.network_data import NetAddr
 from src.network.ctrl_msg import Version, Ping, VerAck
+from src.network.network_data import NetAddr
 from src.network.network_types import Services
 
 __all__ = ["create_version_msg", "create_ping_msg", "create_verack_msg"]
