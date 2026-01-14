@@ -1,7 +1,10 @@
 """
 Classes for different types of Network data structures
 """
+import siphash
+
 from src.core import Serializable, SERIALIZED, get_stream, read_little_int, read_stream, read_big_int, read_compact_size
+from src.cryptography.hash_functions import sha256
 from src.data import IP_ADDRESS, parse_ip_address, ip_from_netaddr, netaddr_bytes, ip_display, write_compact_size
 from src.network.network_types import Services, InvType
 from src.tx.tx import Transaction
@@ -160,8 +163,64 @@ class PrefilledTx(Serializable):
         }
 
 
+class ShortIDs(Serializable):
+    """
+    Short transaction IDs are used to represent a transaction without sending a full 256-bit hash.
+    They are calculated by:
+        -single-SHA256 hashing the block header with the nonce appended (in little-endian)
+        -Running SipHash-2-4 with the input being the transaction ID and the keys (k0/k1) set to the first two
+            little-endian 64-bit (8-byte) integers from the above hash, respectively.
+        -Dropping the 2 most significant bytes from the SipHash output to make it 6 bytes.
+    """
+    __slots__ = ("short_id",)
+
+    def __init__(self, block_header: bytes, nonce: int, txid: bytes):
+        # --- Validation --- #
+        if len(block_header) != 80:
+            raise ValueError(f"block_header must be 80 bytes, got {len(block_header)}")
+        if len(txid) != 32:
+            raise ValueError(f"txid must be 32 bytes, got {len(txid)}")
+
+        # Step 1: Create the SHA256 hash of the block_header + nonce
+        hash_data = block_header + nonce.to_bytes(8, "little")
+        hash_value = sha256(hash_data)
+
+        # Step 2: Extract k0 and k1 as the SipHash key (first 16 bytes)
+        # SipHash_2_4 expects a 16-byte secret key
+        siphash_key = hash_value[:16]
+
+        # Step 3: Run SipHash-2-4 with input being txid and k0/k1
+        siphash_result = siphash.SipHash_2_4(siphash_key, txid).hash()
+
+        # Step 4: Create shortId from lower 6 bytes
+        self.short_id = siphash_result.to_bytes(8, "little")[:6]
+
+    @classmethod
+    def from_bytes(cls, byte_stream: SERIALIZED):
+        """
+        Read a short ID directly from bytes (6 bytes)
+        Note: This doesn't recalculate, just reads the stored value
+        """
+        stream = get_stream(byte_stream)
+        short_id_bytes = read_stream(stream, 6)
+
+        # Create a dummy instance (we can't recalculate without header/nonce/txid)
+        instance = object.__new__(cls)
+        instance.short_id = short_id_bytes
+        return instance
+
+    def to_bytes(self) -> bytes:
+        """Return the 6-byte short ID"""
+        return self.short_id
+
+    def to_dict(self) -> dict:
+        return {"short_id": self.short_id.hex()}
+
+
 # --- TESTING
 if __name__ == "__main__":
+    from secrets import token_bytes
+
     sep = "===" * 40
 
     print(" --- NETWORK DATA TESTING --- ")
@@ -185,4 +244,13 @@ if __name__ == "__main__":
     test_tx = Transaction.from_bytes(test_tx_bytes)
     test_prefilled_tx = PrefilledTx(0, test_tx)
     print(f"TEST PREFILLED TX: {test_prefilled_tx.to_json()}")
+    print(sep)
+
+    # ShortIDs
+    test_block_header = token_bytes(80)  # Your block header
+    test_nonce = 12345
+    test_txid = token_bytes(32)  # Your transaction ID
+
+    test_shortid = ShortIDs(test_block_header, test_nonce, test_txid)
+    print(f"TEST SHORTID: {test_shortid.to_json()}")
     print(sep)
