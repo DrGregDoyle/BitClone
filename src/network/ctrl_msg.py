@@ -1,6 +1,8 @@
 """
 Control messages
 """
+import time
+
 from src.core import SERIALIZED, get_stream, read_little_int, read_stream
 from src.core.byte_stream import read_compact_size
 from src.data import write_compact_size
@@ -137,6 +139,57 @@ class Pong(Message):
 
     def payload_dict(self) -> dict:
         return {"nonce": self.nonce}
+
+
+class Addr(Message):
+    """Provide information on known nodes of the network.
+    =================================================================================
+    |   Name        | data type         | format                            | size  |
+    =================================================================================
+    |   count       |   int             |   compactSize                     |   var |
+    |   addr_list   |   list[NetAddr]   |   timestamp + NetAddr.to_bytes()  |   var |
+    =================================================================================
+    *The timestamp is a 4-byte (32-bit) little-endian integer (Unix timestamp)
+    """
+    COMMAND = "addr"
+    __slots__ = ("addr_list",)
+
+    def __init__(self, addr_list: list[NetAddr]):
+        super().__init__()
+        self.addr_list = addr_list
+
+    @classmethod
+    def from_bytes(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+
+        # count
+        count = read_compact_size(stream)
+
+        # timestamp + net_addr
+        addr_list = []
+        for _ in range(count):
+            temp_timestamp = read_little_int(stream, 4)
+            # TODO: add timestamp validation for version >= 31402
+            addr_list.append(NetAddr.from_bytes(stream))
+
+    def to_bytes(self) -> bytes:
+        count = len(self.addr_list)
+        parts = [write_compact_size(count)]
+        for addr in self.addr_list:
+            timestamp_int = int(time.time())
+            parts.append(timestamp_int.to_bytes(4, "little") + addr.to_bytes())
+        return b''.join(parts)
+
+    def to_dict(self, formatted: bool = True) -> dict:
+        count = len(self.addr_list)
+        addr_dict = {}
+        for x in range(count):
+            temp_addr = self.addr_list[x]
+            addr_dict.update({f"addr_{x}": temp_addr.to_dict(formatted)})
+        return  {
+            "count": write_compact_size(count).hex() if formatted else count
+            "net_addrs": addr_dict
+        }
 
 
 # --- EMPTY MESSAGES --- #

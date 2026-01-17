@@ -7,7 +7,7 @@ from src.blockchain.block import BlockHeader, Block
 from src.core import Serializable, SERIALIZED, get_stream, read_little_int, read_stream, read_big_int, \
     read_compact_size, NetworkDataError
 from src.cryptography.hash_functions import sha256
-from src.data import IP_ADDRESS, parse_ip_address, ip_from_netaddr, netaddr_bytes, ip_display, write_compact_size
+from src.data import IP_ADDRESS, ip_from_netaddr, write_compact_size, BitIP
 from src.network.network_types import Services, InvType
 from src.tx.tx import Transaction
 
@@ -30,7 +30,7 @@ class NetAddr(Serializable):
                  is_version: bool = False):
         self.time = None if is_version else time
         self.services = services
-        self.ip_addr = parse_ip_address(ip_addr)
+        self.ip_addr = BitIP(ip_addr)
         self.port = port
 
     @classmethod
@@ -60,17 +60,21 @@ class NetAddr(Serializable):
         parts = [
             self.time.to_bytes(4, "little") if self.time else b'',
             self.services.to_bytes(8, "little"),
-            netaddr_bytes(self.ip_addr),
+            self.ip_addr.to_bytes(),
             self.port.to_bytes(2, "big")
         ]
         return b''.join(parts)
 
-    def to_dict(self):
+    def to_dict(self, formatted: bool = True):
+        if self.time:
+            time_val = self.time.to_bytes(4, "little").hex() if formatted else self.time
+        else:
+            time_val = ""
         return {
-            "time": self.time if self.time else "",
+            "time": time_val,
             "serivces": self.services.name,
-            "ip_addr": ip_display(self.ip_addr),
-            "port": self.port
+            "ip_addr": self.ip_addr.to_bytes().hex() if formatted else self.ip_addr.ip,
+            "port": self.port.to_bytes(2, "big").hex() if formatted else self.port
         }
 
 

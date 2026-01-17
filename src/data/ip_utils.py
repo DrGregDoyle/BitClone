@@ -4,10 +4,12 @@ Utilities for working with IP address objects
 from ipaddress import IPv4Address, IPv6Address, ip_address
 from typing import Union
 
+from src.core import Serializable, get_bytes, SERIALIZED
+
 V4_PREFIX = b'\x00' * 10 + b'\xff' * 2
 IP_ADDRESS = Union[IPv4Address, IPv6Address]
 
-__all__ = ["IP_ADDRESS", "ip_display", "ip_from_netaddr", "netaddr_bytes", "parse_ip_address"]
+__all__ = ["IP_ADDRESS", "ip_display", "ip_from_netaddr", "netaddr_bytes", "parse_ip_address", "BitIP"]
 
 
 def ip_from_netaddr(raw16: bytes) -> IP_ADDRESS:
@@ -46,3 +48,36 @@ def ip_display(ip: IP_ADDRESS) -> str:
     if isinstance(ip, IPv6Address) and ip.ipv4_mapped is not None:
         return str(ip.ipv4_mapped)  # "1.2.3.4"
     return str(ip)  # "2001:db8::1" or "1.2.3.4"
+
+
+class BitIP(Serializable):
+    """
+    We have a wrapper class to handle all IP objects within BitClone
+    """
+
+    def __init__(self, ip: str | IP_ADDRESS):
+        self.ip_obj = parse_ip_address(ip)
+
+    @property
+    def is_v4(self):
+        return isinstance(self.ip_obj, IPv4Address)
+
+    @property
+    def ip(self) -> str:
+        """
+        Returns ip_display
+        """
+        return ip_display(self.ip_obj)
+
+    @classmethod
+    def from_bytes(cls, byte_stream: SERIALIZED):
+        ip_bytes = get_bytes(byte_stream)
+        return cls(ip_from_netaddr(ip_bytes))
+
+    def to_bytes(self) -> bytes:
+        return netaddr_bytes(self.ip_obj)
+
+    def to_dict(self, formatted: bool = True) -> dict:
+        return {
+            "ip": self.to_bytes().hex() if formatted else ip_display(self.ip_obj)
+        }

@@ -16,3 +16,6 @@
 - Block Dict
     - Add target as well as bits
     - Subtask 2
+- Network
+    - Create BitIP class for handling ip addresses
+    - Needs to inherit from Serializable.
