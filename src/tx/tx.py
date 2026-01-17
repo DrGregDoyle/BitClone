@@ -22,16 +22,15 @@ COINBASE_KEY = "is_coinbase"
 
 class TxInput(Serializable):
     """
-    TxInput
-    -------------------------------------------------------------
-    |   Field           |   Byte Size   |   Format              |
-    -------------------------------------------------------------
-    |   txid            |   32          |   natural byte order  |
-    |   vout            |   4           |   little-endian       |
-    |   scriptsig_size  |   var         |   CompactSize         |
-    |   scriptsig       |   var         |   Script              |
-    |   sequence        |   4           |   little-endian       |
-    -------------------------------------------------------------
+    =============================================================================
+    |   name            |   data type   |   format              |   byte size   |
+    =============================================================================
+    |   txid            |   bytes       |   natural byte order  |   32          |
+    |   vout            |   int         |   little-endian       |   4           |
+    |   scriptsig_size  |               |   compactSize         |   var         |
+    |   scriptsig       |   bytes       |   script bytes        |   var         |
+    |   sequence        |   int         |   little-endian       |   4           |
+    =============================================================================
     """
     __slots__ = ("txid", "vout", "scriptsig", "sequence")
 
@@ -71,13 +70,14 @@ class TxInput(Serializable):
         ]
         return b''.join(parts)
 
-    def to_dict(self) -> dict:
+    def to_dict(self, formatted: bool = True) -> dict:
+        ss_len = len(self.scriptsig)
         return {
-            "txid": self.txid[::-1].hex(),  # Reverse txid for display
-            "vout": self.vout.to_bytes(TX.VOUT, "little").hex(),
-            "scriptsig_size": write_compact_size(len(self.scriptsig)).hex(),
+            "txid": self.txid[::-1].hex() if formatted else self.txid.hex(),
+            "vout": self.vout.to_bytes(TX.VOUT, "little").hex() if formatted else self.vout,
+            "scriptsig_size": write_compact_size(ss_len).hex() if formatted else ss_len,
             "scriptsig": self.scriptsig.hex(),
-            "sequence": self.sequence.to_bytes(TX.SEQUENCE, "little").hex()
+            "sequence": self.sequence.to_bytes(TX.SEQUENCE, "little").hex() if formatted else self.sequence
         }
 
 
@@ -547,20 +547,20 @@ class Transaction(Serializable):
 # -- TESTING ---
 if __name__ == "__main__":
     sep = "===" * 50
+    space = "\n\n"
 
-    known_coinbase_tx_bytes = bytes.fromhex(
-        "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff5003f47c030f00456c6967697573005155a2d20372fabe6d6daf7bf6031ba4aed23330ce4599b8ca3192ef06e727af3f23c2afac46009aea030800000000000000002f503253482f00f000000000000442ffffffff26d8ec8600000000001976a9147c195c7cc2d028eec5abf965209e16bf2ffcd44388ac06040000000000001976a914c719446155d5f0722af1596ff1a801103cdaafe388ac58920100000000001976a914c3f3b9394fd77db04fe78f380fe5957dbc487b0788ac05400200000000001976a914cedcbd7a94ec3a86c1caec625f353bf771c003ec88acc9140000000000001976a9146b8c3a80d69714e5e59090eb46ce15b59ae5bb4088ac34172900000000001976a914ee24ede7d95a9209306cc242a7fc0e1ce236fd1d88ac2d361000000000001976a9140d37f0f7edeae22e7ab7524db57b3885c0a1844f88ac03020000000000001976a914a73de5c60cca9a16c905ccd3c06a4a7973247e8188ac86871404000000001976a914d549d339550e3071411206e77c8fe4e54c982be288ac17791004000000001976a914bdc8359f2f3ae6444354c8020536bac4538e882088ac4b320000000000001976a914e02efee6a0b2622379baffeb45e72fe82190663288ac2ce41200000000001976a91484507a510491ba08bb3301bc0b744e90b70b1ad888ac03020000000000001976a91469a86576f24c5d7788ac186357692a9dd630414588ac875a0000000000001976a914d4ce58af14365181e3f92f26246f3f3b84cb667288ac7b520000000000001976a9147fd29b139a5c1c5d5c5525ee91cd678cfa20f5a588ac44dc0200000000001976a914fa0137d02318b85662b8d172ca4d49bd9eab9fe288ac3c8f0f04000000001976a914db2f9af40204e79f9c2316c043df0abc2121879388ac06040000000000001976a9140066c3e8abdda7ced4983554941580fd8c6d325d88ac03020000000000001976a9148ae4a3b8c00848227e035d9135fd87352a5aadcb88ac33220000000000001976a91462004f0dc5a8ee57f3572a38f5e729c2f1822f6088ac03020000000000001976a914129dc340bab739f6bfe1de20d80ddef301a721d088ac06040000000000001976a9146151115967944d913aaeeb4bcab93ca96a88d0df88ac10fd2304000000001976a9144ebf00154078a5ee78599adb4a82ce3b75709f5688acf3a20000000000001976a914d44d821ce7d05b056dc7df4ab2ceb7eb0f7bb05288ac1b120000000000001976a914e3b38366c2703ea6911162e0b1305a1ddb88890f88ac4b320000000000001976a9141d301a072626635c2df9f7bb2f6d2918c0b22a0588ac1cbe0a04000000001976a914c3b080fe3ba3072c93411413e4ff92c18fffc39188acc6737b04000000001976a914a1e0af13ae87c6d6c85f84fa27e49be06d75e81b88ac8ccc2605000000001976a9146ba1807121fdcb390db917b4ce84b0dc8e70883e88ac05cea807000000001976a9149e669514e32f8511fccb198f71146719c563edaf88ac4de1f922000000001976a914eec10b954bdd9ffae75b098301e21c4de538306d88ac45712504000000001976a9144ca14002a278934440c9234c539a3c22ff9e3f9588ac02b19010000000001976a9149b040186460870ecdf69d09d07dbbde8d37a681588acb0f38b10000000001976a9146753bce382f175bf8b642fac513a7dfe31f1631f88ac79557711000000001976a914da9d41c79ca85ce0c68057b8adfb753424e7f07a88ac83656211000000001976a914b5945df721fd42b339737c07c24ab36ee3e7c1ac88acadc5c204000000001976a914980eafbfc8f56c39ace9dead5949fec6ba7e654788ac01000000000000001976a9145399c3093d31e4b0af4be1215d59b857b861ad5d88ac00000000"
-        "")
-    coinbase_tx = Transaction.from_bytes(known_coinbase_tx_bytes)
-
-    # legacy_tx = Transaction.from_bytes(bytes.fromhex(
-    #     "02000000014cace153f473125a81d3a4e3e21c2e118242e4407b4a9d80a757c755cba5d921000000006a47304402205ac3835898c0f53100c7ae83ad8d7c056c8aea82017e782f50b91e2121f28ff4022010010a1cdc7e0a1695760d1e427004c2b77e646d4a9ab785885a1197b0e3c1fb01210303e1a6e42e644905b205bc025df02ee98a39d392a8f4c3e1979dd9d49c1a4278fdffffff016b242400000000001976a914a4c851d839e26dd37931b5d5db175912d81a4ed888ac00000000"))
-
-    # --- LOGGING --- #
+    print(" --- TX FORMATTING VALIDATION ---")
     print(sep)
-    print(" --- COINBASE TRANSACTION --- ")
-    print(coinbase_tx.to_json())
+
+    # TxInput
+    test_txid = bytes.fromhex("03bbbdcf71dd288dba0a9936fde33d15d319f74ffe26e670e5871e691bf03929")
+    test_vout = 0
+    test_scriptsig = bytes.fromhex(
+        "47304402203fd3ff375c314f40ef02f2665b61a8219b938b281fb1e75785f01437f7f29254022025cf6fcad3c7bb119a044bde1d4c642a33b19299db9a96d53bb8ec6a2f856a72012102f2d9d8629bffca39151042bd24981ff28f579307a11486c3a6989b18ff090a7f")
+    test_sequence = 0xffffffff
+    test_txin = TxInput(test_txid, test_vout, test_scriptsig, test_sequence)
+    print(f"FORMATTED TEST TXINPUT: {test_txin.to_json()}")
     print(sep)
-    # print(" --- LEGACY TRANSACTION ---")
-    # print(legacy_tx.to_json())
-    # print(sep)
+    print(f"UNFORMATTED TEST TXINPUT: {test_txin.to_json(False)}")
+    print(sep)
+    print(space)
