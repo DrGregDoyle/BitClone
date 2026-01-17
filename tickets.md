@@ -13,6 +13,6 @@
 - Serialized to_dict method
     - Have a flag for formatted vs plaintext
     - Default will be serialized formatted
-- Task Category 2
-    - Subtask 1
+- Block Dict
+    - Add target as well as bits
     - Subtask 2
