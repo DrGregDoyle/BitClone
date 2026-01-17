@@ -2,9 +2,9 @@
 The custom exceptions used throughout BitClone
 """
 __all__ = ['BitNumError', 'BitStackError', 'CoinbaseError', 'DataEncodingError', 'ECCError', 'ECCPrivateKeyError',
-           'ECDSAError', 'ExtendedKeyError', 'MerkleError', 'NetworkError', 'OpCodeError', 'PubKeyError', 'ReadError',
-           'SchnorrError', 'ScriptEngineError', 'ScriptPubKeyError', 'ScriptSigError', 'SignatureError', 'StreamError',
-           'TaprootError', 'TargetBitsError', 'WalletError', 'WriteError']
+           'ECDSAError', 'ExtendedKeyError', 'MerkleError', 'NetworkDataError', 'NetworkError', 'OpCodeError',
+           'PubKeyError', 'ReadError', 'SchnorrError', 'ScriptEngineError', 'ScriptPubKeyError', 'ScriptSigError',
+           'SignatureError', 'StreamError', 'TaprootError', 'TargetBitsError', 'WalletError', 'WriteError']
 
 
 class BitNumError(Exception):
@@ -64,6 +64,13 @@ class ExtendedKeyError(Exception):
 class MerkleError(Exception):
     """
     For use in the MerkleTree class
+    """
+    pass
+
+
+class NetworkDataError(Exception):
+    """
+    For use in network data structures
     """
     pass
 
