@@ -159,7 +159,7 @@ class Addr(Message):
         self.addr_list = addr_list
 
     @classmethod
-    def from_bytes(cls, byte_stream: SERIALIZED):
+    def from_payload(cls, byte_stream: SERIALIZED):
         stream = get_stream(byte_stream)
 
         # count
@@ -172,7 +172,7 @@ class Addr(Message):
             # TODO: add timestamp validation for version >= 31402
             addr_list.append(NetAddr.from_bytes(stream))
 
-    def to_bytes(self) -> bytes:
+    def to_payload(self) -> bytes:
         count = len(self.addr_list)
         parts = [write_compact_size(count)]
         for addr in self.addr_list:
@@ -180,14 +180,14 @@ class Addr(Message):
             parts.append(timestamp_int.to_bytes(4, "little") + addr.to_bytes())
         return b''.join(parts)
 
-    def to_dict(self, formatted: bool = True) -> dict:
+    def payload_dict(self, formatted: bool = True) -> dict:
         count = len(self.addr_list)
         addr_dict = {}
         for x in range(count):
             temp_addr = self.addr_list[x]
             addr_dict.update({f"addr_{x}": temp_addr.to_dict(formatted)})
-        return  {
-            "count": write_compact_size(count).hex() if formatted else count
+        return {
+            "count": write_compact_size(count).hex() if formatted else count,
             "net_addrs": addr_dict
         }
 
