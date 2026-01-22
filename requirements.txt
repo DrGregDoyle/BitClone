@@ -1,0 +1,11 @@
+cffi==2.0.0
+cryptography==46.0.3
+iniconfig==2.3.0
+packaging==26.0
+pluggy==1.6.0
+pycparser==3.0
+Pygments==2.19.2
+pytest==9.0.2
+setuptools==80.10.1
+siphash==0.0.1
+wheel==0.46.2
