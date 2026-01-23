@@ -3,12 +3,12 @@ Control messages
 """
 import time
 
-from src.core import SERIALIZED, get_stream, read_little_int, read_stream
+from src.core import SERIALIZED, get_stream, read_little_int, read_stream, NetworkDataError
 from src.core.byte_stream import read_compact_size
 from src.data import write_compact_size
 from src.network.message import EmptyMessage, Message
 from src.network.network_data import NetAddr
-from src.network.network_types import Services
+from src.network.network_types import Services, RejectType
 
 __all__ = ["Version", "Pong", "Ping", "VerAck"]
 
@@ -192,9 +192,86 @@ class Addr(Message):
         }
 
 
+class Reject(Message):
+    """Rejects a message
+    =====================================================================
+    |   Name            | data type     | format            | size      |
+    =====================================================================
+    |   Msg_bytes       |   int         |   CompactSize     |   varint  |
+    |   Msg             |   str         |   ascii bytes     |   var     |
+    |   Code            |   int         |   little-endian   |   1       |
+    |   Reason_bytes    |   int         |   CompactSize     |   varint  |
+    |   Reason          |   str         |   ascii bytes     |   var     |
+    |   Data            |   bytes       |   various         |   var     |
+    =====================================================================
+    NB: Msg here refers to message type. e.g. version, tx, ping
+    """
+    COMMAND = "reject"
+
+    def __init__(self, message_type: str, reject_type: RejectType | int, extra_data: bytes = b""):
+        super().__init__()
+        # TODO: Add message_type validation or create enum
+        # TODO: Add validation for extra_data depending on message_type
+        self.message_type = message_type
+        self.reject_type = reject_type if isinstance(reject_type, RejectType) else RejectType(reject_type)
+        self.extra_data = extra_data
+
+    @classmethod
+    def from_payload(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+
+        # message_type
+        msg_byte_len = read_compact_size(stream)
+        msg_bytes = read_stream(stream, msg_byte_len)
+        message_type = msg_bytes.decode("ascii")
+
+        # reject_type
+        reject_num = read_little_int(stream, 1)
+        reject_byte_len = read_compact_size(stream)
+        reject_bytes = read_stream(stream, reject_byte_len)
+        reject_text = reject_bytes.decode("ascii")
+
+        # Logging
+        if RejectType(reject_num).name != reject_text:
+            raise NetworkDataError("Reject num doesn't agree with reject type")
+
+        # use reject_text to determine extra bytes
+        if message_type in ["block", "tx"]:
+            extra_data = read_stream(stream, 32)
+        else:
+            extra_data = b''
+
+        return cls(message_type, reject_num, extra_data)
+
+    def to_payload(self) -> bytes:
+        msg_bytes = self.message_type.encode("ascii")
+        reason_bytes = self.reject_type.name.encode("ascii")
+        parts = [
+            write_compact_size(len(msg_bytes)), msg_bytes, self.reject_type.value.to_bytes(1, "little"),
+            write_compact_size(len(reason_bytes)), reason_bytes, self.extra_data
+        ]
+        return b''.join(parts)
+
+    def payload_dict(self, formatted: bool = True) -> dict:
+        return {
+            "message_type": self.message_type,
+            "reject_type": self.reject_type.value,
+            "reject_reason": self.reject_type.name,
+            "extra_data": self.extra_data.hex()
+        }
+
+
 # --- EMPTY MESSAGES --- #
 class VerAck(EmptyMessage):
     COMMAND = "verack"
+
+
+class GetAddr(EmptyMessage):
+    COMMAND = "getaddr"
+
+
+class SendHeaders(EmptyMessage):
+    COMMAND = "sendheaders"
 
 
 # --- TESTING ---
@@ -216,3 +293,9 @@ if __name__ == "__main__":
         "F9BEB4D976657273696F6E0000000000550000002C2F86F37E1101000000000000000000C515CF6100000000000000000000000000000000000000000000FFFF2E13894A208D000000000000000000000000000000000000FFFF7F000001208D00000000000000000000000000")
     test_version = Version.from_payload(test_lmab_version_bytes)
     print(f"TEST VERSION: {test_version.to_json()}")
+
+    # Reject
+    test_reject_msg = Reject(
+        message_type='version', reject_type=0x40
+    )
+    print(f"REJECT VERSION: {test_reject_msg.to_json()}")

@@ -85,7 +85,7 @@ class Message(Serializable, ABC):
         """Serialize the instance to full message"""
         return self._get_header(self.payload).to_bytes() + self.to_payload()
 
-    def to_dict(self) -> dict:
+    def to_dict(self, formatted: bool = True) -> dict:
         return {
             "header": self._get_header(self.payload).to_dict(),
             "payload": self.payload_dict(),
