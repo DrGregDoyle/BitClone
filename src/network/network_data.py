@@ -123,9 +123,9 @@ class InvVector(Serializable):
         ]
         return b''.join(parts)
 
-    def to_dict(self) -> dict:
+    def to_dict(self, formatted: bool = True) -> dict:
         return {
-            "type": self.type.name,
+            "type": self.type.value if formatted else self.type.name,
             "hash": self.hash.hex()
         }
 

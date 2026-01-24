@@ -122,11 +122,11 @@ class TxOutput(Serializable):
         """
         return self.amount.to_bytes(TX.AMOUNT, "little") + self.serial_scriptpubkey
 
-    def to_dict(self) -> dict:
+    def to_dict(self, formatted: bool = True) -> dict:
+        scriptpubkey_len = len(self.scriptpubkey)
         return {
-            "amount": self.amount.to_bytes(TX.AMOUNT, "little").hex(),
-            "amount_int": self.amount,
-            "scriptpubkey_size": write_compact_size(len(self.scriptpubkey)).hex(),
+            "amount": self.amount.to_bytes(TX.AMOUNT, "little").hex() if formatted else self.amount,
+            "scriptpubkey_size": write_compact_size(scriptpubkey_len).hex() if formatted else scriptpubkey_len,
             "scriptpubkey": self.scriptpubkey.hex()
         }
 
@@ -174,19 +174,16 @@ class WitnessField(Serializable):
             parts.append(item)
         return b''.join(parts)
 
-    def to_dict(self) -> dict:
-        witness_dict = {
-            "stack_items": write_compact_size(len(self.items)).hex()
+    def to_dict(self, formatted: bool = True) -> dict:
+        stack_items = len(self.items)
+
+        item_dict = {
+            f"{x}": self.items[x].hex() for x in range(stack_items)
         }
-        for x in range(len(self.items)):
-            temp_item = self.items[x]
-            witness_dict.update({
-                x: {
-                    "size": write_compact_size(len(temp_item)).hex(),
-                    "data": temp_item.hex()
-                }
-            })
-        witness_dict.update({"serialized": self.to_bytes().hex()})
+        witness_dict = {
+            "stack_items": write_compact_size(stack_items).hex() if formatted else stack_items,
+            "items": item_dict
+        }
         return witness_dict
 
 
@@ -498,19 +495,19 @@ class Transaction(Serializable):
 
         return b''.join(parts)
 
-    def to_dict(self) -> dict:
+    def to_dict(self, formatted: bool = True) -> dict:
         # Get input and output list
-        inputs = [i.to_dict() for i in self.inputs]
-        outputs = [o.to_dict() for o in self.outputs]
+        inputs = [i.to_dict(formatted) for i in self.inputs]
+        outputs = [o.to_dict(formatted) for o in self.outputs]
 
         # Begin dictionary construction
         tx_dict = {
-            "txid": self.txid[::-1].hex(),  # Reverse byte order for display
-            "wtxid": self.wtxid[::-1].hex(),  # Reverse byte order for display
+            "txid": self.txid[::-1].hex() if formatted else self.txid.hex(),  # Reverse byte order for display
+            "wtxid": self.wtxid[::-1].hex() if formatted else self.wtxid.hex(),  # Reverse byte order for display
             "wu": self.wu,
             "bytes": self.length,
             "vbytes": self.vbytes,
-            "version": self.version.to_bytes(TX.VERSION, "little").hex()
+            "version": self.version.to_bytes(TX.VERSION, "little").hex() if formatted else self.version
         }
 
         # Segwit check | add marker and flag
@@ -522,22 +519,22 @@ class Transaction(Serializable):
 
         # Add inputs and outputs
         tx_dict.update({
-            "input_num": write_compact_size(len(self.inputs)).hex(),
+            "input_num": write_compact_size(len(self.inputs)).hex() if formatted else len(self.inputs),
             "inputs": inputs,
-            "output_num": write_compact_size(len(self.outputs)).hex(),
+            "output_num": write_compact_size(len(self.outputs)).hex() if formatted else len(self.outputs),
             "outputs": outputs
         })
 
         # Segwit check | add witness
         if self.is_segwit:
-            witness = [w.to_dict() for w in self.witness]
+            witness = [w.to_dict(formatted) for w in self.witness]
             tx_dict.update({
                 "witness": witness
             })
 
         # Add locktime and return
         tx_dict.update({
-            "locktime": self.locktime.to_bytes(TX.LOCKTIME, "little").hex(),
+            "locktime": self.locktime.to_bytes(TX.LOCKTIME, "little").hex() if formatted else self.locktime,
             "is_segwit": self.is_segwit,
             "is_coinbase": self.is_coinbase
         })

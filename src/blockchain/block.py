@@ -75,15 +75,18 @@ class BlockHeader(Serializable):
         ]
         return b''.join(parts)
 
-    def to_dict(self) -> dict:
+    def to_dict(self, formatted: bool = True) -> dict:
         return {
-            "block_hash": self.block_id[::-1].hex(),  # Reverse byte order for display
-            "version": self.version.to_bytes(4, "little").hex(),
-            "previous_block": self.prev_block[::-1].hex(),  # Reverse order for display
-            "merkle_root": self.merkle_root[::-1].hex(),  # Reverse order for display
-            "timestamp": datetime.fromtimestamp(self.timestamp).strftime(BLOCK.TIMESTAMP_FORMAT),
+            # Formatted block hash reverses byte order for display
+            "block_hash": self.block_id[::-1].hex() if formatted else self.block_id.hex(),
+            "version": self.version.to_bytes(4, "little").hex() if formatted else self.version,
+            "previous_block": self.prev_block[::-1].hex() if formatted else self.prev_block.hex(),
+            # Formatted merkle root reverse byte order for display
+            "merkle_root": self.merkle_root[::-1].hex() if formatted else self.merkle_root.hex(),
+            "timestamp": datetime.fromtimestamp(self.timestamp).strftime(
+                BLOCK.TIMESTAMP_FORMAT) if formatted else self.timestamp,
             "bits": self.bits.hex(),
-            "nonce": self.nonce
+            "nonce": self.nonce.to_bytes(BLOCK.NONCE, "little").hex() if formatted else self.nonce
         }
 
     def increment(self):
@@ -134,7 +137,7 @@ class Block(Serializable):
     def from_bytes(cls, byte_stream: SERIALIZED):
         stream = get_stream(byte_stream)
 
-        # Read in blockheader
+        # Read in block header
         header = BlockHeader.from_bytes(stream)
 
         # Read in txs
@@ -180,14 +183,13 @@ class Block(Serializable):
             tx_parts.append(tx.to_bytes())
         return self.get_header().to_bytes() + b''.join(tx_parts)
 
-    def to_dict(self) -> dict:
+    def to_dict(self, formatted: bool = True) -> dict:
         tx_num = len(self.txs)
-        tx_dict = {}
-        for x in range(tx_num):
-            temp_tx = self.txs[x]
-            tx_dict.update({x: temp_tx.to_dict()})
+        tx_dict = {
+            f"{x}": self.txs[x].to_dict(formatted=formatted) for x in range(tx_num)
+        }
         return {
-            "header": self.get_header().to_dict(),
+            "header": self.get_header().to_dict(formatted),
             "tx_num": tx_num,
             "txs": tx_dict
         }
