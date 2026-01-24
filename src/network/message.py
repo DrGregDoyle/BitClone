@@ -70,7 +70,7 @@ class Message(Serializable, ABC):
         raise NotImplementedError(f"{self.__name__} must implement to_payload()")
 
     @abstractmethod
-    def payload_dict(self) -> dict:
+    def payload_dict(self, formatted: bool = True) -> dict:
         raise NotImplementedError(f"{self.__name__} must implement payload_dict()")
 
     @classmethod
@@ -87,8 +87,8 @@ class Message(Serializable, ABC):
 
     def to_dict(self, formatted: bool = True) -> dict:
         return {
-            "header": self._get_header(self.payload).to_dict(),
-            "payload": self.payload_dict(),
+            "header": self._get_header(self.payload).to_dict(formatted),
+            "payload": self.payload_dict(formatted),
         }
 
 
@@ -108,7 +108,7 @@ class EmptyMessage(Message):
     def to_payload(self) -> bytes:
         return b''
 
-    def payload_dict(self) -> dict:
+    def payload_dict(self, formatted: bool = True) -> dict:
         return {}
 
 

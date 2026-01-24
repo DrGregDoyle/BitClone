@@ -13,6 +13,7 @@
 - Serialized to_dict method
     - Have a flag for formatted vs plaintext
     - Default will be serialized formatted
+        - The to_payload and to_dict methods will overlap.
 - Block Dict
     - Add target as well as bits
     - Subtask 2

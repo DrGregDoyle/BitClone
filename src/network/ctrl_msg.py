@@ -3,14 +3,14 @@ Control messages
 """
 import time
 
-from src.core import SERIALIZED, get_stream, read_little_int, read_stream, NetworkDataError
+from src.core import SERIALIZED, get_stream, read_little_int, read_stream
 from src.core.byte_stream import read_compact_size
 from src.data import write_compact_size
 from src.network.message import EmptyMessage, Message
 from src.network.network_data import NetAddr
 from src.network.network_types import Services, RejectType
 
-__all__ = ["Version", "Pong", "Ping", "VerAck"]
+__all__ = ["Version", "Pong", "Ping", "VerAck", "Addr", "Reject", "GetAddr", "SendHeaders"]
 
 
 class Version(Message):
@@ -88,7 +88,7 @@ class Version(Message):
         ]
         return b''.join(parts)
 
-    def payload_dict(self) -> dict:
+    def payload_dict(self, formatted: bool = True) -> dict:
         return {
             "protocol_version": self.protocol_version,
             "services": self.services.name,
@@ -101,45 +101,44 @@ class Version(Message):
         }
 
 
-class Ping(Message):
+# --- PING PONG --- #
+
+class PingPongParent(Message):
+    """
+    Parent class for Ping and Pong. They will differ only in their command.
+    """
+
+    def __init__(self, nonce: int):
+        super().__init__()
+        self.nonce = nonce  # Unformatted nonce
+
+    def _format_nonce(self):
+        return self.nonce.to_bytes(8, "little")
+
+    @classmethod
+    def from_payload(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+        nonce = read_little_int(stream, 8)
+        return cls(nonce)
+
+    def to_payload(self) -> bytes:
+        return self._format_nonce()
+
+    def payload_dict(self, formatted: bool = True) -> dict:
+        return {
+            "nonce": self._format_nonce().hex() if formatted else self.nonce
+        }
+
+
+class Ping(PingPongParent):
     COMMAND = "ping"
 
-    def __init__(self, nonce: int):
-        super().__init__()
-        self.nonce = nonce
 
-    @classmethod
-    def from_payload(cls, byte_stream: SERIALIZED):
-        stream = get_stream(byte_stream)
-        nonce = read_little_int(stream, 8)
-        return cls(nonce)
-
-    def to_payload(self) -> bytes:
-        return self.nonce.to_bytes(8, "little")
-
-    def payload_dict(self) -> dict:
-        return {"nonce": self.nonce}
-
-
-class Pong(Message):
+class Pong(PingPongParent):
     COMMAND = "pong"
 
-    def __init__(self, nonce: int):
-        super().__init__()
-        self.nonce = nonce
 
-    @classmethod
-    def from_payload(cls, byte_stream: SERIALIZED):
-        stream = get_stream(byte_stream)
-        nonce = read_little_int(stream, 8)
-        return cls(nonce)
-
-    def to_payload(self) -> bytes:
-        return self.nonce.to_bytes(8, "little")
-
-    def payload_dict(self) -> dict:
-        return {"nonce": self.nonce}
-
+# =================================================================== #
 
 class Addr(Message):
     """Provide information on known nodes of the network.
@@ -208,12 +207,13 @@ class Reject(Message):
     """
     COMMAND = "reject"
 
-    def __init__(self, message_type: str, reject_type: RejectType | int, extra_data: bytes = b""):
+    def __init__(self, message_type: str, reject_type: RejectType | int, reject_reason: str, extra_data: bytes = b""):
         super().__init__()
         # TODO: Add message_type validation or create enum
         # TODO: Add validation for extra_data depending on message_type
         self.message_type = message_type
         self.reject_type = reject_type if isinstance(reject_type, RejectType) else RejectType(reject_type)
+        self.reject_reason = reject_reason
         self.extra_data = extra_data
 
     @classmethod
@@ -231,21 +231,17 @@ class Reject(Message):
         reject_bytes = read_stream(stream, reject_byte_len)
         reject_text = reject_bytes.decode("ascii")
 
-        # Logging
-        if RejectType(reject_num).name != reject_text:
-            raise NetworkDataError("Reject num doesn't agree with reject type")
-
-        # use reject_text to determine extra bytes
+        # use message_type to determine extra bytes
         if message_type in ["block", "tx"]:
             extra_data = read_stream(stream, 32)
         else:
             extra_data = b''
 
-        return cls(message_type, reject_num, extra_data)
+        return cls(message_type, reject_num, reject_text, extra_data)
 
     def to_payload(self) -> bytes:
         msg_bytes = self.message_type.encode("ascii")
-        reason_bytes = self.reject_type.name.encode("ascii")
+        reason_bytes = self.reject_reason.encode("ascii")
         parts = [
             write_compact_size(len(msg_bytes)), msg_bytes, self.reject_type.value.to_bytes(1, "little"),
             write_compact_size(len(reason_bytes)), reason_bytes, self.extra_data
@@ -255,8 +251,8 @@ class Reject(Message):
     def payload_dict(self, formatted: bool = True) -> dict:
         return {
             "message_type": self.message_type,
-            "reject_type": self.reject_type.value,
-            "reject_reason": self.reject_type.name,
+            "reject_type": self.reject_type.value if formatted else self.reject_type.name,
+            "reject_reason": self.reject_reason,
             "extra_data": self.extra_data.hex()
         }
 
@@ -274,28 +270,37 @@ class SendHeaders(EmptyMessage):
     COMMAND = "sendheaders"
 
 
+# =================================================================== #
+
 # --- TESTING ---
 if __name__ == "__main__":
     sep = "===" * 40
 
     # VerAck
     test_verack = VerAck()
-    print(f"VERACK: {test_verack.to_json()}")
+    print(f"VERACK FORMATTED: {test_verack.to_json(formatted=True)}")
+    print(f"VERACK NOT FORMATTED: {test_verack.to_json(formatted=False)}")
     print(sep)
 
     # Ping
     test_ping = Ping(1234)
-    print(f"PING: {test_ping.to_json()}")
+    print(f"FORMATTED PING: {test_ping.to_json()}")
+    print(f"PING NOT FORMATTED: {test_ping.to_json(formatted=False)}")
     print(sep)
-
-    # Version
-    test_lmab_version_bytes = bytes.fromhex(
-        "F9BEB4D976657273696F6E0000000000550000002C2F86F37E1101000000000000000000C515CF6100000000000000000000000000000000000000000000FFFF2E13894A208D000000000000000000000000000000000000FFFF7F000001208D00000000000000000000000000")
-    test_version = Version.from_payload(test_lmab_version_bytes)
-    print(f"TEST VERSION: {test_version.to_json()}")
-
-    # Reject
-    test_reject_msg = Reject(
-        message_type='version', reject_type=0x40
-    )
-    print(f"REJECT VERSION: {test_reject_msg.to_json()}")
+    #
+    # # Version
+    # test_lmab_version_bytes = bytes.fromhex(
+    #     "F9BEB4D976657273696F6E0000000000550000002C2F86F37E1101000000000000000000C515CF6100000000000000000000000000000000000000000000FFFF2E13894A208D000000000000000000000000000000000000FFFF7F000001208D00000000000000000000000000")
+    # test_version = Version.from_payload(test_lmab_version_bytes)
+    # print(f"TEST VERSION: {test_version.to_json()}")
+    #
+    # # Reject
+    # test_reject_msg = Reject(
+    #     message_type='version', reject_type=0x40, reject_reason='testing'
+    # )
+    # print(f"REJECT VERSION: {test_reject_msg.to_json()}")
+    #
+    # known_reject_payload_bytes = bytes.fromhex(
+    #     "02747812156261642d74786e732d696e707574732d7370656e74394715fcab51093be7bfca5a31005972947baf86a31017939575fb2354222821")
+    # known_reject = Reject.from_payload(known_reject_payload_bytes)
+    # print(f"KNOWN REJECT: {known_reject.to_json(False)}")
