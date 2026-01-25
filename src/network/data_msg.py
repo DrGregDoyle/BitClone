@@ -2,11 +2,14 @@
 Data Messages for P2P networking
 """
 from src.blockchain.block import Block
-from src.core import SERIALIZED, get_bytes, get_stream, read_compact_size, NetworkDataError
+from src.core import SERIALIZED, get_bytes, get_stream, read_compact_size, NetworkDataError, read_little_int, \
+    read_stream
 from src.data import write_compact_size
-from src.network.message import Message
+from src.network.message import Message, EmptyMessage
 from src.network.network_data import InvVector
 from src.tx import Transaction
+
+__all__ = ["BlockMessage", "TxMessage", "Inv"]
 
 
 class BlockMessage(Message):
@@ -63,17 +66,78 @@ class TxMessage(Message):
         return {"tx": self.tx.to_dict(formatted)}
 
 
-class Inv(Message):
+# === GETBLOCKS TYPE === #
+
+class GetBlocks(Message):
+    """Return an inv packet containing the list of blocks starting right after the last known hash in the block locator
+        object, up to hash_stop or 500 blocks, whichever comes first
+    =========================================================================
+    |   Name        |   data type   |   format                  |   size    |
+    =========================================================================
+    |   version         |   int         |   little-endian       |   4       |
+    |   hash_count      |   int         |   CompactSize         |   var     |
+    |   locator_hashes  |   list[bytes] |   natural byte order  |   32*     |
+    |   hash_stop       |   bytes       |   natural byte order  |   32      |
+    =========================================================================
+    *set hash_stop to 0 go get max blocks
+    """
+    COMMAND = "getblocks"
+
+    def __init__(self, version: int, locator_hashes: list[bytes], hash_stop: bytes = None):
+        super().__init__()
+        self.version = version
+        self.locator_hashes = locator_hashes
+        self.hash_stop = hash_stop if hash_stop else bytes(32)
+
+    @classmethod
+    def from_payload(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+
+        # version
+        version = read_little_int(stream, 4)
+
+        # locator hashes
+        hash_count = read_compact_size(stream)
+        locator_hashes = [read_stream(stream, 32) for _ in range(hash_count)]
+
+        # hash stop
+        hash_stop = read_stream(stream, 32)
+
+        return cls(version, locator_hashes, hash_stop)
+
+    def to_payload(self) -> bytes:
+        parts = [
+            self.version.to_bytes(4, "little"),
+            write_compact_size(len(self.locator_hashes)), b''.join(self.locator_hashes), self.hash_stop
+        ]
+        return b''.join(parts)
+
+    def payload_dict(self, formatted: bool = True) -> dict:
+        hash_count = len(self.locator_hashes)
+        locator_dict = {
+            f"locator_hash_{x}": self.locator_hashes[x].hex() for x in range(hash_count)
+        }
+        return {
+            "version": self.version.to_bytes(4, "little").hex() if formatted else self.version,
+            "hash_count": write_compact_size(hash_count).hex() if formatted else hash_count,
+            "locator_hashes": locator_dict,
+            "hash_stop": self.hash_stop.hex()
+        }
+
+
+# === INV TYPE === #
+
+class InvParent(Message):
     """
     Sends an Inventory message
     =========================================================================
     |   Name        |   data type   |   format                  |   size    |
     =========================================================================
     |   count       |   int         |   CompactSize             |   var     |
-    |   inventory   |   InvVector   |   InvVector.to_bytes()    |   var     |
+    |   items       |   InvVector   |   InvVector.to_bytes()    |   var     |
     =========================================================================
     """
-    COMMAND = "inv"
+
     MAX_ENTRIES = 50000
 
     def __init__(self, items: list[InvVector]):
@@ -109,6 +173,23 @@ class Inv(Message):
         }
 
 
+class Inv(InvParent):
+    COMMAND = "inv"
+
+
+class NotFound(InvParent):
+    COMMAND = "notfound"
+
+
+class GetData(InvParent):
+    COMMAND = "getdata"
+
+
+# === EMPTY MESSAGES === #
+class MemPool(EmptyMessage):
+    COMMAND = "mempool"
+
+
 # --- TESTING --- #
 if __name__ == "__main__":
     sep = "===" * 40
@@ -131,6 +212,11 @@ if __name__ == "__main__":
         "0201000000de55ffd709ac1f5dc509a0925d0b1fc442ca034f224732e429081da1b621f55a0100000091d36d997037e08018262978766f24b8a055aaf1d872e94ae85e9817b2c68dc7")
     test_inv_mesg = Inv.from_payload(known_inv_bytes)
 
+    # --- GETBLOCK MESSAGE --- #
+    known_getblock_bytes = bytes.fromhex(
+        "7111010002d39f608a7775b537729884d4e6633bb2105e55a16a14d31b00000000000000005c3e6403d40837110a2e8afb602b1c01714bda7ce23bea0a00000000000000000000000000000000000000000000000000000000000000000000000000000000")
+    test_getblock = GetBlocks.from_payload(known_getblock_bytes)
+
     # --- LOGGING --- #
     print(f"=== DATA MESSAGE TESTING ===")
     print(sep)
@@ -139,4 +225,6 @@ if __name__ == "__main__":
     print(f"TX MESSAGE: {test_tx_msg.to_json(False)}")
     print(sep)
     print(f"INV MESSAGE: {test_inv_mesg.to_json(False)}")
+    print(sep)
+    print(f"GETBLOCKS: {test_getblock.to_json(False)}")
     print(sep)
