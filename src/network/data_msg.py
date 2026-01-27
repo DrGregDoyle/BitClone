@@ -1,7 +1,7 @@
 """
 Data Messages for P2P networking
 """
-from src.blockchain.block import Block
+from src.blockchain.block import Block, BlockHeader
 from src.core import SERIALIZED, get_bytes, get_stream, read_compact_size, NetworkDataError, read_little_int, \
     read_stream
 from src.data import write_compact_size
@@ -68,20 +68,21 @@ class TxMessage(Message):
 
 # === GETBLOCKS TYPE === #
 
-class GetBlocks(Message):
-    """Return an inv packet containing the list of blocks starting right after the last known hash in the block locator
-        object, up to hash_stop or 500 blocks, whichever comes first
+class GetBlockParent(Message):
+    """
+    The parent class for GetBlocks and GetHeaders.
     =========================================================================
     |   Name        |   data type   |   format                  |   size    |
     =========================================================================
     |   version         |   int         |   little-endian       |   4       |
     |   hash_count      |   int         |   CompactSize         |   var     |
-    |   locator_hashes  |   list[bytes] |   natural byte order  |   32*     |
+    |   locator_hashes  |   list[bytes] |   natural byte order  |   32      |
     |   hash_stop       |   bytes       |   natural byte order  |   32      |
     =========================================================================
-    *set hash_stop to 0 go get max blocks
+    *When hash_stop is set to 0, we return the max number of blocks.
+    GetBlocks can include max 500 hashes. GetHeaders can include max 2000 headers
     """
-    COMMAND = "getblocks"
+    MAX = None  # To be overridden by subclasses
 
     def __init__(self, version: int, locator_hashes: list[bytes], hash_stop: bytes = None):
         super().__init__()
@@ -122,6 +123,69 @@ class GetBlocks(Message):
             "hash_count": write_compact_size(hash_count).hex() if formatted else hash_count,
             "locator_hashes": locator_dict,
             "hash_stop": self.hash_stop.hex()
+        }
+
+
+class GetBlocks(GetBlockParent):
+    """Return an inv packet containing the list of blocks starting right after the last known hash in the block locator
+        object, up to hash_stop or 500 blocks, whichever comes first
+    """
+    COMMAND = "getblocks"
+    MAX = 500
+
+
+class GetHeaders(GetBlockParent):
+    COMMAND = "getheaders"
+    MAX = 2000
+
+
+# === HEADERS === #
+class Headers(Message):
+    """Send BlockHeaders in response to a GetHeaders message
+    =================================================================================
+    |   Name        |   data type           |   format                  |   size    |
+    =================================================================================
+    |   count       |   int                 |   CompactSize             |   var     |
+    |   headers     |   list[BlockHeader]   |   BlockHeader.to_bytes()  |   81      |
+    =================================================================================
+    * We always include a 00 at the end of the BlockHeader to indicate the tx_count (which is always 0 for a header)
+    """
+    COMMAND = "headers"
+
+    def __init__(self, headers: list[BlockHeader]):
+        super().__init__()
+        self.headers = headers
+
+    @classmethod
+    def from_payload(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+
+        # header count
+        count = read_compact_size(stream)
+
+        # headers
+        headers = []
+        for _ in range(count):
+            temp_header = BlockHeader.from_bytes(stream)
+            tx_count = read_little_int(stream, 1)
+            # Validate
+            if tx_count != 0:
+                raise NetworkDataError("Headers Payload must contain 0 tx_count value appended to each header")
+            headers.append(temp_header)
+
+        return cls(headers)
+
+    def to_payload(self) -> bytes:
+        header_parts = [h.to_bytes() + b'\x00' for h in self.headers]
+        return write_compact_size(len(self.headers)) + b''.join(header_parts)
+
+    def payload_dict(self, formatted: bool = True) -> dict:
+        count = len(self.headers)
+        return {
+            "count": write_compact_size(count).hex() if formatted else count,
+            "headers": {
+                f"header_{x}": self.headers[x].to_dict(formatted) for x in range(count)
+            }
         }
 
 
@@ -217,6 +281,11 @@ if __name__ == "__main__":
         "7111010002d39f608a7775b537729884d4e6633bb2105e55a16a14d31b00000000000000005c3e6403d40837110a2e8afb602b1c01714bda7ce23bea0a00000000000000000000000000000000000000000000000000000000000000000000000000000000")
     test_getblock = GetBlocks.from_payload(known_getblock_bytes)
 
+    # --- HEADERS MESSAGE --- #
+    known_headers_bytes = bytes.fromhex(
+        "0102000000b6ff0b1b1680a2862a30ca44d346d9e8910d334beb48ca0c00000000000000009d10aa52ee949386ca9385695f04ede270dda20810decd12bc9b048aaab3147124d95a5430c31b18fe9f086400")
+    test_headers = Headers.from_payload(known_headers_bytes)
+
     # --- LOGGING --- #
     print(f"=== DATA MESSAGE TESTING ===")
     print(sep)
@@ -227,4 +296,6 @@ if __name__ == "__main__":
     print(f"INV MESSAGE: {test_inv_mesg.to_json(False)}")
     print(sep)
     print(f"GETBLOCKS: {test_getblock.to_json(False)}")
+    print(sep)
+    print(f"HEADERS: {test_headers.to_json()}")
     print(sep)
