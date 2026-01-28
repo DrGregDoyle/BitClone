@@ -14,6 +14,7 @@
     - Have a flag for formatted vs plaintext
     - Default will be serialized formatted
         - The to_payload and to_dict methods will overlap.
+    - Needs to be ordered in serialization order
 - Block Dict
     - Add target as well as bits
     - Subtask 2

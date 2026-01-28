@@ -6,10 +6,10 @@ from src.core import SERIALIZED, get_bytes, get_stream, read_compact_size, Netwo
     read_stream
 from src.data import write_compact_size
 from src.network.message import Message, EmptyMessage
-from src.network.network_data import InvVector
+from src.network.network_data import InvVector, BlockTransactions
 from src.tx import Transaction
 
-__all__ = ["BlockMessage", "TxMessage", "Inv"]
+__all__ = ["BlockMessage", "GetBlocks", "GetData", "GetHeaders", "Headers", "Inv", "MemPool", "NotFound", "TxMessage"]
 
 
 class BlockMessage(Message):
@@ -189,6 +189,31 @@ class Headers(Message):
         }
 
 
+# === BLOCK TRANSACTIONS === #
+class BlockTxn(Message):
+    """
+    Contains a serialized BlockTransactions message
+    *Only supported by protocol version >=70014
+    """
+    COMMAND = "blocktxn"
+
+    def __init__(self, txn: BlockTransactions):
+        super().__init__()
+        self.txn = txn
+
+    @classmethod
+    def from_payload(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+        txn = BlockTransactions.from_bytes(stream)
+        return cls(txn)
+
+    def to_payload(self) -> bytes:
+        return self.txn.to_bytes()
+
+    def payload_dict(self, formatted: bool = True) -> dict:
+        return self.txn.to_dict(formatted)
+
+
 # === INV TYPE === #
 
 class InvParent(Message):
@@ -286,6 +311,20 @@ if __name__ == "__main__":
         "0102000000b6ff0b1b1680a2862a30ca44d346d9e8910d334beb48ca0c00000000000000009d10aa52ee949386ca9385695f04ede270dda20810decd12bc9b048aaab3147124d95a5430c31b18fe9f086400")
     test_headers = Headers.from_payload(known_headers_bytes)
 
+    # --- BLOCKTRANSACTIONS MESSAGE --- #
+    # --- BlockTransactions --- #
+    # display hash
+    known_block_hash = bytes.fromhex("000000000000b0b8b4e8105d62300d63c8ec1a1df0af1c2cdbd943b156a8cd79")[::-1]
+    known_tx_bytes1 = bytes.fromhex(
+        "010000000199db128ad1e9247b8f9182ff57c45949230ff2e9c3f1dd26e6f1c9799ae563c7000000008b48304502203153950a39db89129739d79655e18e844910fc390df3e757444608d68ab7c802022100d679e030889cb2467451c172f8d63c58e85be633f1acdbf85fab87ed95c9eee9014104d0ed1abeba4ecb8e1cdeb2531e0b9adda7541482b60c86e637af94ec82c3aefa777ea9ea50d5242504d19fa4a0500c072db5e5addee09d6808b57d75dd1dd48bffffffff02008eb462000000001976a9143f6a97f34f8c5f6cc697d9650498f3f27060489a88acc0d8a700000000001976a9143478fffab9d7e8d5ec19199e46dcfcf6c6ecb2cf88ac00000000")
+    known_tx_bytes2 = bytes.fromhex(
+        "0100000001d38c4935a387c0cd0658bddaf9553cdf743221e248cbc02e360ace70fdee721b010000008b4830450221009fce94f4489c0f412d181780a5131cf2bd8d926c38878bb520047e4498e85292022078cca9f887ff4c143800eca06c3faa970b65e14013abe1bb45d548e9c6e3825a014104d987807bdac7bc5935067fa4704e87b6a45c3451f4a0b939a513d3cddc1177a729a5d62195abb94b0c532f616b5e5f0f4b09c15008f9470bf5a8c91e01d5995fffffffff02c0d8a700000000001976a914795c679389d97af7ee450f1237bd8944d03b4bff88ac80dc6461000000001976a914526a1a0926fb3d9df1f7ab101075553106f8d84e88ac00000000")
+    tx1 = Transaction.from_bytes(known_tx_bytes1)
+    tx2 = Transaction.from_bytes(known_tx_bytes2)
+
+    test_block_tx = BlockTransactions(known_block_hash, [tx1, tx2])
+    test_block_tx_msg = BlockTxn(test_block_tx)
+
     # --- LOGGING --- #
     print(f"=== DATA MESSAGE TESTING ===")
     print(sep)
@@ -299,3 +338,4 @@ if __name__ == "__main__":
     print(sep)
     print(f"HEADERS: {test_headers.to_json()}")
     print(sep)
+    print(f"BLOCK TRANSACTIONS: {test_block_tx_msg.to_json(False)}")
