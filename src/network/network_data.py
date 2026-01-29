@@ -1,5 +1,12 @@
 """
 Classes for different types of Network data structures
+
+    - Differentially encoded classes:
+        - BlockTransactionsRequest
+        - HeaderAndShortIDs
+        - PrefilledTx
+
+
 """
 import siphash
 
@@ -184,9 +191,9 @@ class PrefilledTx(Serializable):
 
         return write_compact_size(diff_ind) + self.tx.to_bytes()
 
-    def to_dict(self) -> dict:
+    def to_dict(self, formatted: bool = True) -> dict:
         return {
-            "block_index": self.block_index,
+            "block_index": write_compact_size(self.block_index).hex() if formatted else self.block_index,
             "tx": self.tx.to_bytes().hex(),
         }
 
@@ -241,7 +248,7 @@ class ShortIDs(Serializable):
         """Return the 6-byte short ID"""
         return self.short_id
 
-    def to_dict(self) -> dict:
+    def to_dict(self, formatted: bool = True) -> dict:
         return {"short_id": self.short_id.hex()}
 
 
@@ -348,7 +355,7 @@ class BlockTransactions(Serializable):
     |   Name        | datatype              | format                | size  |
     =========================================================================
     |   block_hash  |   bytes               |   natural byte order  |   32  |
-    |   txs_length   |   int                 |   compactSize         |   var |
+    |   txs_length  |   int                 |   compactSize         |   var |
     |   txs         |   list[Transactions]  |   tx.to_bytes()       |   var |
     =========================================================================
     """
@@ -387,6 +394,73 @@ class BlockTransactions(Serializable):
         }
 
 
+class BlockTranasctionsRequest(Serializable):
+    """Used to list tx indices in a block being requested
+    =========================================================================
+    |   Name        | datatype          | format                | size      |
+    =========================================================================
+    |   block_hash  |   bytes           |   natural byte order  |   32      |
+    |   indices_len |   int             |   compactSize         |   1 or 3  |
+    |   indices     |   list[int]       |   compactSize*        |  var      |
+    =========================================================================
+    *indices are differentially encoded
+    * We assume indices are given as an ordered list of block tx indices
+    """
+
+    def __init__(self, block_hash: bytes, indices: list[int]):
+        self.block_hash = block_hash
+        self.indices = indices
+
+    @classmethod
+    def from_bytes(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+
+        # block_hash
+        block_hash = read_stream(stream, 32)
+
+        # indices
+        indices_len = read_compact_size(stream)
+        indices_diff = [read_compact_size(stream) for _ in range(indices_len)]  # differentially encoded
+
+        # differentially encoded means we add the cumulative distance to find the block_index
+        indices = []
+        diff = 0
+        for ind in indices_diff:
+            if diff == 0:
+                indices.append(ind)
+                diff = ind
+            else:
+                indices.append(diff + ind + 1)
+                diff += ind
+        return cls(block_hash, indices)
+
+    def to_bytes(self) -> bytes:
+        index_num = len(self.indices)
+
+        # Differentially encode the indices as integers
+        prev_index = -1
+        diff_indices = []
+        for ind in self.indices:
+            if prev_index < 0:
+                diff_indices.append(ind)
+                prev_index = ind
+            else:
+                diff_indices.append(ind - prev_index - 1)
+                prev_index = ind
+
+        # compactSize encoding
+        index_parts = [write_compact_size(diff) for diff in diff_indices]
+        return self.block_hash + write_compact_size(index_num) + b''.join(index_parts)
+
+    def to_dict(self, formatted: bool = True):
+        index_num = len(self.indices)
+        return {
+            "block_hash": self.block_hash[::-1].hex() if formatted else self.block_hash.hex(),
+            "index_num": write_compact_size(index_num).hex() if formatted else index_num,
+            "indices": self.indices
+        }
+
+
 # --- TESTING
 if __name__ == "__main__":
     sep = "===" * 40
@@ -406,3 +480,6 @@ if __name__ == "__main__":
 
     test_block_tx = BlockTransactions(known_block_hash, [tx1, tx2])
     print(f"BLOCK TRANSACTION: {test_block_tx.to_json()}")
+
+    # --- BLOCK TX REQUEST--- #
+    another_known_block_hash = bytes.fromhex("")
