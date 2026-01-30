@@ -14,11 +14,12 @@ from src.blockchain.block import BlockHeader
 from src.core import Serializable, SERIALIZED, get_stream, read_little_int, read_stream, read_big_int, \
     read_compact_size, NetworkDataError
 from src.cryptography.hash_functions import sha256
-from src.data import IP_ADDRESS, ip_from_netaddr, write_compact_size, BitIP
+from src.data import IP_ADDRESS, ip_from_netaddr, write_compact_size, BitIP, decode_differential, encode_differential
 from src.network.network_types import Services, InvType
 from src.tx.tx import Transaction
 
-__all__ = ["BlockTransactions", "NetAddr", "InvVector", "PrefilledTx", "ShortIDs", "HeaderAndShortIDs"]
+__all__ = ["BlockTransactions", "NetAddr", "InvVector", "PrefilledTx", "ShortIDs", "HeaderAndShortIDs",
+           "BlockTransactionsRequest"]
 
 
 class NetAddr(Serializable):
@@ -200,6 +201,7 @@ class PrefilledTx(Serializable):
 
 class ShortIDs(Serializable):
     """
+    #TODO: Put in serializetion diagram
     Short transaction IDs are used to represent a transaction without sending a full 256-bit hash.
     They are calculated by:
         -single-SHA256 hashing the block header with the nonce appended (in little-endian)
@@ -331,13 +333,12 @@ class HeaderAndShortIDs(Serializable):
 
         return b''.join(parts)
 
-    def to_dict(self):
-        short_id_dict = {f'short_id_{x}': self.short_ids[x].to_dict()
-                         for x in range(len(self.short_ids))}
+    def to_dict(self, formatted: bool = True):
+        short_id_dict = {f'short_id_{x}': self.short_ids[x].to_dict(formatted) for x in range(len(self.short_ids))}
 
         prefilled_tx_dict = {}
         for i, ptx in enumerate(self.prefilled_txs):
-            prefilled_tx_dict[f'prefilled_tx_{i}'] = ptx.to_dict()
+            prefilled_tx_dict[f'prefilled_tx_{i}'] = ptx.to_dict(formatted)
 
         return {
             "header": self.header.hex(),
@@ -394,7 +395,7 @@ class BlockTransactions(Serializable):
         }
 
 
-class BlockTranasctionsRequest(Serializable):
+class BlockTransactionsRequest(Serializable):
     """Used to list tx indices in a block being requested
     =========================================================================
     |   Name        | datatype          | format                | size      |
@@ -422,31 +423,16 @@ class BlockTranasctionsRequest(Serializable):
         indices_len = read_compact_size(stream)
         indices_diff = [read_compact_size(stream) for _ in range(indices_len)]  # differentially encoded
 
-        # differentially encoded means we add the cumulative distance to find the block_index
-        indices = []
-        diff = 0
-        for ind in indices_diff:
-            if diff == 0:
-                indices.append(ind)
-                diff = ind
-            else:
-                indices.append(diff + ind + 1)
-                diff += ind
+        # decoded indices
+        indices = decode_differential(indices_diff)
+
         return cls(block_hash, indices)
 
     def to_bytes(self) -> bytes:
         index_num = len(self.indices)
 
         # Differentially encode the indices as integers
-        prev_index = -1
-        diff_indices = []
-        for ind in self.indices:
-            if prev_index < 0:
-                diff_indices.append(ind)
-                prev_index = ind
-            else:
-                diff_indices.append(ind - prev_index - 1)
-                prev_index = ind
+        diff_indices = encode_differential(self.indices)
 
         # compactSize encoding
         index_parts = [write_compact_size(diff) for diff in diff_indices]
@@ -454,10 +440,12 @@ class BlockTranasctionsRequest(Serializable):
 
     def to_dict(self, formatted: bool = True):
         index_num = len(self.indices)
+        formatted_indices = encode_differential(self.indices) if formatted else self.indices
+
         return {
             "block_hash": self.block_hash[::-1].hex() if formatted else self.block_hash.hex(),
             "index_num": write_compact_size(index_num).hex() if formatted else index_num,
-            "indices": self.indices
+            "indices": formatted_indices
         }
 
 
@@ -482,4 +470,9 @@ if __name__ == "__main__":
     print(f"BLOCK TRANSACTION: {test_block_tx.to_json()}")
 
     # --- BLOCK TX REQUEST--- #
-    another_known_block_hash = bytes.fromhex("")
+    another_known_block_hash = bytes.fromhex("000000000000001154bd96cd2f7c153eee36d2f61faafdf5564bde0348d890d2")[::-1]
+    test_tx_indices = [1, 4, 5]
+    test_block_txn_req = BlockTranasctionsRequest(another_known_block_hash, test_tx_indices)
+    print(sep)
+    print(f"BLOCK TX REQUEST: {test_block_txn_req.to_json(False)}")
+    print(sep)

@@ -1,8 +1,4 @@
 """
-This is for all encoding data functions
-"""
-
-"""
 Methods for encoding and decoding
 """
 
@@ -14,7 +10,34 @@ from src.core import BECH32CODE
 from src.cryptography import hash256, bech32_decode, bech32_encode, convertbits
 
 __all__ = ["encode_base58", "decode_base58", "encode_base58check", "decode_base58check", "encode_bech32",
-           "decode_bech32", "encode_der_signature", "decode_der_signature"]
+           "decode_bech32", "encode_der_signature", "decode_der_signature", "encode_differential",
+           "decode_differential"]
+
+
+# --- DIFFERENTIAL ENCODING --- #
+def encode_differential(indices: list[int]) -> list[int]:
+    """
+    Given a list of integers, we return the differentially encoded list.
+    """
+    encoded_list = []
+    prev_index = -1
+    for index in indices:
+        encoded_list.append(index if prev_index < 0 else index - prev_index - 1)
+        prev_index = index
+    return encoded_list
+
+
+def decode_differential(encoded_list: list[int]) -> list[int]:
+    """
+    Given a list of differentially encoded integers, we return the list of actual index values
+    """
+    decoded_list = []
+    diff = 0
+    for index in encoded_list:
+        decoded_list.append(index if diff == 0 else diff + index + 1)
+        diff += index
+    return decoded_list
+
 
 # --- BASE58 ENCODING --- #
 BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"

@@ -6,7 +6,7 @@ from src.core import SERIALIZED, get_bytes, get_stream, read_compact_size, Netwo
     read_stream
 from src.data import write_compact_size
 from src.network.message import Message, EmptyMessage
-from src.network.network_data import InvVector, BlockTransactions
+from src.network.network_data import InvVector, BlockTransactions, BlockTransactionsRequest
 from src.tx import Transaction
 
 __all__ = ["BlockMessage", "GetBlocks", "GetData", "GetHeaders", "Headers", "Inv", "MemPool", "NotFound", "TxMessage"]
@@ -212,6 +212,37 @@ class BlockTxn(Message):
 
     def payload_dict(self, formatted: bool = True) -> dict:
         return self.txn.to_dict(formatted)
+
+
+class GetBlockTxn(Message):
+    """Contains a serialized GetBlockTxn message
+    """
+    COMMAND = "getblocktxn"
+
+    def __init__(self, block_txn_req: BlockTransactionsRequest):
+        super().__init__()
+        self.block_txn_req = block_txn_req
+
+    @classmethod
+    def from_payload(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+
+        block_txn_req = BlockTransactionsRequest.from_bytes(stream)
+        return cls(block_txn_req)
+
+    def to_payload(self) -> bytes:
+        return self.block_txn_req.to_bytes()
+
+    def payload_dict(self, formatted: bool = True) -> dict:
+        return self.block_txn_req.to_dict(formatted)
+
+
+# === MERKLE BLOCK === #
+class MerkleBlock(Message):
+    """The reply to a getdata message with type MSG_MERKLEBLOCK
+
+
+    """
 
 
 # === INV TYPE === #
