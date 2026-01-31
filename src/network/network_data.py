@@ -472,7 +472,7 @@ if __name__ == "__main__":
     # --- BLOCK TX REQUEST--- #
     another_known_block_hash = bytes.fromhex("000000000000001154bd96cd2f7c153eee36d2f61faafdf5564bde0348d890d2")[::-1]
     test_tx_indices = [1, 4, 5]
-    test_block_txn_req = BlockTranasctionsRequest(another_known_block_hash, test_tx_indices)
+    test_block_txn_req = BlockTransactionsRequest(another_known_block_hash, test_tx_indices)
     print(sep)
     print(f"BLOCK TX REQUEST: {test_block_txn_req.to_json(False)}")
     print(sep)

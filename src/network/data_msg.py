@@ -240,9 +240,76 @@ class GetBlockTxn(Message):
 # === MERKLE BLOCK === #
 class MerkleBlock(Message):
     """The reply to a getdata message with type MSG_MERKLEBLOCK
-
-
+    =========================================================================
+    |   Name            | datatype      | format                | size      |
+    =========================================================================
+    |   header          |   Blockheader |   to_bytes            |   80      |
+    |   tx_num          |   int         |   little_endian       |   4       |
+    |   hash_num        |   int         |   CompactSize         |   varint  |
+    |   hashes          |   list        |   internal byte order |   32      |
+    |   flag_bytes      |   int         |   CompactSize         |   varint  |
+    |   flags           |   bytes       |   little-endian       |   var     |
+    =========================================================================
+    * The flags are decoded into bits, least-sig bit first
     """
+    COMMAND = "merkleblock"
+
+    def __init__(self, header: BlockHeader, tx_num: int, hashes: list[bytes], flags: bytes):
+        super().__init__()
+        self.header = header
+        self.tx_num = tx_num
+        self.hashes = hashes
+        self.flags = flags
+
+    @classmethod
+    def from_payload(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+
+        # header
+        header = BlockHeader.from_bytes(stream)
+
+        # tx_num
+        tx_num = read_little_int(stream, 4)
+
+        # hashes
+        hash_num = read_compact_size(stream)
+        hashes = [read_stream(stream, 32) for _ in range(hash_num)]
+
+        # flags
+        flag_bytes = read_compact_size(stream)
+        flags = read_stream(stream, flag_bytes)
+
+        return cls(header, tx_num, hashes, flags)
+
+    def to_payload(self) -> bytes:
+        hash_num = len(self.hashes)
+        flag_bytes = len(self.flags)
+        parts = [
+            self.tx_num.to_bytes(4, "little"),
+            write_compact_size(hash_num),
+            b''.join(self.hashes),
+            write_compact_size(flag_bytes),
+            self.flags
+        ]
+        return b''.join(parts)
+
+    def payload_dict(self, formatted: bool = True) -> dict:
+        hash_num = len(self.hashes)
+        flag_bytes = len(self.flags)
+        bit_string = ''.join(f'{b:08b}' for b in self.flags)
+        formatted_bit_string = ''.join(f'{b:08b}'[::-1] for b in self.flags)
+        hash_dict = {
+            f"hash_{x}": self.hashes[x].hex() for x in range(hash_num)
+        }
+
+        return {
+            "block_header": self.header.to_dict(formatted),
+            "tx_count": self.tx_num.to_bytes(4, "little").hex() if formatted else self.tx_num,
+            "hash_count": write_compact_size(hash_num).hex() if formatted else hash_num,
+            "hashes": hash_dict,
+            "flag_byte_count": write_compact_size(flag_bytes).hex() if formatted else flag_bytes,
+            "flags": formatted_bit_string if formatted else bit_string
+        }
 
 
 # === INV TYPE === #
@@ -356,6 +423,11 @@ if __name__ == "__main__":
     test_block_tx = BlockTransactions(known_block_hash, [tx1, tx2])
     test_block_tx_msg = BlockTxn(test_block_tx)
 
+    # --- MERKLEBLOCK --- #
+    known_merkleblock_payload = bytes.fromhex(
+        "0100000082bb869cf3a793432a66e826e05a6fc37469f8efb7421dc880670100000000007f16c5962e8bd963659c793ce370d95f093bc7e367117b3c30c1f8fdd0d9728776381b4d4c86041b554b852907000000043612262624047ee87660be1a707519a443b1c1ce3d248cbfc6c15870f6c5daa2019f5b01d4195ecbc9398fbf3c3b1fa9bb3183301d7a1fb3bd174fcfa40a2b6541ed70551dd7e841883ab8f0b16bf04176b7d1480e4f0af9f3d4c3595768d06820d2a7bc994987302e5b1ac80fc425fe25f8b63169ea78e68fbaaefa59379bbf011d")
+    test_merklblock = MerkleBlock.from_payload(known_merkleblock_payload)
+
     # --- LOGGING --- #
     print(f"=== DATA MESSAGE TESTING ===")
     print(sep)
@@ -370,3 +442,5 @@ if __name__ == "__main__":
     print(f"HEADERS: {test_headers.to_json()}")
     print(sep)
     print(f"BLOCK TRANSACTIONS: {test_block_tx_msg.to_json(False)}")
+    print(sep)
+    print(f"MERKLE BLOCK: {test_merklblock.to_json()}")
