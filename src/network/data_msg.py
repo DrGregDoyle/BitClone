@@ -6,10 +6,11 @@ from src.core import SERIALIZED, get_bytes, get_stream, read_compact_size, Netwo
     read_stream
 from src.data import write_compact_size
 from src.network.message import Message, EmptyMessage
-from src.network.network_data import InvVector, BlockTransactions, BlockTransactionsRequest
+from src.network.network_data import InvVector, BlockTransactions, BlockTransactionsRequest, HeaderAndShortIDs
 from src.tx import Transaction
 
-__all__ = ["BlockMessage", "GetBlocks", "GetData", "GetHeaders", "Headers", "Inv", "MemPool", "NotFound", "TxMessage"]
+__all__ = ["BlockMessage", "CmpctBlock", "GetBlocks", "GetData", "GetHeaders", "Headers", "Inv", "MemPool", "NotFound",
+           "TxMessage", "BlockTxn", "GetBlockTxn"]
 
 
 class BlockMessage(Message):
@@ -312,6 +313,69 @@ class MerkleBlock(Message):
         }
 
 
+# === CMPCT BLOCK === #
+class CmpctBlock(Message):
+    """
+    A reply to a GetData message with type MSG_CMPCT_BLOCK
+        -Containes a serialized HeaderAndShortIDs
+    """
+    COMMAND = "cmpctblock"
+
+    def __init__(self, header_and_shortids: HeaderAndShortIDs):
+        super().__init__()
+        self.hashids = header_and_shortids
+
+    @classmethod
+    def from_payload(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+        header_and_shortids = HeaderAndShortIDs.from_bytes(stream)
+        return cls(header_and_shortids)
+
+    def to_payload(self) -> bytes:
+        return self.hashids.to_bytes()
+
+    def payload_dict(self, formatted: bool = True) -> dict:
+        return self.hashids.to_dict(formatted)
+
+
+class SendCmpct(Message):
+    """
+    The Send Compact Block announcement message
+    =================================================================
+    |   Name        |   Datatype    |   Format          |   Size    |
+    =================================================================
+    |   announce    |   bool        |   bytes           |   1       |
+    |   version     |   int         |   little-endian   |   8       |
+    =================================================================
+    """
+
+    def __init__(self, announce: bool, version: int):
+        super().__init__()
+        self.announce = announce
+        self.version = version
+
+    @classmethod
+    def from_payload(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+
+        # announce
+        boolint = read_little_int(stream, 1)
+
+        # version
+        version = read_little_int(stream, 8)
+        return cls(bool(boolint), version)
+
+    def to_payload(self) -> bytes:
+        boolint = int(self.announce)
+        return boolint.to_bytes(1, "little") + self.version.to_bytes(8, "little")
+
+    def payload_dict(self, formatted: bool = True) -> dict:
+        return {
+            "announce": int(self.announce).to_bytes(1, "little").hex() if formatted else self.announce,
+            "version": self.version.to_bytes(8, "little").hex() if formatted else self.version
+        }
+
+
 # === INV TYPE === #
 
 class InvParent(Message):
@@ -428,19 +492,27 @@ if __name__ == "__main__":
         "0100000082bb869cf3a793432a66e826e05a6fc37469f8efb7421dc880670100000000007f16c5962e8bd963659c793ce370d95f093bc7e367117b3c30c1f8fdd0d9728776381b4d4c86041b554b852907000000043612262624047ee87660be1a707519a443b1c1ce3d248cbfc6c15870f6c5daa2019f5b01d4195ecbc9398fbf3c3b1fa9bb3183301d7a1fb3bd174fcfa40a2b6541ed70551dd7e841883ab8f0b16bf04176b7d1480e4f0af9f3d4c3595768d06820d2a7bc994987302e5b1ac80fc425fe25f8b63169ea78e68fbaaefa59379bbf011d")
     test_merklblock = MerkleBlock.from_payload(known_merkleblock_payload)
 
+    # --- SENDCMPCT --- #
+    test_send_compact = SendCmpct(True, 2)
+    test_send_compact2 = SendCmpct(False, 1)
+
     # --- LOGGING --- #
     print(f"=== DATA MESSAGE TESTING ===")
+    # print(sep)
+    # print(f"BLOCK MESSAGE: {test_block_msg.to_json()}")
+    # print(sep)
+    # print(f"TX MESSAGE: {test_tx_msg.to_json(False)}")
+    # print(sep)
+    # print(f"INV MESSAGE: {test_inv_mesg.to_json(False)}")
+    # print(sep)
+    # print(f"GETBLOCKS: {test_getblock.to_json(False)}")
+    # print(sep)
+    # print(f"HEADERS: {test_headers.to_json()}")
+    # print(sep)
+    # print(f"BLOCK TRANSACTIONS: {test_block_tx_msg.to_json(False)}")
+    # print(sep)
+    # print(f"MERKLE BLOCK: {test_merklblock.to_json()}")
     print(sep)
-    print(f"BLOCK MESSAGE: {test_block_msg.to_json()}")
+    print(f"SEND COMPACT 1: {test_send_compact.to_json()}")
+    print(f"SEND COMPACT 2: {test_send_compact2.to_json()}")
     print(sep)
-    print(f"TX MESSAGE: {test_tx_msg.to_json(False)}")
-    print(sep)
-    print(f"INV MESSAGE: {test_inv_mesg.to_json(False)}")
-    print(sep)
-    print(f"GETBLOCKS: {test_getblock.to_json(False)}")
-    print(sep)
-    print(f"HEADERS: {test_headers.to_json()}")
-    print(sep)
-    print(f"BLOCK TRANSACTIONS: {test_block_tx_msg.to_json(False)}")
-    print(sep)
-    print(f"MERKLE BLOCK: {test_merklblock.to_json()}")

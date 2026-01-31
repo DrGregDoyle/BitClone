@@ -4,6 +4,7 @@ Tests for Network data structures
 import secrets
 
 from src.blockchain.block import Block
+from src.network.data_msg import CmpctBlock
 from src.network.network_data import HeaderAndShortIDs, ShortIDs, PrefilledTx
 
 
@@ -41,4 +42,6 @@ def test_header_and_shortids():
 
     assert test_headerandshortid == recovered_header, "Failed to_bytes -> from_bytes construction of HeaderAndShortIDs"
 
-
+    # --- CMPCTBLOCK using random HeaderAndShortIDs --- #
+    test_cmpctblock = CmpctBlock(header_and_shortids=test_headerandshortid)
+    print(f"TEST CMPCTBLOCK: {test_cmpctblock.to_json(False)}")
