@@ -80,7 +80,7 @@ class Header(Serializable):
             raise NetworkError(f"Unknown magic bytes: {magic_bytes.hex()} ")
 
     def _validate_size(self, size: int):
-        if size < 0 or size > 0xffff:
+        if size < 0 or size > 0xffffffff:
             raise NetworkError(f"Invalid size value: {size}")
 
     def _validate_checksum(self, checksum: bytes):

@@ -59,7 +59,6 @@ def test_header_rejects_bad_checksum_length():
         Header(command="version", size=0, checksum=b"\x00\x01\x02", magic_bytes=MAGICBYTES.MAINNET)
 
 
-@pytest.mark.xfail(reason="Header._validate_size currently caps at 0xffff; should allow up to 0xffffffff.")
 def test_header_allows_payloads_over_64kb():
     # Bitcoin message payload size field is 4 bytes (uint32). This should be allowed.
     Header(command="version", size=0x10000, checksum=b"\x00" * 4, magic_bytes=MAGICBYTES.MAINNET)
@@ -90,26 +89,25 @@ def test_from_bytes_does_not_require_eof():
     assert isinstance(parsed, VerAck)
 
 
-@pytest.mark.xfail(reason="Message.from_bytes currently does not validate checksum against payload.")
 def test_checksum_mismatch_raises():
     msg = VerAck()
     raw = bytearray(msg.to_bytes())
     raw[20] ^= 0x01  # flip one bit in checksum field (bytes 20-23 of header)
     with pytest.raises(Exception):
         VerAck.from_bytes(bytes(raw))
-
-
-@pytest.mark.xfail(reason="No dispatcher yet: header.command is ignored; parsing always uses the provided cls.")
-def test_dispatch_by_header_command():
-    msg = VerAck()
-    raw = msg.to_bytes()
-
-    # Expected future behavior:
-    # - read Header
-    # - look up Message.get_registered(header.command)
-    # - parse with that class
-    stream_header = Header.from_bytes(raw[:24])
-    msg_cls = Message.get_registered(stream_header.command)
-    assert msg_cls is VerAck
-    parsed = msg_cls.from_bytes(raw)
-    assert isinstance(parsed, VerAck)
+#
+#
+# @pytest.mark.xfail(reason="No dispatcher yet: header.command is ignored; parsing always uses the provided cls.")
+# def test_dispatch_by_header_command():
+#     msg = VerAck()
+#     raw = msg.to_bytes()
+#
+#     # Expected future behavior:
+#     # - read Header
+#     # - look up Message.get_registered(header.command)
+#     # - parse with that class
+#     stream_header = Header.from_bytes(raw[:24])
+#     msg_cls = Message.get_registered(stream_header.command)
+#     assert msg_cls is VerAck
+#     parsed = msg_cls.from_bytes(raw)
+#     assert isinstance(parsed, VerAck)

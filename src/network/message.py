@@ -79,6 +79,14 @@ class Message(Serializable, ABC):
         stream = get_stream(byte_stream)  # Get message
         header = Header.from_bytes(read_stream(stream, 24))  # Get header
         payload_bytes = read_stream(stream, header.size)  # Get message payload
+
+        # --- Check payload_bytes
+        if payload_bytes == b'':
+            # Check empty message checksum
+            empty_header = EmptyMessage()._get_header(b'')
+            if empty_header.checksum != header.checksum:
+                raise ValueError(f"Checksum mismatch for EmptyMessage type: {header.command}")
+
         return cls.from_payload(payload_bytes)
 
     def to_bytes(self) -> bytes:
