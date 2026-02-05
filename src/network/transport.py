@@ -7,7 +7,6 @@ import time
 from src.network.ctrl_msg import Version, VerAck
 from src.network.header import Header
 from src.network.message import Message
-from src.network.message_factory import create_version_msg
 from src.network.network_data import NetAddr
 from src.network.network_types import Services
 
@@ -15,6 +14,15 @@ from src.network.network_types import Services
 LMAB_IP = "162.120.69.182"
 # --- My IP (dynamic)
 MY_IP = "198.84.237.10"
+
+
+def create_version_msg(protocol_version: int, services: int | Services, remote_addr: NetAddr, local_addr: NetAddr,
+                       nonce: int, user_agent: str, last_block: int) -> Version:
+    """Create a version message for initial peer handshake"""
+    timestamp = int(time.time())
+    return Version(
+        protocol_version, services, timestamp, remote_addr, local_addr, nonce, user_agent, last_block
+    )
 
 
 def send_message(sock: socket.socket, message: Message) -> None:
@@ -114,6 +122,9 @@ def perform_handshake(ip_addr: str, port: int = 8333) -> socket.socket:
         # Step 1: Send our version
         print("\n=== Step 1: Sending our version ===")
         send_message(sock, our_version)
+        print(f"Our version: {our_version.protocol_version}")
+        print(f"Our user agent: {our_version.user_agent}")
+        print(f"Our version dict: {our_version.to_json(False)}")
 
         # Step 2: Receive their version
         print("\n=== Step 2: Receiving their version ===")
@@ -122,7 +133,7 @@ def perform_handshake(ip_addr: str, port: int = 8333) -> socket.socket:
             raise ValueError(f"Expected Version, got {type(their_version)}")
         print(f"Peer version: {their_version.protocol_version}")
         print(f"Peer user agent: {their_version.user_agent}")
-        print(f"Peer version dict: {their_version.to_json()}")
+        print(f"Peer version dict: {their_version.to_json(False)}")
 
         # Step 3: Receive their verack
         print("\n=== Step 3: Receiving their verack ===")

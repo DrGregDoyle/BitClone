@@ -1,11 +1,6 @@
 """
 Control messages
 
-Standard Header:
-=====================================================================
-|   name    |   datatype    |   serialized format   |   byte size   |
-=====================================================================
-
 """
 import secrets
 import time
@@ -17,8 +12,8 @@ from src.network.message import EmptyMessage, Message
 from src.network.network_data import NetAddr
 from src.network.network_types import Services, RejectType
 
-__all__ = ["Addr", "FeeFilter", "FilterAdd", "FilterClear", "GetAddr", "Ping", "Pong", "Reject", "SendHeaders",
-           "VerAck", "Version", ]
+__all__ = ["Addr", "FeeFilter", "FilterAdd", "FilterClear", "FilterLoad", "GetAddr", "Ping", "Pong", "Reject",
+           "SendHeaders", "VerAck", "Version", ]
 
 
 # === PARENT CLASSES === #

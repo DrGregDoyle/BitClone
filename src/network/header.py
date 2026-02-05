@@ -86,3 +86,12 @@ class Header(Serializable):
     def _validate_checksum(self, checksum: bytes):
         if len(checksum) != 4:
             raise NetworkError(f"Incorrect bytes size for checksum: {checksum.hex()}")
+
+
+# --- TESTING ---#
+if __name__ == "__main__":
+    known_verack_header_bytes = bytes.fromhex("f9beb4d976657261636b000000000000000000005df6e0e2")
+    test_header = Header.from_bytes(known_verack_header_bytes)
+    print(f"TEST HEADER: {test_header.to_json()}")
+    print("===" * 60)
+    print(f"TEST HEADER NO FORMATTING: {test_header.to_json(False)}")
