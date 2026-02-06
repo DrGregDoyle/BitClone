@@ -4,9 +4,9 @@ import pytest
 
 from src.core import MAGICBYTES, NetworkError
 from src.cryptography import hash256
-from src.network.ctrl_msg import VerAck
-from src.network.header import Header
-from src.network.message import Message
+from src.network.Messages.ctrl_msg import VerAck
+from src.network.Messages.header import Header
+from src.network.Messages.message import Message
 
 
 def test_header_roundtrip_from_payload():

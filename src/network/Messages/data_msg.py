@@ -5,70 +5,15 @@ from src.blockchain.block import Block, BlockHeader
 from src.core import SERIALIZED, get_bytes, get_stream, read_compact_size, NetworkDataError, read_little_int, \
     read_stream
 from src.data import write_compact_size
-from src.network.message import Message, EmptyMessage
-from src.network.network_data import InvVector, BlockTransactions, BlockTransactionsRequest, HeaderAndShortIDs
+from src.network.Datatypes.network_data import InvVector, BlockTransactions, BlockTransactionsRequest, HeaderAndShortIDs
+from src.network.Messages.message import Message, EmptyMessage
 from src.tx import Transaction
 
-__all__ = ["BlockMessage", "CmpctBlock", "GetBlocks", "GetData", "GetHeaders", "Headers", "Inv", "MemPool", "NotFound",
-           "TxMessage", "BlockTxn", "GetBlockTxn"]
+__all__ = ['BlockMessage', 'BlockTxn', 'CmpctBlock', 'GetBlockTxn', 'GetBlocks', 'GetData', 'GetHeaders', 'Headers',
+           'Inv', 'MemPool', 'MerkleBlock', 'NotFound', 'SendCmpct', 'TxMessage']
 
 
-class BlockMessage(Message):
-    """
-    We transmit a Block in a message
-    =================================================================================
-    |   Name        | data type         | format                            | size  |
-    =================================================================================
-    |   block       |   Block           |   Block.to_bytes()                |   var |
-    =================================================================================
-    """
-    COMMAND = "block"
-
-    def __init__(self, block: Block):
-        super().__init__()  # For magic bytes
-        self.block = block
-
-    @classmethod
-    def from_payload(cls, byte_stream: SERIALIZED):
-        block_bytes = get_bytes(byte_stream)
-        return cls(Block.from_bytes(block_bytes))
-
-    def to_payload(self):
-        return self.block.to_bytes()
-
-    def payload_dict(self, formatted: bool = True) -> dict:
-        return {"block": self.block.to_dict(formatted)}
-
-
-class TxMessage(Message):
-    """
-    We transmit a Block in a message
-    =====================================================================
-    |   Name    |   data type       |   format                  | size  |
-    =====================================================================
-    |   tx      |   Transaction     |   Transaction.to_bytes()  |   var |
-    =====================================================================
-    """
-    COMMAND = "tx"
-
-    def __init__(self, tx: Transaction):
-        super().__init__()  # For magic bytes
-        self.tx = tx
-
-    @classmethod
-    def from_payload(cls, byte_stream: SERIALIZED):
-        tx_bytes = get_bytes(byte_stream)
-        return cls(Transaction.from_bytes(tx_bytes))
-
-    def to_payload(self):
-        return self.tx.to_bytes()
-
-    def payload_dict(self, formatted: bool = True) -> dict:
-        return {"tx": self.tx.to_dict(formatted)}
-
-
-# === GETBLOCKS TYPE === #
-
+# === PARENT CLASSES === #
 class GetBlockParent(Message):
     """
     The parent class for GetBlocks and GetHeaders.
@@ -127,6 +72,153 @@ class GetBlockParent(Message):
         }
 
 
+class InvParent(Message):
+    """
+    Sends an Inventory message
+    =========================================================================
+    |   Name        |   data type   |   format                  |   size    |
+    =========================================================================
+    |   count       |   int         |   CompactSize             |   var     |
+    |   items       |   InvVector   |   InvVector.to_bytes()    |   var     |
+    =========================================================================
+    """
+
+    MAX_ENTRIES = 50000
+
+    def __init__(self, items: list[InvVector]):
+        # Validation
+        if len(items) > self.MAX_ENTRIES:
+            raise NetworkDataError("Inventory list exceeds maximum entries")
+        super().__init__()
+        self.items = items
+
+    @classmethod
+    def from_payload(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+
+        # count
+        count = read_compact_size(stream)
+
+        # items
+        items = [InvVector.from_bytes(stream) for _ in range(count)]
+
+        return cls(items)
+
+    def to_payload(self) -> bytes:
+        return write_compact_size(len(self.items)) + b''.join([i.to_bytes() for i in self.items])
+
+    def payload_dict(self, formatted: bool = True) -> dict:
+        count = len(self.items)
+        inv_dict = {
+            f"{x}": self.items[x].to_dict(formatted) for x in range(count)
+        }
+        return {
+            "count": write_compact_size(count).hex() if formatted else count,
+            "inventory": inv_dict
+        }
+
+
+# === DATA MESSAGES === #
+
+
+class BlockMessage(Message):
+    """
+    We transmit a Block in a message
+    =================================================================================
+    |   Name        | data type         | format                            | size  |
+    =================================================================================
+    |   block       |   Block           |   Block.to_bytes()                |   var |
+    =================================================================================
+    """
+    COMMAND = "block"
+
+    def __init__(self, block: Block):
+        super().__init__()  # For magic bytes
+        self.block = block
+
+    @classmethod
+    def from_payload(cls, byte_stream: SERIALIZED):
+        block_bytes = get_bytes(byte_stream)
+        return cls(Block.from_bytes(block_bytes))
+
+    def to_payload(self):
+        return self.block.to_bytes()
+
+    def payload_dict(self, formatted: bool = True) -> dict:
+        return {"block": self.block.to_dict(formatted)}
+
+
+class BlockTxn(Message):
+    """
+    Contains a serialized BlockTransactions message
+    *Only supported by protocol version >=70014
+    """
+    COMMAND = "blocktxn"
+
+    def __init__(self, txn: BlockTransactions):
+        super().__init__()
+        self.txn = txn
+
+    @classmethod
+    def from_payload(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+        txn = BlockTransactions.from_bytes(stream)
+        return cls(txn)
+
+    def to_payload(self) -> bytes:
+        return self.txn.to_bytes()
+
+    def payload_dict(self, formatted: bool = True) -> dict:
+        return self.txn.to_dict(formatted)
+
+
+class CmpctBlock(Message):
+    """
+    A reply to a GetData message with type MSG_CMPCT_BLOCK
+        -Containes a serialized HeaderAndShortIDs
+    """
+    COMMAND = "cmpctblock"
+
+    def __init__(self, header_and_shortids: HeaderAndShortIDs):
+        super().__init__()
+        self.hashids = header_and_shortids
+
+    @classmethod
+    def from_payload(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+        header_and_shortids = HeaderAndShortIDs.from_bytes(stream)
+        return cls(header_and_shortids)
+
+    def to_payload(self) -> bytes:
+        return self.hashids.to_bytes()
+
+    def payload_dict(self, formatted: bool = True) -> dict:
+        return self.hashids.to_dict(formatted)
+
+
+class GetBlockTxn(Message):
+    """Contains a serialized GetBlockTxn message
+    """
+    COMMAND = "getblocktxn"
+
+    def __init__(self, block_txn_req: BlockTransactionsRequest):
+        super().__init__()
+        self.block_txn_req = block_txn_req
+
+    @classmethod
+    def from_payload(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+
+        block_txn_req = BlockTransactionsRequest.from_bytes(stream)
+        return cls(block_txn_req)
+
+    def to_payload(self) -> bytes:
+        return self.block_txn_req.to_bytes()
+
+    def payload_dict(self, formatted: bool = True) -> dict:
+        return self.block_txn_req.to_dict(formatted)
+
+
 class GetBlocks(GetBlockParent):
     """Return an inv packet containing the list of blocks starting right after the last known hash in the block locator
         object, up to hash_stop or 500 blocks, whichever comes first
@@ -135,12 +227,15 @@ class GetBlocks(GetBlockParent):
     MAX = 500
 
 
+class GetData(InvParent):
+    COMMAND = "getdata"
+
+
 class GetHeaders(GetBlockParent):
     COMMAND = "getheaders"
     MAX = 2000
 
 
-# === HEADERS === #
 class Headers(Message):
     """Send BlockHeaders in response to a GetHeaders message
     =================================================================================
@@ -190,55 +285,14 @@ class Headers(Message):
         }
 
 
-# === BLOCK TRANSACTIONS === #
-class BlockTxn(Message):
-    """
-    Contains a serialized BlockTransactions message
-    *Only supported by protocol version >=70014
-    """
-    COMMAND = "blocktxn"
-
-    def __init__(self, txn: BlockTransactions):
-        super().__init__()
-        self.txn = txn
-
-    @classmethod
-    def from_payload(cls, byte_stream: SERIALIZED):
-        stream = get_stream(byte_stream)
-        txn = BlockTransactions.from_bytes(stream)
-        return cls(txn)
-
-    def to_payload(self) -> bytes:
-        return self.txn.to_bytes()
-
-    def payload_dict(self, formatted: bool = True) -> dict:
-        return self.txn.to_dict(formatted)
+class Inv(InvParent):
+    COMMAND = "inv"
 
 
-class GetBlockTxn(Message):
-    """Contains a serialized GetBlockTxn message
-    """
-    COMMAND = "getblocktxn"
-
-    def __init__(self, block_txn_req: BlockTransactionsRequest):
-        super().__init__()
-        self.block_txn_req = block_txn_req
-
-    @classmethod
-    def from_payload(cls, byte_stream: SERIALIZED):
-        stream = get_stream(byte_stream)
-
-        block_txn_req = BlockTransactionsRequest.from_bytes(stream)
-        return cls(block_txn_req)
-
-    def to_payload(self) -> bytes:
-        return self.block_txn_req.to_bytes()
-
-    def payload_dict(self, formatted: bool = True) -> dict:
-        return self.block_txn_req.to_dict(formatted)
+class MemPool(EmptyMessage):
+    COMMAND = "mempool"
 
 
-# === MERKLE BLOCK === #
 class MerkleBlock(Message):
     """The reply to a getdata message with type MSG_MERKLEBLOCK
     =========================================================================
@@ -313,29 +367,8 @@ class MerkleBlock(Message):
         }
 
 
-# === CMPCT BLOCK === #
-class CmpctBlock(Message):
-    """
-    A reply to a GetData message with type MSG_CMPCT_BLOCK
-        -Containes a serialized HeaderAndShortIDs
-    """
-    COMMAND = "cmpctblock"
-
-    def __init__(self, header_and_shortids: HeaderAndShortIDs):
-        super().__init__()
-        self.hashids = header_and_shortids
-
-    @classmethod
-    def from_payload(cls, byte_stream: SERIALIZED):
-        stream = get_stream(byte_stream)
-        header_and_shortids = HeaderAndShortIDs.from_bytes(stream)
-        return cls(header_and_shortids)
-
-    def to_payload(self) -> bytes:
-        return self.hashids.to_bytes()
-
-    def payload_dict(self, formatted: bool = True) -> dict:
-        return self.hashids.to_dict(formatted)
+class NotFound(InvParent):
+    COMMAND = "notfound"
 
 
 class SendCmpct(Message):
@@ -348,6 +381,7 @@ class SendCmpct(Message):
     |   version     |   int         |   little-endian   |   8       |
     =================================================================
     """
+    COMMAND = "sendcmpct"
 
     def __init__(self, announce: bool, version: int):
         super().__init__()
@@ -376,69 +410,31 @@ class SendCmpct(Message):
         }
 
 
-# === INV TYPE === #
-
-class InvParent(Message):
+class TxMessage(Message):
     """
-    Sends an Inventory message
-    =========================================================================
-    |   Name        |   data type   |   format                  |   size    |
-    =========================================================================
-    |   count       |   int         |   CompactSize             |   var     |
-    |   items       |   InvVector   |   InvVector.to_bytes()    |   var     |
-    =========================================================================
+    We transmit a Block in a message
+    =====================================================================
+    |   Name    |   data type       |   format                  | size  |
+    =====================================================================
+    |   tx      |   Transaction     |   Transaction.to_bytes()  |   var |
+    =====================================================================
     """
+    COMMAND = "tx"
 
-    MAX_ENTRIES = 50000
-
-    def __init__(self, items: list[InvVector]):
-        # Validation
-        if len(items) > self.MAX_ENTRIES:
-            raise NetworkDataError("Inventory list exceeds maximum entries")
-        super().__init__()
-        self.items = items
+    def __init__(self, tx: Transaction):
+        super().__init__()  # For magic bytes
+        self.tx = tx
 
     @classmethod
     def from_payload(cls, byte_stream: SERIALIZED):
-        stream = get_stream(byte_stream)
+        tx_bytes = get_bytes(byte_stream)
+        return cls(Transaction.from_bytes(tx_bytes))
 
-        # count
-        count = read_compact_size(stream)
-
-        # items
-        items = [InvVector.from_bytes(stream) for _ in range(count)]
-
-        return cls(items)
-
-    def to_payload(self) -> bytes:
-        return write_compact_size(len(self.items)) + b''.join([i.to_bytes() for i in self.items])
+    def to_payload(self):
+        return self.tx.to_bytes()
 
     def payload_dict(self, formatted: bool = True) -> dict:
-        count = len(self.items)
-        inv_dict = {
-            f"{x}": self.items[x].to_dict(formatted) for x in range(count)
-        }
-        return {
-            "count": write_compact_size(count).hex() if formatted else count,
-            "inventory": inv_dict
-        }
-
-
-class Inv(InvParent):
-    COMMAND = "inv"
-
-
-class NotFound(InvParent):
-    COMMAND = "notfound"
-
-
-class GetData(InvParent):
-    COMMAND = "getdata"
-
-
-# === EMPTY MESSAGES === #
-class MemPool(EmptyMessage):
-    COMMAND = "mempool"
+        return {"tx": self.tx.to_dict(formatted)}
 
 
 # --- TESTING --- #

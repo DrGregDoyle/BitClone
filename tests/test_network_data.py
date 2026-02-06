@@ -4,8 +4,8 @@ Tests for Network data structures
 import secrets
 
 from src.blockchain.block import Block
-from src.network.data_msg import CmpctBlock
-from src.network.network_data import HeaderAndShortIDs, ShortIDs, PrefilledTx
+from src.network.Datatypes.network_data import HeaderAndShortIDs, ShortIDs, PrefilledTx
+from src.network.Messages.data_msg import CmpctBlock
 
 
 def test_header_and_shortids():

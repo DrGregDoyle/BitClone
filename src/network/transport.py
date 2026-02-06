@@ -4,11 +4,11 @@ Methods for sending/receiving messages and connecting to peers
 import socket
 import time
 
-from src.network.ctrl_msg import Version, VerAck
-from src.network.header import Header
-from src.network.message import Message
-from src.network.network_data import NetAddr
-from src.network.network_types import Services
+from src.network.Datatypes.network_data import NetAddr
+from src.network.Datatypes.network_types import Services
+from src.network.Messages.ctrl_msg import Version, VerAck
+from src.network.Messages.header import Header
+from src.network.Messages.message import Message
 
 # --- Learn Me A Bitcoin IP
 LMAB_IP = "162.120.69.182"
@@ -134,6 +134,8 @@ def perform_handshake(ip_addr: str, port: int = 8333) -> socket.socket:
         print(f"Peer version: {their_version.protocol_version}")
         print(f"Peer user agent: {their_version.user_agent}")
         print(f"Peer version dict: {their_version.to_json(False)}")
+        print(f"Peer version serialized: {their_version.message.hex()}")
+        print("===" * 60)
 
         # Step 3: Receive their verack
         print("\n=== Step 3: Receiving their verack ===")
@@ -142,6 +144,8 @@ def perform_handshake(ip_addr: str, port: int = 8333) -> socket.socket:
             raise ValueError(f"Expected VerAck, got {type(their_verack)}")
         print("Received verack from peer")
         print(f"Peer Verack: {their_verack.to_json()}")
+        print(f"Peer Verack serialized: {their_verack.message.hex()}")
+        print("===" * 60)
 
         # Step 4: Send our verack
         print("\n=== Step 4: Sending our verack ===")
