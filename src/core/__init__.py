@@ -10,5 +10,6 @@ Core:
 from src.core.byte_stream import *
 from src.core.exceptions import *
 from src.core.formats import *
+from src.core.logging import *
 from src.core.opcodes import *
 from src.core.serializable import *

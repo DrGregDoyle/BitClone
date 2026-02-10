@@ -8,9 +8,9 @@ import time
 from src.core import SERIALIZED, get_stream, read_little_int, read_stream
 from src.core.byte_stream import read_compact_size
 from src.data import write_compact_size
-from src.network.Datatypes.network_data import NetAddr
-from src.network.Datatypes.network_types import Services, RejectType
-from src.network.Messages.message import EmptyMessage, Message
+from src.network.datatypes.network_data import NetAddr
+from src.network.datatypes.network_types import Services, RejectType
+from src.network.messages.message import EmptyMessage, Message
 
 __all__ = ["Addr", "FeeFilter", "FilterAdd", "FilterClear", "FilterLoad", "GetAddr", "Ping", "Pong", "Reject",
            "SendHeaders", "VerAck", "Version", ]
@@ -75,7 +75,9 @@ class Addr(Message):
         for _ in range(count):
             temp_timestamp = read_little_int(stream, 4)
             # TODO: add timestamp validation for version >= 31402
-            addr_list.append(NetAddr.from_bytes(stream))
+            addr_list.append(NetAddr.from_bytes(stream, is_version=True))
+
+        return cls(addr_list)
 
     def to_payload(self) -> bytes:
         count = len(self.addr_list)

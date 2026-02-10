@@ -3,26 +3,39 @@ Methods for sending/receiving messages and connecting to peers
 """
 import socket
 import time
+from random import randint
 
-from src.network.Datatypes.network_data import NetAddr
-from src.network.Datatypes.network_types import Services
-from src.network.Messages.ctrl_msg import Version, VerAck
-from src.network.Messages.header import Header
-from src.network.Messages.message import Message
+from src.core import NetworkError
+from src.data.ip_utils import IP_ADDRESS
+from src.network.datatypes.network_data import NetAddr
+from src.network.datatypes.network_types import Services
+from src.network.messages.ctrl_msg import *
+from src.network.messages.data_msg import *  # noqa: F401
+from src.network.messages.header import Header
+from src.network.messages.message import Message
 
 # --- Learn Me A Bitcoin IP
 LMAB_IP = "162.120.69.182"
 # --- My IP (dynamic)
 MY_IP = "198.84.237.10"
+DEFAULT_PORT = 8333
+
+sep1 = "---" * 60
+sep2 = "===" * 60
 
 
-def create_version_msg(protocol_version: int, services: int | Services, remote_addr: NetAddr, local_addr: NetAddr,
-                       nonce: int, user_agent: str, last_block: int) -> Version:
-    """Create a version message for initial peer handshake"""
-    timestamp = int(time.time())
-    return Version(
-        protocol_version, services, timestamp, remote_addr, local_addr, nonce, user_agent, last_block
-    )
+def open_connection(ip_addr: str, port: int = DEFAULT_PORT, timeout: int = 120) -> socket.socket:
+    """Open a TCP connection to a Bitcoin node"""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(timeout)  # 120 second default timeout
+    try:
+        print(f"Connecting to {ip_addr}:{port}...")
+        sock.connect((ip_addr, port))
+        print("Connected!")
+        return sock
+    except socket.error as e:
+        sock.close()
+        raise ConnectionError(f"Failed to connect: {e}")
 
 
 def send_message(sock: socket.socket, message: Message) -> None:
@@ -32,15 +45,17 @@ def send_message(sock: socket.socket, message: Message) -> None:
     print(f"Sent {message.__class__.__name__}: {len(data)} bytes")
 
 
-def receive_message(sock: socket.socket) -> Message:
+def receive_message(sock: socket.socket, command: str = None) -> Message:
     """Receive a message from the connected peer"""
-    # First, read the header (24 bytes)
-    header_bytes = sock.recv(24)
-    if len(header_bytes) < 24:
-        raise ConnectionError("Failed to receive complete header")
+    # Read exactly 24 bytes for header (loop until we get all of them)
+    header_bytes = b''
+    while len(header_bytes) < 24:
+        chunk = sock.recv(24 - len(header_bytes))
+        if not chunk:
+            raise ConnectionError("Connection closed while receiving header")
+        header_bytes += chunk
 
     # Parse the header to get the payload size
-
     header = Header.from_bytes(header_bytes)
     print(f"Receiving {header.command}: {header.size} bytes")
 
@@ -58,108 +73,161 @@ def receive_message(sock: socket.socket) -> Message:
     full_message = header_bytes + payload_bytes
     message_class = Message.get_registered(header.command)
 
+    # (Optional) Validation
+    if command and command != header.command:
+        raise NetworkError(f"Received message command {header.command} didn't match expected command: {command}")
+
     if message_class:
         return message_class.from_bytes(full_message)
     else:
         raise ValueError(f"Unknown message type: {header.command}")
 
 
-def open_connection(ip_addr: str, port: int = 8333) -> socket.socket:
-    """Open a TCP connection to a Bitcoin node"""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(30)  # 30 second timeout
-    try:
-        print(f"Connecting to {ip_addr}:{port}...")
-        sock.connect((ip_addr, port))
-        print("Connected!")
-        return sock
-    except socket.error as e:
-        sock.close()
-        raise ConnectionError(f"Failed to connect: {e}")
-
-
-def perform_handshake(ip_addr: str, port: int = 8333) -> socket.socket:
+class Connector:
     """
-    Perform a complete Bitcoin handshake:
-    1. Connect to peer
-    2. Send our version message
-    3. Receive their version message
-    4. Receive their verack
-    5. Send our verack
-
-    Returns the connected socket for further communication
+    The class used for connecting to a Bitcoin node
     """
-    # Open connection
-    sock = open_connection(ip_addr, port)
 
-    try:
-        # Create our version message
-        local_netaddr = NetAddr(
+    def __init__(self, local_version: int, local_services: int | Services, local_ip: str | IP_ADDRESS,
+                 last_block: int, local_port: int = DEFAULT_PORT, local_user_agent: str = "/BitClone:0.0.1/"):
+        """
+        Constructed using information about the local node. These values will be used later in the handshake.
+        """
+        self.protocol_version = local_version
+        self.services = local_services if isinstance(local_services, int) else Services(local_services)
+        self.ip_addr = local_ip
+        self.port = local_port
+        self.user_agent = local_user_agent
+        self.last_block = last_block
+
+    def create_version_message(self, remote_ip: str | IP_ADDRESS, remote_port: int = DEFAULT_PORT,
+                               remote_services: int | Services = 0x00, nonce: int = 0) -> Version:
+        remote_services = remote_services if isinstance(remote_services, int) else Services(remote_services)
+        remote_addr = NetAddr(
             time=None,
-            services=Services(0),
-            ip_addr=MY_IP,
-            port=8333,
+            services=remote_services,
+            ip_addr=remote_ip,
+            port=remote_port,
             is_version=True
         )
-        remote_netaddr = NetAddr(
+        local_addr = NetAddr(
             time=None,
-            services=Services(0),
-            ip_addr=ip_addr,
-            port=port,
+            services=self.services,
+            ip_addr=self.ip_addr,
+            port=self.port,
             is_version=True
         )
-
-        our_version = create_version_msg(
-            protocol_version=70015,
-            services=0,
-            remote_addr=remote_netaddr,
-            local_addr=local_netaddr,
-            nonce=int(time.time()),  # Use timestamp as nonce
-            user_agent="/BitClone:0.0.1/",
-            last_block=0
+        timestamp = int(time.time())
+        nonce = randint(0x00, 0xffffffffffffffff) if nonce == 0 else nonce
+        return Version(
+            version=self.protocol_version,
+            services=self.services,
+            timestamp=timestamp,
+            remote_addr=remote_addr,
+            local_addr=local_addr,
+            nonce=nonce,
+            user_agent=self.user_agent,
+            last_block=self.last_block,
         )
 
-        # Step 1: Send our version
-        print("\n=== Step 1: Sending our version ===")
-        send_message(sock, our_version)
-        print(f"Our version: {our_version.protocol_version}")
-        print(f"Our user agent: {our_version.user_agent}")
-        print(f"Our version dict: {our_version.to_json(False)}")
+    def handshake(self, sock: socket.socket, peer_ip: str | IP_ADDRESS, peer_port: int = DEFAULT_PORT) -> Message:
+        """
+        We look to establish a handshake with the given peer. If successful, we return the peer's version message
+        """
+        # --- Create local version message
+        local_version = self.create_version_message(peer_ip, peer_port)
 
-        # Step 2: Receive their version
-        print("\n=== Step 2: Receiving their version ===")
-        their_version = receive_message(sock)
-        if not isinstance(their_version, Version):
-            raise ValueError(f"Expected Version, got {type(their_version)}")
-        print(f"Peer version: {their_version.protocol_version}")
-        print(f"Peer user agent: {their_version.user_agent}")
-        print(f"Peer version dict: {their_version.to_json(False)}")
-        print(f"Peer version serialized: {their_version.message.hex()}")
-        print("===" * 60)
+        # --- 1. Send Version message
+        send_message(sock, local_version)
 
-        # Step 3: Receive their verack
-        print("\n=== Step 3: Receiving their verack ===")
-        their_verack = receive_message(sock)
-        if not isinstance(their_verack, VerAck):
-            raise ValueError(f"Expected VerAck, got {type(their_verack)}")
-        print("Received verack from peer")
-        print(f"Peer Verack: {their_verack.to_json()}")
-        print(f"Peer Verack serialized: {their_verack.message.hex()}")
-        print("===" * 60)
+        # --- 2. Receive Version message
+        remote_version = receive_message(sock, "version")
 
-        # Step 4: Send our verack
-        print("\n=== Step 4: Sending our verack ===")
-        our_verack = VerAck()
-        send_message(sock, our_verack)
+        # --- 3. Receive VerAck message
+        _ = receive_message(sock, "verack")
 
-        print("\n=== Handshake complete! ===")
-        return sock
+        # --- 4. Send Verack
+        send_message(sock, VerAck())
 
-    except Exception as e:
-        print(f"Handshake failed: {e}")
-        sock.close()
-        raise
+        return remote_version
+
+    def connect_to_peer(self, peer_ip: str | IP_ADDRESS, peer_port: int = DEFAULT_PORT) -> None:
+        """
+        We create a loop so that after connecting to peer and a successful handshake, we continue to receive messages from the peer.
+        """
+        peer_sock = None
+
+        try:
+            # 1. Open connection to peer
+            peer_sock = open_connection(peer_ip, peer_port)
+
+            # 2. Establish handshake
+            remote_version = self.handshake(peer_sock, peer_ip, peer_port)
+
+            # --- LOGGING --- #
+            print(f" --- HANDSHAKE COMPLETED SUCCESSFULLY ---")
+            print(sep1)
+            print(f"Remote Version: {remote_version.to_json(False)}")
+            print(sep2)
+
+            # 3. Request peer addresses for more traffic
+            send_message(peer_sock, GetAddr())
+            peer_sock.settimeout(300)  # Set a longer timeout for idle periods | 5 minutes
+
+            # 4. Loop until interrupt or error
+            msg_count = 0
+            while True:
+                try:
+                    message = receive_message(peer_sock)
+                    msg_count += 1
+                    msg_type = message.__class__.__name__
+
+                    # --- LOGGING --- #
+                    print(" --- New Message --- ")
+                    print(sep1)
+                    print(f"Message Type: {msg_type}")
+                    print(f"Message Count: {msg_count}")
+                    print(sep2)
+                    # print(f"Message dict: {message.to_json(False)}")
+                    print(sep2, end="\n\n")
+
+                    if message.header.command == 'ping':
+                        encoded_nonce = message.payload
+                        my_pong = Pong(int.from_bytes(encoded_nonce, 'little'))
+                        send_message(peer_sock, my_pong)
+                        print(f" --- PONG --- ")
+                        print(sep1)
+                        print(f"Send pong message: {my_pong.to_json(False)}")
+                        print(sep2)
+
+                except socket.timeout:
+                    print(f"[{time.strftime('%H:%M:%S')}] No messages received - connection still alive, waiting...")
+                    continue
+
+        except KeyboardInterrupt:
+            print("\n\nKeyboard interrupt received. Closing connection...")
+
+        except ConnectionError as e:
+            print(f"\nConnection error: {e}")
+
+        except NetworkError as e:
+            print(f"\nNetwork error during handshake: {e}")
+
+        except Exception as e:
+            print(f"\nUnexpected error: {e}")
+
+        finally:
+            if peer_sock:
+                peer_sock.close()
+                print("Connection closed.")
 
 
+# --- TESTING --- #
 if __name__ == "__main__":
-    perform_handshake(LMAB_IP, 8333)
+    lmab_connector = Connector(
+        local_version=70014,
+        local_services=0x00,
+        local_ip=MY_IP,
+        last_block=0
+    )
+    lmab_connector.connect_to_peer(LMAB_IP)

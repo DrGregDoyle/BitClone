@@ -45,6 +45,7 @@ class BlockHeader(Serializable):
 
     @property
     def block_id(self):
+        """Need dynamic block_id for hashing"""
         return hash256(self.to_bytes())
 
     @property
@@ -142,9 +143,7 @@ class Block(Serializable):
 
         # Read in txs
         tx_num = read_compact_size(stream)
-        txs = []
-        for _ in range(tx_num):
-            txs.append(Transaction.from_bytes(stream))
+        txs = [Transaction.from_bytes(stream) for _ in range(tx_num)]
 
         return cls.from_header(header, txs)
 

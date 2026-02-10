@@ -42,6 +42,11 @@ class Message(Serializable, ABC):
         return self.to_payload()
 
     @property
+    def header(self):
+        """Lazily compute header when accessed"""
+        return self._get_header(self.payload)
+
+    @property
     def message(self):
         """Avoid confusion between to_bytes and to_payload"""
         return self.to_bytes()
