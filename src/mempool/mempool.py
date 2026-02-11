@@ -3,7 +3,7 @@ The MemPool class
 """
 from pathlib import Path
 
-from src.core import ReadError, get_logger
+from src.core import ReadError, get_logger, TransactionError
 from src.database.database import BitCloneDatabase, DB_PATH
 from src.tx import Transaction
 
@@ -57,5 +57,43 @@ class MemPool:
             logger.error("Failed to validate tx")
             return False
 
-    def _validate_tx(self, candidate_tx: Transaction) -> bool:
+        # --- Add tx
+        self.mempool.update({tx.txid: tx})
         return True
+
+    def _validate_tx(self, tx: Transaction) -> bool:
+        # --- Check if tx is in mempool
+        if tx.txid in self.mempool.keys():
+            logger.error(f"Transaction with id {tx.txid} already exists in mempool.")
+            return False
+
+        # --- Check not coinbase
+        if not tx.inputs:
+            logger.error(f"Cannot add coinbase tx to the mempool")
+            return False
+
+        # --- Check fees
+        utxos = self._get_utxos(tx)
+        input_total = 0
+        for utxo in utxos:
+            input_total += utxo.amount
+        output_total = 0
+        for output in tx.outputs:
+            output_total += output.amount
+        tx_fee = input_total - output_total
+        if tx_fee < 0:
+            raise TransactionError("Output total exceeds input total")
+
+        return True
+
+    def _get_utxos(self, tx: Transaction) -> list:
+        """
+        We obtain a list of utxos from the given transaction. Raise error if the utxo cannot be retrieved.
+        """
+        utxos = []
+        for txin in tx.inputs:
+            temp_utxo = self.btcdb.get_utxo(txin.outpoint)
+            if temp_utxo is None:
+                raise ReadError(f"Failed to find utxo with outpoint {txin.outpoint}")
+            utxos.append(temp_utxo)
+        return utxos

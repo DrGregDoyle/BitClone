@@ -4,7 +4,8 @@ The custom exceptions used throughout BitClone
 __all__ = ['BitNumError', 'BitStackError', 'CoinbaseError', 'DataEncodingError', 'ECCError', 'ECCPrivateKeyError',
            'ECDSAError', 'ExtendedKeyError', 'MerkleError', 'NetworkDataError', 'NetworkError', 'OpCodeError',
            'PubKeyError', 'ReadError', 'SchnorrError', 'ScriptEngineError', 'ScriptPubKeyError', 'ScriptSigError',
-           'SignatureError', 'StreamError', 'TaprootError', 'TargetBitsError', 'WalletError', 'WriteError']
+           'SignatureError', 'StreamError', 'TaprootError', 'TargetBitsError', 'TransactionError', 'WalletError',
+           'WriteError']
 
 
 class BitNumError(Exception):
@@ -155,6 +156,13 @@ class TaprootError(Exception):
 class TargetBitsError(Exception):
     """
     For use in target bit encoding and decoding
+    """
+    pass
+
+
+class TransactionError(Exception):
+    """
+    For use in Mempool and other areas involving txs
     """
     pass
 
