@@ -8,7 +8,7 @@ import time
 
 from src.block.block import Block
 from src.blockchain.blockchain import Blockchain
-from src.tx.tx import Transaction, TxInput, TxOutput
+from src.tx.tx import Transaction, TxIn, TxOut
 
 
 # from src.wallet.wallet import Wallet  # Future import
@@ -79,7 +79,7 @@ class Node:
         block_reward = self._calculate_block_reward(height)
 
         # Coinbase input (special format)
-        coinbase_input = TxInput(
+        coinbase_input = TxIn(
             txid=b'\x00' * 32,
             vout=0xffffffff,
             scriptsig=self._create_coinbase_script(height),
@@ -88,7 +88,7 @@ class Node:
 
         # Coinbase output (reward + fees to wallet address)
         payout_scriptpubkey = self._get_payout_address()
-        coinbase_output = TxOutput(
+        coinbase_output = TxOut(
             amount=block_reward + fees,
             scriptpubkey=payout_scriptpubkey
         )

@@ -12,7 +12,7 @@ from src.script.script_types import P2PK_Key, P2PKH_Key, P2MS_Key, P2SH_Key, P2W
     P2PK_Sig, \
     P2PKH_Sig, P2MS_Sig, P2SH_Sig, P2SH_P2WPKH_Sig
 
-from src.tx import Transaction, WitnessField
+from src.tx import Transaction, Witness
 from src.tx.tx import UTXO
 
 OP_PUSHBYTES_20 = OPCODES.get_byte("OP_PUSHBYTES_20")
@@ -207,7 +207,7 @@ def test_p2wpkh(script_engine):
 
     # --- Construct objects
     p2wpkh_key = P2WPKH_Key.from_bytes(p2wpkh_key_bytes)
-    p2wpkh_witness = WitnessField([p2wpkh_witsig, p2wpkh_witpubkey])
+    p2wpkh_witness = Witness([p2wpkh_witsig, p2wpkh_witpubkey])
     p2wpkh_tx = Transaction.from_bytes(p2wpkh_tx_bytes)
     p2wpkh_utxo = UTXO(
         txid=p2wpkh_txid_bytes[::-1],  # Reverse display bytes for use
@@ -254,7 +254,7 @@ def test_p2wsh(script_engine):
     )
 
     # Witness
-    p2wsh_witness = WitnessField.from_bytes(
+    p2wsh_witness = Witness.from_bytes(
         bytes.fromhex(
             "04004730440220415899bbee08e42376d06e8f86c92b4987613c2816352fe09cd1479fd639f18c02200db57f508f69e266d76c23891708158bda18690c165a41b0aa88303b97609f780147304402203973de2303e8787767090dd25c8a4dc97ce1aa7eb4c0962f13952ed4e856ff8e02203f1bb425def789eea8be46407d10b3c8730407176aef4dc2c29865eb5e5542bf0169522103848e308569b644372a5eb26665f1a8c34ca393c130b376db2fae75c43500013c2103cec1ee615c17e06d4f4b0a08617dffb8e568936bdff18fb057832a58ad4d1b752103eed7ae80c34d70f5ba93f93965f69f3c691da0f4607f242f4fd6c7a48789233e53ae")
     )
@@ -326,7 +326,7 @@ def test_simple_spendpath(script_engine):
     p2tr_leaf = Leaf(p2tr_leaf_script)
     p2tr_key = P2TR_Key(p2tr_xonly_pubkey_bytes, [p2tr_leaf_script])
     p2tr_control_block = get_control_block(p2tr_xonly_pubkey_bytes, p2tr_leaf.leaf_hash)
-    p2tr_witness = WitnessField(items=[p2tr_leaf_inputs, p2tr_leaf_script, p2tr_control_block])
+    p2tr_witness = Witness(items=[p2tr_leaf_inputs, p2tr_leaf_script, p2tr_control_block])
     p2tr_tx = Transaction.from_bytes(p2tr_tx_bytes)
     p2tr_utxo = UTXO(
         txid=p2tr_txid_display_bytes[::-1],

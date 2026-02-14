@@ -8,7 +8,7 @@ import pytest
 
 from src.core import TX
 from src.script import ScriptEngine, SignatureEngine
-from src.tx import TxInput, TxOutput, WitnessField, Transaction
+from src.tx import TxIn, TxOut, Witness, Transaction
 
 __all__ = ["getrand_txinput", "getrand_witnessfield", "getrand_txoutput", "getrand_tx"]
 
@@ -21,20 +21,20 @@ def getrand_txinput():
     scriptsig = token_bytes(randint(40, 60))
     sequence = int.from_bytes(token_bytes(TX.SEQUENCE), "little")
 
-    return TxInput(txid, vout, scriptsig, sequence)
+    return TxIn(txid, vout, scriptsig, sequence)
 
 
 def getrand_txoutput():
     amount = int.from_bytes(token_bytes(TX.AMOUNT), "little")
     scriptpubkey = token_bytes(randint(40, 60))
 
-    return TxOutput(amount, scriptpubkey)
+    return TxOut(amount, scriptpubkey)
 
 
 def getrand_witnessfield():
     item_num = randint(0, 4)
     items = [token_bytes(randint(20, 40)) for _ in range(item_num)]
-    return WitnessField(items)
+    return Witness(items)
 
 
 def getrand_tx(segwit: bool = True):

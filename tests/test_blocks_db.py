@@ -8,7 +8,7 @@ from secrets import token_bytes
 
 from src.block.block import Block
 from src.database import BitCloneDatabase
-from src.tx.tx import Transaction, TxInput, TxOutput
+from src.tx.tx import Transaction, TxIn, TxOut
 
 TEST_DB_PATH = Path(__file__).parent / "db_files" / "test_blocks.db"
 
@@ -19,7 +19,7 @@ def create_test_transaction(num_inputs: int = 2, num_outputs: int = 2, is_coinba
     """Create a test transaction"""
     if is_coinbase:
         # Coinbase tx has special input
-        inputs = [TxInput(
+        inputs = [TxIn(
             txid=b'\x00' * 32,
             vout=0xffffffff,
             scriptsig=token_bytes(randint(50, 100)),
@@ -27,7 +27,7 @@ def create_test_transaction(num_inputs: int = 2, num_outputs: int = 2, is_coinba
         )]
     else:
         inputs = [
-            TxInput(
+            TxIn(
                 txid=token_bytes(32),
                 vout=randint(0, 10),
                 scriptsig=token_bytes(randint(70, 150)),
@@ -37,7 +37,7 @@ def create_test_transaction(num_inputs: int = 2, num_outputs: int = 2, is_coinba
         ]
 
     outputs = [
-        TxOutput(
+        TxOut(
             amount=randint(10000, 1000000),
             scriptpubkey=token_bytes(25)
         )

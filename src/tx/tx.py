@@ -9,7 +9,7 @@ from src.core.byte_stream import read_compact_size
 from src.cryptography import hash256
 from src.data import write_compact_size
 
-__all__ = ["TxInput", "TxOutput", "WitnessField", "Transaction", "UTXO"]
+__all__ = ["TxIn", "TxOut", "Witness", "Transaction", "UTXO"]
 
 # --- CACHE KEYS --- #
 SEGWIT_KEY = "is_segwit"
@@ -20,7 +20,7 @@ VB_KEY = "virtual_bytes"
 COINBASE_KEY = "is_coinbase"
 
 
-class TxInput(Serializable):
+class TxIn(Serializable):
     """
     =============================================================================
     |   name            |   data type   |   format              |   byte size   |
@@ -81,7 +81,7 @@ class TxInput(Serializable):
         }
 
 
-class TxOutput(Serializable):
+class TxOut(Serializable):
     """
     TxInput
     -----------------------------------------------------------------
@@ -131,7 +131,7 @@ class TxOutput(Serializable):
         }
 
 
-class WitnessField(Serializable):
+class Witness(Serializable):
     """
     WitnessField
     -------------------------------------------------------------
@@ -203,7 +203,7 @@ class UTXO:
         self.is_coinbase = is_coinbase
 
     @classmethod
-    def from_txoutput(cls, txid: bytes, vout: int, txoutput: TxOutput,
+    def from_txoutput(cls, txid: bytes, vout: int, txoutput: TxOut,
                       block_height: int = None, is_coinbase: bool = False):
         """Create UTXO from a TxOutput"""
         return cls(txid, vout, txoutput.amount, txoutput.scriptpubkey,
@@ -264,7 +264,7 @@ class Transaction(Serializable):
     """
     __slots__ = ("version", "inputs", "outputs", "locktime", "witness", "_cache")
 
-    def __init__(self, inputs: list[TxInput] = None, outputs: list[TxOutput] = None, witness: list[WitnessField] = None,
+    def __init__(self, inputs: list[TxIn] = None, outputs: list[TxOut] = None, witness: list[Witness] = None,
                  locktime: int = 0, version: int = TX.BIP68_VERSION):
         self.inputs = inputs or []
         self.outputs = outputs or []
@@ -446,19 +446,19 @@ class Transaction(Serializable):
         num_inputs = read_compact_size(stream)
         inputs = []
         for _ in range(num_inputs):
-            inputs.append(TxInput.from_bytes(stream))
+            inputs.append(TxIn.from_bytes(stream))
 
         # Read outputs
         num_outputs = read_compact_size(stream)
         outputs = []
         for _ in range(num_outputs):
-            outputs.append(TxOutput.from_bytes(stream))
+            outputs.append(TxOut.from_bytes(stream))
 
         # Read witness if segwit
         witness = []
         if segwit:
             for _ in range(num_inputs):
-                witness.append(WitnessField.from_bytes(stream))
+                witness.append(Witness.from_bytes(stream))
 
         # Locktime
         locktime = read_little_int(stream, TX.LOCKTIME, "locktime")
@@ -555,7 +555,7 @@ if __name__ == "__main__":
     test_scriptsig = bytes.fromhex(
         "47304402203fd3ff375c314f40ef02f2665b61a8219b938b281fb1e75785f01437f7f29254022025cf6fcad3c7bb119a044bde1d4c642a33b19299db9a96d53bb8ec6a2f856a72012102f2d9d8629bffca39151042bd24981ff28f579307a11486c3a6989b18ff090a7f")
     test_sequence = 0xffffffff
-    test_txin = TxInput(test_txid, test_vout, test_scriptsig, test_sequence)
+    test_txin = TxIn(test_txid, test_vout, test_scriptsig, test_sequence)
     print(f"FORMATTED TEST TXINPUT: {test_txin.to_json()}")
     print(sep)
     print(f"UNFORMATTED TEST TXINPUT: {test_txin.to_json(False)}")

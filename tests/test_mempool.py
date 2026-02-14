@@ -15,7 +15,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from src.mempool.mempool import MemPool, MemPoolTx
-from src.tx import TxInput, TxOutput, Transaction, UTXO
+from src.tx import TxIn, TxOut, Transaction, UTXO
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ def make_spending_tx(utxos: list[UTXO], output_amount: int,
     The fee is implicitly:  sum(utxo.amount) - output_amount
     """
     inputs = [
-        TxInput(
+        TxIn(
             txid=u.txid,
             vout=u.vout,
             scriptsig=b'',  # unsigned — mempool doesn't verify scripts yet
@@ -53,7 +53,7 @@ def make_spending_tx(utxos: list[UTXO], output_amount: int,
         )
         for u in utxos
     ]
-    outputs = [TxOutput(amount=output_amount, scriptpubkey=b'\x51')]
+    outputs = [TxOut(amount=output_amount, scriptpubkey=b'\x51')]
     return Transaction(inputs=inputs, outputs=outputs)
 
 
@@ -204,13 +204,13 @@ class TestAddTxRejectionCases(unittest.TestCase):
         """
         mp = make_mempool_with_utxos([])
 
-        coinbase_input = TxInput(
+        coinbase_input = TxIn(
             txid=b'\x00' * 32,
             vout=0xffffffff,
             scriptsig=b'\x03\x01\x00\x00',  # block height push
             sequence=0xffffffff,
         )
-        coinbase_output = TxOutput(amount=625_000_000, scriptpubkey=b'\x51')
+        coinbase_output = TxOut(amount=625_000_000, scriptpubkey=b'\x51')
         coinbase_tx = Transaction(inputs=[coinbase_input], outputs=[coinbase_output])
 
         result = mp.add_tx(coinbase_tx.to_bytes())

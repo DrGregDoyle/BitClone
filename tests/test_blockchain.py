@@ -7,14 +7,14 @@ from secrets import token_bytes
 
 from src.block import Block
 from src.blockchain import Blockchain
-from src.tx.tx import Transaction, TxInput, TxOutput
+from src.tx.tx import Transaction, TxIn, TxOut
 
 TESTBD_PATH = Path(__file__).parent / "db_files" / "test_blockchain.db"
 
 
 def create_coinbase_tx(block_height: int) -> Transaction:
     """Create a simple coinbase transaction"""
-    coinbase_input = TxInput(
+    coinbase_input = TxIn(
         txid=b'\x00' * 32,
         vout=0xffffffff,
         scriptsig=block_height.to_bytes(4, 'little') + token_bytes(20),
@@ -22,7 +22,7 @@ def create_coinbase_tx(block_height: int) -> Transaction:
     )
 
     # Coinbase reward (simplified - not checking halving)
-    coinbase_output = TxOutput(
+    coinbase_output = TxOut(
         amount=5000000000,  # 50 BTC in satoshis
         scriptpubkey=token_bytes(25)
     )
@@ -43,14 +43,14 @@ def create_test_block(prev_hash: bytes, height: int) -> Block:
     txs = [coinbase]
     for _ in range(3):
         tx = Transaction(
-            inputs=[TxInput(
+            inputs=[TxIn(
                 txid=token_bytes(32),
                 vout=randint(0, 5),
                 scriptsig=token_bytes(100),
                 sequence=0xfffffffe
             )],
             outputs=[
-                TxOutput(amount=randint(100000, 1000000), scriptpubkey=token_bytes(25))
+                TxOut(amount=randint(100000, 1000000), scriptpubkey=token_bytes(25))
                 for _ in range(2)
             ],
             version=2,
@@ -171,15 +171,15 @@ def test_utxo_spending():
 
     # Create a block that spends the coinbase (in reality this would fail validation due to maturity)
     spending_tx = Transaction(
-        inputs=[TxInput(
+        inputs=[TxIn(
             txid=genesis_coinbase.txid,
             vout=0,
             scriptsig=token_bytes(100),
             sequence=0xfffffffe
         )],
         outputs=[
-            TxOutput(amount=2500000000, scriptpubkey=token_bytes(25)),
-            TxOutput(amount=2500000000, scriptpubkey=token_bytes(25))
+            TxOut(amount=2500000000, scriptpubkey=token_bytes(25)),
+            TxOut(amount=2500000000, scriptpubkey=token_bytes(25))
         ],
         version=2,
         locktime=0
@@ -230,14 +230,14 @@ def test_intra_block_dependencies():
 
     # First transaction creates an output
     tx1 = Transaction(
-        inputs=[TxInput(
+        inputs=[TxIn(
             txid=token_bytes(32),
             vout=0,
             scriptsig=token_bytes(100),
             sequence=0xfffffffe
         )],
         outputs=[
-            TxOutput(amount=1000000, scriptpubkey=token_bytes(25))
+            TxOut(amount=1000000, scriptpubkey=token_bytes(25))
         ],
         version=2,
         locktime=0
@@ -245,15 +245,15 @@ def test_intra_block_dependencies():
 
     # Second transaction spends the output from tx1
     tx2 = Transaction(
-        inputs=[TxInput(
+        inputs=[TxIn(
             txid=tx1.txid,
             vout=0,
             scriptsig=token_bytes(100),
             sequence=0xfffffffe
         )],
         outputs=[
-            TxOutput(amount=500000, scriptpubkey=token_bytes(25)),
-            TxOutput(amount=500000, scriptpubkey=token_bytes(25))
+            TxOut(amount=500000, scriptpubkey=token_bytes(25)),
+            TxOut(amount=500000, scriptpubkey=token_bytes(25))
         ],
         version=2,
         locktime=0

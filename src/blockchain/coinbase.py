@@ -5,7 +5,7 @@ Implements BIP34 (block height in coinbase) and BIP141 (witness commitment)
 """
 from src.core import CoinbaseError, Serializable, SERIALIZED
 from src.script.stack import BitNum
-from src.tx.tx import TxOutput, TxInput, WitnessField, Transaction
+from src.tx.tx import TxOut, TxIn, Witness, Transaction
 
 # --- CONSTANTS --- #
 MAX_SCRIPTSIG_BYTES = 100
@@ -34,7 +34,7 @@ class Coinbase(Serializable):
 
     def __init__(
             self,
-            outputs: list[TxOutput],
+            outputs: list[TxOut],
             height: int,
             block_reward: int,
             custom_scriptsig: bytes = None,
@@ -99,7 +99,7 @@ class Coinbase(Serializable):
         coinbase_scriptsig = height_bytes + custom_scriptsig
 
         # Create coinbase input
-        coinbase_txin = TxInput(
+        coinbase_txin = TxIn(
             txid=b'\x00' * TXID_SIZE,
             vout=MAX_VOUT,
             scriptsig=coinbase_scriptsig,
@@ -110,7 +110,7 @@ class Coinbase(Serializable):
         coinbase_witness = None
         if wtxid_commitment:
             witness_reserved_value = b'\x00' * WITNESS_RESERVED_VALUE_SIZE
-            coinbase_witness = [WitnessField(items=[witness_reserved_value])]
+            coinbase_witness = [Witness(items=[witness_reserved_value])]
 
         # Create transaction
         self.tx = Transaction(
@@ -211,7 +211,7 @@ class Coinbase(Serializable):
         return self.tx.wtxid
 
     @property
-    def outputs(self) -> list[TxOutput]:
+    def outputs(self) -> list[TxOut]:
         """Access coinbase outputs."""
         return self.tx.outputs
 
@@ -284,7 +284,7 @@ if __name__ == "__main__":
     test_fees = 12_000_000  # 0.12 BTC in fees
     reward = test_subsidy + test_fees
 
-    test_output = TxOutput(
+    test_output = TxOut(
         amount=reward,  # Total reward (subsidy + fees)
         scriptpubkey=bytes.fromhex("76a914" + "00" * 20 + "88ac")  # P2PKH
     )
@@ -314,8 +314,8 @@ if __name__ == "__main__":
     commitment = bytes.fromhex("6a24aa21a9ed") + b'\x00' * 32  # OP_RETURN + commitment
 
     segwit_outputs = [
-        TxOutput(amount=reward, scriptpubkey=bytes.fromhex("76a914" + "00" * 20 + "88ac")),
-        TxOutput(amount=0, scriptpubkey=commitment)  # Witness commitment (always 0 value)
+        TxOut(amount=reward, scriptpubkey=bytes.fromhex("76a914" + "00" * 20 + "88ac")),
+        TxOut(amount=0, scriptpubkey=commitment)  # Witness commitment (always 0 value)
     ]
 
     segwit_coinbase = Coinbase(

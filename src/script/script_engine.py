@@ -15,7 +15,7 @@ from src.script.parser import to_asm
 from src.script.script_types import ScriptPubKey, ScriptSig, P2SH_Key, P2WPKH_Key, P2PKH_Key, P2WSH_Key, P2TR_Key
 from src.script.signature_engine import SignatureEngine
 from src.script.stack import BitStack, BitNum
-from src.tx.tx import WitnessField
+from src.tx.tx import Witness
 
 __all__ = ["ScriptEngine"]
 
@@ -362,7 +362,7 @@ class ScriptEngine:
         # Get WitnessField from context
         tx = ctx.tx
         input_index = ctx.input_index
-        witness_field: WitnessField = tx.witness[input_index]
+        witness_field: Witness = tx.witness[input_index]
         utxo = ctx.utxo
 
         # Find type
