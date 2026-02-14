@@ -68,6 +68,7 @@ def make_mempool_with_utxos(utxos: list[UTXO]) -> MemPool:
     mp.max_time = MemPool.MAX_TIME
     mp.min_fee = MemPool.MIN_FEE
     mp.mempool = {}
+    mp.total_vbytes = 0
     mp.script_engine = MagicMock()  # script validation is a stub in mempool
 
     # Build a dict of outpoint -> UTXO so the mock db can serve lookups

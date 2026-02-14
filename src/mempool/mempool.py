@@ -1,6 +1,7 @@
 """
 The MemPool class
 """
+import time
 from pathlib import Path
 
 from src.core import ReadError, get_logger, TransactionError
@@ -24,6 +25,7 @@ class MemPoolTx:
         self.fee = fee
         self.ancestors = ancestors or []
         self.descendants = descendants or []
+        self.arrival_time = int(time.time())
 
 
 class MemPool:
@@ -49,13 +51,19 @@ class MemPool:
         # --- MemPool storage
         self.mempool = {}  # Dict where the key will be the txid
 
-    def add_tx(self, candidate_tx: bytes) -> bool:
+        # --- Metadata
+        self.total_vbytes = 0  # Update with every tx added or removed
+
+    def add_tx(self, candidate_tx: bytes | Transaction) -> bool:
         """
         We validate the candidate_tx and return True or False based on whether the transaction was added to the pool.
         """
+        # --- Evict expired transactions
+        self.evict_expired()
+
         # --- Get the Transaction object
         try:
-            tx = Transaction.from_bytes(candidate_tx)
+            tx = Transaction.from_bytes(candidate_tx) if isinstance(candidate_tx, bytes) else candidate_tx
         except (ReadError, ValueError) as e:
             logger.error(f"Failed to decode tx from byte stream: {e}")
             return False
@@ -68,7 +76,7 @@ class MemPool:
         # --- Find ancestors
         # --- If a Tx has an ancestor, that means the input references one of the outputs of the ancestor. Hence for
         # each input, we want to strip away the txid from its outpoint and look for that tx in the mempool
-        ancestors = []
+        ancestors: list[MemPoolTx] = []
         for txin in tx.inputs:
             temp_id = txin.outpoint[:32]  # outpoint = txid (32 bytes) + vout (4 bytes)
             if temp_id in self.mempool.keys():
@@ -81,9 +89,31 @@ class MemPool:
             ancestors=ancestors,
         )
 
+        # --- Add descendent
+        # --- For each ancestor found in the mempool, we add the current tx to its descendents.
+        # --- Each ancestor and descendent is a MemPoolTx
+        for ancestor in ancestors:
+            ancestor.descendants.append(mempool_tx)
+
         # --- Add tx
         self.mempool.update({tx.txid: mempool_tx})
+        self.total_vbytes += tx.vbytes
         return True
+
+    def evict_expired(self) -> int:
+        """
+        We look through mempool and remove any txs older than 2 weeks
+        """
+        now = int(time.time())
+        expired_txids = [txid for txid, mptx in self.mempool.items() if now - mptx.arrival_time > self.max_time]
+
+        for txid in expired_txids:
+            self.total_vbytes -= self.mempool[txid].tx.vbytes
+            for ancestor in self.mempool[txid].ancestors:
+                ancestor.descendants.remove(self.mempool[txid])
+            del self.mempool[txid]
+            logger.info(f"Evicted expired tx {txid.hex()}")
+        return len(expired_txids)
 
     def _validate_tx(self, tx: Transaction) -> bool:
         # --- Check if tx is in mempool
@@ -103,8 +133,14 @@ class MemPool:
             logger.error(f"Validation error: {e}")
             return False
 
-        if tx_fee < self.min_fee:
-            logger.error(f"Transaction fee {tx_fee} exceeds minimum fee {self.min_fee}")
+        if tx_fee < self.min_fee * tx.vbytes:
+            logger.error(
+                f"Fee too low: {tx_fee} sats ({tx_fee / tx.vbytes:.2f} sat/vb), minimum is {self.min_fee} sat/vb")
+            return False
+
+        # --- Check size
+        if self.total_vbytes + tx.vbytes > self.max_size:
+            logger.error(f"Mempool full. Rejecting tx {tx.txid.hex()}")
             return False
 
         # --- Validate Scripts
