@@ -6,7 +6,7 @@ The Node class - Main coordinator for the blockchain node
 """
 import time
 
-from src.blockchain.block import Block
+from src.block.block import Block
 from src.blockchain.blockchain import Blockchain
 from src.tx.tx import Transaction, TxInput, TxOutput
 

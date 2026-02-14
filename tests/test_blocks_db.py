@@ -6,7 +6,7 @@ from pathlib import Path
 from random import randint
 from secrets import token_bytes
 
-from src.blockchain.block import Block
+from src.block.block import Block
 from src.database import BitCloneDatabase
 from src.tx.tx import Transaction, TxInput, TxOutput
 

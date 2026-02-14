@@ -265,7 +265,7 @@ class Transaction(Serializable):
     __slots__ = ("version", "inputs", "outputs", "locktime", "witness", "_cache")
 
     def __init__(self, inputs: list[TxInput] = None, outputs: list[TxOutput] = None, witness: list[WitnessField] = None,
-                 locktime: int = 0, version: int = TX.BIP68):
+                 locktime: int = 0, version: int = TX.BIP68_VERSION):
         self.inputs = inputs or []
         self.outputs = outputs or []
         self.witness = witness or []

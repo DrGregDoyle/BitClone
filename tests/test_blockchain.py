@@ -5,7 +5,8 @@ from pathlib import Path
 from random import randint
 from secrets import token_bytes
 
-from src.blockchain import Block, Blockchain
+from src.block import Block
+from src.blockchain import Blockchain
 from src.tx.tx import Transaction, TxInput, TxOutput
 
 TESTBD_PATH = Path(__file__).parent / "db_files" / "test_blockchain.db"

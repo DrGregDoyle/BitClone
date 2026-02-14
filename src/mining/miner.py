@@ -7,7 +7,7 @@ The Miner class - Performs proof-of-work mining in separate thread
 import threading
 import time
 
-from src.blockchain.block import Block
+from src.block.block import Block
 
 
 class Miner:

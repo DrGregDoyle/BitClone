@@ -3,7 +3,7 @@ The Blockchain class
 """
 from pathlib import Path
 
-from src.blockchain.block import Block
+from src.block.block import Block
 from src.database.database import BitCloneDatabase, DB_PATH
 from src.tx.tx import UTXO
 

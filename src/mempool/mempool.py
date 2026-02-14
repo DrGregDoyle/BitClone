@@ -56,8 +56,9 @@ class MemPool:
         # --- Get the Transaction object
         try:
             tx = Transaction.from_bytes(candidate_tx)
-        except [ReadError, ValueError] as e:
-            raise "Failed to read tx byte stream" from e
+        except (ReadError, ValueError) as e:
+            logger.error(f"Failed to decode tx from byte stream: {e}")
+            return False
 
         # --- Validate tx
         if not self._validate_tx(tx):
@@ -91,15 +92,19 @@ class MemPool:
             return False
 
         # --- Check not coinbase
-        if not tx.inputs:
+        if tx.is_coinbase:
             logger.error(f"Cannot add coinbase tx to the mempool")
             return False
 
         # --- Check fees
         try:
             tx_fee = self._get_fee(tx)
-        except TransactionError as e:
+        except (ReadError, TransactionError) as e:
             logger.error(f"Validation error: {e}")
+            return False
+
+        if tx_fee < self.min_fee:
+            logger.error(f"Transaction fee {tx_fee} exceeds minimum fee {self.min_fee}")
             return False
 
         # --- Validate Scripts

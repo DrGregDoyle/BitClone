@@ -10,7 +10,7 @@ Classes for different types of Network data structures
 """
 import siphash
 
-from src.blockchain.block import BlockHeader
+from src.block.block import BlockHeader
 from src.core import Serializable, SERIALIZED, get_stream, read_little_int, read_stream, read_big_int, \
     read_compact_size, NetworkDataError
 from src.cryptography.hash_functions import sha256

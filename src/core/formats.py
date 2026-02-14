@@ -54,36 +54,36 @@ class WALLET:
     BITLEN_KEY: Final[int] = "bit_length"
     WORD_KEY: Final[str] = "word_count"
     CHECKSUM_KEY: Final[str] = "checksum_bits"
-    SEED_ITERATIONS: Final[str] = 2048
-    DKLEN: Final[str] = 64
+    SEED_ITERATIONS: Final[int] = 2048
+    DKLEN: Final[int] = 64
 
 
 class XKEYS:
     """
     Constants related to the extended public and private keys
     """
-    SEED_KEY = b'Bitcoin seed'
-    CHAIN_LENGTH = 32
-    MAX_DEPTH = 255
+    SEED_KEY: Final[bytes] = b'Bitcoin seed'
+    CHAIN_LENGTH: Final[int] = 32
+    MAX_DEPTH: Final[int] = 255
 
     # Version bytes for different key types
-    TESTNET_PRIVATE = bytes.fromhex("04358394")
-    TESTNET_PUBLIC = bytes.fromhex("043587cf")
-    BIP44_XPRV = bytes.fromhex("0488ade4")
-    BIP44_XPUB = bytes.fromhex("0488b21e")
-    BIP49_XPRV = bytes.fromhex("049d7878")
-    BIP49_XPUB = bytes.fromhex("049d7cb2")
-    BIP84_XPRV = bytes.fromhex("04b2430c")
-    BIP84_XPUB = bytes.fromhex("04b24746")
+    TESTNET_PRIVATE: Final[bytes] = bytes.fromhex("04358394")
+    TESTNET_PUBLIC: Final[bytes] = bytes.fromhex("043587cf")
+    BIP44_XPRV: Final[bytes] = bytes.fromhex("0488ade4")
+    BIP44_XPUB: Final[bytes] = bytes.fromhex("0488b21e")
+    BIP49_XPRV: Final[bytes] = bytes.fromhex("049d7878")
+    BIP49_XPUB: Final[bytes] = bytes.fromhex("049d7cb2")
+    BIP84_XPRV: Final[bytes] = bytes.fromhex("04b2430c")
+    BIP84_XPUB: Final[bytes] = bytes.fromhex("04b24746")
 
     # Hardened derivation threshold
-    HARDENED_OFFSET = 0x80000000
-    MAX_INDEX = 0xffffffff
+    HARDENED_OFFSET: Final[int] = 0x80000000
+    MAX_INDEX: Final[int] = 0xffffffff
 
 
 class BECH32CODE:
-    BECH32 = 1
-    BECH32M = 2
+    BECH32: Final[int] = 1
+    BECH32M: Final[int] = 2
 
 
 class TX:
@@ -96,7 +96,7 @@ class TX:
     AMOUNT: Final[int] = 8
     VERSION: Final[int] = 4
     LOCKTIME: Final[int] = 4
-    BIP68: Final[int] = 2  # Tx.version
+    BIP68_VERSION: Final[int] = 2  # Tx.version
     MARKERFLAG: Final[int] = 2
     INDEX: Final[int] = 4
 

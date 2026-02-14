@@ -4,7 +4,7 @@ The Database class - holds the UTXO set
 import sqlite3
 from pathlib import Path
 
-from src.blockchain.block import Block
+from src.block.block import Block
 from src.database.block_files import BlockFileManager
 from src.tx.tx import UTXO
 
@@ -29,33 +29,84 @@ class BitCloneDatabase:
         with sqlite3.connect(self.db_path) as conn:
             c = conn.cursor()
             c.execute('''
-                CREATE TABLE IF NOT EXISTS utxos (
-                    outpoint      BLOB    NOT NULL,   -- 36 bytes
-                    amount        INTEGER NOT NULL,   -- satoshis
-                    script_pubkey BLOB    NOT NULL,   -- raw bytes
-                    height        INTEGER NOT NULL,
-                    coinbase      INTEGER NOT NULL DEFAULT 0 CHECK (coinbase IN (0,1)),
-                    PRIMARY KEY (outpoint)
-                ) WITHOUT ROWID
-            ''')
+                      CREATE TABLE IF NOT EXISTS utxos
+                      (
+                          outpoint
+                          BLOB
+                          NOT
+                          NULL, -- 36 bytes
+                          amount
+                          INTEGER
+                          NOT
+                          NULL, -- satoshis
+                          script_pubkey
+                          BLOB
+                          NOT
+                          NULL, -- raw bytes
+                          height
+                          INTEGER
+                          NOT
+                          NULL,
+                          coinbase
+                          INTEGER
+                          NOT
+                          NULL
+                          DEFAULT
+                          0
+                          CHECK (
+                          coinbase
+                          IN
+                      (
+                          0,
+                          1
+                      )),
+                          PRIMARY KEY
+                      (
+                          outpoint
+                      )
+                          ) WITHOUT ROWID
+                      ''')
             # Blocks metadata table
             c.execute('''
-                        CREATE TABLE IF NOT EXISTS blocks (
-                            height        INTEGER PRIMARY KEY,
-                            block_hash    BLOB    NOT NULL UNIQUE,
-                            prev_hash     BLOB    NOT NULL,
-                            timestamp     INTEGER NOT NULL,
-                            file_number   INTEGER NOT NULL,
-                            file_offset   INTEGER NOT NULL,
-                            block_size    INTEGER NOT NULL
-                        )
-                    ''')
+                      CREATE TABLE IF NOT EXISTS blocks
+                      (
+                          height
+                          INTEGER
+                          PRIMARY
+                          KEY,
+                          block_hash
+                          BLOB
+                          NOT
+                          NULL
+                          UNIQUE,
+                          prev_hash
+                          BLOB
+                          NOT
+                          NULL,
+                          timestamp
+                          INTEGER
+                          NOT
+                          NULL,
+                          file_number
+                          INTEGER
+                          NOT
+                          NULL,
+                          file_offset
+                          INTEGER
+                          NOT
+                          NULL,
+                          block_size
+                          INTEGER
+                          NOT
+                          NULL
+                      )
+                      ''')
 
             # Index for faster lookups by hash
             c.execute('''
-                        CREATE INDEX IF NOT EXISTS idx_block_hash 
-                        ON blocks(block_hash)
-                    ''')
+                      CREATE INDEX IF NOT EXISTS idx_block_hash
+                          ON blocks(block_hash)
+                      ''')
 
             conn.commit()
 

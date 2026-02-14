@@ -3,7 +3,7 @@ Tests for Network data structures
 """
 import secrets
 
-from src.blockchain.block import Block
+from src.block.block import Block
 from src.network.datatypes.network_data import HeaderAndShortIDs, ShortIDs, PrefilledTx
 from src.network.messages.data_msg import CmpctBlock
 
