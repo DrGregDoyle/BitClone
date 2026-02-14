@@ -4,8 +4,8 @@ The classes for BitClone transactions
 import json
 from io import SEEK_CUR
 
-from src.core import Serializable, SERIALIZED, get_stream, read_little_int, read_stream, TX
-from src.core.byte_stream import read_compact_size, write_compact_size
+from src.core import (Serializable, SERIALIZED, get_stream, read_little_int, read_stream, TX, deserialize_data,
+                      serialize_data, read_compact_size, write_compact_size)
 from src.cryptography import hash256
 
 __all__ = ["TxIn", "TxOut", "Witness", "Transaction", "UTXO"]
@@ -22,11 +22,11 @@ COINBASE_KEY = "is_coinbase"
 class TxIn(Serializable):
     """
     =============================================================================
-    |   name            |   data type   |   format              |   byte size   |
+    |   name            |   data type   |   serialized format   |   byte size   |
     =============================================================================
     |   txid            |   bytes       |   natural byte order  |   32          |
     |   vout            |   int         |   little-endian       |   4           |
-    |   scriptsig_size  |               |   compactSize         |   var         |
+    |   scriptsig_size  |   int         |   compactSize         |   var         |
     |   scriptsig       |   bytes       |   script bytes        |   var         |
     |   sequence        |   int         |   little-endian       |   4           |
     =============================================================================
@@ -82,14 +82,13 @@ class TxIn(Serializable):
 
 class TxOut(Serializable):
     """
-    TxInput
-    -----------------------------------------------------------------
-    |   Field               |   Byte Size   |   Format              |
-    -----------------------------------------------------------------
-    |   Amount              |   8           |   little-endian       |
-    |   scriptpubkey_size   |   var         |   CompactSize         |
-    |   scriptpubkey        |   var         |   Script              |
-    -----------------------------------------------------------------
+    =============================================================================
+    |   name            |   data type   |   serialized format   |   byte size   |
+    =============================================================================
+    |   amount          |   int         |   little-endian       |   8           |
+    |   scriptlen       |   int         |   compactSize         |   vatInt      |
+    |   scriptpubkey    |   bytes       |   bytes               |   var         |
+    =============================================================================
     """
     __slots__ = ("amount", "scriptpubkey")
 
@@ -97,20 +96,12 @@ class TxOut(Serializable):
         self.amount: int = amount if isinstance(amount, int) else int.from_bytes(amount, "little")
         self.scriptpubkey = scriptpubkey
 
-    @property
-    def serial_scriptpubkey(self) -> bytes:
-        """
-        We return the formatted scriptpubkey_size + scriptpubkey
-        """
-        return write_compact_size(len(self.scriptpubkey)) + self.scriptpubkey
-
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):
         stream = get_stream(byte_stream)
 
-        amount = read_little_int(stream, TX.AMOUNT, "amount")
-        scriptpubkey_size = read_compact_size(stream)
-        scriptpubkey = read_stream(stream, scriptpubkey_size, "scriptpubkey")
+        amount = read_little_int(stream, TX.AMOUNT)
+        scriptpubkey = deserialize_data(stream)
 
         return cls(amount, scriptpubkey)
 
@@ -119,7 +110,7 @@ class TxOut(Serializable):
         Serializt the TxOutput
         amount || scriptpubkey_size || scriptpubkey
         """
-        return self.amount.to_bytes(TX.AMOUNT, "little") + self.serial_scriptpubkey
+        return self.amount.to_bytes(TX.AMOUNT, "little") + serialize_data(self.scriptpubkey)
 
     def to_dict(self, formatted: bool = True) -> dict:
         scriptpubkey_len = len(self.scriptpubkey)
@@ -133,16 +124,13 @@ class TxOut(Serializable):
 class Witness(Serializable):
     """
     WitnessField
-    -------------------------------------------------------------
-    |   Field           |   Byte Size   |   Format              |
-    -------------------------------------------------------------
-    |   Stack Items     |   var         |   CompactSize         |
-    =============================================================
-    |   Size            |   var         |   CompactSize         |
-    |   Item            |   var         |   bytes               |
-    =============================================================
-    |   the Size | Item format repeats for all witness items    |
-    -------------------------------------------------------------    
+    =================================================================================
+    |   name            |   data type   |   serialized format       |   byte size   |
+    =================================================================================
+    |   stack_items     |   int         |   compactSize             |   varInt      |
+    |   item*           |   bytes       |   serialized_data(item)   |   varInt      |
+    =================================================================================
+    *Each item in the Witness is serialized with a leading compactSize value indicating the item size
     """
     __slots__ = ("items",)
 
@@ -157,33 +145,32 @@ class Witness(Serializable):
         stack_items = read_compact_size(stream)
 
         # Get items
-        witness_items = []
-        for _ in range(stack_items):
-            item_len = read_compact_size(stream)
-            witness_items.append(read_stream(stream, item_len, "WitnessField data"))
+        witness_items = [deserialize_data(stream) for _ in range(stack_items)]
         return cls(witness_items)
 
     def to_bytes(self) -> bytes:
         """
         Serialize the stack items
         """
-        parts = [write_compact_size(len(self.items))]
-        for item in self.items:
-            parts.append(write_compact_size(len(item)))
-            parts.append(item)
-        return b''.join(parts)
+        stack_items = len(self.items)
+        item_bytes = b''.join([serialize_data(item) for item in self.items])
+        return write_compact_size(stack_items) + item_bytes
 
     def to_dict(self, formatted: bool = True) -> dict:
         stack_items = len(self.items)
+        items_dict = {}
 
-        item_dict = {
-            f"{x}": self.items[x].hex() for x in range(stack_items)
+        for x, item in enumerate(self.items):
+            size = len(item)
+            items_dict[str(x)] = {
+                "size": write_compact_size(size).hex() if formatted else size,
+                "item": item.hex(),
+            }
+
+        return {
+            "stack_items": stack_items,
+            "items": items_dict,
         }
-        witness_dict = {
-            "stack_items": write_compact_size(stack_items).hex() if formatted else stack_items,
-            "items": item_dict
-        }
-        return witness_dict
 
 
 class UTXO:
@@ -548,15 +535,19 @@ if __name__ == "__main__":
     print(" --- TX FORMATTING VALIDATION ---")
     print(sep)
 
-    # TxInput
-    test_txid = bytes.fromhex("03bbbdcf71dd288dba0a9936fde33d15d319f74ffe26e670e5871e691bf03929")
-    test_vout = 0
-    test_scriptsig = bytes.fromhex(
-        "47304402203fd3ff375c314f40ef02f2665b61a8219b938b281fb1e75785f01437f7f29254022025cf6fcad3c7bb119a044bde1d4c642a33b19299db9a96d53bb8ec6a2f856a72012102f2d9d8629bffca39151042bd24981ff28f579307a11486c3a6989b18ff090a7f")
-    test_sequence = 0xffffffff
-    test_txin = TxIn(test_txid, test_vout, test_scriptsig, test_sequence)
-    print(f"FORMATTED TEST TXINPUT: {test_txin.to_json()}")
-    print(sep)
-    print(f"UNFORMATTED TEST TXINPUT: {test_txin.to_json(False)}")
-    print(sep)
+    # # TxInput
+    # test_txid = bytes.fromhex("03bbbdcf71dd288dba0a9936fde33d15d319f74ffe26e670e5871e691bf03929")
+    # test_vout = 0
+    # test_scriptsig = bytes.fromhex(
+    #     "47304402203fd3ff375c314f40ef02f2665b61a8219b938b281fb1e75785f01437f7f29254022025cf6fcad3c7bb119a044bde1d4c642a33b19299db9a96d53bb8ec6a2f856a72012102f2d9d8629bffca39151042bd24981ff28f579307a11486c3a6989b18ff090a7f")
+    # test_sequence = 0xffffffff
+    # test_txin = TxIn(test_txid, test_vout, test_scriptsig, test_sequence)
+    # print(f"FORMATTED TEST TXINPUT: {test_txin.to_json()}")
+    # print(sep)
+    # print(f"UNFORMATTED TEST TXINPUT: {test_txin.to_json(False)}")
+    # print(sep)
     print(space)
+    known_witness_bytes = bytes.fromhex(
+        "024730440220537f470c1a18dc1a9d233c0b6af1d2ce18a07f3b244e4d9d54e0e60c34c55e67022058169cd11ac42374cda217d6e28143abd0e79549f7b84acc6542817466dc9b3001210301c1768b48843933bd7f0e8782716e8439fc44723d3745feefde2d57b761f503")
+    known_witness = Witness.from_bytes(known_witness_bytes)
+    print(f"KNOWN WITNESS: {known_witness.to_json()}")
