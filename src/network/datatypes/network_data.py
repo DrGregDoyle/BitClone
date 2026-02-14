@@ -13,8 +13,9 @@ import siphash
 from src.block.block import BlockHeader
 from src.core import Serializable, SERIALIZED, get_stream, read_little_int, read_stream, read_big_int, \
     read_compact_size, NetworkDataError
+from src.core.byte_stream import write_compact_size
 from src.cryptography.hash_functions import sha256
-from src.data import IP_ADDRESS, ip_from_netaddr, write_compact_size, BitIP, decode_differential, encode_differential
+from src.data import IP_ADDRESS, ip_from_netaddr, BitIP, decode_differential, encode_differential
 from src.network.datatypes.network_types import Services, InvType
 from src.tx.tx import Transaction
 

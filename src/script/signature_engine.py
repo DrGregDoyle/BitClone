@@ -8,9 +8,10 @@ from __future__ import annotations
 from enum import IntEnum
 
 from src.core import SignatureError, TX, TAPROOT
+from src.core.byte_stream import write_compact_size
 from src.cryptography import ecdsa, verify_ecdsa, schnorr_verify, schnorr_sig, hash256, sha256, tapsighash_hash, \
     SECP256K1
-from src.data import encode_der_signature, decode_der_signature, write_compact_size, PubKey, get_control_block, \
+from src.data import encode_der_signature, decode_der_signature, PubKey, get_control_block, \
     Leaf, TweakPubkey, Tree, get_tweak, get_control_byte
 from src.script.script_types import P2TR_Key
 from src.tx import Transaction, Witness, UTXO

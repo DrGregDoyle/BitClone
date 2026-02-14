@@ -4,7 +4,7 @@ Data messages for P2P networking
 from src.block.block import Block, BlockHeader
 from src.core import SERIALIZED, get_bytes, get_stream, read_compact_size, NetworkDataError, read_little_int, \
     read_stream
-from src.data import write_compact_size
+from src.core.byte_stream import write_compact_size
 from src.network.datatypes.network_data import InvVector, BlockTransactions, BlockTransactionsRequest, HeaderAndShortIDs
 from src.network.messages.message import Message, EmptyMessage
 from src.tx import Transaction

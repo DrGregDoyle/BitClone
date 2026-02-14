@@ -4,8 +4,8 @@ Helper functions and classes for P2TR
 import json
 
 from src.core import TaprootError, TAPROOT
+from src.core.byte_stream import write_compact_size
 from src.cryptography import tapleaf_hash, tapbranch_hash, taptweak_hash, Point
-from src.data.compact_size import write_compact_size
 from src.data.ecc_keys import PubKey
 
 VERSION_BYTE = TAPROOT.VERSION_BYTE

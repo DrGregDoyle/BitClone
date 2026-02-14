@@ -6,8 +6,7 @@ import secrets
 import time
 
 from src.core import SERIALIZED, get_stream, read_little_int, read_stream
-from src.core.byte_stream import read_compact_size
-from src.data import write_compact_size
+from src.core.byte_stream import read_compact_size, write_compact_size
 from src.network.datatypes.network_data import NetAddr
 from src.network.datatypes.network_types import Services, RejectType
 from src.network.messages.message import EmptyMessage, Message

@@ -1,18 +1,55 @@
 """
-Methods for deserializing byte streams
+Methods for serializing/deserializing byte streams
 
-#TODO: Remove optional data_type once testing is complete
+
 """
 from io import BytesIO
 from typing import Union, Optional, Literal
 
-from .exceptions import ReadError
+from src.core.formats import DATA
+from .exceptions import ReadError, WriteError
 
 __all__ = ["SERIALIZED", "BYTEORDER", "get_stream", "read_stream", "read_little_int", "read_big_int", "get_bytes",
-           "read_compact_size"]
+           "read_compact_size", "write_compact_size", "serialize_data", "deserialize_data"]
 
 SERIALIZED = Union[bytes, BytesIO]
 BYTEORDER = Literal['big', 'little']
+
+
+# === SERIALIZATION METHODS === #
+def write_compact_size(num: int) -> bytes:
+    """
+    Given an integer we return its CompactSize encoding
+    """
+    # --- Validation --- #
+    if num < 0 or num > DATA.MAX_COMPACTSIZE:
+        raise WriteError("Given number out of bounds for CompactSize encoding")
+
+    if num <= 0xfc:  # One byte
+        return num.to_bytes(1, "little")
+    elif num <= 0xffff:  # Two bytes
+        return b'\xfd' + num.to_bytes(2, "little")
+    elif num <= 0xffffffff:  # Four bytes
+        return b'\xfe' + num.to_bytes(4, "little")
+    else:  # Eight bytes
+        return b'\xff' + num.to_bytes(8, "little")
+
+
+def serialize_data(data: bytes) -> bytes:
+    """
+    Returns compact size encoding of the size of the given data plus the data
+    """
+    return write_compact_size(len(data)) + data
+
+
+# === DESERIALIZATION METHODS === #
+def deserialize_data(data: bytes) -> bytes:
+    """
+    We decode the compact size encoding of the size of the given data and then return the data.
+    """
+    stream = get_stream(data)
+    datalen = read_compact_size(stream)
+    return read_stream(stream, datalen)
 
 
 def get_stream(byte_stream: SERIALIZED):
