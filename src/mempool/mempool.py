@@ -27,20 +27,32 @@ class MemPoolTx:
         self.descendants = descendants or []
         self.arrival_time = int(time.time())
 
+    @property
+    def feerate(self) -> float:
+        return self.fee / self.tx.vbytes
+
+    @property
+    def ancestor_feerate(self) -> float:
+        ancestor_fees = sum(a.fee for a in self.ancestors)
+        ancestor_vbytes = sum(a.tx.vbytes for a in self.ancestors)
+        return (self.fee + ancestor_fees) / (self.tx.vbytes + ancestor_vbytes)
+
 
 class MemPool:
     """
     The holding area for incoming transactions.
     """
-    MAX_SIZE = 300000
-    MAX_TIME = 3600 * 336  # 336 hours = 2 weeks
+    MAX_SIZE = 300_000
+    MAX_TIME = 3_600 * 336  # 336 hours = 2 weeks
     MIN_FEE = 1  # sats/vbyte = feerate
+    MAX_BLOCK_WEIGHT = 4_000_000  # 4 million wu
 
     def __init__(self, db_path: Path = TEST_DB_PATH) -> None:
         # --- MemPool constants
         self.max_size = MemPool.MAX_SIZE
         self.max_time = MemPool.MAX_TIME
         self.min_fee = MemPool.MIN_FEE
+        self.max_block_weight = MemPool.MAX_BLOCK_WEIGHT
 
         # --- UTXO set
         self.btcdb = BitCloneDatabase(db_path)
@@ -53,6 +65,7 @@ class MemPool:
 
         # --- Metadata
         self.total_vbytes = 0  # Update with every tx added or removed
+        self.spent_outpoints = set()  # Update with every tx added or removed
 
     def add_tx(self, candidate_tx: bytes | Transaction) -> bool:
         """
@@ -97,8 +110,16 @@ class MemPool:
 
         # --- Add tx
         self.mempool.update({tx.txid: mempool_tx})
-        self.total_vbytes += tx.vbytes
+        self._add_metadata(tx)
+
         return True
+
+    def confirm_block(self, confirmed_txids: list[bytes]) -> None:
+        for txid in confirmed_txids:
+            if txid not in self.mempool:
+                continue
+            self._remove_tx(txid)
+            logger.info(f"Confirmed tx removed from mempool: {txid.hex()}")
 
     def evict_expired(self) -> int:
         """
@@ -108,12 +129,16 @@ class MemPool:
         expired_txids = [txid for txid, mptx in self.mempool.items() if now - mptx.arrival_time > self.max_time]
 
         for txid in expired_txids:
-            self.total_vbytes -= self.mempool[txid].tx.vbytes
-            for ancestor in self.mempool[txid].ancestors:
-                ancestor.descendants.remove(self.mempool[txid])
-            del self.mempool[txid]
+            self._remove_tx(txid)
             logger.info(f"Evicted expired tx {txid.hex()}")
         return len(expired_txids)
+
+    def get_block_template(self):
+        """
+        We select a list of txs to be included in a block.
+        """
+        # --- Get list sorted by ancestor_feerate
+        txid_list = sorted(self.mempool.values(), key=lambda mptx: mptx.ancestor_feerate, reverse=True)
 
     def _validate_tx(self, tx: Transaction) -> bool:
         # --- Check if tx is in mempool
@@ -125,6 +150,12 @@ class MemPool:
         if tx.is_coinbase:
             logger.error(f"Cannot add coinbase tx to the mempool")
             return False
+
+        # --- Check doublespend
+        for txin in tx.inputs:
+            if txin.outpoint in self.spent_outpoints:
+                logger.error(f"Double spend detected: {txin.outpoint.hex()}")
+                return False
 
         # --- Check fees
         try:
@@ -175,6 +206,36 @@ class MemPool:
         if tx_fee < 0:
             raise TransactionError("Output total exceeds input total")
         return tx_fee
+
+    def _remove_tx(self, txid: bytes) -> None:
+        """Remove a tx from the mempool and clean up all references."""
+        mempool_tx = self.mempool[txid]
+        for ancestor in mempool_tx.ancestors:
+            ancestor.descendants.remove(mempool_tx)
+        self._remove_metadata(mempool_tx.tx)
+        del self.mempool[txid]
+
+    def _add_metadata(self, tx: Transaction) -> None:
+        """
+        When a tx is to be added to the pool, we track some metadata for the pool.
+        """
+        # --- total_vbytes
+        self.total_vbytes += tx.vbytes
+
+        # --- spent_outpoints
+        for txin in tx.inputs:
+            self.spent_outpoints.add(txin.outpoint)
+
+    def _remove_metadata(self, tx: Transaction) -> None:
+        """
+        When a tx is removed from the pool, we also remove its tracked metadata.
+        """
+        # --- total_vbytes
+        self.total_vbytes -= tx.vbytes
+
+        # --- spent_outpoints
+        for txin in tx.inputs:
+            self.spent_outpoints.remove(txin.outpoint)
 
 
 # ---TESING --- #
