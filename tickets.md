@@ -21,3 +21,4 @@
 - Network
     - Create BitIP class for handling ip addresses
     - Needs to inherit from Serializable.
+- Add the CheckLockTimeVerify opcode (redefine NOP2)

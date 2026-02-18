@@ -2,7 +2,6 @@
 The Blockchain class
 """
 import time
-from datetime import time
 from pathlib import Path
 
 from src.block.block import Block
@@ -182,6 +181,71 @@ class Blockchain:
             return False
         # --- Verify coinbase output value
         coinbase_output_value = sum(txout.amount for txout in coinbase_tx.outputs)
+        total_fees = sum(self._get_tx_fee(tx) for tx in block.txs[1:])  # All non-coinbase tx fees
+        if coinbase_output_value > self.block_subsidy + total_fees:
+            logger.error("Output value on coinbase tx exceeds block_subsidy + total fees")
+            return False
+
+        # === NON-COINBASE TX VALIDATION === #
+        seen_outpoints = set()
+        for tx in block.txs[1:]:
+            # --- Locktime check (BIP65)
+            if tx.locktime > 0 and any(txin.sequence < 0xffffffff for txin in tx.inputs):
+                if tx.locktime < 500_000_000:
+                    # Block-height based
+                    if tx.locktime >= (self.height + 1):
+                        logger.error(
+                            f"Tx {tx.txid.hex()} locktime {tx.locktime} not yet reached at height {self.height + 1}")
+                        return False
+                else:
+                    # Unix timestamp based
+                    if tx.locktime > int(time.time()):
+                        logger.error(f"Tx {tx.txid.hex()} locktime {tx.locktime} not yet reached")
+                        return False
+
+            for txin in tx.inputs:
+                # --- Check UTXO exists (either in db or created earlier in this block)
+                utxo = self.db.get_utxo(txin.outpoint)
+                if utxo is None:
+                    logger.error(f"Input references missing UTXO: {txin.outpoint.hex()}")
+                    return False
+
+                # --- Coinbase maturity check
+                if utxo.is_coinbase:
+                    if (self.height + 1) - utxo.block_height < 100:  # COINBASE_MATURITY
+                        logger.error(f"Coinbase UTXO spent before maturity: {txin.outpoint.hex()}")
+                        return False
+
+                # --- Intra-block double spend
+                if txin.outpoint in seen_outpoints:
+                    logger.error(f"Double spend detected within block: {txin.outpoint.hex()}")
+                    return False
+                seen_outpoints.add(txin.outpoint)
+
+                # --- Relative locktime per input (BIP68)
+                sequence = txin.sequence
+                # Bit 31 set = BIP68 disabled for this input
+                if sequence & (1 << 31):
+                    continue
+
+                if sequence & (1 << 22):
+                    # Time-based: lower 16 bits * 512 seconds
+                    required_seconds = (sequence & 0xffff) * 512
+                    utxo = self.db.get_utxo(txin.outpoint)
+                    # Get the block the UTXO was confirmed in and check elapsed time
+                    utxo_block = self.db.get_block_at_height(utxo.block_height)
+                    elapsed = block.timestamp - utxo_block.timestamp
+                    if elapsed < required_seconds:
+                        logger.error(f"Relative timelock not met for input {txin.outpoint.hex()}")
+                        return False
+                else:
+                    # Block-based: lower 16 bits = number of blocks since UTXO confirmed
+                    required_blocks = sequence & 0xffff
+                    utxo = self.db.get_utxo(txin.outpoint)
+                    blocks_since = (self.height + 1) - utxo.block_height
+                    if blocks_since < required_blocks:
+                        logger.error(f"Relative block locktime not met for input {txin.outpoint.hex()}")
+                        return False
 
         # --- Verify weight
         if block.weight > self.MAX_WEIGHT:
@@ -213,8 +277,8 @@ class Blockchain:
         input_total = sum(self.db.get_utxo(txin.outpoint).amount for txin in tx.inputs)
         # --- Output sums
         output_total = sum(txout.amount for txout in tx.outputs)
-        if input_total < output_total:
-            fee = output_total - input_total
+        if input_total >= output_total:
+            fee = input_total - output_total
             # --- Logging
             logger.info("--- Fee Calculation ---")
             logger.info(f"txid: {tx.txid}")
