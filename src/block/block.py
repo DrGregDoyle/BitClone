@@ -27,7 +27,7 @@ class BlockHeader(Serializable):
     |   nonce       |   int         |   little-endian       |   4       |
     ---------------------------------------------------------------------
     """
-    __slots__ = ('version', 'prev_block', 'merkle_root', 'timestamp', 'bits', 'nonce')
+    __slots__ = ('version', 'prev_block', 'merkle_root', 'timestamp', 'bits', 'nonce', 'weight')
 
     def __init__(self,
                  version: int = None,
@@ -117,7 +117,7 @@ class Block(Serializable):
     |   txs         |   list        |   Serializable        |   var     |
     ---------------------------------------------------------------------
     """
-    __slots__ = ('prev_block', 'txs', 'tx_num', 'merkle_tree', 'timestamp', 'bits', 'nonce', 'version')
+    __slots__ = ('prev_block', 'txs', 'tx_num', 'merkle_tree', 'timestamp', 'bits', 'nonce', 'version', 'weight')
 
     def __init__(self,
                  version: int = None,
@@ -134,6 +134,7 @@ class Block(Serializable):
         self.nonce = nonce or 0
         self.txs = txs
         self.merkle_tree = MerkleTree([t.txid for t in self.txs])
+        self.weight = self._calculate_block_weight()
 
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):
@@ -193,6 +194,13 @@ class Block(Serializable):
             "tx_num": tx_num,
             "txs": tx_dict
         }
+
+    def _calculate_block_weight(self):
+        """
+        Return total weight units of the Block instance.
+        """
+        # Start with fixed header weight 80 bytes = 320 weight units
+        return 320 + sum(tx.wu for tx in self.txs)
 
 
 if __name__ == "__main__":

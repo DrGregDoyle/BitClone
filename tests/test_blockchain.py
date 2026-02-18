@@ -73,7 +73,7 @@ def test_basic_blockchain_ops():
     We test basic functionality of the blockchain (BEFORE VALIDATION)
     """
     chain = Blockchain(TESTBD_PATH)
-    chain.db.wipe_db()  # Start fresh
+    chain.wipe_chain()  # Start fresh
 
     # 1. Test adding genesis block
     genesis = create_test_block(b'\x00' * 32, 0)
@@ -156,7 +156,7 @@ def test_utxo_spending():
     Test that spending UTXOs removes them from the set
     """
     chain = Blockchain(TESTBD_PATH)
-    chain.db.wipe_db()
+    chain.wipe_chain()
 
     # Create genesis with coinbase
     genesis = create_test_block(b'\x00' * 32, 0)
@@ -219,7 +219,7 @@ def test_intra_block_dependencies():
     Test that a transaction can spend an output created earlier in the same block
     """
     chain = Blockchain(TESTBD_PATH)
-    chain.db.wipe_db()
+    chain.wipe_chain()
 
     # Create genesis
     genesis = create_test_block(b'\x00' * 32, 0)

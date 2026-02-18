@@ -15,6 +15,8 @@ COINBASE_MATURITY = 100
 WITNESS_RESERVED_VALUE_SIZE = 32
 TXID_SIZE = 32
 
+__all__ = ["Coinbase"]
+
 
 class Coinbase(Serializable):
     """
@@ -251,7 +253,7 @@ class Coinbase(Serializable):
             return 0
 
         # Start with 50 BTC (5,000,000,000 satoshis) and halve
-        return 50_00_000_000 >> halvings
+        return 5_000_000_000 >> halvings
 
     @staticmethod
     def calculate_block_reward(height: int, tx_fees: int) -> int:

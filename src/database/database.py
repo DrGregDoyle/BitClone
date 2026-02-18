@@ -5,12 +5,14 @@ import sqlite3
 from pathlib import Path
 
 from src.block.block import Block
+from src.core import get_logger
 from src.database.block_files import BlockFileManager
-from src.tx.tx import UTXO
+from src.tx.tx import UTXO, Transaction
 
 DB_PATH = Path(__file__).parent / "db_files" / "bitclone.db"
 
 __all__ = ["BitCloneDatabase", "DB_PATH"]
+logger = get_logger(__name__)
 
 
 class BitCloneDatabase:
@@ -159,6 +161,19 @@ class BitCloneDatabase:
         with sqlite3.connect(self.db_path) as conn:
             result = conn.execute("SELECT COUNT(*) FROM utxos").fetchone()
             return result[0] if result else 0
+
+    def get_utxos(self, tx: Transaction) -> list[UTXO] | None:
+        """
+        We return a list of UTXOS associated with the tx inputs. If any are missing we return None.
+        """
+        utxos = []
+        for txin in tx.inputs:
+            temp_utxo = self.get_utxo(txin.outpoint)
+            if temp_utxo is None:
+                logger.error(f"Missing utxo for oupoint {txin.outpoint.hex()}. Invalid tx.")
+                return None
+            utxos.append(temp_utxo)
+        return utxos
 
     # --- BLOCKS --- #
     def add_block(self, block, block_height: int):
