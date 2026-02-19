@@ -1,13 +1,11 @@
 """
-===============================================================================
-FILE: src/node/node.py
-===============================================================================
 The Node class - Main coordinator for the blockchain node
 """
 import time
 
 from src.block.block import Block
 from src.blockchain.blockchain import Blockchain
+from src.mempool.mempool import MemPool
 from src.tx.tx import Transaction, TxIn, TxOut
 
 
@@ -21,9 +19,11 @@ class Node:
     """
 
     def __init__(self, blockchain: Blockchain = None, wallet=None):
+        # -- TODO: Update inputs to take db_path and wallet_obj
+        # -- TODO: Make blockchain and mempool use the same db
         self.blockchain = blockchain or Blockchain()
         self.wallet = wallet  # Will hold wallet instance
-        self.mempool = []  # List of unconfirmed transactions
+        self.mempool = MemPool()  # List of unconfirmed transactions
         self.current_difficulty = b'\x1d\x00\xff\xff'  # Default difficulty
 
         # Mining thread (to be implemented)

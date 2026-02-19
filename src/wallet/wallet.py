@@ -6,7 +6,6 @@ from src.wallet.mnemonic import Mnemonic
 from src.wallet.xkeys import ExtendedKey
 
 __all__ = ["Wallet"]
-_X = XKEYS()
 
 
 class Wallet:
@@ -20,7 +19,7 @@ class Wallet:
             phrase: list | None = None,
             passphrase: str = "",
             entropy_bytelen: int = 16,
-            version: bytes = _X.BIP44_XPRV
+            version: bytes = XKEYS.BIP44_XPRV
     ):
         """
         Initialize a wallet from a mnemonic phrase or generate a new one
@@ -41,7 +40,7 @@ class Wallet:
         self.master_key = ExtendedKey.from_master_seed(_seed, version=version)
 
     @classmethod
-    def from_seed(cls, seed: bytes, version: bytes = _X.BIP44_XPRV):
+    def from_seed(cls, seed: bytes, version: bytes = XKEYS.BIP44_XPRV):
         """
         Create a wallet directly from a seed (bypasses mnemonic)
 
