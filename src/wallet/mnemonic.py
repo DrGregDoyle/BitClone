@@ -4,17 +4,21 @@ generated one
 """
 import os
 
-from src.core import WALLET, WalletError
+from src.core.exceptions import WalletError
+from src.core.formats import WALLET
+from src.core.logging import get_logger
 from src.cryptography import sha256, pbkdf2
 from src.data import load_wordlist
 
-# --- CONSTANTS --- #
-DEFAULT_ENTROPY_BYTELEN = WALLET.DEFAULT_ENTROPY_BYTES  # 16 bytes | 12 words
-ALLOWED_ENTROPY_BYTELEN = WALLET.MNEMONIC.keys()
-CHECKSUM_KEY = WALLET.CHECKSUM_KEY
-WORD_KEY = WALLET.WORD_KEY
-BITLEN_KEY = WALLET.BITLEN_KEY
-WORD_BITS = WALLET.WORD_BITS
+logger = get_logger(__name__)
+
+# # --- CONSTANTS --- #
+# DEFAULT_ENTROPY_BYTELEN = WALLET.DEFAULT_ENTROPY_BYTES  # 16 bytes | 12 words
+# ALLOWED_ENTROPY_BYTELEN = WALLET.MNEMONIC.keys()
+# CHECKSUM_KEY = WALLET.CHECKSUM_KEY
+# WORD_KEY = WALLET.WORD_KEY
+# BITLEN_KEY = WALLET.BITLEN_KEY
+# WORD_BITS = WALLET.WORD_BITS
 
 __all__ = ["Mnemonic"]
 
@@ -22,15 +26,16 @@ __all__ = ["Mnemonic"]
 class Mnemonic:
     __slots__ = ("phrase",)
 
-    def __init__(self, phrase: list | None = None, entropy_bytelen: int = DEFAULT_ENTROPY_BYTELEN):
+    def __init__(self, phrase: list | None = None, entropy_bytelen: int = WALLET.ENTROPY_BYTES):
         """
         We create a mnemonic phrase corresponding to a seed value. The number of words in the phrase corresponds to
         the entropy byte length (32 bytes = 12 words, 64 bytes = 24 words)
         """
         # --- BIP39 ENTROPY BYTE LENGTH VALIDATION --- #
-        if entropy_bytelen not in ALLOWED_ENTROPY_BYTELEN:
+        allowed_entropy_bytelens = WALLET.MNEMONIC.keys()
+        if entropy_bytelen not in allowed_entropy_bytelens:
             raise WalletError(
-                f"Entropy byte length {entropy_bytelen} not BIP30 compliant. Must be one of {ALLOWED_ENTROPY_BYTELEN}")
+                f"Entropy byte length {entropy_bytelen} not BIP30 compliant. Must be one of {allowed_entropy_bytelens}")
 
         # --- GET PHRASE --- #
 
@@ -61,21 +66,21 @@ class Mnemonic:
 
         # Get the checksum bit length from config (not from the actual value!)
         entropy_bytelen = len(entropy)
-        checksum_bitlen = WALLET.MNEMONIC[entropy_bytelen][CHECKSUM_KEY]
+        checksum_bitlen = WALLET.MNEMONIC[entropy_bytelen][WALLET.CHECKSUM_KEY]
 
         # Shift entropy_int by checksum_bitlen then OR the checksum_int to append it (as an integer)
         ent_check = (entropy_int << checksum_bitlen) | checksum_int
 
         # Get phrase
         entropy_bytelen = len(entropy)
-        word_count = WALLET.MNEMONIC[entropy_bytelen][WORD_KEY]
+        word_count = WALLET.MNEMONIC[entropy_bytelen][WALLET.WORD_KEY]
         wordlist = load_wordlist()
         phrase = []
         for _ in range(word_count):
             # Extract 11-bit groups from right to left
-            word_index = ent_check & ((1 << WORD_BITS) - 1)  # Get last 11 bits
+            word_index = ent_check & ((1 << WALLET.WORD_BITS) - 1)  # Get last 11 bits
             phrase.insert(0, wordlist[word_index])  # Insert at beginning
-            ent_check >>= WORD_BITS  # Shift right by 11 bits
+            ent_check >>= WALLET.WORD_BITS  # Shift right by 11 bits
 
         return phrase
 
@@ -89,7 +94,7 @@ class Mnemonic:
 
         # Calculate shift
         bytelen = len(entropy)
-        shift = 256 - WALLET.MNEMONIC[bytelen][CHECKSUM_KEY]  # SHA256 generates 256 bit hash
+        shift = 256 - WALLET.MNEMONIC[bytelen][WALLET.CHECKSUM_KEY]  # SHA256 generates 256 bit hash
 
         # Return first checksum_bits as int
         return entropy_hash_int >> shift  # Shift = entropy_bitlen - checksum_bitlen
@@ -105,7 +110,8 @@ class Mnemonic:
         word_count = len(phrase)
         _m = WALLET.MNEMONIC
         entropy_bytelen = next(
-            (bytelen for bytelen in ALLOWED_ENTROPY_BYTELEN if _m.get(bytelen, {}).get(WORD_KEY) == word_count), None
+            (bytelen for bytelen in WALLET.MNEMONIC.keys() if _m.get(bytelen, {}).get(WALLET.WORD_KEY) == word_count),
+            None
         )
 
         if entropy_bytelen is None:
@@ -116,7 +122,7 @@ class Mnemonic:
 
         # Get configuration for this entropy length
         mnemonic_dict = WALLET.MNEMONIC.get(entropy_bytelen)
-        checksum_bitlen = mnemonic_dict.get(CHECKSUM_KEY)
+        checksum_bitlen = mnemonic_dict.get(WALLET.CHECKSUM_KEY)
 
         # Convert phrase to combined integer
         ent_check = 0
@@ -125,7 +131,7 @@ class Mnemonic:
                 word_index = wordlist.index(word)
             except ValueError:
                 return False  # Word not in wordlist
-            ent_check = (ent_check << WORD_BITS) | word_index  # | OR bitwise operation
+            ent_check = (ent_check << WALLET.WORD_BITS) | word_index  # | OR bitwise operation
 
         # Extract checksum and entropy
         checksum_mask = (1 << checksum_bitlen) - 1  # Creates mask with checksum_bitlen 1's
@@ -134,15 +140,6 @@ class Mnemonic:
 
         # Get checksum from entropy
         calc_checksum = self._get_checksum_from_entropy(entropy.to_bytes(entropy_bytelen, "big"))
-
-        # # --- TESTING --- #
-        # print("--- VALIDATE PHRASE --- ")
-        # print("===" * 60)
-        # print(f"PHRASE: {phrase}")
-        # print(f"PHRASE INTEGER ENT_CHECK: {ent_check}")
-        # print(f"CHECKSUM FROM ENT_CHECK: {checksum}")
-        # print(f"ENTROPY FROM ENT_CHECK: {entropy}")
-        # print(f"CHECKSUM FROM ENTROPY: {calc_checksum}")
 
         return calc_checksum == checksum
 

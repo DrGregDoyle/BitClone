@@ -6,26 +6,14 @@ Implements BIP32 Hierarchical Deterministic Wallet key derivation
 import json
 from io import BytesIO
 
-from src.core import ExtendedKeyError, XKEYS, get_stream, read_stream
+from src.core.byte_stream import get_stream, read_stream
+from src.core.exceptions import ExtendedKeyError
+from src.core.formats import XKEYS
 from src.cryptography import SECP256K1, hash160, hmac_sha512, hash256
 from src.data import encode_base58, decode_base58
-
-__all__ = ["ExtendedKey"]
-
 from src.data.ecc_keys import PubKey
 
-BIP44_XPRV = XKEYS.BIP44_XPRV
-BIP44_XPUB = XKEYS.BIP44_XPUB
-BIP49_XPRV = XKEYS.BIP49_XPRV
-BIP49_XPUB = XKEYS.BIP49_XPUB
-BIP84_XPRV = XKEYS.BIP84_XPRV
-BIP84_XPUB = XKEYS.BIP84_XPUB
-TESTNET_PRV = XKEYS.TESTNET_PRIVATE
-TESTNET_PUB = XKEYS.TESTNET_PUBLIC
-HARDENED_INDEX = XKEYS.HARDENED_OFFSET
-SEED_KEY = XKEYS.SEED_KEY
-
-VERSIONS = [BIP44_XPRV, BIP44_XPUB, BIP49_XPRV, BIP84_XPRV, BIP84_XPUB, TESTNET_PRV, TESTNET_PUB]
+__all__ = ["ExtendedKey"]
 
 
 class ExtendedKey:
@@ -87,17 +75,11 @@ class ExtendedKey:
         return hash(self.to_bytes())
 
     # --- INTERNAL --- #
-    def _private_to_public(self, privkey: bytes) -> PubKey:
-        """
-        Given a 32-byte private key, we return a basic PubKey object
-        """
-        pk_int = int.from_bytes(privkey, "big")
-        return PubKey(pk_int)
 
     @classmethod
-    def from_master_seed(cls, seed: bytes, version: bytes = BIP44_XPRV):
+    def from_master_seed(cls, seed: bytes, version: bytes = XKEYS.BIP44_XPRV):
         # 1. Run the HMAC-512
-        seed_hash = hmac_sha512(key=SEED_KEY, message=seed)
+        seed_hash = hmac_sha512(key=XKEYS.SEED_KEY, message=seed)
 
         # 2. Get private_key in bytes and blockchain code
         privkey, chain_code = seed_hash[:32], seed_hash[32:]
@@ -191,7 +173,8 @@ class ExtendedKey:
         Calculate the fingerprint of the key
         """
         if self.is_private:
-            pubkey = self._private_to_public(self.key_data).compressed()
+            pubkey = PubKey(self.key_data).compressed()
+            # pubkey = self._private_to_public(self.key_data).compressed()
         else:
             pubkey = self.key_data
 
@@ -203,13 +186,13 @@ class ExtendedKey:
         Derive a child at the given index
         """
         # --- Validate Key Type --- #
-        if self.is_public and index >= HARDENED_INDEX:
+        if self.is_public and index >= XKEYS.HARDENED_OFFSET:
             raise ExtendedKeyError("Cannot derive hardened child from public key")
 
         # --- Prepare data for HMAC --- #
         index_bytes = index.to_bytes(4, "big")
 
-        if index >= HARDENED_INDEX:
+        if index >= XKEYS.HARDENED_OFFSET:
             # Hardened derivation: use private key
             if self.is_public:
                 raise ExtendedKeyError("Cannot perform hardened derivation with public key")
@@ -218,7 +201,7 @@ class ExtendedKey:
             # Non-hardened derivation: use public key
             if self.is_private:
                 # Convert private key to public key for HMAC data
-                pubkey_data = self._private_to_public(self.key_data).compressed()
+                pubkey_data = PubKey(self.key_data).compressed()
             else:
                 # Already have public key data
                 pubkey_data = self.key_data

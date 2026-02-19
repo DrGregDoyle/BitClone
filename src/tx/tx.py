@@ -6,8 +6,10 @@ from io import SEEK_CUR
 
 from src.core import (Serializable, SERIALIZED, get_stream, read_little_int, read_stream, TX, deserialize_data,
                       serialize_data, read_compact_size, write_compact_size)
+from src.core.logging import get_logger
 from src.cryptography import hash256
 
+logger = get_logger(__name__)
 __all__ = ["TxIn", "TxOut", "Witness", "Transaction", "UTXO"]
 
 # --- CACHE KEYS --- #
@@ -525,6 +527,30 @@ class Transaction(Serializable):
             "is_coinbase": self.is_coinbase
         })
         return tx_dict
+
+
+class LoadedTx:
+    """
+    This is an object containing a transaction and its associated TxIn UTXOS.
+    """
+
+    def __init__(self, tx: Transaction, utxos: list[UTXO]):
+        # --- Assign variables
+        self.tx = tx
+        self.utxos = utxos
+
+        # --- Validate attached utxos
+
+    def _validate_utxos(self, tx: Transaction, utxos: list[UTXO]) -> bool:
+        """
+        For each utxo we verify its the utxo associated with all txins.
+        """
+        # --- Validate number of utxos and txins
+        txin_num = len(tx.inputs)
+        utxo_num = len(utxos)
+        if txin_num != utxo_num:
+            logger.error(f"Mismatch between number of utxos ({utxo_num}) and number of txins ({txin_num}).")
+            return False
 
 
 # -- TESTING ---

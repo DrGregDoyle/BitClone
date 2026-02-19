@@ -37,7 +37,7 @@ class BlockHeader(Serializable):
                  bits: bytes = None,
                  nonce: int = None
                  ):
-        self.version = version or BLOCK.VERSION
+        self.version = version or BLOCK.BIP65_VERSION
         self.prev_block = prev_block or b'\x00' * BLOCK.PREV_BLOCK
         self.merkle_root = merkle_root or b'\x00' * BLOCK.MERKLE_ROOT
         self.timestamp = timestamp or int(time.time())
@@ -85,9 +85,9 @@ class BlockHeader(Serializable):
             "previous_block": self.prev_block[::-1].hex() if formatted else self.prev_block.hex(),
             # Formatted merkle root reverse byte order for display
             "merkle_root": self.merkle_root[::-1].hex() if formatted else self.merkle_root.hex(),
-            "timestamp": datetime.fromtimestamp(self.timestamp).strftime(
-                BLOCK.TIMESTAMP_FORMAT) if formatted else self.timestamp,
-            "bits": self.bits.hex(),
+            "timestamp": self.timestamp.to_bytes(BLOCK.TIME, "little").hex() if formatted else datetime.fromtimestamp(
+                self.timestamp).strftime(BLOCK.TIMESTAMP_FORMAT),
+            "bits": self.bits.hex() if formatted else self.bits.hex()[::-1],
             "nonce": self.nonce.to_bytes(BLOCK.NONCE, "little").hex() if formatted else self.nonce
         }
 
@@ -191,7 +191,7 @@ class Block(Serializable):
         }
         return {
             "header": self.get_header().to_dict(formatted),
-            "tx_num": tx_num,
+            "tx_num": write_compact_size(tx_num).hex() if formatted else tx_num,
             "txs": tx_dict
         }
 
@@ -204,7 +204,15 @@ class Block(Serializable):
 
 
 if __name__ == "__main__":
-    test_block_bytes = bytes.fromhex(
-        "02000000a8008de56c7e51598863e8dcdbf72410fa31275ee254b9590000000000000000d0a03183007c4e7941e7c7c9989fd956a89be722ce5e88af4df3631eb40ef12bd7595f538c9d0019e9569678")
-    test_block = BlockHeader.from_bytes(test_block_bytes)
-    print(f"TEST HEADER: {test_block.to_json()}")
+    # test_block_bytes = bytes.fromhex(
+    #     "02000000a8008de56c7e51598863e8dcdbf72410fa31275ee254b9590000000000000000d0a03183007c4e7941e7c7c9989fd956a89be722ce5e88af4df3631eb40ef12bd7595f538c9d0019e9569678")
+    # test_block = BlockHeader.from_bytes(test_block_bytes)
+    # print(f"TEST HEADER: {test_block.to_json()}")
+
+    # --- Genesis block bytes
+    genesis_block_bytes = bytes.fromhex(
+        "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c0101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff4d04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73ffffffff0100f2052a01000000434104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac00000000")
+    genesis_block = Block.from_bytes(genesis_block_bytes)
+    print(f"GENESIS BLOCK: {genesis_block.to_json(formatted=True)}")
+    print(f"===" * 50)
+    print(f"UNFORMATTED: {genesis_block.to_json(formatted=False)}")

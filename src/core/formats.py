@@ -4,18 +4,17 @@ The Bitcoin standard formats
 """
 from typing import Final
 
-__all__ = ["ECC", "WALLET", "XKEYS", "BECH32CODE", "DATA", "TX", "SCRIPT", "BLOCK", "TAPROOT", "MAGICBYTES", "NETWORK"]
+__all__ = ["BECH32CODE", "BLOCK", "DATA", "ECC", "MAGICBYTES", "NETWORK", "SCRIPT", "TAPROOT", "TX", "WALLET", "XKEYS"]
 
 
-class TAPROOT:
-    VERSION_BYTE: Final[bytes] = b'\xc0'
-    SIGHASH_EPOCH: Final[bytes] = b'\x00'
-    PUBKEY_BYTELEN: Final[int] = 32
-    PUBKEY_VERSION: Final[bytes] = b'\x00'
+class BECH32CODE:
+    BECH32: Final[int] = 1
+    BECH32M: Final[int] = 2
 
 
 class BLOCK:
-    VERSION: Final[int] = 4  # Byte size and minimum integer version
+    VERSION: Final[int] = 4  # Byte size
+    BIP65_VERSION: Final[int] = 0x04  # BIP65 --> uses OP_CHECKLOCKTIMEVERIFY for locktime calculations
     PREV_BLOCK: Final[int] = 32
     TIME: Final[int] = VERSION
     NONCE: Final[int] = VERSION
@@ -35,83 +34,6 @@ class DATA:
 
 class ECC:
     COORD_BYTES: Final[int] = 32
-
-
-class WALLET:
-    """
-    We provide a Mnemonic dictionary which is BIP39 compliant. This forces the Mnemonic to be of a certain size
-    depending on the entropy byte length chosen
-    """
-    MNEMONIC: Final[dict] = {
-        16: {"bit_length": 128, "word_count": 12, "checksum_bits": 4},
-        20: {"bit_length": 160, "word_count": 15, "checksum_bits": 5},
-        24: {"bit_length": 192, "word_count": 18, "checksum_bits": 6},
-        28: {"bit_length": 224, "word_count": 21, "checksum_bits": 7},
-        32: {"bit_length": 256, "word_count": 24, "checksum_bits": 8},
-    }
-    DEFAULT_ENTROPY_BYTES: Final[int] = 16
-    WORD_BITS: Final[int] = 11
-    BITLEN_KEY: Final[int] = "bit_length"
-    WORD_KEY: Final[str] = "word_count"
-    CHECKSUM_KEY: Final[str] = "checksum_bits"
-    SEED_ITERATIONS: Final[int] = 2048
-    DKLEN: Final[int] = 64
-
-
-class XKEYS:
-    """
-    Constants related to the extended public and private keys
-    """
-    SEED_KEY: Final[bytes] = b'Bitcoin seed'
-    CHAIN_LENGTH: Final[int] = 32
-    MAX_DEPTH: Final[int] = 255
-
-    # Version bytes for different key types
-    TESTNET_PRIVATE: Final[bytes] = bytes.fromhex("04358394")
-    TESTNET_PUBLIC: Final[bytes] = bytes.fromhex("043587cf")
-    BIP44_XPRV: Final[bytes] = bytes.fromhex("0488ade4")
-    BIP44_XPUB: Final[bytes] = bytes.fromhex("0488b21e")
-    BIP49_XPRV: Final[bytes] = bytes.fromhex("049d7878")
-    BIP49_XPUB: Final[bytes] = bytes.fromhex("049d7cb2")
-    BIP84_XPRV: Final[bytes] = bytes.fromhex("04b2430c")
-    BIP84_XPUB: Final[bytes] = bytes.fromhex("04b24746")
-
-    # Hardened derivation threshold
-    HARDENED_OFFSET: Final[int] = 0x80000000
-    MAX_INDEX: Final[int] = 0xffffffff
-
-
-class BECH32CODE:
-    BECH32: Final[int] = 1
-    BECH32M: Final[int] = 2
-
-
-class TX:
-    """
-    Transaction byte sizes
-    """
-    TXID: Final[int] = 32
-    VOUT: Final[int] = 4
-    SEQUENCE: Final[int] = 4
-    AMOUNT: Final[int] = 8
-    VERSION: Final[int] = 4
-    LOCKTIME: Final[int] = 4
-    BIP68_VERSION: Final[int] = 2  # Tx.version
-    MARKERFLAG: Final[int] = 2
-    INDEX: Final[int] = 4
-
-
-class SCRIPT:
-    """
-    Constants in use in the Script
-    """
-    MAX_BITNUM: Final[int] = 4
-    MAX_STACK: Final[int] = 1000
-    COMMON_VALUES: Final[dict] = {
-        0: b'',
-        -1: b'\x81'
-    }
-    PUBKEY_LENS: Final[list] = [33, 65]  # Allowable lengths for a public key
 
 
 class MAGICBYTES:
@@ -148,3 +70,85 @@ class NETWORK:
     ])
 
     COMMAND_LENGTH: Final[int] = 12
+
+
+class SCRIPT:
+    """
+    Constants in use in the Script
+    """
+    MAX_BITNUM: Final[int] = 4
+    MAX_STACK: Final[int] = 1000
+    COMMON_VALUES: Final[dict] = {
+        0: b'',
+        -1: b'\x81'
+    }
+    PUBKEY_LENS: Final[list] = [33, 65]  # Allowable lengths for a public key
+
+
+class TAPROOT:
+    VERSION_BYTE: Final[bytes] = b'\xc0'
+    SIGHASH_EPOCH: Final[bytes] = b'\x00'
+    PUBKEY_BYTELEN: Final[int] = 32
+    PUBKEY_VERSION: Final[bytes] = b'\x00'
+
+
+class TX:
+    """
+    Transaction byte sizes
+    """
+    TXID: Final[int] = 32
+    VOUT: Final[int] = 4
+    SEQUENCE: Final[int] = 4
+    AMOUNT: Final[int] = 8
+    VERSION: Final[int] = 4
+    LOCKTIME: Final[int] = 4
+    BIP68_VERSION: Final[int] = 2  # Tx.version
+    MARKERFLAG: Final[int] = 2
+    INDEX: Final[int] = 4
+
+
+class WALLET:
+    """
+    We provide a Mnemonic dictionary which is BIP39 compliant. This forces the Mnemonic to be of a certain size
+    depending on the entropy byte length chosen
+    """
+    MNEMONIC: Final[dict] = {
+        16: {"bit_length": 128, "word_count": 12, "checksum_bits": 4},
+        20: {"bit_length": 160, "word_count": 15, "checksum_bits": 5},
+        24: {"bit_length": 192, "word_count": 18, "checksum_bits": 6},
+        28: {"bit_length": 224, "word_count": 21, "checksum_bits": 7},
+        32: {"bit_length": 256, "word_count": 24, "checksum_bits": 8},
+    }
+    ENTROPY_BYTES: Final[int] = 16
+    WORD_BITS: Final[int] = 11
+    BITLEN_KEY: Final[int] = "bit_length"
+    WORD_KEY: Final[str] = "word_count"
+    CHECKSUM_KEY: Final[str] = "checksum_bits"
+    SEED_ITERATIONS: Final[int] = 2048
+    DKLEN: Final[int] = 64
+
+
+class XKEYS:
+    """
+    Constants related to the extended public and private keys
+    """
+    SEED_KEY: Final[bytes] = b'Bitcoin seed'
+    CHAIN_LENGTH: Final[int] = 32
+    MAX_DEPTH: Final[int] = 255
+
+    # Version bytes for different key types
+    TESTNET_PRV: Final[bytes] = bytes.fromhex("04358394")
+    TESTNET_PUB: Final[bytes] = bytes.fromhex("043587cf")
+    BIP44_XPRV: Final[bytes] = bytes.fromhex("0488ade4")
+    BIP44_XPUB: Final[bytes] = bytes.fromhex("0488b21e")
+    BIP49_XPRV: Final[bytes] = bytes.fromhex("049d7878")
+    BIP49_XPUB: Final[bytes] = bytes.fromhex("049d7cb2")
+    BIP84_XPRV: Final[bytes] = bytes.fromhex("04b2430c")
+    BIP84_XPUB: Final[bytes] = bytes.fromhex("04b24746")
+    VERSIONS: Final[list] = [
+        BIP44_XPRV, BIP44_XPUB, BIP49_XPRV, BIP84_XPRV, BIP84_XPUB, TESTNET_PRV, TESTNET_PUB
+    ]
+
+    # Hardened derivation threshold
+    HARDENED_OFFSET: Final[int] = 0x80000000
+    MAX_INDEX: Final[int] = 0xffffffff
