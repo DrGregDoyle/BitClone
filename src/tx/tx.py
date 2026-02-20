@@ -2,6 +2,7 @@
 The classes for BitClone transactions
 """
 import json
+import re
 from io import SEEK_CUR
 
 from src.core import (Serializable, SERIALIZED, get_stream, read_little_int, read_stream, TX, deserialize_data,
@@ -71,15 +72,30 @@ class TxIn(Serializable):
         ]
         return b''.join(parts)
 
-    def to_dict(self, formatted: bool = True) -> dict:
+    def to_dict(self, formatted: bool = True, is_coinbase: bool = False) -> dict:
         ss_len = len(self.scriptsig)
+        decoded_scriptsig = self._decode_scriptsig()
         return {
             "txid": self.txid[::-1].hex() if formatted else self.txid.hex(),
             "vout": self.vout.to_bytes(TX.VOUT, "little").hex() if formatted else self.vout,
             "scriptsig_size": write_compact_size(ss_len).hex() if formatted else ss_len,
-            "scriptsig": self.scriptsig.hex(),
+            "scriptsig": self.scriptsig.hex() if not is_coinbase or (is_coinbase and decoded_scriptsig is None) else
+            decoded_scriptsig,
             "sequence": self.sequence.to_bytes(TX.SEQUENCE, "little").hex() if formatted else self.sequence
         }
+
+    def _decode_scriptsig(self) -> str | None:
+        """
+        To be called whenever the is_coinbase var is true in the to_dict method
+        """
+        try:
+            decoded = self.scriptsig.decode("latin-1")  # latin-1 so it doesn't throw on arbitrary bytes
+        except Exception as e:
+            logger.error(f"Decode scriptsig fails: {e}")
+            return None
+        printable = ''.join(c for c in decoded if 32 <= ord(c) <= 126)
+        match = re.search(r'[A-Za-z].{20,}', printable)
+        return match.group(0).strip() if match else None
 
 
 class TxOut(Serializable):
@@ -178,6 +194,7 @@ class Witness(Serializable):
 class UTXO:
     """
     Unspent Transaction Output - represents a spendable output
+    TODO: Change outpoint to be either property or instance var
     """
     __slots__ = ("txid", "vout", "amount", "scriptpubkey", "block_height", "is_coinbase")
 
@@ -485,7 +502,7 @@ class Transaction(Serializable):
 
     def to_dict(self, formatted: bool = True) -> dict:
         # Get input and output list
-        inputs = [i.to_dict(formatted) for i in self.inputs]
+        inputs = [i.to_dict(formatted, self.is_coinbase) for i in self.inputs]
         outputs = [o.to_dict(formatted) for o in self.outputs]
 
         # Begin dictionary construction
@@ -527,30 +544,6 @@ class Transaction(Serializable):
             "is_coinbase": self.is_coinbase
         })
         return tx_dict
-
-
-class LoadedTx:
-    """
-    This is an object containing a transaction and its associated TxIn UTXOS.
-    """
-
-    def __init__(self, tx: Transaction, utxos: list[UTXO]):
-        # --- Assign variables
-        self.tx = tx
-        self.utxos = utxos
-
-        # --- Validate attached utxos
-
-    def _validate_utxos(self, tx: Transaction, utxos: list[UTXO]) -> bool:
-        """
-        For each utxo we verify its the utxo associated with all txins.
-        """
-        # --- Validate number of utxos and txins
-        txin_num = len(tx.inputs)
-        utxo_num = len(utxos)
-        if txin_num != utxo_num:
-            logger.error(f"Mismatch between number of utxos ({utxo_num}) and number of txins ({txin_num}).")
-            return False
 
 
 # -- TESTING ---
