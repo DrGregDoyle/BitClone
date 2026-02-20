@@ -19,12 +19,16 @@ class Blockchain:
     """
     Manages the blockchain: blocks, UTXO set, and blockchain state
     """
+    # TODO: Add special add_genesis function which will add the known genesis block. To be called when Blockchain is
+    # first created
     TWO_WEEK_SECONDS = 20160
     MAX_WEIGHT = 4_000_000  # 4 million wu max
 
     def __init__(self, db_path: Path = DB_PATH):
         # --- Main db
         self.db = BitCloneDatabase(db_path)
+
+        # --- Add genesis block
 
         # --- State tracking
         self._height: int = self.db.get_chain_height()
@@ -43,7 +47,7 @@ class Blockchain:
     @property
     def block_subsidy(self):
 
-        halvings = self.height // 210_000
+        halvings = max(0, self.height // 210_000)
 
         # After 64 halvings, subsidy becomes zero
         if halvings >= 64:
@@ -78,9 +82,12 @@ class Blockchain:
         Returns:
             True if successful, False otherwise
         """
-        # --- Validate block
-
         try:
+            # --- Validate before doing anything
+            if not self._validate_block(block):
+                logger.error(f"Block failed validation: {block.block_id.hex()}")
+                return False
+
             # Determine block height
             new_height = self.height + 1
 
@@ -94,10 +101,13 @@ class Blockchain:
             self._height = new_height
             self._tip = block
 
+            # Adjust difficulty every 2016 blocks
+            self._adjust_target()
+
             return True
 
         except Exception as e:
-            print(f"Error adding block: {e}")
+            logger.error(f"Error adding block: {e}")
             return False
 
     def _update_utxo_set(self, block: Block, block_height: int):
@@ -150,10 +160,19 @@ class Blockchain:
         # --- Get validation elements
         block_header = block.get_header()
 
-        if self.tip.block_id != block.prev_block:
-            logger.error(f"Previous block_id in chain {self.tip.block_id.hex()} doesn't match "
-                         f"prev_block in block: {block.prev_block.hex()}")
-            return False
+        # --- Genesis block: only check PoW and coinbase
+        if self.tip is None:
+            block_target = bits_to_target(block.bits)
+            if block.block_id >= block_target:
+                logger.error("Genesis block fails proof of work")
+                return False
+            # Fall through to coinbase validation below
+        else:
+            # --- Prev block check only applies to non-genesis
+            if self.tip.block_id != block.prev_block:
+                logger.error(f"Previous block_id in chain {self.tip.block_id.hex()} doesn't match "
+                             f"prev_block in block: {block.prev_block.hex()}")
+                return False
         # --- Timestamp check
         current_time = int(time.time())
         block_time = block.timestamp
@@ -187,6 +206,9 @@ class Blockchain:
             return False
 
         # === NON-COINBASE TX VALIDATION === #
+        # Build a temporary UTXO map for intra-block lookups
+        pending_utxos: dict[bytes, UTXO] = {}
+
         seen_outpoints = set()
         for tx in block.txs[1:]:
             # --- Locktime check (BIP65)
@@ -204,8 +226,8 @@ class Blockchain:
                         return False
 
             for txin in tx.inputs:
-                # --- Check UTXO exists (either in db or created earlier in this block)
-                utxo = self.db.get_utxo(txin.outpoint)
+                # Check pending intra-block UTXOs first, then fall back to DB
+                utxo = pending_utxos.get(txin.outpoint) or self.db.get_utxo(txin.outpoint)
                 if utxo is None:
                     logger.error(f"Input references missing UTXO: {txin.outpoint.hex()}")
                     return False
@@ -246,6 +268,17 @@ class Blockchain:
                     if blocks_since < required_blocks:
                         logger.error(f"Relative block locktime not met for input {txin.outpoint.hex()}")
                         return False
+
+            # After validating this tx, add its outputs to the pending map
+            for vout, output in enumerate(tx.outputs):
+                utxo = UTXO.from_txoutput(
+                    txid=tx.txid,
+                    vout=vout,
+                    txoutput=output,
+                    block_height=self.height + 1,
+                    is_coinbase=False
+                )
+                pending_utxos[utxo.outpoint()] = utxo
 
         # --- Verify weight
         if block.weight > self.MAX_WEIGHT:
@@ -289,7 +322,21 @@ class Blockchain:
         raise TransactionError(f"Input fee: {input_total}, Output fee: {output_total}. Negative fee value: "
                                f"{output_total - input_total} for tx {tx.txid}")
 
+    def _adjust_target(self):
+        """
+        After a block gets added, if the height is = 0 (mod 2016), we adjust the target based on the previous average mining gap in the previous 2016 blocks.
+
+         Uses Bitcoin's retargeting algorithm:
+            new_target = old_target * actual_timespan / TWO_WEEK_SECONDS
+        Clamped to a max adjustment of 4x in either direction.
+        """
+        # Only retarget every 2016 blocks, and never on genesis
+        if self._height == 0 or self._height % 2016 != 0:
+            return
+
 
 # --- TESTING --- #
 if __name__ == "__main__":
     sep = "=" * 128
+    test_blockchain = Blockchain()
+    test_blockchain.wipe_chain()

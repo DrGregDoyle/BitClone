@@ -95,3 +95,20 @@ class BlockFileManager:
             raise ValueError(f"Expected {block_size} bytes, got {len(block_bytes)}")
 
         return block_bytes
+
+    def clear_block_files(self) -> int:
+        """
+        Delete all blk*.dat files from the blocks directory.
+
+        Returns:
+            Number of files deleted.
+        """
+        files = list(self.blocks_dir.glob("blk*.dat"))
+        for f in files:
+            f.unlink()
+
+        # Reset internal state so the next write starts fresh
+        self.current_file_number = 0
+        self.current_file_size = 0
+
+        return len(files)

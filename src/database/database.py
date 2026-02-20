@@ -114,11 +114,18 @@ class BitCloneDatabase:
 
     def _clear_db(self):
         """Wipes the database and creates a fresh one."""
+        # Remove tables
         with sqlite3.connect(self.db_path) as conn:
             c = conn.cursor()
             c.execute("DROP TABLE IF EXISTS utxos")
             c.execute("DROP TABLE IF EXISTS blocks")
             conn.commit()
+
+        # Remove all .dat block files to keep storage in sync with the DB
+        deleted = self.block_files.clear_block_files()
+        logger.info(f"Cleared {deleted} block file(s) from disk.")
+
+        # Create new db
         self._initialize_database()
 
     # --- UTXOS --- #
@@ -170,7 +177,7 @@ class BitCloneDatabase:
         for txin in tx.inputs:
             temp_utxo = self.get_utxo(txin.outpoint)
             if temp_utxo is None:
-                logger.error(f"Missing utxo for oupoint {txin.outpoint.hex()}. Invalid tx.")
+                logger.error(f"Missing utxo for outpoint {txin.outpoint.hex()}. Invalid tx.")
                 return None
             utxos.append(temp_utxo)
         return utxos
