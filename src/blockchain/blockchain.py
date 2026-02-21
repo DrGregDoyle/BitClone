@@ -1,10 +1,12 @@
 """
 The Blockchain class
 """
+import json
 import time
 from pathlib import Path
 
 from src.block.block import Block
+from src.blockchain.genesis_block import genesis_block
 from src.core import get_logger, TransactionError
 from src.data import bits_to_target, target_to_bits, MerkleTree
 from src.database.database import BitCloneDatabase, DB_PATH
@@ -28,12 +30,14 @@ class Blockchain:
         # --- Main db
         self.db = BitCloneDatabase(db_path)
 
-        # --- Add genesis block
-
         # --- State tracking
         self._height: int = self.db.get_chain_height()
         self._tip: Block | None = self.db.get_latest_block()
         self._difficulty: int = 0
+
+        # --- Add genesis block
+        if self.height == -1:
+            self.add_block(genesis_block)
 
     def wipe_chain(self):
         """
@@ -43,6 +47,7 @@ class Blockchain:
         self.db.wipe_db()
         self._height: int = -1
         self._tip: Block | None = None
+        self.add_block(genesis_block)
 
     @property
     def block_subsidy(self):
@@ -163,7 +168,14 @@ class Blockchain:
         # --- Genesis block: only check PoW and coinbase
         if self.tip is None:
             block_target = bits_to_target(block.bits)
-            if block.block_id >= block_target:
+            # print(f"BITS: {block.bits.hex()}")
+            # print(f"INT TARGET: {0x00000000ffff0000000000000000000000000000000000000000000000000000}")
+            # print(f"BLOCK TARGET: {int.from_bytes(block_target, 'big')}")
+            # print(f"BLOCK ID: {int.from_bytes(block.block_id, 'little')}")
+            # print(
+            #     f"TARGET MINUS BLOCK_ID: {int.from_bytes(block_target, 'big') - int.from_bytes(block.block_id, 'little')}")
+
+            if int.from_bytes(block.block_id, 'little') >= int.from_bytes(block_target, 'big'):
                 logger.error("Genesis block fails proof of work")
                 return False
             # Fall through to coinbase validation below
@@ -173,36 +185,23 @@ class Blockchain:
                 logger.error(f"Previous block_id in chain {self.tip.block_id.hex()} doesn't match "
                              f"prev_block in block: {block.prev_block.hex()}")
                 return False
-        # --- Timestamp check
+        # --- Timestamp check: block must not be more than 2 hours in the future
         current_time = int(time.time())
-        block_time = block.timestamp
-        if abs(current_time - block_time) > 6400:  # Two hours in seconds
-            logger.error(f"Block timestamp is outside the 2-hour period: {current_time}")
+        if block.timestamp > current_time + 7200:
+            logger.error(f"Block timestamp {block.timestamp} is more than 2 hours in the future")
             return False
 
         # --- Difficulty hash check
         block_target = bits_to_target(block.bits)
         block_hash = block.block_id
-        if block_hash >= block_target:
+        if int.from_bytes(block_hash, 'little') >= int.from_bytes(block_target, 'big'):
             logger.error(f"Block fails proof of work validation. Current difficulty: "
                          f"{target_to_bits(block_target).hex()}")
             return False
 
         # === COINBASE VALIDATION === #
-        # --- Verify coinbase tx
-        coinbase_tx = block.txs[0]
-        if not coinbase_tx.is_coinbase:
-            logger.error(f"First tx in block not coinbase tx: {coinbase_tx.txid}")
-            return False
-        # --- Verify no other tx is a coinbase
-        if any(tx.is_coinbase for tx in block.txs[1:]):
-            logger.error("Cannot have more than one coinbase per block")
-            return False
-        # --- Verify coinbase output value
-        coinbase_output_value = sum(txout.amount for txout in coinbase_tx.outputs)
-        total_fees = sum(self._get_tx_fee(tx) for tx in block.txs[1:])  # All non-coinbase tx fees
-        if coinbase_output_value > self.block_subsidy + total_fees:
-            logger.error("Output value on coinbase tx exceeds block_subsidy + total fees")
+        if not self._validate_coinbase(block):
+            logger.error("Block fails coinbase validation")
             return False
 
         # === NON-COINBASE TX VALIDATION === #
@@ -295,6 +294,29 @@ class Blockchain:
         # --- All clear
         return True
 
+    def _validate_coinbase(self, block: Block) -> bool:
+        """
+        We validate the coinbase tx in the block
+        """
+        coinbase_tx = block.txs[0]
+        # --- Verify 1st tx in block is coinbase
+        if not coinbase_tx.is_coinbase:
+            logger.error(f"First tx in block not coinbase tx: {coinbase_tx.txid}")
+            return False
+        # --- Verify no other tx is a coinbase
+        if any(tx.is_coinbase for tx in block.txs[1:]):
+            logger.error("Cannot have more than one coinbase per block")
+            return False
+        # --- Verify coinbase output value
+        coinbase_output_value = sum(txout.amount for txout in coinbase_tx.outputs)
+        total_fees = sum(self._get_tx_fee(tx) for tx in block.txs[1:])  # All non-coinbase tx fees
+        if coinbase_output_value > self.block_subsidy + total_fees:
+            logger.error("Output value on coinbase tx exceeds block_subsidy + total fees")
+            return False
+
+        # --- All clear
+        return True
+
     def _get_input_utxos(self, tx: Transaction) -> list[UTXO]:
         """
         For a given tx we return a list of UTXOs associated with that tx
@@ -334,9 +356,23 @@ class Blockchain:
         if self._height == 0 or self._height % 2016 != 0:
             return
 
+    def to_dict(self) -> dict:
+        """
+        Return current stats of the blockchain
+        """
+        return {
+            "height": self._height,
+            "difficulty": self._difficulty,
+            "last_block": self.tip.to_dict() if self.tip else None
+        }
+
+    def to_json(self):
+        return json.dumps(self.to_dict())
+
 
 # --- TESTING --- #
 if __name__ == "__main__":
     sep = "=" * 128
     test_blockchain = Blockchain()
     test_blockchain.wipe_chain()
+    print(f"TEST BLOCKCHAIN: {test_blockchain.to_json()}")
