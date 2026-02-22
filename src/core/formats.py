@@ -2,10 +2,11 @@
 The Bitcoin standard formats
 
 """
+from enum import Enum
 from typing import Final
 
-__all__ = ["BECH32CODE", "BLOCK", "DATA", "ECC", "MAGICBYTES", "NETWORK", "SCRIPT", "TAPROOT", "TX", "WALLET",
-           "UTXO_SERIAL", "XKEYS"]
+__all__ = ["BECH32CODE", "BLOCK", "DATA", "DerivationPath", "ECC", "MAGICBYTES", "NETWORK", "SCRIPT", "TAPROOT",
+           "TX", "WALLET", "UTXO_SERIAL", "XKEYS"]
 
 
 class BECH32CODE:
@@ -163,3 +164,19 @@ class XKEYS:
     # Hardened derivation threshold
     HARDENED_OFFSET: Final[int] = 0x80000000
     MAX_INDEX: Final[int] = 0xffffffff
+
+
+# ==== ENUM CLASSES === #
+class DerivationPath(Enum):
+    BIP44 = (44, "P2PKH")
+    BIP49 = (49, "P2SH_P2WPKH")
+    BIP84 = (84, "P2WPKH")
+    BIP86 = (86, "P2TR")
+
+    def __init__(self, purpose: int, script_type: str):
+        self.purpose = purpose
+        self.script_type = script_type
+
+    def path(self, account: int = 0, change: int = 0, index: int = 0) -> str:
+        # Coin value in path hardcoded to be 0 (BTC)
+        return f"m/{self.purpose}'/0'/{account}'/{change}/{index}"
