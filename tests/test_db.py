@@ -15,7 +15,7 @@ TESTBD_PATH = Path(__file__).parent / "db_files" / "test_db.db"
 
 def random_utxo(is_coinbase: bool = False):
     return UTXO(
-        txid=token_bytes(32), vout=randint(0, 16), amount=randint(10000, 1000000), scriptpubkey=token_bytes(20),
+        outpoint=token_bytes(36), amount=randint(10000, 1000000), scriptpubkey=token_bytes(20),
         block_height=randint(100000, 200000), is_coinbase=is_coinbase
     )
 
@@ -30,12 +30,12 @@ def test_utxo_ops():
         temp_db.add_utxo(u)
 
     choice_utxo = choice(utxos)
-    recovered_utxo = temp_db.get_utxo(choice_utxo.outpoint())
+    recovered_utxo = temp_db.get_utxo(choice_utxo.outpoint)
     assert recovered_utxo == choice_utxo, "Did not recover correct utxo for given outpoint"
 
     # Remove
-    temp_db.remove_utxo(choice_utxo.outpoint())
-    empty_utxo = temp_db.get_utxo(choice_utxo.outpoint())
+    temp_db.remove_utxo(choice_utxo.outpoint)
+    empty_utxo = temp_db.get_utxo(choice_utxo.outpoint)
     assert empty_utxo is None, "Did not remove random utxo"
 
 
@@ -54,4 +54,4 @@ def test_db_recovery():
 
     # Verify number of entries
     for t in utxos:
-        assert loaded_db.get_utxo(t.outpoint()) == t, "Did not load random db properly"
+        assert loaded_db.get_utxo(t.outpoint) == t, "Did not load random db properly"

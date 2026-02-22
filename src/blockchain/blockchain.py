@@ -7,7 +7,7 @@ from pathlib import Path
 
 from src.block.block import Block
 from src.blockchain.genesis_block import genesis_block
-from src.core import get_logger, TransactionError
+from src.core import get_logger, TransactionError, TX
 from src.data import bits_to_target, target_to_bits, MerkleTree
 from src.database.database import BitCloneDatabase, DB_PATH
 from src.tx import TxIn
@@ -179,9 +179,9 @@ class Blockchain:
 
             # Step 2: Add new UTXOs from this transaction
             for vout, output in enumerate(tx.outputs):
+                outpoint = tx.txid + vout.to_bytes(TX.VOUT, "little")
                 utxo = UTXO.from_txoutput(
-                    txid=tx.txid,
-                    vout=vout,
+                    outpoint=outpoint,
                     txoutput=output,
                     block_height=block_height,
                     is_coinbase=tx.is_coinbase
@@ -292,8 +292,7 @@ class Blockchain:
             # Commit this tx's outputs to the pending map for subsequent txs
             for vout, output in enumerate(tx.outputs):
                 utxo = UTXO.from_txoutput(
-                    txid=tx.txid,
-                    vout=vout,
+                    outpoint=tx.txid + vout.to_bytes(TX.VOUT, "little"),
                     txoutput=output,
                     block_height=next_height,
                     is_coinbase=False,

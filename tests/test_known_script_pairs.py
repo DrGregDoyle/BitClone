@@ -5,7 +5,7 @@ For reference - we look at the transaction containing the scriptsig. This refere
 created from a previous transactions data + a specific TxOutput.
 
 """
-from src.core import OPCODES
+from src.core import OPCODES, TX
 from src.core.byte_stream import serialize_data
 from src.data import Leaf, get_control_block, TweakPubkey
 from src.script.context import ExecutionContext
@@ -38,8 +38,7 @@ def test_p2pk_pair(script_engine):
     p2pk_key = P2PK_Key.from_bytes(p2pk_key_bytes)
     p2pk_tx = Transaction.from_bytes(p2pk_tx_bytes)
     p2pk_utxo = UTXO(
-        txid=p2pk_txid_display[::-1],
-        vout=1,
+        outpoint=p2pk_txid_display[::-1] + (1).to_bytes(TX.VOUT, "little"),
         amount=25000000000,
         scriptpubkey=p2pk_key.script,
         block_height=140496
@@ -73,8 +72,7 @@ def test_p2pkh_pair(script_engine):
     p2pkh_sig = P2PKH_Sig.from_bytes(p2pkh_sig_bytes)
     p2pkh_tx = Transaction.from_bytes(p2pkh_tx_bytes)
     p2pkh_utxo = UTXO(
-        txid=p2pkh_txid_display[::-1],  # Reverse display bytes
-        vout=1,
+        outpoint=p2pkh_txid_display[::-1] + (1).to_bytes(TX.VOUT, "little"),  # Reverse display bytes
         amount=82974043165,
         scriptpubkey=p2pkh_key.script,
         block_height=39983
@@ -105,8 +103,7 @@ def test_p2ms_pair(script_engine):
     p2ms_sig = P2MS_Sig.from_bytes(p2ms_sig_bytes)
     p2ms_tx = Transaction.from_bytes(p2ms_tx_bytes)
     p2ms_utxo = UTXO(
-        txid=p2ms_txid_display[::-1],  # Reverse display bytes
-        vout=0,
+        outpoint=p2ms_txid_display[::-1] + (0).to_bytes(TX.VOUT, "little"),  # Reverse display bytes
         amount=1690000,
         scriptpubkey=p2ms_key.script,
         block_height=442241
@@ -136,8 +133,7 @@ def test_p2sh_p2ms_pair(script_engine):
     p2sh_p2ms_sig = P2SH_Sig.from_bytes(p2sh_p2ms_sig_bytes)
     p2sh_p2ms_tx = Transaction.from_bytes(p2sh_p2ms_tx_bytes)
     p2sh_p2ms_utxo = UTXO(
-        txid=p2sh_p2ms_txid_display[::-1],  # Reverse display bytes
-        vout=1,
+        outpoint=p2sh_p2ms_txid_display[::-1] + (1).to_bytes(TX.VOUT, "little"),  # Reverse display bytes
         amount=10000000,
         scriptpubkey=p2sh_p2ms_key.script,
         block_height=183729
@@ -169,8 +165,7 @@ def test_p2sh_p2wpkh_pair(script_engine):
     p2sh_p2wpkh_sig = P2SH_P2WPKH_Sig.from_bytes(p2sh_p2wpkh_sig_bytes)
     p2sh_p2wpkh_tx = Transaction.from_bytes(p2sh_p2wpkh_tx_bytes)
     p2sh_p2wpkh_utxo = UTXO(
-        txid=p2sh_p2wpkh_txid_display[::-1],  # Reverse display bytes
-        vout=0,
+        outpoint=p2sh_p2wpkh_txid_display[::-1] + (0).to_bytes(TX.VOUT, "little"),  # Reverse display bytes
         amount=25552,
         scriptpubkey=p2sh_key.script,
         block_height=826281
@@ -210,8 +205,7 @@ def test_p2wpkh(script_engine):
     p2wpkh_witness = Witness([p2wpkh_witsig, p2wpkh_witpubkey])
     p2wpkh_tx = Transaction.from_bytes(p2wpkh_tx_bytes)
     p2wpkh_utxo = UTXO(
-        txid=p2wpkh_txid_bytes[::-1],  # Reverse display bytes for use
-        vout=0,
+        outpoint=p2wpkh_txid_bytes[::-1] + (0).to_bytes(TX.VOUT, "little"),  # Reverse display bytes for use
         amount=1083200,
         scriptpubkey=p2wpkh_key.script
     )
@@ -246,8 +240,8 @@ def test_p2wsh(script_engine):
     # UTXO (outpoint, amount, scriptpubkey, blockheight)
     p2wsh_utxo = UTXO(
         # Reverse display bytes
-        txid=bytes.fromhex("46ebe264b0115a439732554b2b390b11b332b5b5692958b1754aa0ee57b64265")[::-1],
-        vout=1,
+        outpoint=bytes.fromhex("46ebe264b0115a439732554b2b390b11b332b5b5692958b1754aa0ee57b64265")[::-1] + (1).to_bytes(
+            TX.VOUT, "little"),
         amount=53519352,
         scriptpubkey=p2wsh_key.script,
         block_height=630000
@@ -288,8 +282,8 @@ def test_keypath(script_engine):
 
     p2tr_utxo = UTXO(
         # reverse display bytes
-        txid=bytes.fromhex("a7115c7267dbb4aab62b37818d431b784fe731f4d2f9fa0939a9980d581690ec")[::-1],
-        vout=0,
+        outpoint=bytes.fromhex("a7115c7267dbb4aab62b37818d431b784fe731f4d2f9fa0939a9980d581690ec")[::-1] + (0).to_bytes(
+            TX.VOUT, "little"),
         amount=20000,
         scriptpubkey=p2tr_key.script,
         block_height=861957
@@ -329,8 +323,7 @@ def test_simple_spendpath(script_engine):
     p2tr_witness = Witness(items=[p2tr_leaf_inputs, p2tr_leaf_script, p2tr_control_block])
     p2tr_tx = Transaction.from_bytes(p2tr_tx_bytes)
     p2tr_utxo = UTXO(
-        txid=p2tr_txid_display_bytes[::-1],
-        vout=1,
+        outpoint=p2tr_txid_display_bytes[::-1] + (1).to_bytes(TX.VOUT, "little"),
         amount=20000,
         scriptpubkey=p2tr_key.script,
         block_height=862100
@@ -356,8 +349,8 @@ def test_simple_sig_spendpath(script_engine):
 
     p2tr_scriptpubkey = P2TR_Key(xonly_pubkey=xonly_pubkey, scripts=[leaf_script])
     p2tr_utxo = UTXO(
-        txid=bytes.fromhex("d1c40446c65456a9b11a9dddede31ee34b8d3df83788d98f690225d2958bfe3c")[::-1],
-        vout=0,
+        outpoint=bytes.fromhex("d1c40446c65456a9b11a9dddede31ee34b8d3df83788d98f690225d2958bfe3c")[::-1] + (0).to_bytes(
+            TX.VOUT, "little"),
         amount=20000,
         scriptpubkey=p2tr_scriptpubkey.script,
         block_height=863496
@@ -398,8 +391,8 @@ def test_scriptpath_spend(script_engine):
 
     test_p2tr_pubkey = P2TR_Key(xonly_pubkey, leaf_scripts)
     test_p2tr_utxo = UTXO(
-        txid=bytes.fromhex("ec7b0fdfeb2c115b5a4b172a3a1cf406acc2425229c540d40ec752d893aac0d7")[::-1],
-        vout=0,
+        outpoint=bytes.fromhex("ec7b0fdfeb2c115b5a4b172a3a1cf406acc2425229c540d40ec752d893aac0d7")[::-1] + (0).to_bytes(
+            TX.VOUT, "little"),
         amount=10000,
         scriptpubkey=test_p2tr_pubkey.script,
         block_height=863632

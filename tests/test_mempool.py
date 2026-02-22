@@ -14,6 +14,7 @@ import os
 import unittest
 from unittest.mock import MagicMock
 
+from src.core import TX
 from src.mempool.mempool import MemPool, MemPoolTx
 from src.tx import TxIn, TxOut, Transaction, UTXO
 
@@ -33,7 +34,8 @@ def make_utxo(txid: bytes, vout: int = 0, amount: int = 100_000,
     Build a UTXO.  scriptpubkey defaults to OP_1 (anyone-can-spend) so the
     script engine won't reject it while script validation is still a stub.
     """
-    return UTXO(txid=txid, vout=vout, amount=amount, scriptpubkey=scriptpubkey)
+    outpoint = txid + vout.to_bytes(TX.VOUT, "little")
+    return UTXO(outpoint=outpoint, amount=amount, scriptpubkey=scriptpubkey)
 
 
 def make_spending_tx(utxos: list[UTXO], output_amount: int,
@@ -46,8 +48,8 @@ def make_spending_tx(utxos: list[UTXO], output_amount: int,
     """
     inputs = [
         TxIn(
-            txid=u.txid,
-            vout=u.vout,
+            txid=u.outpoint[:32],
+            vout=u.outpoint[32:],
             scriptsig=b'',  # unsigned — mempool doesn't verify scripts yet
             sequence=sequence,
         )
@@ -73,7 +75,7 @@ def make_mempool_with_utxos(utxos: list[UTXO]) -> MemPool:
     mp.script_engine = MagicMock()  # script validation is a stub in mempool
 
     # Build a dict of outpoint -> UTXO so the mock db can serve lookups
-    utxo_map = {u.txid + u.vout.to_bytes(4, 'little'): u for u in utxos}
+    utxo_map = {u.outpoint: u for u in utxos}
 
     mock_db = MagicMock()
     mock_db.get_utxo.side_effect = lambda outpoint: utxo_map.get(outpoint)
@@ -145,7 +147,7 @@ class TestAddTxHappyPath(unittest.TestCase):
         # Its UTXO must also be in the mock db (simulates an unconfirmed output)
         child_utxo = make_utxo(parent_tx.txid, vout=0, amount=90_000)
         mp.btcdb.get_utxo.side_effect = lambda op: (
-            child_utxo if op == child_utxo.txid + (0).to_bytes(4, 'little') else None
+            child_utxo if op == child_utxo.outpoint[:32] + (0).to_bytes(4, 'little') else None
         )
 
         child_tx = make_spending_tx([child_utxo], output_amount=80_000)

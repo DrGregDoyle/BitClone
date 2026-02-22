@@ -135,7 +135,7 @@ class BitCloneDatabase:
             conn.execute(
                 "INSERT INTO utxos(outpoint, amount, script_pubkey, height, coinbase) "
                 "VALUES (?, ?, ?, ?, ?)",
-                (u.outpoint(), u.amount, u.scriptpubkey, u.block_height or 0, 1 if u.is_coinbase else 0),
+                (u.outpoint, u.amount, u.scriptpubkey, u.block_height or 0, 1 if u.is_coinbase else 0),
             )
             conn.commit()
 
@@ -150,9 +150,7 @@ class BitCloneDatabase:
         if not row:
             return None
         outpoint, amt, spk, h, cb = row
-        txid_b = outpoint[:32]
-        vout_i = int.from_bytes(outpoint[-4:], "little")
-        return UTXO(txid_b, vout_i, amt, spk, h, bool(cb))
+        return UTXO(outpoint, amt, spk, h, bool(cb))
 
     def remove_utxo(self, outpoint: bytes):
         """Remove a UTXO from the set"""
@@ -272,8 +270,7 @@ if __name__ == "__main__":
     test_db = BitCloneDatabase()
 
     test_utxo = UTXO(
-        txid=b'deadbeef' * 8,
-        vout=0,
+        outpoint=b'\x00' * 36,
         amount=0xfff,
         scriptpubkey=b'beefdead',
         block_height=1,

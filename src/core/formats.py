@@ -128,6 +128,14 @@ class WALLET:
     DKLEN: Final[int] = 64
 
 
+class UTXO_SERIAL:
+    """
+    Constants for UTXO serialization
+    """
+    OUTPOINT: Final[int] = 36
+    AMOUNT: Final[int] = 8
+
+
 class XKEYS:
     """
     Constants related to the extended public and private keys

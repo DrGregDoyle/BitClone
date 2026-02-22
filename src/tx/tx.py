@@ -194,30 +194,32 @@ class Witness(Serializable):
 class UTXO:
     """
     Unspent Transaction Output - represents a spendable output
-    TODO: Change outpoint to be either property or instance var
-    TODO: Make Serializable - decide on a serialization format or find one
+    =================================================================================
+    |   name            |   data type   |   serialized format       |   byte size   |
+    =================================================================================
+    |   outpoint        |   bytes       |   natural byte order      |   36          |
+    |   amount          |   int         |   little-endian           |   8           |
+    |   script_len      |   int         |   compactSize             |   varInt      |
+    |   scriptpubkey    |   bytes       |   natural byte order      |   varInt      |
+    |   is_coinbase     |   bool        |   little-endian           |   1           |
+    =================================================================================
     """
-    __slots__ = ("txid", "vout", "amount", "scriptpubkey", "block_height", "is_coinbase")
+    __slots__ = ("outpoint", "amount", "scriptpubkey", "block_height", "is_coinbase")
 
-    def __init__(self, txid: bytes, vout: int, amount: int, scriptpubkey: bytes,
+    def __init__(self, outpoint: bytes, amount: int, scriptpubkey: bytes,
                  block_height: int = None, is_coinbase: bool = False):
-        self.txid = txid
-        self.vout = vout
+        self.outpoint = outpoint
         self.amount = amount
         self.scriptpubkey = scriptpubkey
         self.block_height = block_height
         self.is_coinbase = is_coinbase
 
     @classmethod
-    def from_txoutput(cls, txid: bytes, vout: int, txoutput: TxOut,
+    def from_txoutput(cls, outpoint: bytes, txoutput: TxOut,
                       block_height: int = None, is_coinbase: bool = False):
         """Create UTXO from a TxOutput"""
-        return cls(txid, vout, txoutput.amount, txoutput.scriptpubkey,
+        return cls(outpoint, txoutput.amount, txoutput.scriptpubkey,
                    block_height, is_coinbase)
-
-    def outpoint(self) -> bytes:
-        """Return txid + vout for referencing. Will be key in the db."""
-        return self.txid + self.vout.to_bytes(TX.VOUT, "little")
 
     def is_mature(self, current_height: int) -> bool:
         """Check if coinbase UTXO is mature (100 blocks)"""
@@ -226,9 +228,11 @@ class UTXO:
         return current_height - self.block_height >= 100
 
     def to_dict(self):
+        txid = self.outpoint[:32]
+        vout = self.outpoint[32:]
         return {
-            "txid": self.txid[::-1].hex(),  # Display txid
-            "vout": self.vout,
+            "txid": txid[::-1].hex(),  # Display txid
+            "vout": vout,
             "amount": self.amount,
             "scriptpubkey": self.scriptpubkey.hex(),
             "block_height": self.block_height,
@@ -241,13 +245,13 @@ class UTXO:
     def __eq__(self, other):
         if not isinstance(other, UTXO):
             return False
-        return self.outpoint() == other.outpoint()
+        return self.outpoint == other.outpoint
 
     def __hash__(self):
-        return hash(self.outpoint())
+        return hash(self.outpoint)
 
     def __str__(self):
-        return f"UTXO({self.txid.hex()[:8]}...:{self.vout}, {self.amount} sats)"
+        return f"UTXO({self.outpoint.hex()[:8]}...:{self.outpoint.hex()[-8:]}, {self.amount} sats)"
 
 
 class Transaction(Serializable):
