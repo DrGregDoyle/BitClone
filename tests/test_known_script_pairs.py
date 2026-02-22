@@ -5,6 +5,8 @@ For reference - we look at the transaction containing the scriptsig. This refere
 created from a previous transactions data + a specific TxOutput.
 
 """
+from random import randint
+
 from src.core import OPCODES, TX
 from src.core.byte_stream import serialize_data
 from src.data import Leaf, get_control_block, TweakPubkey
@@ -204,10 +206,12 @@ def test_p2wpkh(script_engine):
     p2wpkh_key = P2WPKH_Key.from_bytes(p2wpkh_key_bytes)
     p2wpkh_witness = Witness([p2wpkh_witsig, p2wpkh_witpubkey])
     p2wpkh_tx = Transaction.from_bytes(p2wpkh_tx_bytes)
+    p2wpkh_height = randint(1, 1_000_000)
     p2wpkh_utxo = UTXO(
         outpoint=p2wpkh_txid_bytes[::-1] + (0).to_bytes(TX.VOUT, "little"),  # Reverse display bytes for use
         amount=1083200,
-        scriptpubkey=p2wpkh_key.script
+        scriptpubkey=p2wpkh_key.script,
+        block_height=p2wpkh_height,
     )
 
     p2wpkh_scriptcode = (OP_PUSHBYTES_25 + OP_DUP + OP_HASH160 + OP_PUSHBYTES_20 + p2wpkh_scriptcode_bytes

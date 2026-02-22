@@ -10,7 +10,7 @@ from src.core import TX
 from src.script import ScriptEngine, SignatureEngine
 from src.tx import TxIn, TxOut, Witness, Transaction
 
-__all__ = ["getrand_txinput", "getrand_witnessfield", "getrand_txoutput", "getrand_tx"]
+__all__ = ["getrand_txinput", "getrand_witnessfield", "getrand_txoutput", "getrand_tx", "make_outpoint"]
 
 
 # --- Generate Random Tx Elements --- #
@@ -48,6 +48,10 @@ def getrand_tx(segwit: bool = True):
         witness = None
     locktime = int.from_bytes(token_bytes(TX.LOCKTIME), "little")
     return Transaction(inputs, outputs, witness, locktime)
+
+
+def make_outpoint(txid: bytes, vout: int):
+    return txid + vout.to_bytes(TX.VOUT, "little")
 
 
 @pytest.fixture()

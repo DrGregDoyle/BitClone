@@ -4,7 +4,8 @@ The Bitcoin standard formats
 """
 from typing import Final
 
-__all__ = ["BECH32CODE", "BLOCK", "DATA", "ECC", "MAGICBYTES", "NETWORK", "SCRIPT", "TAPROOT", "TX", "WALLET", "XKEYS"]
+__all__ = ["BECH32CODE", "BLOCK", "DATA", "ECC", "MAGICBYTES", "NETWORK", "SCRIPT", "TAPROOT", "TX", "WALLET",
+           "UTXO_SERIAL", "XKEYS"]
 
 
 class BECH32CODE:
@@ -134,6 +135,8 @@ class UTXO_SERIAL:
     """
     OUTPOINT: Final[int] = 36
     AMOUNT: Final[int] = 8
+    HEIGHT: Final[int] = 4
+    IS_COINBASE: Final[int] = 1
 
 
 class XKEYS:

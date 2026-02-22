@@ -6,7 +6,7 @@ import re
 from io import SEEK_CUR
 
 from src.core import (Serializable, SERIALIZED, get_stream, read_little_int, read_stream, TX, deserialize_data,
-                      serialize_data, read_compact_size, write_compact_size)
+                      serialize_data, read_compact_size, write_compact_size, UTXO_SERIAL)
 from src.core.logging import get_logger
 from src.cryptography import hash256
 
@@ -191,7 +191,7 @@ class Witness(Serializable):
         }
 
 
-class UTXO:
+class UTXO(Serializable):
     """
     Unspent Transaction Output - represents a spendable output
     =================================================================================
@@ -201,13 +201,15 @@ class UTXO:
     |   amount          |   int         |   little-endian           |   8           |
     |   script_len      |   int         |   compactSize             |   varInt      |
     |   scriptpubkey    |   bytes       |   natural byte order      |   varInt      |
+    |   block_height    |   int         |   little-endian           |   4           |
     |   is_coinbase     |   bool        |   little-endian           |   1           |
     =================================================================================
+    # is_coinbase uses 0 = False, 1 = True for single byte int values
     """
     __slots__ = ("outpoint", "amount", "scriptpubkey", "block_height", "is_coinbase")
 
     def __init__(self, outpoint: bytes, amount: int, scriptpubkey: bytes,
-                 block_height: int = None, is_coinbase: bool = False):
+                 block_height: int, is_coinbase: bool = False):
         self.outpoint = outpoint
         self.amount = amount
         self.scriptpubkey = scriptpubkey
@@ -216,31 +218,50 @@ class UTXO:
 
     @classmethod
     def from_txoutput(cls, outpoint: bytes, txoutput: TxOut,
-                      block_height: int = None, is_coinbase: bool = False):
+                      block_height: int, is_coinbase: bool = False):
         """Create UTXO from a TxOutput"""
         return cls(outpoint, txoutput.amount, txoutput.scriptpubkey,
                    block_height, is_coinbase)
 
-    def is_mature(self, current_height: int) -> bool:
-        """Check if coinbase UTXO is mature (100 blocks)"""
-        if not self.is_coinbase or self.block_height is None:
-            return True
-        return current_height - self.block_height >= 100
+    @classmethod
+    def from_bytes(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
 
-    def to_dict(self):
+        outpoint = read_stream(stream, UTXO_SERIAL.OUTPOINT)
+        amount = read_little_int(stream, UTXO_SERIAL.AMOUNT)
+        script_len = read_compact_size(stream)
+        scriptpubkey = read_stream(stream, script_len)
+        block_height = read_little_int(stream, UTXO_SERIAL.HEIGHT)
+        is_coinbase = bool(read_little_int(stream, UTXO_SERIAL.IS_COINBASE))
+
+        return cls(outpoint, amount, scriptpubkey, block_height, is_coinbase)
+
+    def to_bytes(self) -> bytes:
+        script_len = len(self.scriptpubkey)
+        parts = [
+            self.outpoint, self.amount.to_bytes(UTXO_SERIAL.AMOUNT, "little"), write_compact_size(script_len),
+            self.scriptpubkey, self.block_height.to_bytes(UTXO_SERIAL.HEIGHT, "little"),
+            int(self.is_coinbase).to_bytes(UTXO_SERIAL.IS_COINBASE, "little")
+        ]
+        return b''.join(parts)
+
+    def to_dict(self, formatted: bool = True):
         txid = self.outpoint[:32]
         vout = self.outpoint[32:]
         return {
-            "txid": txid[::-1].hex(),  # Display txid
-            "vout": vout,
-            "amount": self.amount,
+            "outpoint": self.outpoint.hex(),
+            "txid": txid[::-1].hex() if formatted else txid.hex(),
+            "vout": vout.hex() if formatted else int.from_bytes(vout, "little"),
+            "amount": self.amount.to_bytes(UTXO_SERIAL.AMOUNT, "little").hex() if formatted else self.amount,
             "scriptpubkey": self.scriptpubkey.hex(),
-            "block_height": self.block_height,
-            "is_coinbase": False
+            "block_height": self.block_height.to_bytes(UTXO_SERIAL.HEIGHT,
+                                                       "little") if formatted else self.block_height,
+            "is_coinbase": int(self.is_coinbase).to_bytes(UTXO_SERIAL.IS_COINBASE,
+                                                          "little") if formatted else self.is_coinbase
         }
 
-    def to_json(self):
-        return json.dumps(self.to_dict(), indent=2)
+    def to_json(self, formatted: bool = True):
+        return json.dumps(self.to_dict(formatted), indent=2)
 
     def __eq__(self, other):
         if not isinstance(other, UTXO):

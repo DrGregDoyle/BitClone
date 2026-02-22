@@ -12,6 +12,7 @@ or directly:
 """
 import os
 import unittest
+from random import randint
 from unittest.mock import MagicMock
 
 from src.core import TX
@@ -35,7 +36,7 @@ def make_utxo(txid: bytes, vout: int = 0, amount: int = 100_000,
     script engine won't reject it while script validation is still a stub.
     """
     outpoint = txid + vout.to_bytes(TX.VOUT, "little")
-    return UTXO(outpoint=outpoint, amount=amount, scriptpubkey=scriptpubkey)
+    return UTXO(outpoint=outpoint, amount=amount, scriptpubkey=scriptpubkey, block_height=randint(1, 1_000_000))
 
 
 def make_spending_tx(utxos: list[UTXO], output_amount: int,
