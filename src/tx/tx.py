@@ -195,6 +195,7 @@ class UTXO:
     """
     Unspent Transaction Output - represents a spendable output
     TODO: Change outpoint to be either property or instance var
+    TODO: Make Serializable - decide on a serialization format or find one
     """
     __slots__ = ("txid", "vout", "amount", "scriptpubkey", "block_height", "is_coinbase")
 

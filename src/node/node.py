@@ -7,9 +7,9 @@ from src.block.block import Block
 from src.blockchain.blockchain import Blockchain
 from src.mempool.mempool import MemPool
 from src.tx.tx import Transaction, TxIn, TxOut
+from src.wallet.wallet import Wallet  # Future import
 
 
-# from src.wallet.wallet import Wallet  # Future import
 # from src.miner.miner import Miner     # Future import
 
 
@@ -22,9 +22,9 @@ class Node:
         # -- TODO: Update inputs to take db_path and wallet_obj
         # -- TODO: Make blockchain and mempool use the same db
         self.blockchain = blockchain or Blockchain()
-        self.wallet = wallet  # Will hold wallet instance
+        self.wallet = wallet or Wallet()  # Will hold wallet instance
         self.mempool = MemPool()  # List of unconfirmed transactions
-        self.current_difficulty = b'\x1d\x00\xff\xff'  # Default difficulty
+        self.current_difficulty_bits = b'\x1d\x00\xff\xff'  # Default difficulty
 
         # Mining thread (to be implemented)
         self.miner = None  # Will be Miner instance

@@ -1,11 +1,50 @@
 """
 The Wallet class - ties together Mnemonic and ExtendedKey for HD wallet functionality
 """
+from dataclasses import dataclass, field
+from enum import Enum
+
 from src.core.formats import XKEYS
+from src.tx.tx import UTXO
 from src.wallet.mnemonic import Mnemonic
 from src.wallet.xkeys import ExtendedKey
 
 __all__ = ["Wallet"]
+
+
+class DerivationPath(Enum):
+    BIP44 = (44, "P2PKH")
+    BIP49 = (49, "P2SH_P2WPKH")
+    BIP84 = (84, "P2WPKH")
+    BIP86 = (86, "P2TR")
+
+    def __init__(self, purpose: int, script_type: str):
+        self.purpose = purpose
+        self.script_type = script_type
+
+    def path(self, account: int = 0, change: int = 0, index: int = 0) -> str:
+        # Coin value in path hardcoded to be 0 (BTC)
+        return f"m/{self.purpose}'/0'/{account}'/{change}/{index}"
+
+
+@dataclass
+class DerivedAddress:
+    bip: DerivationPath
+    account: int
+    change: int
+    index: int
+    address: str
+    pubkey: bytes
+    used: bool = False
+    utxos: list[UTXO] = field(default_factory=list)
+
+    @property
+    def path(self) -> str:
+        return self.bip.path(self.account, self.change, self.index)
+
+    @property
+    def balance(self) -> int:
+        return sum(u.amount for u in self.utxos)
 
 
 class Wallet:
