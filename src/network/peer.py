@@ -1,13 +1,11 @@
 """
 The Peer class. Used to track information about remote Nodes
 """
-from src.network.messages.ctrl_msg import Version
+from src.data.ip_utils import IP_ADDRESS
 
 
 class Peer:
 
-    def __init__(self, version: Version):
-        self.version = version
-
-    def to_dict(self):
-        return self.version.to_dict()
+    def __init__(self, host: str | IP_ADDRESS, port: int):
+        # Todo: Add on_message capabilities
+        self.host = host
