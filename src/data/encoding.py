@@ -6,12 +6,33 @@ import re
 
 from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature, decode_dss_signature
 
-from src.core import BECH32CODE
+from src.core import BECH32CODE, TX, get_logger
 from src.cryptography import hash256, bech32_decode, bech32_encode, convertbits
 
 __all__ = ["encode_base58", "decode_base58", "encode_base58check", "decode_base58check", "encode_bech32",
            "decode_bech32", "encode_der_signature", "decode_der_signature", "encode_differential",
-           "decode_differential"]
+           "decode_differential", "encode_outpoint", "decode_outpoint"]
+
+logger = get_logger(__name__)
+
+
+# --- OUTPOINT <--> TXID, VOUT --- #
+def encode_outpoint(txid: bytes, vout: int):
+    # --- Validation
+    if len(txid) != TX.TXID:
+        raise ValueError(f"txid unexpected length: {len(txid)}, expected {TX.TXID}")
+    if not isinstance(vout, int):
+        raise ValueError(f"vout unexpected type: {type(vout)}, expected {int}")
+    return txid + vout.to_bytes(TX.VOUT, byteorder="little")
+
+
+def decode_outpoint(outpoint: bytes) -> tuple[bytes, int]:
+    # --- Validation
+    if len(outpoint) != TX.OUTPOINT:
+        raise ValueError(f"outpoint unexpected length: {len(outpoint)}, expected {TX.OUTPOINT}")
+    txid = outpoint[:TX.TXID]
+    vout = int.from_bytes(outpoint[-TX.VOUT:], "little")
+    return txid, vout
 
 
 # --- DIFFERENTIAL ENCODING --- #

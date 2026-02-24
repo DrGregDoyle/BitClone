@@ -4,8 +4,8 @@ AddressBook - manages derived addresses, UTXO tracking, and gap limit scanning
 import json
 from dataclasses import dataclass, field
 
-from src.core.formats import DerivationPath
 from src.tx.tx import UTXO
+from src.wallet.derivation import DerivationPath
 
 __all__ = ["DerivedAddress", "AddressBook"]
 
@@ -43,8 +43,7 @@ class DerivedAddress:
             "used": self.used,
             "utxos": [
                 {
-                    "txid": u.txid.hex(),
-                    "vout": u.vout,
+                    "outpoint": u.outpoint.hex(),
                     "amount": u.amount,
                     "scriptpubkey": u.scriptpubkey.hex(),
                     "block_height": u.block_height,

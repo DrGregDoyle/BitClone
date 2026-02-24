@@ -1,8 +1,9 @@
 """
 The Wallet class - ties together Mnemonic and ExtendedKey for HD wallet functionality
 """
-
 from src.core.formats import XKEYS
+from src.wallet.address_book import AddressBook, DerivedAddress
+from src.wallet.derivation import DerivationPath
 from src.wallet.mnemonic import Mnemonic
 from src.wallet.xkeys import ExtendedKey
 
@@ -13,7 +14,7 @@ class Wallet:
     """
     Hierarchical Deterministic Wallet implementing BIP32/BIP39/BIP44
     """
-    __slots__ = ('mnemonic', 'seed', 'master_key')
+    __slots__ = ('mnemonic', 'seed', 'master_key', 'address_book')
 
     def __init__(
             self,
@@ -40,6 +41,9 @@ class Wallet:
         # Generate master extended private key from seed
         self.master_key = ExtendedKey.from_master_seed(_seed, version=version)
 
+        # Address book
+        self.address_book = AddressBook()
+
     @classmethod
     def from_seed(cls, seed: bytes, version: bytes = XKEYS.BIP44_XPRV):
         """
@@ -56,7 +60,22 @@ class Wallet:
         wallet.mnemonic = None
         wallet.seed = seed
         wallet.master_key = ExtendedKey.from_master_seed(seed, version=version)
+        wallet.address_book = AddressBook()
         return wallet
+
+    def derive_address(self, bip: DerivationPath, account: int = 0, change: int = 0, index: int = 0) -> DerivedAddress:
+        """Derive a key, build its address, register in the address book"""
+        path = bip.path(account, change, index)
+        xkey = self.derive_path(path)
+        pubkey = xkey.get_pubkey().key_data
+        address = bip.address(pubkey)
+
+        derived = DerivedAddress(
+            bip=bip, account=account, change=change,
+            index=index, address=address, pubkey=pubkey
+        )
+        self.address_book.add(derived)
+        return derived
 
     def derive_path(self, path: str) -> ExtendedKey:
         """

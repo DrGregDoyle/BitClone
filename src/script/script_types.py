@@ -232,6 +232,14 @@ class P2SH_Key(ScriptPubKey):
         self.script = OP_HASH160 + OP_PUSHBYTES_20 + hash_data + OP_EQUAL
 
     @classmethod
+    def from_data(cls, data: bytes):
+        """
+        Hashes the data
+        """
+        hash_data = hash160(data)
+        return cls(hash_data)
+
+    @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):
         script_bytes = get_bytes(byte_stream)
 
