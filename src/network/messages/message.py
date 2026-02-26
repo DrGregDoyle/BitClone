@@ -3,11 +3,37 @@ The Message parent class
 """
 from abc import ABC, abstractmethod
 
-from src.core import Serializable, MAGICBYTES, SERIALIZED, get_stream, read_stream
+from src.core import Serializable, MAGICBYTES, SERIALIZED, get_stream, read_stream, get_logger
 from src.cryptography import hash256
 from src.network import Header
 
 DEFAULT_MAGIC = MAGICBYTES.MAINNET
+
+__all__ = ["Message", "validate_package", "EmptyMessage"]
+
+logger = get_logger(__name__)
+
+
+def validate_package(header: Header, payload: bytes) -> bool:
+    """
+    We validate the Header values against the payload
+    """
+    calc_checksum = hash256(payload)[:4]
+    calc_size = len(payload)
+
+    # checksum
+    if calc_checksum != header.checksum:
+        logger.error("Message checksum mismatch")
+        return False
+    # size
+    if calc_size != header.size:
+        logger.error("Message size mismatch")
+        return False
+    # magic_bytes
+    if header.magic_bytes not in MAGICBYTES.ALLOWED_MAGIC:
+        logger.error("Message magic bytes mismatch")
+        return False
+    return True
 
 
 class Message(Serializable, ABC):
@@ -84,6 +110,10 @@ class Message(Serializable, ABC):
         stream = get_stream(byte_stream)  # Get message
         header = Header.from_bytes(read_stream(stream, 24))  # Get header
         payload_bytes = read_stream(stream, header.size)  # Get message payload
+
+        # --- Validate package
+        if not validate_package(header, payload=payload_bytes):
+            raise ValueError("Package fails validation")
 
         # --- Check payload_bytes
         if payload_bytes == b'':

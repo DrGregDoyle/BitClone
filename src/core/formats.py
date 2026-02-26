@@ -43,6 +43,7 @@ class MAGICBYTES:
     REGTEST: Final[bytes] = b'\xfa\xbf\xb5\xda'
     SIGNET: Final[bytes] = b'\x0a\x03\xcf\x40'
     NAMECOIN: Final[bytes] = b'\xf9\xbe\xb4\xfe'
+    ALLOWED_MAGIC: Final[list] = [MAINNET, TESTNET, REGTEST, SIGNET, NAMECOIN]
 
     @classmethod
     def __contains__(cls, item):
