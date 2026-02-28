@@ -3,7 +3,7 @@ The Message parent class
 """
 from abc import ABC, abstractmethod
 
-from src.core import Serializable, MAGICBYTES, SERIALIZED, get_stream, read_stream, get_logger
+from src.core import Serializable, MAGICBYTES, SERIALIZED, get_stream, read_stream, get_logger, NETWORK
 from src.cryptography import hash256
 from src.network import Header
 
@@ -32,6 +32,10 @@ def validate_package(header: Header, payload: bytes) -> bool:
     # magic_bytes
     if header.magic_bytes not in MAGICBYTES.ALLOWED_MAGIC:
         logger.error("Message magic bytes mismatch")
+        return False
+    # command
+    if header.command not in NETWORK.ALLOWED_COMMANDS:
+        logger.error("Message command mismatch")
         return False
     return True
 

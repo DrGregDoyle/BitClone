@@ -3,12 +3,11 @@ Control messages
 
 """
 import secrets
-import time
 
 from src.core import SERIALIZED, get_stream, read_little_int, read_stream
 from src.core.byte_stream import read_compact_size, write_compact_size
 from src.network.datatypes.network_data import NetAddr
-from src.network.datatypes.network_types import Services, RejectType
+from src.network.datatypes.network_types import Services, RejectType, BloomFlags
 from src.network.messages.message import EmptyMessage, Message
 
 __all__ = ["Addr", "FeeFilter", "FilterAdd", "FilterClear", "FilterLoad", "GetAddr", "Ping", "Pong", "Reject",
@@ -72,9 +71,7 @@ class Addr(Message):
         # timestamp + net_addr
         addr_list = []
         for _ in range(count):
-            temp_timestamp = read_little_int(stream, 4)
-            # TODO: add timestamp validation for version >= 31402
-            addr_list.append(NetAddr.from_bytes(stream, is_version=True))
+            addr_list.append(NetAddr.from_bytes(stream, is_version=False))
 
         return cls(addr_list)
 
@@ -82,8 +79,7 @@ class Addr(Message):
         count = len(self.addr_list)
         parts = [write_compact_size(count)]
         for addr in self.addr_list:
-            timestamp_int = int(time.time())
-            parts.append(timestamp_int.to_bytes(4, "little") + addr.to_bytes())
+            parts.append(addr.to_bytes())
         return b''.join(parts)
 
     def payload_dict(self, formatted: bool = True) -> dict:
@@ -185,17 +181,17 @@ class FilterLoad(Message):
     |   bitfilter       |   bit field   |   bytes               |   max 36000   |
     |   hash_num        |   int         |   little-endian       |   4           |
     |   tweak           |   int         |   little-endian       |   4           |
-    |   flags           |   bit field   |   bytes               |   1           |
+    |   flags           |   BloomFlags  |   bytes               |   1           |
     =============================================================================
     """
     COMMAND = "filterload"
 
-    def __init__(self, bitfilter: bytes, hash_num: int, tweak: int, flags: bytes):
+    def __init__(self, bitfilter: bytes, hash_num: int, tweak: int, flags: int | BloomFlags):
         super().__init__()
         self.bitfilter = bitfilter
         self.hash_num = hash_num
         self.tweak = tweak
-        self.flags = flags
+        self.flags = flags if isinstance(flags, BloomFlags) else BloomFlags(flags)
 
     @classmethod
     def from_payload(cls, byte_stream: SERIALIZED):
@@ -212,7 +208,7 @@ class FilterLoad(Message):
         tweak = read_little_int(stream, 4)
 
         # flags
-        flags = read_stream(stream, 1)
+        flags = read_little_int(stream, 1)
         return cls(bitfilter, hash_num, tweak, flags)
 
     def to_payload(self) -> bytes:
@@ -220,7 +216,7 @@ class FilterLoad(Message):
         parts = [
             write_compact_size(filter_bytes),
             self.bitfilter, self.hash_num.to_bytes(4, "little"),
-            self.tweak.to_bytes(4, "little"), self.flags
+            self.tweak.to_bytes(4, "little"), self.flags.value.to_bytes(1, "little")
         ]
         return b"".join(parts)
 

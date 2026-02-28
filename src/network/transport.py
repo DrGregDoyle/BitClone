@@ -9,14 +9,13 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from src.core import NetworkError
-from src.cryptography import hash256
 from src.network.datatypes.network_types import PeerState
 from src.network.messages.header import Header, ALLOWED_MAGIC
-from src.network.messages.message import Message
+from src.network.messages.message import Message, validate_package
 from src.network.peer import Peer
 
 
-@dataclass(slots=True)
+@dataclass
 class Connection:
     """Represents a live TCP connection to a peer."""
     sock: socket.socket
@@ -29,11 +28,11 @@ class Connection:
 class Transport:
     """Manages connections and sending/receiving messages."""
 
-    def __init__(self, timeout: int = 120, allowed_magic: Optional[tuple[bytes, ...]] = None):
+    def __init__(self, timeout: int = 120):
         self._timeout = timeout
         self._conns: dict[tuple[str, int], Connection] = {}
         # If you want strict network-only later, replace this with a single expected magic.
-        self._allowed_magic = allowed_magic if allowed_magic is not None else tuple(ALLOWED_MAGIC)
+        self._allowed_magic = ALLOWED_MAGIC
 
     def connect(self, peer: Peer) -> None:
         if peer.key in self._conns:
@@ -85,27 +84,15 @@ class Transport:
 
         payload_bytes = self._recv_exact(conn.sock, header.size)
 
-        # --- Validate checksum matches payload
-        expected_checksum = hash256(payload_bytes)[:4] if payload_bytes else hash256(b"")[:4]
-        if header.checksum != expected_checksum:
-            raise NetworkError(
-                f"Checksum mismatch for {header.command}: "
-                f"got={header.checksum.hex()} expected={expected_checksum.hex()}"
-            )
-
-        if expected_command and header.command != expected_command:
-            raise NetworkError(
-                f"Received {header.command} but expected {expected_command}"
-            )
-
-        msg_cls = Message.get_registered(header.command)
-        if not msg_cls:
-            raise NetworkError(f"Unknown message type: {header.command}")
+        # --- Validate header + payload
+        if not validate_package(header, payload_bytes):
+            raise NetworkError("Failed to validate header and payload")
 
         conn.last_rx = time.time()
         peer.last_seen = time.time()
 
         # Rebuild full message for existing Message.from_bytes() API
+        msg_cls = Message.get_registered(header.command)
         return msg_cls.from_bytes(header_bytes + payload_bytes)
 
     def _require_conn(self, peer: Peer) -> Connection:

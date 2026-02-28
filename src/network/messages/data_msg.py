@@ -311,7 +311,7 @@ class MerkleBlock(Message):
 
     def __init__(self, header: BlockHeader, tx_num: int, hashes: list[bytes], flags: bytes):
         super().__init__()
-        self.header = header
+        self.blockheader = header
         self.tx_num = tx_num
         self.hashes = hashes
         self.flags = flags
@@ -346,7 +346,7 @@ class MerkleBlock(Message):
             write_compact_size(flag_bytes),
             self.flags
         ]
-        return b''.join(parts)
+        return self.blockheader.to_bytes() + b''.join(parts)
 
     def payload_dict(self, formatted: bool = True) -> dict:
         hash_num = len(self.hashes)
@@ -358,7 +358,7 @@ class MerkleBlock(Message):
         }
 
         return {
-            "block_header": self.header.to_dict(formatted),
+            "block_header": self.blockheader.to_dict(formatted),
             "tx_count": self.tx_num.to_bytes(4, "little").hex() if formatted else self.tx_num,
             "hash_count": write_compact_size(hash_num).hex() if formatted else hash_num,
             "hashes": hash_dict,

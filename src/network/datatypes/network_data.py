@@ -8,6 +8,8 @@ Classes for different types of Network data structures
 
 
 """
+import time
+
 import siphash
 
 from src.block.block import BlockHeader
@@ -29,20 +31,21 @@ class NetAddr(Serializable):
     -----------------------------------------------------------------
     |   Name            | Data type | Formatted             | Size  |
     -----------------------------------------------------------------
-    |   time*           | int       | little-endian         | 4     |
+    |   timestamp*      | int       | little-endian         | 4     |
     |   Services        | bytes     | little-endian         | 8     |
     |   ip address      | ipv6      | network byte order    | 16    |
     |   port            | int       | network byte order    | 2     |
     -----------------------------------------------------------------
-    *time not present in version message
+    *timestamp not present in version message
     """
 
-    def __init__(self, time: int | None, services: Services, ip_addr: IP_ADDRESS | str, port: int,
+    def __init__(self, ip_addr: IP_ADDRESS | str, port: int, services: Services, timestamp: int = None,
                  is_version: bool = False):
-        self.time = None if is_version else time
+        self.timestamp = None if is_version else (timestamp if timestamp is not None else int(time.time()))
         self.services = services
         self.ip_addr = BitIP(ip_addr)
         self.port = port
+        self.is_version = is_version
 
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED, is_version: bool = False):
@@ -50,9 +53,9 @@ class NetAddr(Serializable):
 
         # Time
         if not is_version:
-            time = read_little_int(stream, 4)
+            timestamp = read_little_int(stream, 4)
         else:
-            time = None
+            timestamp = None
 
         # Services
         service_int = read_little_int(stream, 8)
@@ -65,11 +68,11 @@ class NetAddr(Serializable):
         # port
         port = read_big_int(stream, 2)
 
-        return cls(time, services, ip_addr, port)
+        return cls(ip_addr, port, services, timestamp, is_version)
 
     def to_bytes(self) -> bytes:
         parts = [
-            self.time.to_bytes(4, "little") if self.time else b'',
+            self.timestamp.to_bytes(4, "little") if self.timestamp and not self.is_version else b'',
             self.services.to_bytes(8, "little"),
             self.ip_addr.to_bytes(),
             self.port.to_bytes(2, "big")
@@ -77,8 +80,8 @@ class NetAddr(Serializable):
         return b''.join(parts)
 
     def to_dict(self, formatted: bool = True):
-        if self.time:
-            time_val = self.time.to_bytes(4, "little").hex() if formatted else self.time
+        if self.timestamp:
+            time_val = self.timestamp.to_bytes(4, "little").hex() if formatted else self.timestamp
         else:
             time_val = ""
         return {

@@ -3,7 +3,7 @@ Various Network type Enum classes
 """
 from enum import IntFlag, Enum
 
-__all__ = ["Services", "InvType", "PeerState", "RejectType", "RejectType"]
+__all__ = ["BloomFlags", "InvType", "PeerState", "RejectType", "Services"]
 
 
 class Services(IntFlag):
@@ -46,3 +46,10 @@ class PeerState(Enum):
     HANDSHAKING = "handshaking"
     READY = "ready"
     DISCONNECTING = "disconnecting"
+
+
+class BloomFlags(IntFlag):
+    """Bloom filter flags"""
+    BLOOM_UPDATE_NONE = 0x00
+    BLOOM_UPDATE_ALL = 0x01
+    BLOOM_UPDATE_P2PKEY_ONLY = 0x02

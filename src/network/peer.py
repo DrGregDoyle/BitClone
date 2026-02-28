@@ -13,7 +13,7 @@ from src.network.datatypes.network_types import PeerState, Services
 __all__ = ["Peer"]
 
 
-@dataclass(slots=True)
+@dataclass
 class Peer:
     """Represents a remote node and what we know about it."""
     host: str | IP_ADDRESS
