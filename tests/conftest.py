@@ -8,8 +8,9 @@ from secrets import token_bytes
 
 import pytest
 
-from src.core import TX
-from src.network.datatypes.network_data import NetAddr
+from src.block.block import Block
+from src.core import TX, write_compact_size
+from src.network.datatypes.network_data import NetAddr, BlockTransactions
 from src.network.datatypes.network_types import Services
 from src.script import ScriptEngine, SignatureEngine
 from src.tx import TxIn, TxOut, Witness, Transaction
@@ -55,8 +56,51 @@ def getrand_tx(segwit: bool = True):
     return Transaction(inputs, outputs, witness, locktime)
 
 
+def getrand_coinbase(segwit: bool = True):
+    """Get random coinbase tx"""
+    # --- Coinbase TxIn
+    random_height = randint(500_000, 999_999)
+    random_height_bytes = random_height.to_bytes((random_height.bit_length() + 7) // 8, "big")
+    coinbase_txin = TxIn(
+        txid=b'\x00' * 32,
+        vout=0xffffffff,
+        scriptsig=write_compact_size(len(random_height_bytes)) + random_height_bytes + token_bytes(20),
+        sequence=0xffffffff
+    )
+    output_list = [getrand_txoutput() for _ in range(randint(5, 10))]
+    witness_reserve_val = b'\x00' * 32 if segwit else None
+
+    return Transaction(
+        inputs=[coinbase_txin],
+        outputs=output_list,
+        witness=[Witness(witness_reserve_val)],
+        locktime=random_height + 100
+    )
+
+
 def make_outpoint(txid: bytes, vout: int):
     return txid + vout.to_bytes(TX.VOUT, "little")
+
+
+@pytest.fixture
+def getrand_block():
+    """Returns a random block"""
+    coinbase_tx = getrand_coinbase()
+    tx_list = [getrand_tx() for _ in range(randint(5, 10))]
+    tx_list.insert(0, coinbase_tx)
+    prev_block = token_bytes(32)
+    return Block(
+        prev_block=prev_block,
+        txs=tx_list,
+    )
+
+
+@pytest.fixture
+def getrand_blocktxns():
+    """We return a random BlockTransaction"""
+    random_hash = token_bytes(32)
+    txs = [getrand_tx() for _ in range(randint(5, 10))]
+    return BlockTransactions(random_hash, txs)
 
 
 # --- Generate Random Network Data Elements --- #
@@ -89,7 +133,3 @@ def script_engine():
 @pytest.fixture()
 def sig_engine():
     return SignatureEngine()
-
-
-if __name__ == "__main__":
-    getrand_ipaddr()

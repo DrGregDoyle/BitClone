@@ -24,4 +24,4 @@
 - Add the CheckLockTimeVerify opcode (redefine NOP2)
 - Use the imported formatted class within each file, don't assign these to be file variables, this is unnecessary
   extra work
-- 
+- Straighten out the is_version bools with NetAddr and Addr and Version Messages

@@ -149,3 +149,39 @@ def test_version(getrand_netaddr):
     # --- Asserts
     assert from_bytes_version == version_msg, "Version message failed to_bytes -> from_bytes construction"
     assert from_payload_version == version_msg, "Version message failed to_payload -> from_payload construction"
+
+
+def test_blockmsg(getrand_block):
+    # --- Construction
+    random_block = getrand_block
+    block_msg = BlockMessage(random_block)
+
+    # --- Message and payload bytes
+    block_msg_bytes = block_msg.to_bytes()
+    block_payload_bytes = block_msg.payload
+
+    # -- Reconstruction
+    from_bytes_blockmsg = BlockMessage.from_bytes(block_msg_bytes)
+    from_payload_blockmsg = BlockMessage.from_payload(block_payload_bytes)
+
+    # --- Asserts
+    assert from_bytes_blockmsg == block_msg, "Block message failed to_bytes -> from_bytes construction"
+    assert from_payload_blockmsg == block_msg, "Block message failed to_payload -> from_payload construction"
+
+
+def test_blocktxns(getrand_blocktxns):
+    random_blocktxns = getrand_blocktxns
+    block_txns_msg = BlockTxn(random_blocktxns)
+
+    # --- Message and payload bytes
+    blocktxns_msg_bytes = block_txns_msg.to_bytes()
+    blocktxns_payload_bytes = block_txns_msg.payload
+
+    # -- Reconstruction
+    from_bytes_blocktxnsmsg = BlockTxn.from_bytes(blocktxns_msg_bytes)
+    from_payload_blocktxnsmsg = BlockTxn.from_payload(blocktxns_payload_bytes)
+
+    # --- Asserts
+    assert from_bytes_blocktxnsmsg == block_txns_msg, "BlockTxns message failed to_bytes -> from_bytes construction"
+    assert from_payload_blocktxnsmsg == block_txns_msg, ("BlockTxns message failed to_payload -> from_payload "
+                                                         "construction")
