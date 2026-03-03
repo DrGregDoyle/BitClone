@@ -185,3 +185,8 @@ def test_blocktxns(getrand_blocktxns):
     assert from_bytes_blocktxnsmsg == block_txns_msg, "BlockTxns message failed to_bytes -> from_bytes construction"
     assert from_payload_blocktxnsmsg == block_txns_msg, ("BlockTxns message failed to_payload -> from_payload "
                                                          "construction")
+
+
+def test_cmpctblock_msg():
+    """Test the CmpctBlock Message"""
+    pass

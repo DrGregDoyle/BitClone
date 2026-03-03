@@ -3,14 +3,14 @@ Fixtures used in the tests
 """
 import time
 from ipaddress import IPv4Address
-from random import randint, choice
+from random import randint, choice, sample
 from secrets import token_bytes
 
 import pytest
 
 from src.block.block import Block
 from src.core import TX, write_compact_size
-from src.network.datatypes.network_data import NetAddr, BlockTransactions
+from src.network.datatypes.network_data import NetAddr, BlockTransactions, PrefilledTx
 from src.network.datatypes.network_types import Services
 from src.script import ScriptEngine, SignatureEngine
 from src.tx import TxIn, TxOut, Witness, Transaction
@@ -101,6 +101,24 @@ def getrand_blocktxns():
     random_hash = token_bytes(32)
     txs = [getrand_tx() for _ in range(randint(5, 10))]
     return BlockTransactions(random_hash, txs)
+
+
+def getrand_headerandshortids():
+    """We return a random HeaderAndShortIds"""
+    # --- Get block
+    random_block = getrand_block()
+
+    # --- Fill out prefilled txs
+    tx_list = random_block.txs.copy()
+    tx_list.pop(0)  # Remove coinbase
+    indices_to_remove = set(sample(range(1, len(tx_list) + 1), randint(1, 3)))
+    indexed_txs = list(enumerate(tx_list, start=1))  # Gives a list of tuples: (block_index, tx) for prefilled txs
+    indexed_txs = [(i, tx) for i, tx in indexed_txs if i not in indices_to_remove]  # Remove based on block index
+    prefilled_txs = [PrefilledTx(block_index, tx) for block_index, tx in indexed_txs]
+
+    # --- Fill out shortIds
+
+    # --- Fill out header and shortids
 
 
 # --- Generate Random Network Data Elements --- #

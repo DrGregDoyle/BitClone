@@ -9,10 +9,11 @@ Classes for different types of Network data structures
 
 """
 import time
+from os import urandom
 
 import siphash
 
-from src.block.block import BlockHeader
+from src.block.block import BlockHeader, Block
 from src.core import Serializable, SERIALIZED, get_stream, read_little_int, read_stream, read_big_int, \
     read_compact_size, NetworkDataError
 from src.core.byte_stream import write_compact_size
@@ -315,6 +316,23 @@ class HeaderAndShortIDs(Serializable):
             prev_ind = ptx.block_index
 
         return cls(header, nonce, short_ids, prefilled_txs)
+
+    @classmethod
+    def from_block(cls, block: Block, prefilled_indices: list[int], nonce: int = None) -> "HeaderAndShortIDs":
+        """
+        Construct HeaderAndShortIDs from a block given prfilled_indices
+        """
+        if nonce is None:
+            nonce = int.from_bytes(urandom(8), "little")
+            
+        # --- ShortIDs for all txs not in prefilled_indices
+        short_ids = [ShortIDs.from_tx(tx, nonce) for i, tx in enumerate(block.txs)
+                     if i not in prefilled_indices]
+
+        # --- PrefilledTxs
+        prefilled_txs = [PrefilledTx(i, block.txs[i]) for i in prefilled_indices]
+
+        return cls(block.header.to_bytes(), nonce, short_ids, prefilled_txs)
 
     def to_bytes(self) -> bytes:
         short_id_len = len(self.short_ids)
