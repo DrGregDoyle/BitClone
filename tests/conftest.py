@@ -43,6 +43,7 @@ def getrand_witnessfield():
     return Witness(items)
 
 
+# Plain function - can be called directly
 def getrand_tx(segwit: bool = True):
     input_num = randint(1, 4)
     output_num = randint(1, 4)
@@ -54,6 +55,12 @@ def getrand_tx(segwit: bool = True):
         witness = None
     locktime = int.from_bytes(token_bytes(TX.LOCKTIME), "little")
     return Transaction(inputs, outputs, witness, locktime)
+
+
+# Fixture wraps the plain function for tests that need it injected
+@pytest.fixture
+def getrand_tx_fixture():
+    return getrand_tx
 
 
 def getrand_coinbase(segwit: bool = True):
@@ -85,6 +92,7 @@ def make_outpoint(txid: bytes, vout: int):
 @pytest.fixture
 def getrand_block():
     """Returns a random block"""
+    # TODO: Add factory to use is_segwit bool
     coinbase_tx = getrand_coinbase()
     tx_list = [getrand_tx() for _ in range(randint(5, 10))]
     tx_list.insert(0, coinbase_tx)

@@ -100,14 +100,13 @@ class InvVector(Serializable):
 
     def __init__(self, inv_type: int | InvType, obj_hash: bytes):
         # Validation
-        if isinstance(inv_type, int):
-            # Check if the integer corresponds to a valid InvType value
-            valid_values = {member.value for member in InvType}
-            if inv_type not in valid_values:
-                raise ValueError(f"Invalid inv_type: {inv_type}. Must be one of {sorted(valid_values)}")
-            self.type = InvType(inv_type)
-        elif isinstance(inv_type, InvType):
+        if isinstance(inv_type, InvType):
             self.type = inv_type
+        elif isinstance(inv_type, int):
+            try:
+                self.type = InvType(inv_type)
+            except ValueError:
+                raise ValueError(f"Invalid inv_type: {inv_type}. Must be one of {[m.value for m in InvType]}")
         else:
             raise TypeError(f"inv_type must be int or InvType, got {type(inv_type)}")
 
@@ -324,7 +323,7 @@ class HeaderAndShortIDs(Serializable):
         """
         if nonce is None:
             nonce = int.from_bytes(urandom(8), "little")
-            
+
         # --- ShortIDs for all txs not in prefilled_indices
         short_ids = [ShortIDs.from_tx(tx, nonce) for i, tx in enumerate(block.txs)
                      if i not in prefilled_indices]
