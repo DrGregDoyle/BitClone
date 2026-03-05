@@ -25,3 +25,4 @@
 - Use the imported formatted class within each file, don't assign these to be file variables, this is unnecessary
   extra work
 - Straighten out the is_version bools with NetAddr and Addr and Version Messages
+- Add all possible getrand functions to conftest for testing

@@ -8,7 +8,7 @@ from secrets import token_bytes, randbelow
 import pytest
 
 from src.block.block import Block
-from src.network.datatypes.network_data import HeaderAndShortIDs, ShortIDs, PrefilledTx, InvVector, NetAddr
+from src.network.datatypes.network_data import HeaderAndShortIDs, ShortID, PrefilledTx, InvVector, NetAddr
 from src.network.datatypes.network_types import InvType
 from src.network.messages.data_msg import CmpctBlock
 
@@ -65,12 +65,15 @@ def test_header_and_shortids():
     shortid_indices = [i for i in range(num_txs) if i not in prefilled_indices]
 
     shortid_list = [
-        ShortIDs(block_header, random_nonce, sample_block.txs[i].txid)
+        ShortID(block_header, random_nonce, sample_block.txs[i].txid)
         for i in shortid_indices
     ]
 
     test_headerandshortid = HeaderAndShortIDs(block_header, random_nonce, shortid_list, prefilled_tx_list)
     recovered_header = HeaderAndShortIDs.from_bytes(test_headerandshortid.to_bytes())
+
+    print(f"TEST HEADER: {test_headerandshortid.to_json()}")
+    print(f"RECOVERED HEADER: {recovered_header.to_json()}")
 
     assert test_headerandshortid == recovered_header, "Failed to_bytes -> from_bytes construction of HeaderAndShortIDs"
 

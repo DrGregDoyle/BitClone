@@ -9,21 +9,21 @@ Classes for different types of Network data structures
 
 """
 import time
-from os import urandom
 
 import siphash
 
-from src.block.block import BlockHeader, Block
+from src.block.block import BlockHeader
 from src.core import Serializable, SERIALIZED, get_stream, read_little_int, read_stream, read_big_int, \
-    read_compact_size, NetworkDataError
+    read_compact_size, NetworkDataError, get_logger, NETWORK
 from src.core.byte_stream import write_compact_size
 from src.cryptography.hash_functions import sha256
 from src.data import IP_ADDRESS, ip_from_netaddr, BitIP, decode_differential, encode_differential
 from src.network.datatypes.network_types import Services, InvType
 from src.tx.tx import Transaction
 
-__all__ = ["BlockTransactions", "NetAddr", "InvVector", "PrefilledTx", "ShortIDs", "HeaderAndShortIDs",
+__all__ = ["BlockTransactions", "NetAddr", "InvVector", "PrefilledTx", "ShortID", "HeaderAndShortIDs",
            "BlockTransactionsRequest"]
+logger = get_logger(__name__)
 
 
 class NetAddr(Serializable):
@@ -203,9 +203,12 @@ class PrefilledTx(Serializable):
         }
 
 
-class ShortIDs(Serializable):
+class ShortID(Serializable):
     """
-    #TODO: Put in serializetion diagram
+    =====================================================================
+    |   name        |   data type   |   format          |   byte size   |
+    =====================================================================
+    |
     Short transaction IDs are used to represent a transaction without sending a full 256-bit hash.
     They are calculated by:
         -single-SHA256 hashing the block header with the nonce appended (in little-endian)
@@ -216,25 +219,12 @@ class ShortIDs(Serializable):
     __slots__ = ("short_id",)
 
     def __init__(self, block_header: bytes, nonce: int, txid: bytes):
-        # --- Validation --- #
-        if len(block_header) != 80:
-            raise ValueError(f"block_header must be 80 bytes, got {len(block_header)}")
-        if len(txid) != 32:
-            raise ValueError(f"txid must be 32 bytes, got {len(txid)}")
+        # --- Validate
+        if not self.validate_shortid(block_header, nonce, txid):
+            raise NetworkDataError("Invalid ShortID elements")
 
-        # Step 1: Create the SHA256 hash of the block_header + nonce
-        hash_data = block_header + nonce.to_bytes(8, "little")
-        hash_value = sha256(hash_data)
-
-        # Step 2: Extract k0 and k1 as the SipHash key (first 16 bytes)
-        # SipHash_2_4 expects a 16-byte secret key
-        siphash_key = hash_value[:16]
-
-        # Step 3: Run SipHash-2-4 with input being txid and k0/k1
-        siphash_result = siphash.SipHash_2_4(siphash_key, txid).hash()
-
-        # Step 4: Create shortId from lower 6 bytes
-        self.short_id = siphash_result.to_bytes(8, "little")[:6]
+        # --- Calc short_id
+        self.shortid = self.calc_shortid(block_header, nonce, txid)
 
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):
@@ -247,15 +237,47 @@ class ShortIDs(Serializable):
 
         # Create a dummy instance (we can't recalculate without header/nonce/txid)
         instance = object.__new__(cls)
-        instance.short_id = short_id_bytes
+        instance.shortid = short_id_bytes
         return instance
 
     def to_bytes(self) -> bytes:
         """Return the 6-byte short ID"""
-        return self.short_id
+        return self.shortid
 
     def to_dict(self, formatted: bool = True) -> dict:
-        return {"short_id": self.short_id.hex()}
+        return {"short_id": self.shortid.hex()}
+
+    @staticmethod
+    def validate_shortid(block_header: bytes, nonce: int, txid: bytes) -> bool:
+        """Validate the ShortID elements"""
+        # --- Validation --- #
+        if len(block_header) != 80:
+            logger.error(f"block_header must be 80 bytes, got {len(block_header)}")
+            return False
+        if nonce > NETWORK.MAX_SHORTID_NONCE:
+            logger.error(f"Nonce must be less than {NETWORK.MAX_SHORTID_NONCE}")
+            return False
+        if len(txid) != 32:
+            logger.error(f"txid must be 32 bytes, got {len(txid)}")
+            return False
+        return True
+
+    @staticmethod
+    def calc_shortid(block_header: bytes, nonce: int, txid: bytes):
+        """Calculate shortid. Assumed to be validated ahead of time"""
+        # Step 1: Create the SHA256 hash of the block_header + nonce
+        hash_data = block_header + nonce.to_bytes(8, "little")
+        hash_value = sha256(hash_data)
+
+        # Step 2: Extract k0 and k1 as the SipHash key (first 16 bytes)
+        # SipHash_2_4 expects a 16-byte secret key
+        siphash_key = hash_value[:16]
+
+        # Step 3: Run SipHash-2-4 with input being txid and k0/k1
+        siphash_result = siphash.SipHash_2_4(siphash_key, txid).hash()
+
+        # Step 4: Create shortId from lower 6 bytes
+        return siphash_result.to_bytes(8, "little")[:6]
 
 
 class HeaderAndShortIDs(Serializable):
@@ -272,7 +294,7 @@ class HeaderAndShortIDs(Serializable):
     =================================================================
     """
 
-    def __init__(self, header: bytes | BlockHeader, nonce: int, short_ids: list[ShortIDs],
+    def __init__(self, header: bytes | BlockHeader, nonce: int, short_ids: list[ShortID],
                  prefilled_txs: list[PrefilledTx]):
         """
         Args:
@@ -302,7 +324,7 @@ class HeaderAndShortIDs(Serializable):
 
         # short_ids
         short_id_len = read_compact_size(stream)
-        short_ids = [ShortIDs.from_bytes(stream) for _ in range(short_id_len)]
+        short_ids = [ShortID.from_bytes(stream) for _ in range(short_id_len)]
 
         # prefilled_txs - decode with differential encoding
         prefilled_tx_len = read_compact_size(stream)
@@ -316,22 +338,22 @@ class HeaderAndShortIDs(Serializable):
 
         return cls(header, nonce, short_ids, prefilled_txs)
 
-    @classmethod
-    def from_block(cls, block: Block, prefilled_indices: list[int], nonce: int = None) -> "HeaderAndShortIDs":
-        """
-        Construct HeaderAndShortIDs from a block given prfilled_indices
-        """
-        if nonce is None:
-            nonce = int.from_bytes(urandom(8), "little")
-
-        # --- ShortIDs for all txs not in prefilled_indices
-        short_ids = [ShortIDs.from_tx(tx, nonce) for i, tx in enumerate(block.txs)
-                     if i not in prefilled_indices]
-
-        # --- PrefilledTxs
-        prefilled_txs = [PrefilledTx(i, block.txs[i]) for i in prefilled_indices]
-
-        return cls(block.header.to_bytes(), nonce, short_ids, prefilled_txs)
+    # @classmethod
+    # def from_block(cls, block: Block, prefilled_indices: list[int], nonce: int = None) -> "HeaderAndShortIDs":
+    #     """
+    #     Construct HeaderAndShortIDs from a block given prfilled_indices
+    #     """
+    #     if nonce is None:
+    #         nonce = int.from_bytes(urandom(8), "little")
+    #
+    #     # --- ShortIDs for all txs not in prefilled_indices
+    #     short_ids = [ShortID.from_tx(tx, nonce) for i, tx in enumerate(block.txs)
+    #                  if i not in prefilled_indices]
+    #
+    #     # --- PrefilledTxs
+    #     prefilled_txs = [PrefilledTx(i, block.txs[i]) for i in prefilled_indices]
+    #
+    #     return cls(block.header.to_bytes(), nonce, short_ids, prefilled_txs)
 
     def to_bytes(self) -> bytes:
         short_id_len = len(self.short_ids)

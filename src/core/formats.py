@@ -72,6 +72,7 @@ class NETWORK:
     ])
 
     COMMAND_LENGTH: Final[int] = 12
+    MAX_SHORTID_NONCE: Final[int] = 0xffffffffffffffff
 
 
 class SCRIPT:
