@@ -141,12 +141,12 @@ def getrand_ipaddr() -> IPv4Address:
 
 @pytest.fixture
 def getrand_netaddr():
-    def _factory(is_version=True):
+    def _factory():
         rand_ip = getrand_ipaddr()
         rand_port = randint(3000, 6000)
         rand_service = choice(list(Services))
-        rand_time = None if is_version else int(time.time())
-        return NetAddr(rand_ip, rand_port, rand_service, timestamp=rand_time, is_version=is_version)
+        rand_time = int(time.time())
+        return NetAddr(rand_ip, rand_port, rand_service, timestamp=rand_time)
 
     return _factory
 

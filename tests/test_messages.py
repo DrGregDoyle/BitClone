@@ -56,7 +56,7 @@ def test_ping_pong():
 
 def test_addr(getrand_netaddr):
     rand_addr_num = randint(3, 5)
-    addr_list = [getrand_netaddr(is_version=False) for _ in range(rand_addr_num)]
+    addr_list = [getrand_netaddr() for _ in range(rand_addr_num)]
     addr_msg = Addr(addr_list)
     constructed_msg = Addr.from_bytes(addr_msg.to_bytes())
     assert constructed_msg == addr_msg, "Addr message failed to_bytes -> from_bytes construction"
@@ -130,8 +130,8 @@ def test_version(getrand_netaddr):
     random_version = randint(1, 70015)
     random_services = choice(list(Services))
     random_timestamp = int.from_bytes(token_bytes(8), "big")
-    random_remote_addr = getrand_netaddr(is_version=True)
-    random_local_addr = getrand_netaddr(is_version=True)
+    random_remote_addr = getrand_netaddr()
+    random_local_addr = getrand_netaddr()
     random_nonce = int.from_bytes(token_bytes(8), "big")
     random_user_agent = "/" + "".join(choice(ascii_letters) for _ in range(randint(5, 15))) + "/"
     random_last_block = randint(0, 800_000)

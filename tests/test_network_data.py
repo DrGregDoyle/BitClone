@@ -22,13 +22,19 @@ def test_invvectors(inv_type):
     assert from_bytes_vector == test_vector, f"InvVector failed to_bytes -> from_bytes construction for InvType {inv_type}"
 
 
-@pytest.mark.parametrize("is_version", [True, False])
-def test_netaddr(getrand_netaddr, is_version):
-    netaddr = getrand_netaddr(is_version=is_version)
+def test_netaddr(getrand_netaddr):
+    netaddr = getrand_netaddr()
     netaddr_bytes = netaddr.to_bytes()
-    from_bytes_netaddr = NetAddr.from_bytes(netaddr_bytes, is_version=is_version)
-    assert from_bytes_netaddr == netaddr, (f"NetAddr with is_version={is_version} failed "
-                                           f"to_bytes -> from_bytes construction")
+    netaddr_version_bytes = netaddr.to_version_bytes()
+    from_bytes_netaddr = NetAddr.from_bytes(netaddr_bytes)
+    from_version_bytes_netaddr = NetAddr.from_version_bytes(netaddr_version_bytes)
+    assert from_bytes_netaddr == netaddr, f"NetAddr failed to_bytes -> from_bytes construction"
+    assert from_version_bytes_netaddr.services == netaddr.services, ("NetAddr failed to_version_bytes -> "
+                                                                     "from_version_bytes construction for services")
+    assert from_version_bytes_netaddr.ip_addr == netaddr.ip_addr, ("NetAddr failed to_version_bytes -> "
+                                                                   "from_version_bytes construction for ip_addr")
+    assert from_version_bytes_netaddr.port == netaddr.port, ("NetAddr failed to_version_bytes -> "
+                                                             "from_version_bytes construction for port")
 
 
 def test_prefilled_txs(getrand_tx_fixture):

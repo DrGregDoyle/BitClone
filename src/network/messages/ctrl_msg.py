@@ -71,7 +71,7 @@ class Addr(Message):
         # timestamp + net_addr
         addr_list = []
         for _ in range(count):
-            addr_list.append(NetAddr.from_bytes(stream, is_version=False))
+            addr_list.append(NetAddr.from_bytes(stream))
 
         return cls(addr_list)
 
@@ -227,7 +227,7 @@ class FilterLoad(Message):
             "bitfilter": self.bitfilter.hex(),
             "hash_num": self.hash_num.to_bytes(4, "little") if formatted else self.hash_num,
             "tweak": self.tweak.to_bytes(4, "little") if formatted else self.tweak,
-            "flags": self.flags.hex()
+            "flags": self.flags.value
         }
 
 
@@ -367,8 +367,8 @@ class Version(Message):
         timestamp = read_little_int(stream, 8, "time")
 
         # Read in remote and local NetAddr
-        remote_netaddr = NetAddr.from_bytes(stream, is_version=True)
-        local_netaddr = NetAddr.from_bytes(stream, is_version=True)
+        remote_netaddr = NetAddr.from_version_bytes(stream)
+        local_netaddr = NetAddr.from_version_bytes(stream)
 
         # Read in nonce, user agent and last block
         nonce = read_little_int(stream, 8, "nonce")
@@ -384,8 +384,8 @@ class Version(Message):
             self.protocol_version.to_bytes(4, "little"),
             self.services.to_bytes(8, "little"),
             self.timestamp.to_bytes(8, "little"),
-            self.remote_net_addr.to_bytes(),
-            self.local_net_addr.to_bytes(),
+            self.remote_net_addr.to_version_bytes(),
+            self.local_net_addr.to_version_bytes(),
             self.nonce.to_bytes(8, "little"),
             write_compact_size(len(encoded_agent)) + encoded_agent,
             self.last_block.to_bytes(4, "little")

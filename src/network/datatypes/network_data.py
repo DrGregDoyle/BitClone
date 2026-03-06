@@ -40,23 +40,18 @@ class NetAddr(Serializable):
     *timestamp not present in version message
     """
 
-    def __init__(self, ip_addr: IP_ADDRESS | str, port: int, services: Services, timestamp: int = None,
-                 is_version: bool = False):
-        self.timestamp = None if is_version else (timestamp if timestamp is not None else int(time.time()))
+    def __init__(self, ip_addr: IP_ADDRESS | str, port: int, services: Services, timestamp: int = None):
+        self.timestamp = timestamp if timestamp is not None else int(time.time())
         self.services = services
         self.ip_addr = BitIP(ip_addr)
         self.port = port
-        self.is_version = is_version
 
     @classmethod
-    def from_bytes(cls, byte_stream: SERIALIZED, is_version: bool = False):
+    def from_bytes(cls, byte_stream: SERIALIZED):
         stream = get_stream(byte_stream)
 
         # Time
-        if not is_version:
-            timestamp = read_little_int(stream, 4)
-        else:
-            timestamp = None
+        timestamp = read_little_int(stream, 4)
 
         # Services
         service_int = read_little_int(stream, 8)
@@ -69,25 +64,39 @@ class NetAddr(Serializable):
         # port
         port = read_big_int(stream, 2)
 
-        return cls(ip_addr, port, services, timestamp, is_version)
+        return cls(ip_addr, port, services, timestamp)
+
+    @classmethod
+    def from_version_bytes(cls, byte_stream: SERIALIZED):
+        """Read netaddr without timestamp"""
+        stream = get_stream(byte_stream)
+        # Services
+        service_int = read_little_int(stream, 8)
+        services = Services(service_int)
+
+        # IP address
+        ip_bytes = read_stream(stream, 16)
+        ip_addr = ip_from_netaddr(ip_bytes)
+
+        # port
+        port = read_big_int(stream, 2)
+
+        return cls(ip_addr, port, services)
 
     def to_bytes(self) -> bytes:
-        parts = [
-            self.timestamp.to_bytes(4, "little") if self.timestamp and not self.is_version else b'',
+        return self.timestamp.to_bytes(4, "little") + self.to_version_bytes()
+
+    def to_version_bytes(self) -> bytes:
+        return b''.join([
             self.services.to_bytes(8, "little"),
             self.ip_addr.to_bytes(),
             self.port.to_bytes(2, "big")
-        ]
-        return b''.join(parts)
+        ])
 
     def to_dict(self, formatted: bool = True):
-        if self.timestamp:
-            time_val = self.timestamp.to_bytes(4, "little").hex() if formatted else self.timestamp
-        else:
-            time_val = ""
         return {
-            "time": time_val,
-            "serivces": self.services.name,
+            "time": self.timestamp.to_bytes(4, "little").hex() if formatted else self.timestamp,
+            "services": self.services.name,
             "ip_addr": self.ip_addr.to_bytes().hex() if formatted else self.ip_addr.ip,
             "port": self.port.to_bytes(2, "big").hex() if formatted else self.port
         }
