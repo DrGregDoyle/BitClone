@@ -12,7 +12,7 @@ from src.block.block import Block
 from src.core import TX, write_compact_size
 from src.network import InvType
 from src.network.datatypes.network_data import NetAddr, BlockTransactions, InvVector, PrefilledTx, \
-    BlockTransactionsRequest
+    BlockTransactionsRequest, ShortID, HeaderAndShortIDs
 from src.network.datatypes.network_types import Services
 from src.script import ScriptEngine, SignatureEngine
 from src.tx import TxIn, TxOut, Witness, Transaction
@@ -127,6 +127,29 @@ def _getrand_blocktxnrqst() -> BlockTransactionsRequest:
     )
 
 
+def _getrand_shortid() -> ShortID:
+    return ShortID(
+        block_header=token_bytes(80),
+        nonce=int.from_bytes(token_bytes(randint(1, 8)), "little"),
+        txid=token_bytes(32)
+    )
+
+
+def _getrand_headerandshortids() -> HeaderAndShortIDs:
+    block = _getrand_block()
+    nonce = randint(0, 999_999)
+    header = block.get_header().to_bytes()
+
+    # Coinbase is always prefilled; randomly prefill one more tx
+    prefilled_indices = {0, randint(1, len(block.txs) - 1)}
+    prefilled_tx_list = [PrefilledTx(i, block.txs[i]) for i in sorted(prefilled_indices)]
+    shortid_list = [
+        ShortID(header, nonce, block.txs[i].txid)
+        for i in range(len(block.txs)) if i not in prefilled_indices
+    ]
+    return HeaderAndShortIDs(header, nonce, shortid_list, prefilled_tx_list)
+
+
 # --- Factory fixtures --- #
 
 @pytest.fixture
@@ -152,6 +175,16 @@ def getrand_blocktxns():
 @pytest.fixture
 def getrand_blocktxnrqst():
     return _getrand_blocktxnrqst
+
+
+@pytest.fixture
+def getrand_headerandshortids():
+    return _getrand_headerandshortids
+
+
+@pytest.fixture
+def getrand_shortid():
+    return _getrand_shortid
 
 
 @pytest.fixture

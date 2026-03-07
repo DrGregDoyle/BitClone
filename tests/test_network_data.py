@@ -1,14 +1,16 @@
 """
 Tests for Network data structures
 """
-# import secrets
+
+import io
 from secrets import randbelow
 
 import pytest
 
 from src.block.block import Block
-from src.network.datatypes.network_data import HeaderAndShortIDs, ShortID, PrefilledTx, InvVector, NetAddr, \
-    BlockTransactions, BlockTransactionsRequest
+from src.core import NetworkDataError
+from src.data import encode_differential, decode_differential
+from src.network.datatypes.network_data import *
 from src.network.datatypes.network_types import InvType
 from src.network.messages.data_msg import CmpctBlock
 
@@ -19,6 +21,21 @@ def test_invvectors(inv_type, getrand_invvector):
     test_vector_bytes = test_vector.to_bytes()
     from_bytes_vector = InvVector.from_bytes(test_vector_bytes)
     assert from_bytes_vector == test_vector, f"InvVector failed to_bytes -> from_bytes construction for InvType {inv_type}"
+
+
+def test_invvector_invalid_hash_size():
+    with pytest.raises(NetworkDataError):
+        InvVector(inv_type=InvType.MSG_TX, obj_hash=b'\x00' * 10)
+
+
+def test_invvector_invalid_int_type():
+    with pytest.raises(NetworkDataError):
+        InvVector(inv_type=9999, obj_hash=b'\x00' * 32)
+
+
+def test_invvector_invalid_type_wrong_class():
+    with pytest.raises(NetworkDataError):
+        InvVector(inv_type="MSG_TX", obj_hash=b'\x00' * 32)
 
 
 def test_netaddr(getrand_netaddr):
@@ -36,6 +53,13 @@ def test_netaddr(getrand_netaddr):
                                                              "from_version_bytes construction for port")
 
 
+def test_netaddr_version_bytes_roundtrip(getrand_netaddr):
+    """Verify from_version_bytes fully reconstructs the serialized form, catching any __eq__ gaps"""
+    netaddr = getrand_netaddr()
+    recovered = NetAddr.from_version_bytes(netaddr.to_version_bytes())
+    assert recovered.to_version_bytes() == netaddr.to_version_bytes()
+
+
 def test_prefilled_txs(getrand_prefilledtx):
     random_prefilled_tx = getrand_prefilledtx()
     random_prefilled_tx_bytes = random_prefilled_tx.to_bytes()
@@ -43,7 +67,34 @@ def test_prefilled_txs(getrand_prefilledtx):
     assert from_bytes_prefilled_tx == random_prefilled_tx, "PrefilledTx failed to_bytes -> from_bytes construction."
 
 
-def test_header_and_shortids():
+def test_prefilled_tx_sequence(getrand_tx):
+    """Test differential encoding across a sequence of PrefilledTx, which is the real use case for prev_ind"""
+    indices = [1, 4, 8, 11]  # avoid 0: __eq__ calls to_bytes(prev_ind=0) which raises when block_index==0
+    prefilled_list = [PrefilledTx(i, getrand_tx()) for i in indices]
+
+    # Serialize in sequence
+    parts = []
+    prev_ind = -1
+    for ptx in prefilled_list:
+        parts.append(ptx.to_bytes(prev_ind))
+        prev_ind = ptx.block_index
+
+    # Deserialize in sequence
+    stream = io.BytesIO(b''.join(parts))
+    recovered = []
+    prev_ind = -1
+    for _ in range(len(indices)):
+        ptx = PrefilledTx.from_bytes(stream, prev_ind)
+        recovered.append(ptx)
+        prev_ind = ptx.block_index
+
+    assert [p.block_index for p in recovered] == indices, \
+        "PrefilledTx sequence failed to recover correct block indices"
+    assert all(r == o for r, o in zip(recovered, prefilled_list)), \
+        "PrefilledTx sequence failed to recover correct transactions"
+
+
+def test_header_and_shortids_knownblock():
     """
     We create a HeaderAndShortIDs using a sample block. We verify that the to_bytes -> from_bytes works as expected.
     """
@@ -85,6 +136,13 @@ def test_header_and_shortids():
     print(f"TEST CMPCTBLOCK: {test_cmpctblock.to_json(False)}")
 
 
+def test_headerandshortids(getrand_headerandshortids):
+    random_headerandshortids = getrand_headerandshortids()
+    from_bytes_hashids = HeaderAndShortIDs.from_bytes(random_headerandshortids.to_bytes())
+    assert from_bytes_hashids == random_headerandshortids, \
+        "Failed to_bytes -> from_bytes construction of HeaderAndShortIDs"
+
+
 def test_blocktxns(getrand_blocktxns):
     random_blocktxn = getrand_blocktxns()
     from_bytes_blocktxn = BlockTransactions.from_bytes(random_blocktxn.to_bytes())
@@ -96,3 +154,30 @@ def test_blocktxnrqst(getrand_blocktxnrqst):
     from_bytes_blocktxnrqst = BlockTransactionsRequest.from_bytes(random_blocktxnrqst.to_bytes())
     assert from_bytes_blocktxnrqst == random_blocktxnrqst, \
         "Failed to_bytes -> from_bytes construction for BlockTransactionsRequest."
+
+
+@pytest.mark.parametrize("indices", [
+    [],  # empty
+    [5],  # single element
+    [3, 4, 5],  # consecutive — diffs of 0, the most likely source of off-by-one errors
+])
+def test_blocktxnrqst_edge_cases(indices):
+    from secrets import token_bytes
+    rqst = BlockTransactionsRequest(block_hash=token_bytes(32), indices=indices)
+    recovered = BlockTransactionsRequest.from_bytes(rqst.to_bytes())
+    assert recovered.indices == indices, \
+        f"BlockTransactionsRequest failed round-trip for indices={indices}"
+
+
+# --- Differential encoding unit tests --- #
+
+@pytest.mark.parametrize("indices", [
+    [],  # empty
+    [7],  # single element
+    [1, 4, 5],  # mix of gaps and consecutive (diff of 0)
+    [3, 4, 5],  # all consecutive — all diffs are 0
+    [0, 1, 2, 3],  # starting from zero, all consecutive
+])
+def test_differential_roundtrip(indices):
+    assert decode_differential(encode_differential(indices)) == indices, \
+        f"Differential encode -> decode roundtrip failed for indices={indices}"
