@@ -26,6 +26,10 @@ class InvType(IntFlag):
     MSG_WITNESS_BLOCK = 0x40000002
     MSG_FILTERED_WITNESS_BLOCK = 0x40000003
 
+    @property
+    def serialized(self) -> bytes:
+        return self.value.to_bytes(4, "little")
+
 
 class RejectType(IntFlag):
     REJECT_MALFORMED = 0x01

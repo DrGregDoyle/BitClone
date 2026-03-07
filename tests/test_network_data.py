@@ -1,22 +1,21 @@
 """
 Tests for Network data structures
 """
-from random import randint
 # import secrets
-from secrets import token_bytes, randbelow
+from secrets import randbelow
 
 import pytest
 
 from src.block.block import Block
-from src.network.datatypes.network_data import HeaderAndShortIDs, ShortID, PrefilledTx, InvVector, NetAddr
+from src.network.datatypes.network_data import HeaderAndShortIDs, ShortID, PrefilledTx, InvVector, NetAddr, \
+    BlockTransactions, BlockTransactionsRequest
 from src.network.datatypes.network_types import InvType
 from src.network.messages.data_msg import CmpctBlock
 
 
 @pytest.mark.parametrize("inv_type", list(InvType))
-def test_invvectors(inv_type):
-    random_hash = token_bytes(32)
-    test_vector = InvVector(inv_type=inv_type, obj_hash=random_hash)
+def test_invvectors(inv_type, getrand_invvector):
+    test_vector = getrand_invvector(inv_type)
     test_vector_bytes = test_vector.to_bytes()
     from_bytes_vector = InvVector.from_bytes(test_vector_bytes)
     assert from_bytes_vector == test_vector, f"InvVector failed to_bytes -> from_bytes construction for InvType {inv_type}"
@@ -37,10 +36,8 @@ def test_netaddr(getrand_netaddr):
                                                              "from_version_bytes construction for port")
 
 
-def test_prefilled_txs(getrand_tx):
-    random_tx = getrand_tx()
-    random_index = randint(0, 100)
-    random_prefilled_tx = PrefilledTx(block_index=random_index, tx=random_tx)
+def test_prefilled_txs(getrand_prefilledtx):
+    random_prefilled_tx = getrand_prefilledtx()
     random_prefilled_tx_bytes = random_prefilled_tx.to_bytes()
     from_bytes_prefilled_tx = PrefilledTx.from_bytes(random_prefilled_tx_bytes)
     assert from_bytes_prefilled_tx == random_prefilled_tx, "PrefilledTx failed to_bytes -> from_bytes construction."
@@ -86,3 +83,16 @@ def test_header_and_shortids():
     # --- CMPCTBLOCK using random HeaderAndShortIDs --- #
     test_cmpctblock = CmpctBlock(header_and_shortids=test_headerandshortid)
     print(f"TEST CMPCTBLOCK: {test_cmpctblock.to_json(False)}")
+
+
+def test_blocktxns(getrand_blocktxns):
+    random_blocktxn = getrand_blocktxns()
+    from_bytes_blocktxn = BlockTransactions.from_bytes(random_blocktxn.to_bytes())
+    assert from_bytes_blocktxn == random_blocktxn, "Failed to_bytes -> from_bytes construction for BlockTransactions."
+
+
+def test_blocktxnrqst(getrand_blocktxnrqst):
+    random_blocktxnrqst = getrand_blocktxnrqst()
+    from_bytes_blocktxnrqst = BlockTransactionsRequest.from_bytes(random_blocktxnrqst.to_bytes())
+    assert from_bytes_blocktxnrqst == random_blocktxnrqst, \
+        "Failed to_bytes -> from_bytes construction for BlockTransactionsRequest."

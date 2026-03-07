@@ -90,27 +90,24 @@ class NetAddr(Serializable):
 class InvVector(Serializable):
     """
     The inventory vector data structure
+    =================================================================
+    |   Name    |   datatype    |   serialized format   |   size    |
+    =================================================================
+    |   inv_type    |   int     |   little-endian       |   4       |
+    |   obj_hash    |   bytes   |   bytes               |   32      |
+    =================================================================
     """
 
     def __init__(self, inv_type: int | InvType, obj_hash: bytes):
-        # Validation
-        if isinstance(inv_type, InvType):
-            self.type = inv_type
-        elif isinstance(inv_type, int):
-            try:
-                self.type = InvType(inv_type)
-            except ValueError:
-                raise ValueError(f"Invalid inv_type: {inv_type}. Must be one of {[m.value for m in InvType]}")
-        else:
-            raise TypeError(f"inv_type must be int or InvType, got {type(inv_type)}")
+        # --- Validation
+        if len(obj_hash) != NETWORK.INV_HASH_SIZE:
+            raise NetworkDataError(f"Object hash incorrect size. Expected {NETWORK.INV_HASH_SIZE} bytes, "
+                                   f"received {len(obj_hash)}")
+        if not self._validate_inv_type(inv_type):
+            raise NetworkDataError(f"Invalid inv_type: {inv_type}")
 
-        # Validate hash length
-        if not isinstance(obj_hash, bytes):
-            raise TypeError(f"obj_hash must be bytes, got {type(obj_hash)}")
-        if len(obj_hash) != 32:
-            raise ValueError(f"obj_hash must be exactly 32 bytes, got {len(obj_hash)}")
-
-        self.hash = obj_hash
+        self.obj_hash = obj_hash
+        self.inv_type: InvType = inv_type if isinstance(inv_type, InvType) else InvType(inv_type)
 
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):
@@ -125,13 +122,30 @@ class InvVector(Serializable):
         return cls(int_type, obj_hash)
 
     def to_bytes(self) -> bytes:
-        return self.type.to_bytes(4, "little") + self.hash
+        return self.inv_type.serialized + self.obj_hash
 
     def to_dict(self, formatted: bool = True) -> dict:
         return {
-            "type": self.type.value if formatted else self.type.name,
-            "hash": self.hash.hex()
+            "type": self.inv_type.serialized.hex() if formatted else self.inv_type.name,
+            "hash": self.obj_hash.hex()
         }
+
+    @staticmethod
+    def _validate_inv_type(inv_type: int | InvType) -> bool:
+        # --- int
+        if isinstance(inv_type, int):
+            if inv_type in list(InvType):
+                return True
+            else:
+                logger.error(f"Invalid integer value. Expected one of {list(InvType)}, received {inv_type}")
+                return False
+        # --- InvType
+        if isinstance(inv_type, InvType):
+            return True
+
+        # --- invalid type
+        logger.error(f"Invalid type. Expected one of: int, InvType. Received: {type(inv_type)}")
+        return False
 
 
 class PrefilledTx(Serializable):
@@ -287,13 +301,6 @@ class HeaderAndShortIDs(Serializable):
 
     def __init__(self, header: bytes | BlockHeader, nonce: int, short_ids: list[ShortID],
                  prefilled_txs: list[PrefilledTx]):
-        """
-        Args:
-            header: Block header (80 bytes)
-            nonce: Nonce for short ID generation
-            short_ids: List of ShortIDs
-            prefilled_txs: List of PrefilledTx objects (with block_index set to actual indices)
-        """
         # ---  Validation --- #
         if isinstance(header, bytes) and len(header) != 80:
             raise NetworkDataError("Serialized BlockHeader of incorrect length")
@@ -328,23 +335,6 @@ class HeaderAndShortIDs(Serializable):
             prev_ind = ptx.block_index
 
         return cls(header, nonce, short_ids, prefilled_txs)
-
-    # @classmethod
-    # def from_block(cls, block: Block, prefilled_indices: list[int], nonce: int = None) -> "HeaderAndShortIDs":
-    #     """
-    #     Construct HeaderAndShortIDs from a block given prfilled_indices
-    #     """
-    #     if nonce is None:
-    #         nonce = int.from_bytes(urandom(8), "little")
-    #
-    #     # --- ShortIDs for all txs not in prefilled_indices
-    #     short_ids = [ShortID.from_tx(tx, nonce) for i, tx in enumerate(block.txs)
-    #                  if i not in prefilled_indices]
-    #
-    #     # --- PrefilledTxs
-    #     prefilled_txs = [PrefilledTx(i, block.txs[i]) for i in prefilled_indices]
-    #
-    #     return cls(block.header.to_bytes(), nonce, short_ids, prefilled_txs)
 
     def to_bytes(self) -> bytes:
         short_id_len = len(self.short_ids)

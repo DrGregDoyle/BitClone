@@ -10,7 +10,9 @@ import pytest
 
 from src.block.block import Block
 from src.core import TX, write_compact_size
-from src.network.datatypes.network_data import NetAddr, BlockTransactions
+from src.network import InvType
+from src.network.datatypes.network_data import NetAddr, BlockTransactions, InvVector, PrefilledTx, \
+    BlockTransactionsRequest
 from src.network.datatypes.network_types import Services
 from src.script import ScriptEngine, SignatureEngine
 from src.tx import TxIn, TxOut, Witness, Transaction
@@ -19,6 +21,13 @@ __all__ = ["getrand_txinput", "getrand_witnessfield", "getrand_txoutput", "getra
 
 
 # --- Plain helper functions (logic lives here, fixtures wrap these) --- #
+
+
+def _getrand_sorted_index() -> list[int]:
+    """Return a random list of sorted indices. Suitable for differentially encoded block indices"""
+    index_list = [randint(0, 100) for _ in range(randint(10, 20))]
+    return sorted(list(set(index_list)))
+
 
 def _getrand_ipaddr() -> IPv4Address:
     rand_octets = [randint(0, 255) for _ in range(4)]
@@ -89,11 +98,60 @@ def _getrand_netaddr() -> NetAddr:
     )
 
 
+def _getrand_invvector(inv_type: int = None) -> InvVector:
+    inv_type = inv_type if inv_type is not None else choice(list(InvType))
+    return InvVector(
+        inv_type=inv_type,
+        obj_hash=token_bytes(32)
+    )
+
+
+def _getrand_prefilledtx() -> PrefilledTx:
+    return PrefilledTx(
+        block_index=randint(0, 100),
+        tx=_getrand_tx(),
+    )
+
+
+def _getrand_blocktxns() -> BlockTransactions:
+    return BlockTransactions(
+        block_hash=token_bytes(32),
+        txs=[_getrand_tx() for _ in range(randint(5, 10))]
+    )
+
+
+def _getrand_blocktxnrqst() -> BlockTransactionsRequest:
+    return BlockTransactionsRequest(
+        block_hash=token_bytes(32),
+        indices=_getrand_sorted_index(),
+    )
+
+
 # --- Factory fixtures --- #
 
 @pytest.fixture
 def getrand_ipaddr():
     return _getrand_ipaddr
+
+
+@pytest.fixture
+def getrand_invvector():
+    return _getrand_invvector
+
+
+@pytest.fixture
+def getrand_prefilledtx():
+    return _getrand_prefilledtx
+
+
+@pytest.fixture
+def getrand_blocktxns():
+    return _getrand_blocktxns
+
+
+@pytest.fixture
+def getrand_blocktxnrqst():
+    return _getrand_blocktxnrqst
 
 
 @pytest.fixture
@@ -131,20 +189,7 @@ def getrand_netaddr():
     return _getrand_netaddr
 
 
-@pytest.fixture
-def getrand_blocktxns():
-    def _factory():
-        return BlockTransactions(
-            block_hash=token_bytes(32),
-            txs=[_getrand_tx() for _ in range(randint(5, 10))]
-        )
-
-    return _factory
-
-
-def make_outpoint(txid: bytes, vout: int):
-    return txid + vout.to_bytes(TX.VOUT, "little")
-
+# --- ENGINE FIXTURES --- #
 
 @pytest.fixture()
 def script_engine():

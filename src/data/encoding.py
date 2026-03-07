@@ -53,10 +53,11 @@ def decode_differential(encoded_list: list[int]) -> list[int]:
     Given a list of differentially encoded integers, we return the list of actual index values
     """
     decoded_list = []
-    diff = 0
-    for index in encoded_list:
-        decoded_list.append(index if diff == 0 else diff + index + 1)
-        diff += index
+    prev_index = -1
+    for encoded in encoded_list:
+        actual = encoded if prev_index < 0 else prev_index + encoded + 1
+        decoded_list.append(actual)
+        prev_index = actual  # ✅ track the decoded value, not the encoded one
     return decoded_list
 
 

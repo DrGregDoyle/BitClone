@@ -73,6 +73,7 @@ class NETWORK:
 
     COMMAND_LENGTH: Final[int] = 12
     MAX_SHORTID_NONCE: Final[int] = 0xffffffffffffffff
+    INV_HASH_SIZE: Final[int] = 32
 
 
 class SCRIPT:
