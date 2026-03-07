@@ -187,6 +187,37 @@ def test_blocktxns(getrand_blocktxns):
                                                          "construction")
 
 
-def test_cmpctblock_msg():
+def test_cmpctblock_msg(getrand_headerandshortids):
     """Test the CmpctBlock Message"""
-    pass
+    rand_hashids = getrand_headerandshortids()
+    cmpctblock_msg = CmpctBlock(rand_hashids)
+
+    # --- Message and payload bytes
+    cmpctblock_msg_bytes = cmpctblock_msg.to_bytes()
+    cmpctblock_payload_bytes = cmpctblock_msg.to_payload()
+
+    # --- Reconstruction
+    from_bytes_cmpctblock = CmpctBlock.from_bytes(cmpctblock_msg_bytes)
+    from_payload_cmpctblock = CmpctBlock.from_payload(cmpctblock_payload_bytes)
+
+    # --- Asserts
+    assert from_bytes_cmpctblock == cmpctblock_msg, "CmpctBlock failed to_bytes -> from_bytes construction"
+    assert from_payload_cmpctblock == cmpctblock_msg, (
+        "CmpctBlock message failed to_payload ->  from_payload construction")
+
+
+def test_getblocktxn(getrand_blocktxnrqst):
+    random_blocktxnrqst = getrand_blocktxnrqst()
+    getblocktxn_msg = GetBlockTxn(random_blocktxnrqst)
+
+    # --- Message and payload bytes
+    getblocktxn_bytes = getblocktxn_msg.to_bytes()
+    getblocktxn_payload = getblocktxn_msg.payload
+
+    # --- Reconstruction
+    from_bytes_getblocktxn = GetBlockTxn.from_bytes(getblocktxn_bytes)
+    from_payload_getblocktxn = GetBlockTxn.from_payload(getblocktxn_payload)
+
+    # --- Asserts
+    assert from_bytes_getblocktxn == getblocktxn_msg, "GetBlockTxn message failed to_bytes -> from_bytes construction"
+    assert from_payload_getblocktxn == getblocktxn_msg, "GetBlockTxn message failed to_payload -> from_payload construction"
