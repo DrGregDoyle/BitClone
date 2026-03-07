@@ -221,3 +221,50 @@ def test_getblocktxn(getrand_blocktxnrqst):
     # --- Asserts
     assert from_bytes_getblocktxn == getblocktxn_msg, "GetBlockTxn message failed to_bytes -> from_bytes construction"
     assert from_payload_getblocktxn == getblocktxn_msg, "GetBlockTxn message failed to_payload -> from_payload construction"
+
+
+def test_getblocks(getrand_getblocks):
+    getblocks_msg = getrand_getblocks()
+
+    getblocks_bytes = getblocks_msg.to_bytes()
+    getblocks_payload = getblocks_msg.payload
+
+    from_bytes_getblocks = GetBlocks.from_bytes(getblocks_bytes)
+    from_payload_getblocks = GetBlocks.from_payload(getblocks_payload)
+
+    assert from_bytes_getblocks == getblocks_msg, "GetBlocks message failed to_bytes -> from_bytes construction"
+    assert from_payload_getblocks == getblocks_msg, "GetBlocks message failed to_payload -> from_payload construction"
+
+
+def test_getdata(getrand_getdata):
+    # --- Construction
+    getdata_msg = getrand_getdata()
+
+    # --- Bytes and Payload
+    getdata_bytes = getdata_msg.to_bytes()
+    getdata_payload = getdata_msg.payload
+
+    # --- Reconstruction
+    from_bytes_getdata = GetData.from_bytes(getdata_bytes)
+    from_payload_getdata = GetData.from_payload(getdata_payload)
+
+    # --- Asserts
+    assert from_bytes_getdata == getdata_msg, "GetData message failed to_bytes -> from_bytes construction"
+    assert from_payload_getdata == getdata_msg, "GetData message failed to_payload -> from_payload construction"
+
+
+def test_getheaders(getrand_getheaders):
+    # --- Construction
+    getheaders_msg = getrand_getheaders()
+
+    # --- Payload and Bytes
+    getheaders_bytes = getheaders_msg.to_bytes()
+    getheaders_payload = getheaders_msg.payload
+
+    # --- Reconstruction
+    from_bytes_getheaders = GetHeaders.from_bytes(getheaders_bytes)
+    from_payload_getheaders = GetHeaders.from_payload(getheaders_payload)
+
+    # --- Asserts
+    assert from_bytes_getheaders == getheaders_msg, "GetHeaders message failed to_bytes -> from_bytes construction"
+    assert from_payload_getheaders == getheaders_msg, "GetHeaders message failed to_payload -> from_payload construction"

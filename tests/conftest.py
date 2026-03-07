@@ -11,9 +11,9 @@ import pytest
 from src.block.block import Block
 from src.core import TX, write_compact_size
 from src.network import InvType
-from src.network.datatypes.network_data import NetAddr, BlockTransactions, InvVector, PrefilledTx, \
-    BlockTransactionsRequest, ShortID, HeaderAndShortIDs
+from src.network.datatypes.network_data import *
 from src.network.datatypes.network_types import Services
+from src.network.messages.data_msg import GetBlocks, GetData, GetHeaders
 from src.script import ScriptEngine, SignatureEngine
 from src.tx import TxIn, TxOut, Witness, Transaction
 
@@ -150,7 +150,43 @@ def _getrand_headerandshortids() -> HeaderAndShortIDs:
     return HeaderAndShortIDs(header, nonce, shortid_list, prefilled_tx_list)
 
 
+def _getrand_getblocks() -> GetBlocks:
+    return GetBlocks(
+        version=randint(0, 0xffffffff),
+        locator_hashes=[token_bytes(32) for _ in range(randint(5, 10))],
+        hash_stop=bytes(32)
+    )
+
+
+def _getrand_getdata() -> GetData:
+    return GetData(
+        items=[_getrand_invvector() for _ in range(randint(5, 10))]
+    )
+
+
+def _getrand_getheaders() -> GetHeaders:
+    return GetHeaders(
+        version=randint(0, 0xffffffff),
+        locator_hashes=[token_bytes(32) for _ in range(randint(5, 10))],
+        hash_stop=bytes(32)
+    )
+
+
 # --- Factory fixtures --- #
+@pytest.fixture
+def getrand_getheaders():
+    return _getrand_getheaders
+
+
+@pytest.fixture
+def getrand_getdata():
+    return _getrand_getdata
+
+
+@pytest.fixture
+def getrand_getblocks():
+    return _getrand_getblocks
+
 
 @pytest.fixture
 def getrand_ipaddr():
