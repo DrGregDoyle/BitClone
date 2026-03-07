@@ -13,11 +13,9 @@ from src.core import TX, write_compact_size
 from src.network import InvType
 from src.network.datatypes.network_data import *
 from src.network.datatypes.network_types import Services
-from src.network.messages.data_msg import GetBlocks, GetData, GetHeaders
+from src.network.messages.data_msg import *
 from src.script import ScriptEngine, SignatureEngine
 from src.tx import TxIn, TxOut, Witness, Transaction
-
-__all__ = ["getrand_txinput", "getrand_witnessfield", "getrand_txoutput", "getrand_tx", "getrand_netaddr"]
 
 
 # --- Plain helper functions (logic lives here, fixtures wrap these) --- #
@@ -150,6 +148,39 @@ def _getrand_headerandshortids() -> HeaderAndShortIDs:
     return HeaderAndShortIDs(header, nonce, shortid_list, prefilled_tx_list)
 
 
+def _getrand_blockheader():
+    """Return a random BlockHeader derived from a random block."""
+    return _getrand_block().get_header()
+
+
+def _getrand_headers() -> Headers:
+    headers = [_getrand_blockheader() for _ in range(randint(2, 6))]
+    return Headers(headers)
+
+
+def _getrand_inv() -> Inv:
+    return Inv(
+        items=[_getrand_invvector() for _ in range(randint(5, 10))]
+    )
+
+
+def _getrand_notfound() -> NotFound:
+    return NotFound(
+        items=[_getrand_invvector() for _ in range(randint(5, 10))]
+    )
+
+
+def _getrand_merkleblock() -> MerkleBlock:
+    header = _getrand_blockheader()
+    tx_num = randint(1, 500)
+    hash_num = randint(1, 10)
+    hashes = [token_bytes(32) for _ in range(hash_num)]
+    # flags: one byte per 8 hashes, rounded up
+    flag_byte_count = (hash_num * 2 + 7) // 8
+    flags = token_bytes(flag_byte_count)
+    return MerkleBlock(header, tx_num, hashes, flags)
+
+
 def _getrand_getblocks() -> GetBlocks:
     return GetBlocks(
         version=randint(0, 0xffffffff),
@@ -176,6 +207,26 @@ def _getrand_getheaders() -> GetHeaders:
 @pytest.fixture
 def getrand_getheaders():
     return _getrand_getheaders
+
+
+@pytest.fixture
+def getrand_headers():
+    return _getrand_headers
+
+
+@pytest.fixture
+def getrand_inv():
+    return _getrand_inv
+
+
+@pytest.fixture
+def getrand_notfound():
+    return _getrand_notfound
+
+
+@pytest.fixture
+def getrand_merkleblock():
+    return _getrand_merkleblock
 
 
 @pytest.fixture

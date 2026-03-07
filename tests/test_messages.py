@@ -268,3 +268,114 @@ def test_getheaders(getrand_getheaders):
     # --- Asserts
     assert from_bytes_getheaders == getheaders_msg, "GetHeaders message failed to_bytes -> from_bytes construction"
     assert from_payload_getheaders == getheaders_msg, "GetHeaders message failed to_payload -> from_payload construction"
+
+
+def test_headers(getrand_headers):
+    # --- Construction
+    headers_msg = getrand_headers()
+
+    # --- Bytes and Payload
+    headers_bytes = headers_msg.to_bytes()
+    headers_payload = headers_msg.payload
+
+    # --- Reconstruction
+    from_bytes_headers = Headers.from_bytes(headers_bytes)
+    from_payload_headers = Headers.from_payload(headers_payload)
+
+    # --- Asserts
+    assert from_bytes_headers == headers_msg, "Headers message failed to_bytes -> from_bytes construction"
+    assert from_payload_headers == headers_msg, "Headers message failed to_payload -> from_payload construction"
+
+
+def test_inv(getrand_inv):
+    # --- Construction
+    inv_msg = getrand_inv()
+
+    # --- Bytes and Payload
+    inv_bytes = inv_msg.to_bytes()
+    inv_payload = inv_msg.payload
+
+    # --- Reconstruction
+    from_bytes_inv = Inv.from_bytes(inv_bytes)
+    from_payload_inv = Inv.from_payload(inv_payload)
+
+    # --- Asserts
+    assert from_bytes_inv == inv_msg, "Inv message failed to_bytes -> from_bytes construction"
+    assert from_payload_inv == inv_msg, "Inv message failed to_payload -> from_payload construction"
+
+
+def test_notfound(getrand_notfound):
+    # --- Construction
+    notfound_msg = getrand_notfound()
+
+    # --- Bytes and Payload
+    notfound_bytes = notfound_msg.to_bytes()
+    notfound_payload = notfound_msg.payload
+
+    # --- Reconstruction
+    from_bytes_notfound = NotFound.from_bytes(notfound_bytes)
+    from_payload_notfound = NotFound.from_payload(notfound_payload)
+
+    # --- Asserts
+    assert from_bytes_notfound == notfound_msg, "NotFound message failed to_bytes -> from_bytes construction"
+    assert from_payload_notfound == notfound_msg, "NotFound message failed to_payload -> from_payload construction"
+
+
+def test_merkleblock(getrand_merkleblock):
+    # --- Construction
+    merkleblock_msg = getrand_merkleblock()
+
+    # --- Bytes and Payload
+    merkleblock_bytes = merkleblock_msg.to_bytes()
+    merkleblock_payload = merkleblock_msg.payload
+
+    # --- Reconstruction
+    from_bytes_merkleblock = MerkleBlock.from_bytes(merkleblock_bytes)
+    from_payload_merkleblock = MerkleBlock.from_payload(merkleblock_payload)
+
+    # --- Asserts
+    assert from_bytes_merkleblock == merkleblock_msg, "MerkleBlock message failed to_bytes -> from_bytes construction"
+    assert from_payload_merkleblock == merkleblock_msg, (
+        "MerkleBlock message failed to_payload -> from_payload construction")
+
+
+@pytest.mark.parametrize("announce, version", [
+    (True, 1),
+    (False, 1),
+    (True, 2),
+])
+def test_sendcmpct(announce, version):
+    # --- Construction
+    sendcmpct_msg = SendCmpct(announce, version)
+
+    # --- Bytes and Payload
+    sendcmpct_bytes = sendcmpct_msg.to_bytes()
+    sendcmpct_payload = sendcmpct_msg.payload
+
+    # --- Reconstruction
+    from_bytes_sendcmpct = SendCmpct.from_bytes(sendcmpct_bytes)
+    from_payload_sendcmpct = SendCmpct.from_payload(sendcmpct_payload)
+
+    # --- Asserts
+    assert from_bytes_sendcmpct == sendcmpct_msg, "SendCmpct message failed to_bytes -> from_bytes construction"
+    assert from_payload_sendcmpct == sendcmpct_msg, "SendCmpct message failed to_payload -> from_payload construction"
+    assert from_bytes_sendcmpct.announce == announce, "SendCmpct announce field mismatch"
+    assert from_bytes_sendcmpct.version == version, "SendCmpct version field mismatch"
+
+
+def test_txmessage(getrand_tx):
+    # --- Construction
+    random_tx = getrand_tx()
+    tx_msg = TxMessage(random_tx)
+
+    # --- Bytes and Payload
+    tx_msg_bytes = tx_msg.to_bytes()
+    tx_msg_payload = tx_msg.payload
+
+    # --- Reconstruction
+    from_bytes_txmsg = TxMessage.from_bytes(tx_msg_bytes)
+    from_payload_txmsg = TxMessage.from_payload(tx_msg_payload)
+
+    # --- Asserts
+    assert from_bytes_txmsg == tx_msg, "TxMessage failed to_bytes -> from_bytes construction"
+    assert from_payload_txmsg == tx_msg, "TxMessage failed to_payload -> from_payload construction"
