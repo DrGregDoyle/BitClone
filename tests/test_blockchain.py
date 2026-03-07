@@ -5,7 +5,6 @@ from pathlib import Path
 
 from src.blockchain.blockchain import Blockchain
 from src.blockchain.genesis_block import genesis_block
-from tests.conftest import make_outpoint
 
 TEST_DB_PATH = Path(__file__).parent / "db_files" / "test_blockchain.db"
 
@@ -30,8 +29,8 @@ def test_genesis_block():
 
     # --- Check UTXO set
     genesis_coinbase = genesis_block.txs[0]
-    # outpoint = genesis_coinbase.txid + (0).to_bytes(4, "little")  # txid + vout index
-    outpoint = make_outpoint(genesis_coinbase.txid, 0)
+    outpoint = genesis_coinbase.txid + (0).to_bytes(4, "little")  # txid + vout index
+
     utxo = test_blockchain.get_utxo(outpoint)
 
     assert utxo is not None, "Genesis coinbase UTXO not found in UTXO set"

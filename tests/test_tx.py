@@ -7,10 +7,9 @@ import sys
 from src.tx import TxIn, TxOut, Witness, Transaction
 
 sys.path.append(os.path.dirname(__file__))
-from conftest import getrand_txinput, getrand_txoutput, getrand_witnessfield, getrand_tx
 
 
-def test_txinput():
+def test_txinput(getrand_txinput):
     """
     We test the serialization and class method of TxInput
     """
@@ -20,7 +19,7 @@ def test_txinput():
     assert recovered_txinput == random_txinput, "Failed to reconstruct TxInput using to_bytes -> from_bytes method"
 
 
-def test_txoutput():
+def test_txoutput(getrand_txoutput):
     """
     We test the serialization and class method of TxOutput
     """
@@ -30,7 +29,7 @@ def test_txoutput():
     assert recovered_txoutput == random_txoutput, "Failed to reconstruct TxOutput using to_bytes -> from_bytes method"
 
 
-def test_witness():
+def test_witness(getrand_witnessfield):
     """
     We test the serialization of the WitnessField class
     """
@@ -40,7 +39,7 @@ def test_witness():
     assert random_witness == recovered_witness, "Failed to reconstruct WitnessField using to_bytes -> from_bytes method"
 
 
-def test_tx():
+def test_tx(getrand_tx):
     # Legacy tx first
     random_legacytx = getrand_tx(segwit=False)
     recovered_legacytx = Transaction.from_bytes(random_legacytx.to_bytes())

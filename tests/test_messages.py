@@ -153,7 +153,7 @@ def test_version(getrand_netaddr):
 
 def test_blockmsg(getrand_block):
     # --- Construction
-    random_block = getrand_block
+    random_block = getrand_block()
     block_msg = BlockMessage(random_block)
 
     # --- Message and payload bytes
@@ -170,7 +170,7 @@ def test_blockmsg(getrand_block):
 
 
 def test_blocktxns(getrand_blocktxns):
-    random_blocktxns = getrand_blocktxns
+    random_blocktxns = getrand_blocktxns()
     block_txns_msg = BlockTxn(random_blocktxns)
 
     # --- Message and payload bytes

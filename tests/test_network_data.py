@@ -37,8 +37,8 @@ def test_netaddr(getrand_netaddr):
                                                              "from_version_bytes construction for port")
 
 
-def test_prefilled_txs(getrand_tx_fixture):
-    random_tx = getrand_tx_fixture()
+def test_prefilled_txs(getrand_tx):
+    random_tx = getrand_tx()
     random_index = randint(0, 100)
     random_prefilled_tx = PrefilledTx(block_index=random_index, tx=random_tx)
     random_prefilled_tx_bytes = random_prefilled_tx.to_bytes()

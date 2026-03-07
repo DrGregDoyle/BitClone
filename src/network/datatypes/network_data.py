@@ -46,41 +46,26 @@ class NetAddr(Serializable):
         self.ip_addr = BitIP(ip_addr)
         self.port = port
 
+    @staticmethod
+    def _read_stream(stream) -> tuple:
+        """Read the common services/ip/port fields from a stream"""
+        services = Services(read_little_int(stream, 8))
+        ip_addr = ip_from_netaddr(read_stream(stream, 16))
+        port = read_big_int(stream, 2)
+        return services, ip_addr, port
+
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):
         stream = get_stream(byte_stream)
-
-        # Time
         timestamp = read_little_int(stream, 4)
-
-        # Services
-        service_int = read_little_int(stream, 8)
-        services = Services(service_int)
-
-        # IP address
-        ip_bytes = read_stream(stream, 16)
-        ip_addr = ip_from_netaddr(ip_bytes)
-
-        # port
-        port = read_big_int(stream, 2)
-
+        services, ip_addr, port = cls._read_stream(stream)
         return cls(ip_addr, port, services, timestamp)
 
     @classmethod
     def from_version_bytes(cls, byte_stream: SERIALIZED):
         """Read netaddr without timestamp"""
         stream = get_stream(byte_stream)
-        # Services
-        service_int = read_little_int(stream, 8)
-        services = Services(service_int)
-
-        # IP address
-        ip_bytes = read_stream(stream, 16)
-        ip_addr = ip_from_netaddr(ip_bytes)
-
-        # port
-        port = read_big_int(stream, 2)
-
+        services, ip_addr, port = cls._read_stream(stream)
         return cls(ip_addr, port, services)
 
     def to_bytes(self) -> bytes:
@@ -140,11 +125,7 @@ class InvVector(Serializable):
         return cls(int_type, obj_hash)
 
     def to_bytes(self) -> bytes:
-        parts = [
-            self.type.to_bytes(4, "little"),
-            self.hash
-        ]
-        return b''.join(parts)
+        return self.type.to_bytes(4, "little") + self.hash
 
     def to_dict(self, formatted: bool = True) -> dict:
         return {
@@ -217,7 +198,8 @@ class ShortID(Serializable):
     =====================================================================
     |   name        |   data type   |   format          |   byte size   |
     =====================================================================
-    |
+    |   shortid     |   bytes       |   SipHash         |   6           |
+    =====================================================================
     Short transaction IDs are used to represent a transaction without sending a full 256-bit hash.
     They are calculated by:
         -single-SHA256 hashing the block header with the nonce appended (in little-endian)
