@@ -585,3 +585,14 @@ class P2SH_P2WPKH_Sig(ScriptSig):
         obj = object.__new__(cls)
         obj.script = scriptsig
         return obj
+
+
+def classify_script(script: bytes):
+    """
+    We
+    Args:
+        script:
+
+    Returns:
+
+    """

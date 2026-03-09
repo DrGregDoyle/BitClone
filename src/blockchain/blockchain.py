@@ -76,10 +76,29 @@ class Blockchain:
         return 0 if halvings >= 64 else Blockchain.INITIAL_SUBSIDY >> halvings
 
     def _adjust_target(self):
-        """
-        Adjusts _target instance variables if conditions are met.
-        """
-        pass
+        # Only retarget every 2016 blocks
+        if self._height == 0 or self._height % 2016 != 0:
+            return
+
+        # Get the block at the START of the 2016-block window
+        first_block = self.get_block_at_height(self._height - 2016)
+        last_block = self._tip
+
+        # Measure how long the window actually took
+        actual_time = last_block.timestamp - first_block.timestamp
+
+        # Clamp: no more than 4x adjustment in either direction
+        actual_time = max(actual_time, self.TWO_WEEK_SECONDS // 4)
+        actual_time = min(actual_time, self.TWO_WEEK_SECONDS * 4)
+
+        # Scale the target proportionally
+        new_target = int.from_bytes(self._target, "big") * actual_time // self.TWO_WEEK_SECONDS
+
+        # Clamp to genesis target as the minimum difficulty ceiling
+        genesis_target = int.from_bytes(bits_to_target(self.GENESIS_BLOCK_BITS), "big")
+        new_target = min(new_target, genesis_target)
+
+        self._target = new_target.to_bytes(32, "big")
 
     # --- Properties
 

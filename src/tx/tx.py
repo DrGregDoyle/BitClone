@@ -377,8 +377,7 @@ class Transaction(Serializable):
         for vout in range(0, len(self.outputs)):
             temp_output = self.outputs[vout]
             utxo_list.append(UTXO(
-                txid=self.txid,
-                vout=vout,
+                outpoint=self.txid + vout.to_bytes(TX.VOUT, "little"),
                 amount=temp_output.amount,
                 scriptpubkey=temp_output.scriptpubkey,
                 is_coinbase=False  # Coinbase will have their own Tx type

@@ -26,3 +26,4 @@
   extra work
 - ~~Straighten out the is_version bools with NetAddr and Addr and Version Messages~~
 - Add all possible getrand functions to conftest for testing
+- Separate scriptpubkey and scriptsig into separate files. Have ScriptType as enum for classification
