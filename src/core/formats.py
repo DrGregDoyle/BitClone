@@ -22,6 +22,7 @@ class BLOCK:
     BITS: Final[int] = VERSION
     MERKLE_ROOT: Final[int] = PREV_BLOCK
     TIMESTAMP_FORMAT: Final[str] = "%A, %d %B %Y %H:%M:%S"  # Display
+    GENESIS_BLOCK_BITS: Final[bytes] = b'\x1d\x00\xff\xff'
 
 
 class DATA:

@@ -12,6 +12,16 @@ ALLOWED_MAGIC = [DEFAULT_MAGIC, MAGICBYTES.REGTEST, MAGICBYTES.TESTNET]
 
 
 class Header(Serializable):
+    """
+    =============================================================================
+    |   name            |   datatype    |   serialzed format    |   byte size   |
+    =============================================================================
+    |   magic_byttes    |   bytes       |   natural byte order  |   4           |
+    |   command         |   str         |   ascii bytes         |   12          |
+    |   size            |   int         |   little-endian       |   4           |
+    |   checksum        |   bytes       |   natural byte order  |   4           |
+    =============================================================================
+    """
 
     def __init__(self, command: str, size: int, checksum: bytes, magic_bytes: bytes = DEFAULT_MAGIC):
         self._validate_header(magic_bytes, command.lower(), size, checksum)

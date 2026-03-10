@@ -2,11 +2,12 @@
 
 ## Formatting Tasks
 
-- Each Serializable class will have a table in the docstring containing:
-    - variable name
-    - data type in python
-    - serialized format
-    - serialized length
+- ~~Each Serializable class will have a table in the docstring containing:~~
+    - ~~variable name~~
+    - ~~data type in python~~
+    - ~~serialized format~~
+    - ~~serialized length~~
+- All classes inheriting from Serializable must have a similar table in the docstring
 
 ## Implementation Tasks
 

@@ -25,7 +25,7 @@ COINBASE_KEY = "is_coinbase"
 class TxIn(Serializable):
     """
     =============================================================================
-    |   name            |   data type   |   serialized format   |   byte size   |
+    |   name            |   datatype    |   serialzed format    |   byte size   |
     =============================================================================
     |   txid            |   bytes       |   natural byte order  |   32          |
     |   vout            |   int         |   little-endian       |   4           |
@@ -101,7 +101,7 @@ class TxIn(Serializable):
 class TxOut(Serializable):
     """
     =============================================================================
-    |   name            |   data type   |   serialized format   |   byte size   |
+    |   name            |   datatype    |   serialzed format    |   byte size   |
     =============================================================================
     |   amount          |   int         |   little-endian       |   8           |
     |   scriptlen       |   int         |   compactSize         |   vatInt      |
@@ -143,7 +143,7 @@ class Witness(Serializable):
     """
     WitnessField
     =================================================================================
-    |   name            |   data type   |   serialized format       |   byte size   |
+    |   name            |   datatype    |   serialzed format        |   byte size   |
     =================================================================================
     |   stack_items     |   int         |   compactSize             |   varInt      |
     |   item*           |   bytes       |   serialized_data(item)   |   varInt      |
@@ -194,16 +194,16 @@ class Witness(Serializable):
 class UTXO(Serializable):
     """
     Unspent Transaction Output - represents a spendable output
-    =================================================================================
-    |   name            |   data type   |   serialized format       |   byte size   |
-    =================================================================================
-    |   outpoint        |   bytes       |   natural byte order      |   36          |
-    |   amount          |   int         |   little-endian           |   8           |
-    |   script_len      |   int         |   compactSize             |   varInt      |
-    |   scriptpubkey    |   bytes       |   natural byte order      |   varInt      |
-    |   block_height    |   int         |   little-endian           |   4           |
-    |   is_coinbase     |   bool        |   little-endian           |   1           |
-    =================================================================================
+    =============================================================================
+    |   name            |   datatype    |   serialzed format    |   byte size   |
+    =============================================================================
+    |   outpoint        |   bytes       |   natural byte order  |   36          |
+    |   amount          |   int         |   little-endian       |   8           |
+    |   script_len      |   int         |   compactSize         |   varInt      |
+    |   scriptpubkey    |   bytes       |   natural byte order  |   varInt      |
+    |   block_height    |   int         |   little-endian       |   4           |
+    |   is_coinbase     |   bool        |   little-endian       |   1           |
+    =============================================================================
     # is_coinbase uses 0 = False, 1 = True for single byte int values
     """
     __slots__ = ("outpoint", "amount", "scriptpubkey", "block_height", "is_coinbase")
@@ -278,19 +278,18 @@ class UTXO(Serializable):
 class Transaction(Serializable):
     """
     Transaction
-    -------------------------------------------------------------
-    |   Field           |   Byte Size   |   Format              |
-    -------------------------------------------------------------
-    |   Version         |   4           |   little-endian       |
-    |   Marker*         |   1           |   fixed byte          |
-    |   Flag*           |   1           |   fixed byte          |
-    |   input_count     |   var         |   ComapctSize         |
-    |   inputs          |   var         |   TxInput             |
-    |   output_count    |   var         |   CompactSize         |
-    |   outputs         |   var         |   TxOutput            |
-    |   witness*        |   var         |   WitnessField             |
-    |   locktime        |   4           |   little-endian       |
-    -------------------------------------------------------------
+    =============================================================================
+    |   name            |   datatype    |   serialzed format    |   byte size   |
+    =============================================================================
+    |   version         |   int         |   little-endian       |   4           |
+    |   marker*         |   bytes       |   little-endian       |   1           |
+    |   flag*           |   bytes       |   little-endian       |   1           |
+    |   input_count     |   int         |   compactSize         |   var         |
+    |   inputs          |   list        |   TxIn.to_bytes()     |   var         |
+    |   output_count    |   int         |   compactSize         |   var         |
+    |   outputs         |   list        |   TxOut.to_bytes()    |   var         |
+    |   witness         |   Witness     |   Witness.to_bytes()  |   var         |
+    =============================================================================
     * indicates optional segwit specific fields
     """
     __slots__ = ("version", "inputs", "outputs", "locktime", "witness", "_cache")
@@ -369,7 +368,7 @@ class Transaction(Serializable):
         """
         return b''.join([w.to_bytes() for w in self.witness])
 
-    def get_utxo_list(self) -> list[UTXO]:
+    def get_utxo_list(self, block_height: int) -> list[UTXO]:
         """
         We generate UTXOs for the current tx and all its inputs
         """
@@ -380,6 +379,7 @@ class Transaction(Serializable):
                 outpoint=self.txid + vout.to_bytes(TX.VOUT, "little"),
                 amount=temp_output.amount,
                 scriptpubkey=temp_output.scriptpubkey,
+                block_height=block_height,
                 is_coinbase=False  # Coinbase will have their own Tx type
             ))
         return utxo_list

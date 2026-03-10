@@ -29,14 +29,14 @@ logger = get_logger(__name__)
 class NetAddr(Serializable):
     """
     The standard format of a network address
-    -----------------------------------------------------------------
-    |   Name            | Data type | Formatted             | Size  |
-    -----------------------------------------------------------------
-    |   timestamp*      | int       | little-endian         | 4     |
-    |   Services        | bytes     | little-endian         | 8     |
-    |   ip address      | ipv6      | network byte order    | 16    |
-    |   port            | int       | network byte order    | 2     |
-    -----------------------------------------------------------------
+    =============================================================================
+    |   name            |   datatype    |   serialzed format    |   byte size   |
+    =============================================================================
+    |   timestamp*      | int           | little-endian         | 4             |
+    |   Services        | bytes         | little-endian         | 8             |
+    |   ip address      | ipv6          | network byte order    | 16            |
+    |   port            | int           | network byte order    | 2             |
+    =============================================================================
     *timestamp not present in version message
     """
 
@@ -90,12 +90,12 @@ class NetAddr(Serializable):
 class InvVector(Serializable):
     """
     The inventory vector data structure
-    =================================================================
-    |   Name    |   datatype    |   serialized format   |   size    |
-    =================================================================
-    |   inv_type    |   int     |   little-endian       |   4       |
-    |   obj_hash    |   bytes   |   bytes               |   32      |
-    =================================================================
+    =========================================================================
+    |   name        |   datatype    |   serialzed format    |   byte size   |
+    =========================================================================
+    |   inv_type    |   int         |   little-endian       |   4           |
+    |   obj_hash    |   bytes       |   bytes               |   32          |
+    =========================================================================
     """
 
     def __init__(self, inv_type: int | InvType, obj_hash: bytes):
@@ -150,12 +150,12 @@ class InvVector(Serializable):
 
 class PrefilledTx(Serializable):
     """
-    =====================================================================
-    |   name        |   data type   |   format          |   byte size   |
-    =====================================================================
-    |   block_index |   int         |   compactSize*    |   1 or 3      |
-    |   tx          |   Transaction |   tx.to_bytes()   |   var         |
-    =====================================================================
+    =============================================================================
+    |   name            |   datatype    |   serialzed format    |   byte size   |
+    =============================================================================
+    |   block_index     |   int         |   compactSize*        |   1 or 3      |
+    |   tx              |   Transaction |   tx.to_bytes()       |   var         |
+    =============================================================================
     NB: The index will be differentially encoded since the last PrefilledTx in a list
     """
     __slots__ = ("block_index", "tx")
@@ -209,11 +209,11 @@ class PrefilledTx(Serializable):
 
 class ShortID(Serializable):
     """
-    =====================================================================
-    |   name        |   data type   |   format          |   byte size   |
-    =====================================================================
-    |   shortid     |   bytes       |   SipHash         |   6           |
-    =====================================================================
+    =========================================================================
+    |   name        |   datatype    |   serialzed format    |   byte size   |
+    =========================================================================
+    |   shortid     |   bytes       |   SipHash             |   6           |
+    =========================================================================
     Short transaction IDs are used to represent a transaction without sending a full 256-bit hash.
     They are calculated by:
         -single-SHA256 hashing the block header with the nonce appended (in little-endian)
@@ -287,16 +287,16 @@ class ShortID(Serializable):
 
 class HeaderAndShortIDs(Serializable):
     """
-    =================================================================
-    |   Name            | datatype  | format                | size  |
-    =================================================================
-    |   header          | bytes     | bytes                 | 80    |
-    |   nonce           | int       | little-endian         | 8     |
-    |   short_id_num    |           | CompactSize           | 1/3   |
-    |   short_ids       | list      | Serialized            | var   |
-    |   prefilled_tx_num|           | Compactsize           | 1/3   |
-    |   prefilled_txs   | list      | Serialized            | var   |
-    =================================================================
+    =============================================================================
+    |   name            |   datatype    |   serialzed format    |   byte size   |
+    =============================================================================
+    |   header          | bytes         | bytes                 | 80            |
+    |   nonce           | int           | little-endian         | 8             |
+    |   short_id_num    |               | CompactSize           | 1/3           |
+    |   short_ids       | list          | Serialized            | var           |
+    |   prefilled_tx_num|               | Compactsize           | 1/3           |
+    |   prefilled_txs   | list          | Serialized            | var           |
+    =============================================================================
     """
 
     def __init__(self, header: bytes | BlockHeader, nonce: int, short_ids: list[ShortID],
@@ -376,13 +376,13 @@ class HeaderAndShortIDs(Serializable):
 
 class BlockTransactions(Serializable):
     """Provides some requested txs from a block
-    =========================================================================
-    |   Name        | datatype              | format                | size  |
-    =========================================================================
-    |   block_hash  |   bytes               |   natural byte order  |   32  |
-    |   txs_length  |   int                 |   compactSize         |   var |
-    |   txs         |   list[Transactions]  |   tx.to_bytes()       |   var |
-    =========================================================================
+    =================================================================================
+    |   name        |   datatype            |   serialzed format    |   byte size   |
+    =================================================================================
+    |   block_hash  |   bytes               |   natural byte order  |   32          |
+    |   txs_length  |   int                 |   compactSize         |   var         |
+    |   txs         |   list[Transactions]  |   tx.to_bytes()       |   var         |
+    =================================================================================
     """
 
     def __init__(self, block_hash: bytes, txs: list[Transaction]):
@@ -421,13 +421,13 @@ class BlockTransactions(Serializable):
 
 class BlockTransactionsRequest(Serializable):
     """Used to list tx indices in a block being requested
-    =========================================================================
-    |   Name        | datatype          | format                | size      |
-    =========================================================================
-    |   block_hash  |   bytes           |   natural byte order  |   32      |
-    |   indices_len |   int             |   compactSize         |   1 or 3  |
-    |   indices     |   list[int]       |   compactSize*        |  var      |
-    =========================================================================
+    =============================================================================
+    |   name        |   datatype        |   serialzed format    |   byte size   |
+    =============================================================================
+    |   block_hash  |   bytes           |   natural byte order  |   32          |
+    |   indices_len |   int             |   compactSize         |   1 or 3      |
+    |   indices     |   list[int]       |   compactSize*        |  var          |
+    =============================================================================
     *indices are differentially encoded
     * We assume indices are given as an ordered list of block tx indices
     """

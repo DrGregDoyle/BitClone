@@ -16,18 +16,18 @@ from src.tx import Transaction
 
 class BlockHeader(Serializable):
     """
-    ---------------------------------------------------------------------
-    |   Name        |   data_type   |   format              |   size    |
-    ---------------------------------------------------------------------
-    |   Version     |   int         |   little-endian       |   4       |
-    |   prev_block  |   bytes       |   natural byte order  |   32      |
-    |   merkle_root |   bytes       |   natural byte order  |   32      |
-    |   time        |   int         |   little-endian       |   4       |
-    |   bits        |   bytes       |   little-endian       |   4       |
-    |   nonce       |   int         |   little-endian       |   4       |
-    ---------------------------------------------------------------------
+    =========================================================================
+    |   name        |   datatype    |   serialzed format    |   byte size   |
+    =========================================================================
+    |   Version     |   int         |   little-endian       |   4           |
+    |   prev_block  |   bytes       |   natural byte order  |   32          |
+    |   merkle_root |   bytes       |   natural byte order  |   32          |
+    |   time        |   int         |   little-endian       |   4           |
+    |   bits        |   bytes       |   little-endian       |   4           |
+    |   nonce       |   int         |   little-endian       |   4           |
+    =========================================================================
     """
-    __slots__ = ('version', 'prev_block', 'merkle_root', 'timestamp', 'bits', 'nonce', 'weight')
+    __slots__ = ('version', 'prev_block', 'merkle_root', 'timestamp', 'bits', 'nonce')
 
     def __init__(self,
                  version: int = None,
@@ -41,7 +41,7 @@ class BlockHeader(Serializable):
         self.prev_block = prev_block or b'\x00' * BLOCK.PREV_BLOCK
         self.merkle_root = merkle_root or b'\x00' * BLOCK.MERKLE_ROOT
         self.timestamp = timestamp or int(time.time())
-        self.bits = bits or b'\x00' * BLOCK.BITS
+        self.bits = bits or BLOCK.GENESIS_BLOCK_BITS
         self.nonce = nonce or 0
 
     @property
@@ -99,23 +99,18 @@ class BlockHeader(Serializable):
 
 class Block(Serializable):
     """
-    ---------------------------------------------------------------------
-    |   Name        |   data_type   |   format              |   size    |
-    ---------------------------------------------------------------------
-    |                       BlockHeader                                 |
-    ---------------------------------------------------------------------
-    |   Version     |   int         |   little-endian       |   4       |
-    |   prev_block  |   bytes       |   natural byte order  |   32      |
-    |   merkle_root |   bytes       |   natural byte order  |   32      |
-    |   time        |   int         |   little-endian       |   4       |
-    |   bits        |   bytes       |   little-endian       |   4       |
-    |   nonce       |   int         |   little-endian       |   4       |
-    ---------------------------------------------------------------------
-    |                       Transactions                                |
-    ---------------------------------------------------------------------
-    |   tx_num      |   int         |   CompactSize         |   var     |
-    |   txs         |   list        |   Serializable        |   var     |
-    ---------------------------------------------------------------------
+    =========================================================================
+    |   name        |   datatype    |   serialzed format    |   byte size   |
+    =========================================================================
+    |   Version     |   int         |   little-endian       |   4           |
+    |   prev_block  |   bytes       |   natural byte order  |   32          |
+    |   merkle_root |   bytes       |   natural byte order  |   32          |
+    |   time        |   int         |   little-endian       |   4           |
+    |   bits        |   bytes       |   little-endian       |   4           |
+    |   nonce       |   int         |   little-endian       |   4           |
+    |   tx_num      |   int         |   CompactSize         |   var         |
+    |   txs         |   list        |   Serializable        |   var         |
+    =========================================================================
     """
     __slots__ = ('prev_block', 'txs', 'tx_num', 'merkle_tree', 'timestamp', 'bits', 'nonce', 'version', 'weight')
 

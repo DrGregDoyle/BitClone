@@ -21,7 +21,7 @@ def ip_from_netaddr(raw16: bytes) -> IP_ADDRESS:
     return IPv6Address(raw16)
 
 
-def parse_ip_address(ip_addr: IP_ADDRESS | str):
+def parse_ip_address(ip_addr: IP_ADDRESS | str) -> IP_ADDRESS:
     """
     Convert string IP addresses to IPv4Address or IPv6Address objects.
     Pass through existing IP address objects unchanged.
@@ -53,6 +53,11 @@ def ip_display(ip: IP_ADDRESS) -> str:
 class BitIP(Serializable):
     """
     We have a wrapper class to handle all IP objects within BitClone
+    =========================================================================
+    |   name        |   datatype    |   serialzed format    |   byte size   |
+    =========================================================================
+    |   ip_obj      |   IP_ADDRESS  |   big-endian          |   16          |
+    =========================================================================
     """
 
     def __init__(self, ip: str | IP_ADDRESS):

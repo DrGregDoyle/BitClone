@@ -47,6 +47,12 @@ class Message(Serializable, ABC):
         -The children which inherit from Message will create the particular payload for their given class
         -The from_bytes and to_bytes method are assumed to comprise the whole message
         -We have from_payload and to_payload methods to handle the message payload
+    =================================================================================
+    |   name            |   datatype    |   serialzed format        |   byte size   |
+    =================================================================================
+    |   header          |   Header      |   header.to_bytes()       |   24          |
+    |   payload         |   Message     |   message.to_payload()    |  var          |
+    =================================================================================
     """
     _registry: dict[str, type["Message"]] = {}
     __slots__ = ("magic_bytes",)
