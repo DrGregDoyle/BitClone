@@ -7,15 +7,17 @@
     - ~~data type in python~~
     - ~~serialized format~~
     - ~~serialized length~~
-- All classes inheriting from Serializable must have a similar table in the docstring
 
 ## Implementation Tasks
 
-- Serialized to_dict method
-    - Have a flag for formatted vs plaintext
-    - Default will be serialized formatted
-        - The to_payload and to_dict methods will overlap.
-    - Needs to be ordered in serialization order
+[~- Serialized to_dict method
+- Have a flag for formatted vs plaintext
+- Default will be serialized formatted
+- The to_payload and to_dict methods will overlap.
+- Needs to be ordered in serialization order~]
+-Modify serializable - have to_dict method to produce the serialized format, and to_data to produce the raw data
+(for display)
+
 - Block Dict
     - Add target as well as bits
     - Subtask 2
@@ -28,3 +30,4 @@
 - ~~Straighten out the is_version bools with NetAddr and Addr and Version Messages~~
 - Add all possible getrand functions to conftest for testing
 - Separate scriptpubkey and scriptsig into separate files. Have ScriptType as enum for classification
+- Change Transactions to Tx and network related transactions to Txn

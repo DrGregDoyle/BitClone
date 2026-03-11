@@ -17,14 +17,14 @@ __all__ = ['BlockMessage', 'BlockTxn', 'CmpctBlock', 'GetBlockTxn', 'GetBlocks',
 class GetBlockParent(Message):
     """
     The parent class for GetBlocks and GetHeaders.
-    =========================================================================
-    |   Name        |   data type   |   format                  |   size    |
-    =========================================================================
-    |   version         |   int         |   little-endian       |   4       |
-    |   hash_count      |   int         |   CompactSize         |   var     |
-    |   locator_hashes  |   list[bytes] |   natural byte order  |   32      |
-    |   hash_stop       |   bytes       |   natural byte order  |   32      |
-    =========================================================================
+    =============================================================================
+    |   name            |   datatype    |   serialzed format    |   byte size   |
+    =============================================================================
+    |   version         |   int         |   little-endian       |   4           |
+    |   hash_count      |   int         |   CompactSize         |   var         |
+    |   locator_hashes  |   list[bytes] |   natural byte order  |   32          |
+    |   hash_stop       |   bytes       |   natural byte order  |   32          |
+    =============================================================================
     *When hash_stop is set to 0, we return the max number of blocks.
     GetBlocks can include max 500 hashes. GetHeaders can include max 2000 headers
     """
@@ -76,10 +76,10 @@ class InvParent(Message):
     """
     Sends an Inventory message
     =========================================================================
-    |   Name        |   data type   |   format                  |   size    |
+    |   name        |   datatype    |   serialzed format    |   byte size   |
     =========================================================================
-    |   count       |   int         |   CompactSize             |   var     |
-    |   items       |   InvVector   |   InvVector.to_bytes()    |   var     |
+    |   count       |   int         |   CompactSize         |   var         |
+    |   items       |   InvVector   |   InvVector.to_bytes()|   var         |
     =========================================================================
     """
 
@@ -125,9 +125,9 @@ class BlockMessage(Message):
     """
     We transmit a Block in a message
     =================================================================================
-    |   Name        | data type         | format                            | size  |
+    |   name        |   datatype        |   serialzed format        |   byte size   |
     =================================================================================
-    |   block       |   Block           |   Block.to_bytes()                |   var |
+    |   block       |   Block           |   Block.to_bytes()        |   var         |
     =================================================================================
     """
     COMMAND = "block"
@@ -151,6 +151,11 @@ class BlockMessage(Message):
 class BlockTxn(Message):
     """
     Contains a serialized BlockTransactions message
+    =================================================================================
+    |   name        |   datatype        |   serialzed format        |   byte size   |
+    =================================================================================
+    |   txn         |   BlockTransaction    |   txn.to_bytes()      |   var         |
+    =================================================================================
     *Only supported by protocol version >=70014
     """
     COMMAND = "blocktxn"
@@ -175,6 +180,11 @@ class BlockTxn(Message):
 class CmpctBlock(Message):
     """
     A reply to a GetData message with type MSG_CMPCT_BLOCK
+    =================================================================================
+    |   name        |   datatype            |   serialzed format      |   byte size |
+    =================================================================================
+    |   hashids     |   HeaderAndShortIDs   |   hashids.to_bytes()    |   var       |
+    =================================================================================
         -Containes a serialized HeaderAndShortIDs
     """
     COMMAND = "cmpctblock"
@@ -198,6 +208,11 @@ class CmpctBlock(Message):
 
 class GetBlockTxn(Message):
     """Contains a serialized GetBlockTxn message
+    =====================================================================================================
+    |   name            |   datatype                    |   serialzed format            |   byte size   |
+    =====================================================================================================
+    |   block_txn_req   |   BlockTransactionsRequest    |   block_txn_req.to_bytes()    |   var         |
+    =====================================================================================================
     """
     COMMAND = "getblocktxn"
 
@@ -238,12 +253,12 @@ class GetHeaders(GetBlockParent):
 
 class Headers(Message):
     """Send BlockHeaders in response to a GetHeaders message
-    =================================================================================
-    |   Name        |   data type           |   format                  |   size    |
-    =================================================================================
-    |   count       |   int                 |   CompactSize             |   var     |
-    |   headers     |   list[BlockHeader]   |   BlockHeader.to_bytes()  |   81      |
-    =================================================================================
+    =====================================================================================
+    |   name        |   datatype            |   serialzed format        |   byte size   |
+    =====================================================================================
+    |   count       |   int                 |   CompactSize             |   var         |
+    |   headers     |   list[BlockHeader]   |   BlockHeader.to_bytes()  |   81          |
+    =====================================================================================
     * We always include a 00 at the end of the BlockHeader to indicate the tx_count (which is always 0 for a header)
     """
     COMMAND = "headers"
@@ -295,16 +310,16 @@ class MemPool(EmptyMessage):
 
 class MerkleBlock(Message):
     """The reply to a getdata message with type MSG_MERKLEBLOCK
-    =========================================================================
-    |   Name            | datatype      | format                | size      |
-    =========================================================================
-    |   header          |   Blockheader |   to_bytes            |   80      |
-    |   tx_num          |   int         |   little_endian       |   4       |
-    |   hash_num        |   int         |   CompactSize         |   varint  |
-    |   hashes          |   list        |   internal byte order |   32      |
-    |   flag_bytes      |   int         |   CompactSize         |   varint  |
-    |   flags           |   bytes       |   little-endian       |   var     |
-    =========================================================================
+    =============================================================================
+    |   name            |   datatype    |   serialzed format    |   byte size   |
+    =============================================================================
+    |   header          |   Blockheader |   to_bytes            |   80          |
+    |   tx_num          |   int         |   little_endian       |   4           |
+    |   hash_num        |   int         |   CompactSize         |   varint      |
+    |   hashes          |   list        |   internal byte order |   32          |
+    |   flag_bytes      |   int         |   CompactSize         |   varint      |
+    |   flags           |   bytes       |   little-endian       |   var         |
+    =============================================================================
     * The flags are decoded into bits, least-sig bit first
     """
     COMMAND = "merkleblock"
@@ -374,12 +389,12 @@ class NotFound(InvParent):
 class SendCmpct(Message):
     """
     The Send Compact Block announcement message
-    =================================================================
-    |   Name        |   Datatype    |   Format          |   Size    |
-    =================================================================
-    |   announce    |   bool        |   bytes           |   1       |
-    |   version     |   int         |   little-endian   |   8       |
-    =================================================================
+    =========================================================================
+    |   name        |   datatype    |   serialzed format    |   byte size   |
+    =========================================================================
+    |   announce    |   bool        |   bytes               |   1           |
+    |   version     |   int         |   little-endian       |   8           |
+    =========================================================================
     """
     COMMAND = "sendcmpct"
 
@@ -413,11 +428,11 @@ class SendCmpct(Message):
 class TxMessage(Message):
     """
     We transmit a Block in a message
-    =====================================================================
-    |   Name    |   data type       |   format                  | size  |
-    =====================================================================
-    |   tx      |   Transaction     |   Transaction.to_bytes()  |   var |
-    =====================================================================
+    =============================================================================
+    |   name        |   datatype    |   serialzed format        |   byte size   |
+    =============================================================================
+    |   tx      |   Transaction     |   Transaction.to_bytes()  |   var         |
+    =============================================================================
     """
     COMMAND = "tx"
 
