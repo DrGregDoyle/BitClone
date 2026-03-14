@@ -3,6 +3,7 @@ The file for all ScriptPubKey and ScriptSig types
 """
 import json
 from abc import ABC, abstractmethod
+from enum import Enum
 
 from src.core import SERIALIZED, ScriptPubKeyError, get_bytes, get_stream, read_little_int, read_stream, PubKeyError, \
     ScriptSigError
@@ -31,6 +32,18 @@ OP_HASH160 = b'\xa9'
 
 # --- CONSTANTS --- #
 PUBKEY_LENGTHS = [33, 65]
+
+
+class ScriptType(Enum):
+    P2PK = "P2PK"
+    P2PKH = "P2PKH"
+    P2MS = "P2MS"
+    P2SH = "P2SH"
+    P2SH_P2WPKH = "P2SH-P2WPKH"
+    P2SH_P2WSH = "P2SH-P2WSH"
+    P2WPKH = "P2WPKH"
+    P2WSH = "P2WSH"
+    P2TR = "P2TR"
 
 
 class BaseScript(ABC):
