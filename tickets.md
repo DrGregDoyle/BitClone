@@ -10,20 +10,20 @@
 
 ## Implementation Tasks
 
-[~- Serialized to_dict method
-- Have a flag for formatted vs plaintext
-- Default will be serialized formatted
-- The to_payload and to_dict methods will overlap.
-- Needs to be ordered in serialization order~]
--Modify serializable - have to_dict method to produce the serialized format, and to_data to produce the raw data
-(for display)
+~~Serialized to_dict method~~
 
-- Block Dict
-    - Add target as well as bits
-    - Subtask 2
-- Network
-    - Create BitIP class for handling ip addresses
-    - Needs to inherit from Serializable.
+- ~~Have a flag for formatted vs plaintext~~
+- ~~Default will be serialized formatted~~
+- ~~The to_payload and to_dict methods will overlap.~~
+- ~~Needs to be ordered in serialization order~~
+- ~~Modify serializable - have to_dict method to produce the serialized format, and to_data to produce the raw data
+  (for display)~~
+
+- ~~Block Dict~~
+    - ~~Add target as well as bits~~
+- ~~Network~~
+    - ~~Create BitIP class for handling ip addresses~~
+    - ~~Needs to inherit from Serializable.~~
 - Add the CheckLockTimeVerify opcode (redefine NOP2)
 - Use the imported formatted class within each file, don't assign these to be file variables, this is unnecessary
   extra work

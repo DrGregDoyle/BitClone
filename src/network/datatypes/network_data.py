@@ -9,6 +9,7 @@ Classes for different types of Network data structures
 
 """
 import time
+from typing import Union
 
 import siphash
 
@@ -17,13 +18,14 @@ from src.core import Serializable, SERIALIZED, get_stream, read_little_int, read
     read_compact_size, NetworkDataError, get_logger, NETWORK
 from src.core.byte_stream import write_compact_size
 from src.cryptography.hash_functions import sha256
-from src.data import IP_ADDRESS, ip_from_netaddr, BitIP, decode_differential, encode_differential
+from src.data import IP_ADDRESS, BitIP, decode_differential, encode_differential
 from src.network.datatypes.network_types import Services, InvType
 from src.tx.tx import Transaction
 
 __all__ = ["BlockTransactions", "NetAddr", "InvVector", "PrefilledTx", "ShortID", "HeaderAndShortIDs",
            "BlockTransactionsRequest"]
 logger = get_logger(__name__)
+IP_LIKE = Union[IP_ADDRESS, str, BitIP]
 
 
 class NetAddr(Serializable):
@@ -40,17 +42,17 @@ class NetAddr(Serializable):
     *timestamp not present in version message
     """
 
-    def __init__(self, ip_addr: IP_ADDRESS | str, port: int, services: Services, timestamp: int = None):
+    def __init__(self, ip_addr: IP_LIKE, port: int, services: Services, timestamp: int = None):
         self.timestamp = timestamp if timestamp is not None else int(time.time())
         self.services = services
-        self.ip_addr = BitIP(ip_addr)
+        self.ip_addr = BitIP(ip_addr) if not isinstance(ip_addr, BitIP) else ip_addr
         self.port = port
 
     @staticmethod
     def _read_stream(stream) -> tuple:
         """Read the common services/ip/port fields from a stream"""
         services = Services(read_little_int(stream, 8))
-        ip_addr = ip_from_netaddr(read_stream(stream, 16))
+        ip_addr = BitIP.from_bytes(read_stream(stream, 16))
         port = read_big_int(stream, 2)
         return services, ip_addr, port
 

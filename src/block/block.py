@@ -3,7 +3,6 @@ The Block classes
 """
 
 import time
-from datetime import datetime
 
 from src.core.byte_stream import SERIALIZED, get_stream, read_stream, read_little_int, read_compact_size, \
     write_compact_size
@@ -80,19 +79,26 @@ class BlockHeader(Serializable):
     def to_dict(self, formatted: bool = True) -> dict:
         return {
             # Formatted block hash reverses byte order for display
-            "block_hash": self.block_id[::-1].hex() if formatted else self.block_id.hex(),
-            "version": self.version.to_bytes(4, "little").hex() if formatted else self.version,
-            "previous_block": self.prev_block[::-1].hex() if formatted else self.prev_block.hex(),
-            # Formatted merkle root reverse byte order for display
-            "merkle_root": self.merkle_root[::-1].hex() if formatted else self.merkle_root.hex(),
-            "timestamp": self.timestamp.to_bytes(BLOCK.TIME, "little").hex() if formatted else datetime.fromtimestamp(
-                self.timestamp).strftime(BLOCK.TIMESTAMP_FORMAT),
-            "bits": self.bits.hex() if formatted else self.bits.hex()[::-1],
-            "nonce": self.nonce.to_bytes(BLOCK.NONCE, "little").hex() if formatted else self.nonce
+            "block_hash": self.block_id.hex(),
+            "version": self.version.to_bytes(4, "little").hex(),
+            "previous_block": self.prev_block.hex(),
+            "merkle_root": self.merkle_root.hex(),
+            "timestamp": self.timestamp.to_bytes(BLOCK.TIME, "little").hex(),
+            "bits": self.bits.hex(),
+            "nonce": self.nonce.to_bytes(BLOCK.NONCE, "little").hex()
         }
 
     def to_data(self):
-        return {}
+        return {
+            # Formatted block hash reverses byte order for display
+            "block_hash": self.block_id[::-1].hex(),
+            "version": self.version,
+            "previous_block": self.prev_block[::-1].hex(),
+            "merkle_root": self.merkle_root[::-1].hex(),
+            "timestamp": self.timestamp,
+            "bits": self.bits.hex()[::-1],
+            "nonce": self.nonce
+        }
 
     def increment(self):
         self.nonce += 1
@@ -185,16 +191,26 @@ class Block(Serializable):
     def to_dict(self, formatted: bool = True) -> dict:
         tx_num = len(self.txs)
         tx_dict = {
-            f"{x}": self.txs[x].to_dict(formatted=formatted) for x in range(tx_num)
+            f"{x}": self.txs[x].to_dict() for x in range(tx_num)
         }
         return {
-            "header": self.get_header().to_dict(formatted),
-            "tx_num": write_compact_size(tx_num).hex() if formatted else tx_num,
-            "txs": tx_dict
+            "header": self.get_header().to_dict(),
+            "tx_num": write_compact_size(tx_num).hex(),
+            "txs": tx_dict,
+            "block_target": bits_to_target(self.bits).hex()
         }
 
     def to_data(self):
-        return {}
+        tx_num = len(self.txs)
+        tx_dict = {
+            f"{x}": self.txs[x].to_data() for x in range(tx_num)
+        }
+        return {
+            "header": self.get_header().to_data(),
+            "tx_num": tx_num,
+            "txs": tx_dict,
+            "block_target": bits_to_target(self.bits).hex()
+        }
 
     def _calculate_block_weight(self):
         """
@@ -214,6 +230,6 @@ if __name__ == "__main__":
     genesis_block_bytes = bytes.fromhex(
         "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c0101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff4d04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73ffffffff0100f2052a01000000434104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac00000000")
     genesis_block = Block.from_bytes(genesis_block_bytes)
-    print(f"GENESIS BLOCK: {genesis_block.to_json(formatted=True)}")
+    print(f"GENESIS BLOCK: {genesis_block.to_json()}")
     print(f"===" * 50)
-    print(f"UNFORMATTED: {genesis_block.to_json(formatted=False)}")
+    print(f"UNFORMATTED: {genesis_block.to_display()}")
