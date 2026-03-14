@@ -108,9 +108,9 @@ class Mnemonic:
 
         # Find entropy_bytelen based on word_count
         word_count = len(phrase)
-        _m = WALLET.MNEMONIC
         entropy_bytelen = next(
-            (bytelen for bytelen in WALLET.MNEMONIC.keys() if _m.get(bytelen, {}).get(WALLET.WORD_KEY) == word_count),
+            (bytelen for bytelen in WALLET.MNEMONIC.keys() if
+             WALLET.MNEMONIC.get(bytelen, {}).get(WALLET.WORD_KEY) == word_count),
             None
         )
 

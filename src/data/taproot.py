@@ -8,9 +8,6 @@ from src.core.byte_stream import write_compact_size
 from src.cryptography import tapleaf_hash, tapbranch_hash, taptweak_hash, Point
 from src.data.ecc_keys import PubKey
 
-VERSION_BYTE = TAPROOT.VERSION_BYTE
-PUBKEY_BYTELEN = TAPROOT.PUBKEY_BYTELEN
-
 __all__ = ["Leaf", "Branch", "Tree", "TweakPubkey", "get_unbalanced_merkle_root", "get_control_byte",
            "get_control_block", "get_tweak", "validate_merkle_path"]
 
@@ -23,7 +20,7 @@ class Leaf:
 
     def __init__(self, script: bytes):
         self.script = script
-        self.serialized = VERSION_BYTE + write_compact_size(len(script)) + self.script
+        self.serialized = TAPROOT.VERSION_BYTE + write_compact_size(len(script)) + self.script
         self.leaf_hash = tapleaf_hash(self.serialized)
 
     def to_dict(self):
@@ -213,7 +210,7 @@ def get_unbalanced_merkle_root(scripts: list[bytes]) -> bytes:
 
 def get_control_byte(pubkey_point: Point) -> bytes:
     parity_bit = pubkey_point.y % 2
-    return bytes([int.from_bytes(VERSION_BYTE, "big") + parity_bit])
+    return bytes([int.from_bytes(TAPROOT.VERSION_BYTE, "big") + parity_bit])
 
 
 def get_control_block(xonly_pubkey_bytes: bytes, merkle_root: bytes, merkle_path: bytes = b'') -> bytes:
@@ -235,15 +232,15 @@ def validate_merkle_path(leaf_hash: bytes, merkle_path: bytes, merkle_root: byte
     Given a leaf_hash, we validate the merkle_root against the merkle_path
     """
     # --- Validation
-    if len(leaf_hash) != PUBKEY_BYTELEN:
-        raise TaprootError(f"Leaf hash is not {PUBKEY_BYTELEN} bytes")
-    if len(merkle_path) % PUBKEY_BYTELEN != 0:
-        raise TaprootError(f"Merkle path is not divisble by {PUBKEY_BYTELEN}")
-    if len(merkle_root) != PUBKEY_BYTELEN:
-        raise TaprootError(f"Merkle root is not {PUBKEY_BYTELEN} bytes")
+    if len(leaf_hash) != TAPROOT.PUBKEY_BYTELEN:
+        raise TaprootError(f"Leaf hash is not {TAPROOT.PUBKEY_BYTELEN} bytes")
+    if len(merkle_path) % TAPROOT.PUBKEY_BYTELEN != 0:
+        raise TaprootError(f"Merkle path is not divisble by {TAPROOT.PUBKEY_BYTELEN}")
+    if len(merkle_root) != TAPROOT.PUBKEY_BYTELEN:
+        raise TaprootError(f"Merkle root is not {TAPROOT.PUBKEY_BYTELEN} bytes")
 
     # --- Divide merkle path
-    hash_list = [merkle_path[x: x + PUBKEY_BYTELEN] for x in range(0, len(merkle_path), PUBKEY_BYTELEN)]
+    hash_list = [merkle_path[x: x + TAPROOT.PUBKEY_BYTELEN] for x in range(0, len(merkle_path), TAPROOT.PUBKEY_BYTELEN)]
     print(f"HASH LIST: {[h.hex() for h in hash_list]}")
 
     # --- Create merkle_root from leaf_hash and hash_list

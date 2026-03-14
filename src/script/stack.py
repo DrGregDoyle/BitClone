@@ -7,10 +7,6 @@ from typing import Any
 
 from src.core import SCRIPT, BitNumError, BitStackError
 
-MAX_BITNUM_BYTES = SCRIPT.MAX_BITNUM
-MAX_STACK_ITEMS = SCRIPT.MAX_STACK
-COMMON = SCRIPT.COMMON_VALUES
-
 __all__ = ["BitNum", "BitStack", "StackItem"]
 
 
@@ -47,7 +43,7 @@ class BitNum:
         # Size guard (predict result length without allocating):
         # Need one extra byte iff MSB bit would collide with sign.
         predicted_len = len(mag) + (1 if (mag[-1] & 0x80) else 0)
-        if predicted_len > MAX_BITNUM_BYTES:
+        if predicted_len > SCRIPT.MAX_BITNUM:
             raise BitNumError("Integer too large to be BitNum encoded")
 
         # The most significant bit of the most significant byte holds the sign encoding
@@ -76,7 +72,7 @@ class BitNum:
 
         # Check size
         size = len(data)
-        if size > MAX_BITNUM_BYTES:
+        if size > SCRIPT.MAX_BITNUM:
             raise BitNumError("Integer too large to be BitNum encoded")
 
         # int from bytes
@@ -172,7 +168,7 @@ class BitStack:
     A lightweight stack implementation for use in BitClone script
     """
 
-    def __init__(self, items: list = None, max_size: int = MAX_STACK_ITEMS):
+    def __init__(self, items: list = None, max_size: int = SCRIPT.MAX_STACK):
         """
         The stack is ordered so that the right-most element is at the top of the stack.
         Given a list, we apply the items from left to right, so that the first data will be at the bottom of the stack

@@ -6,9 +6,9 @@ from src.core import Serializable, SERIALIZED, get_stream, MAGICBYTES, NETWORK, 
     read_little_int
 from src.cryptography import hash256
 
-DEFAULT_MAGIC = MAGICBYTES.MAINNET
-ALLOWED_COMMANDS = NETWORK.ALLOWED_COMMANDS
-ALLOWED_MAGIC = [DEFAULT_MAGIC, MAGICBYTES.REGTEST, MAGICBYTES.TESTNET]
+# DEFAULT_MAGIC = MAGICBYTES.MAINNET
+# ALLOWED_COMMANDS = NETWORK.ALLOWED_COMMANDS
+ALLOWED_MAGIC = [MAGICBYTES.MAINNET, MAGICBYTES.REGTEST, MAGICBYTES.TESTNET]
 
 
 class Header(Serializable):
@@ -23,7 +23,7 @@ class Header(Serializable):
     =============================================================================
     """
 
-    def __init__(self, command: str, size: int, checksum: bytes, magic_bytes: bytes = DEFAULT_MAGIC):
+    def __init__(self, command: str, size: int, checksum: bytes, magic_bytes: bytes = MAGICBYTES.MAINNET):
         self._validate_header(magic_bytes, command.lower(), size, checksum)
         self.command = command.lower()
         self.size = size
@@ -49,7 +49,7 @@ class Header(Serializable):
         return cls(command, size, checksum, magic_bytes)
 
     @classmethod
-    def from_payload(cls, payload: bytes, command: str, magic_bytes: bytes = DEFAULT_MAGIC):
+    def from_payload(cls, payload: bytes, command: str, magic_bytes: bytes = MAGICBYTES.MAINNET):
         size = len(payload)
         checksum = hash256(payload)[:4]
         return cls(command, size, checksum, magic_bytes)
@@ -112,4 +112,4 @@ if __name__ == "__main__":
     test_header = Header.from_bytes(known_verack_header_bytes)
     print(f"TEST HEADER: {test_header.to_json()}")
     print("===" * 60)
-    print(f"TEST HEADER NO FORMATTING: {test_header.to_json(False)}")
+    print(f"TEST HEADER NO FORMATTING: {test_header.to_json()}")

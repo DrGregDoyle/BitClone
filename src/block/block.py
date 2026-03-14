@@ -134,7 +134,7 @@ class Block(Serializable):
         self.version = version or BLOCK.VERSION
         self.prev_block = prev_block or b'\x00' * BLOCK.PREV_BLOCK
         self.timestamp = timestamp or int(time.time())
-        self.bits = bits or b'\x00' * BLOCK.BITS
+        self.bits = bits or BLOCK.GENESIS_BLOCK_BITS
         self.nonce = nonce or 0
         self.txs = txs
         self.merkle_tree = MerkleTree([t.txid for t in self.txs])
