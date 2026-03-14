@@ -39,15 +39,22 @@ class Serializable(ABC):
         raise NotImplementedError(f"{self.__class__.__name__} must implement to_bytes()")
 
     @abstractmethod
-    def to_dict(self, formatted: bool = True) -> dict:
-        """Return a dictionary representation of the object. By default we return the serialized formatting in the
-        dictionary. When formatted = False we return the instance variables.
-        """
+    def to_dict(self) -> dict:
+        """Returns a dictionary representation of the serialized values of the object for display."""
         raise NotImplementedError(f"{self.__class__.__name__} must implement to_dict()")
 
-    def to_json(self, formatted: bool = True) -> str:
+    @abstractmethod
+    def to_data(self) -> dict:
+        """Returns a dictionary representation of the raw data values of the object for display"""
+        raise NotImplementedError(f"{self.__class__.__name__} must implement to_data()")
+
+    def to_json(self) -> str:
         """Return a pretty-printed JSON string of the object."""
-        return json.dumps(self.to_dict(formatted), indent=2)
+        return json.dumps(self.to_dict(), indent=2)
+
+    def to_display(self) -> str:
+        """Return a pretty-printed JSON string of the object."""
+        return json.dumps(self.to_data(), indent=2)
 
     def clone(self: T) -> T:
         """

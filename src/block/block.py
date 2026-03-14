@@ -91,6 +91,9 @@ class BlockHeader(Serializable):
             "nonce": self.nonce.to_bytes(BLOCK.NONCE, "little").hex() if formatted else self.nonce
         }
 
+    def to_data(self):
+        return {}
+
     def increment(self):
         self.nonce += 1
 
@@ -189,6 +192,9 @@ class Block(Serializable):
             "tx_num": write_compact_size(tx_num).hex() if formatted else tx_num,
             "txs": tx_dict
         }
+
+    def to_data(self):
+        return {}
 
     def _calculate_block_weight(self):
         """

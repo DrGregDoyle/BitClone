@@ -82,7 +82,12 @@ class BitIP(Serializable):
     def to_bytes(self) -> bytes:
         return netaddr_bytes(self.ip_obj)
 
-    def to_dict(self, formatted: bool = True) -> dict:
+    def to_dict(self) -> dict:
         return {
-            "ip": self.to_bytes().hex() if formatted else ip_display(self.ip_obj)
+            "ip": self.to_bytes().hex()
+        }
+
+    def to_data(self) -> dict:
+        return {
+            "ip": ip_display(self.ip_obj)
         }

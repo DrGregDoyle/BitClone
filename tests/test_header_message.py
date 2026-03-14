@@ -79,7 +79,7 @@ def test_message_registry_contains_verack():
 
 def test_to_dict_formatted_is_json_safe():
     msg = VerAck()
-    json.dumps(msg.to_dict(formatted=True), indent=2)  # should not raise
+    json.dumps(msg.to_dict(), indent=2)  # should not raise
 
 
 def test_from_bytes_does_not_require_eof():

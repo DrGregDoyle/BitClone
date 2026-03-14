@@ -35,6 +35,7 @@ def test_invvector_invalid_int_type():
 
 def test_invvector_invalid_type_wrong_class():
     with pytest.raises(NetworkDataError):
+        # noinspection PyTypeChecker
         InvVector(inv_type="MSG_TX", obj_hash=b'\x00' * 32)
 
 
@@ -133,7 +134,7 @@ def test_header_and_shortids_knownblock():
 
     # --- CMPCTBLOCK using random HeaderAndShortIDs --- #
     test_cmpctblock = CmpctBlock(header_and_shortids=test_headerandshortid)
-    print(f"TEST CMPCTBLOCK: {test_cmpctblock.to_json(False)}")
+    print(f"TEST CMPCTBLOCK: {test_cmpctblock.to_json()}")
 
 
 def test_headerandshortids(getrand_headerandshortids):

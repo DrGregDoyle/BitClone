@@ -59,14 +59,26 @@ class GetBlockParent(Message):
         ]
         return b''.join(parts)
 
-    def payload_dict(self, formatted: bool = True) -> dict:
+    def payload_dict(self) -> dict:
         hash_count = len(self.locator_hashes)
         locator_dict = {
             f"locator_hash_{x}": self.locator_hashes[x].hex() for x in range(hash_count)
         }
         return {
-            "version": self.version.to_bytes(4, "little").hex() if formatted else self.version,
-            "hash_count": write_compact_size(hash_count).hex() if formatted else hash_count,
+            "version": self.version.to_bytes(4, "little").hex(),
+            "hash_count": write_compact_size(hash_count).hex(),
+            "locator_hashes": locator_dict,
+            "hash_stop": self.hash_stop.hex()
+        }
+
+    def payload_data(self) -> dict:
+        hash_count = len(self.locator_hashes)
+        locator_dict = {
+            f"locator_hash_{x}": self.locator_hashes[x].hex() for x in range(hash_count)
+        }
+        return {
+            "version": self.version,
+            "hash_count": hash_count,
             "locator_hashes": locator_dict,
             "hash_stop": self.hash_stop.hex()
         }
@@ -107,14 +119,22 @@ class InvParent(Message):
     def to_payload(self) -> bytes:
         return write_compact_size(len(self.items)) + b''.join([i.to_bytes() for i in self.items])
 
-    def payload_dict(self, formatted: bool = True) -> dict:
+    def payload_dict(self) -> dict:
         count = len(self.items)
-        inv_dict = {
-            f"{x}": self.items[x].to_dict(formatted) for x in range(count)
-        }
         return {
-            "count": write_compact_size(count).hex() if formatted else count,
-            "inventory": inv_dict
+            "count": write_compact_size(count).hex(),
+            "inventory": {
+                f"{x}": self.items[x].to_dict() for x in range(count)
+            }
+        }
+
+    def payload_data(self) -> dict:
+        count = len(self.items)
+        return {
+            "count": count,
+            "inventory": {
+                f"{x}": self.items[x].to_data() for x in range(count)
+            }
         }
 
 
@@ -144,8 +164,13 @@ class BlockMessage(Message):
     def to_payload(self):
         return self.block.to_bytes()
 
-    def payload_dict(self, formatted: bool = True) -> dict:
-        return {"block": self.block.to_dict(formatted)}
+    def payload_dict(self) -> dict:
+        return {"block": self.block.to_dict()}
+
+    def payload_data(self) -> dict:
+        return {
+            "block": self.block.to_data()
+        }
 
 
 class BlockTxn(Message):
@@ -173,8 +198,15 @@ class BlockTxn(Message):
     def to_payload(self) -> bytes:
         return self.txn.to_bytes()
 
-    def payload_dict(self, formatted: bool = True) -> dict:
-        return self.txn.to_dict(formatted)
+    def payload_dict(self) -> dict:
+        return {
+            "txn": self.txn.to_dict()
+        }
+
+    def payload_data(self) -> dict:
+        return {
+            "txn": self.txn.to_data()
+        }
 
 
 class CmpctBlock(Message):
@@ -202,8 +234,15 @@ class CmpctBlock(Message):
     def to_payload(self) -> bytes:
         return self.hashids.to_bytes()
 
-    def payload_dict(self, formatted: bool = True) -> dict:
-        return self.hashids.to_dict(formatted)
+    def payload_dict(self) -> dict:
+        return {
+            "header_and_shortids": self.hashids.to_dict()
+        }
+
+    def payload_data(self) -> dict:
+        return {
+            "header_and_shortids": self.hashids.to_data()
+        }
 
 
 class GetBlockTxn(Message):
@@ -230,8 +269,15 @@ class GetBlockTxn(Message):
     def to_payload(self) -> bytes:
         return self.block_txn_req.to_bytes()
 
-    def payload_dict(self, formatted: bool = True) -> dict:
-        return self.block_txn_req.to_dict(formatted)
+    def payload_dict(self) -> dict:
+        return {
+            "block_txn_req": self.block_txn_req.to_dict()
+        }
+
+    def payload_data(self) -> dict:
+        return {
+            "block_txn_req": self.block_txn_req.to_data()
+        }
 
 
 class GetBlocks(GetBlockParent):
@@ -290,12 +336,21 @@ class Headers(Message):
         header_parts = [h.to_bytes() + b'\x00' for h in self.headers]
         return write_compact_size(len(self.headers)) + b''.join(header_parts)
 
-    def payload_dict(self, formatted: bool = True) -> dict:
+    def payload_dict(self) -> dict:
         count = len(self.headers)
         return {
-            "count": write_compact_size(count).hex() if formatted else count,
+            "count": write_compact_size(count).hex(),
             "headers": {
-                f"header_{x}": self.headers[x].to_dict(formatted) for x in range(count)
+                f"header_{x}": self.headers[x].to_dict() for x in range(count)
+            }
+        }
+
+    def payload_data(self) -> dict:
+        count = len(self.headers)
+        return {
+            "count": count,
+            "headers": {
+                f"header_{x}": self.headers[x].to_data() for x in range(count)
             }
         }
 
@@ -363,22 +418,38 @@ class MerkleBlock(Message):
         ]
         return self.blockheader.to_bytes() + b''.join(parts)
 
-    def payload_dict(self, formatted: bool = True) -> dict:
+    def payload_dict(self) -> dict:
         hash_num = len(self.hashes)
         flag_bytes = len(self.flags)
-        bit_string = ''.join(f'{b:08b}' for b in self.flags)
         formatted_bit_string = ''.join(f'{b:08b}'[::-1] for b in self.flags)
         hash_dict = {
             f"hash_{x}": self.hashes[x].hex() for x in range(hash_num)
         }
 
         return {
-            "block_header": self.blockheader.to_dict(formatted),
-            "tx_count": self.tx_num.to_bytes(4, "little").hex() if formatted else self.tx_num,
-            "hash_count": write_compact_size(hash_num).hex() if formatted else hash_num,
+            "block_header": self.blockheader.to_dict(),
+            "tx_count": self.tx_num.to_bytes(4, "little").hex(),
+            "hash_count": write_compact_size(hash_num).hex(),
             "hashes": hash_dict,
-            "flag_byte_count": write_compact_size(flag_bytes).hex() if formatted else flag_bytes,
-            "flags": formatted_bit_string if formatted else bit_string
+            "flag_byte_count": write_compact_size(flag_bytes).hex(),
+            "flags": formatted_bit_string
+        }
+
+    def payload_data(self) -> dict:
+        hash_num = len(self.hashes)
+        flag_bytes = len(self.flags)
+        bit_string = ''.join(f'{b:08b}' for b in self.flags)
+        hash_dict = {
+            f"hash_{x}": self.hashes[x].hex() for x in range(hash_num)
+        }
+
+        return {
+            "block_header": self.blockheader.to_data(),
+            "tx_count": self.tx_num,
+            "hash_count": hash_num,
+            "hashes": hash_dict,
+            "flag_byte_count": flag_bytes,
+            "flags": bit_string
         }
 
 
@@ -418,10 +489,16 @@ class SendCmpct(Message):
         boolint = int(self.announce)
         return boolint.to_bytes(1, "little") + self.version.to_bytes(8, "little")
 
-    def payload_dict(self, formatted: bool = True) -> dict:
+    def payload_dict(self) -> dict:
         return {
-            "announce": int(self.announce).to_bytes(1, "little").hex() if formatted else self.announce,
-            "version": self.version.to_bytes(8, "little").hex() if formatted else self.version
+            "announce": int(self.announce).to_bytes(1, "little").hex(),
+            "version": self.version.to_bytes(8, "little").hex()
+        }
+
+    def payload_data(self) -> dict:
+        return {
+            "announce": self.announce,
+            "version": self.version
         }
 
 
@@ -448,8 +525,13 @@ class TxMessage(Message):
     def to_payload(self):
         return self.tx.to_bytes()
 
-    def payload_dict(self, formatted: bool = True) -> dict:
-        return {"tx": self.tx.to_dict(formatted)}
+    def payload_dict(self) -> dict:
+        return {"tx": self.tx.to_dict()}
+
+    def payload_data(self) -> dict:
+        return {
+            "tx": self.tx.to_data()
+        }
 
 
 # --- TESTING --- #

@@ -63,11 +63,19 @@ class Header(Serializable):
         ]
         return b''.join(parts)
 
-    def to_dict(self, formatted: bool = True) -> dict:
+    def to_dict(self) -> dict:
         return {
             "magic_bytes": self.magic_bytes.hex(),
-            "command": self.command.encode("ascii").ljust(12, b'\x00')[:12].hex() if formatted else self.command,
-            "size": self.size.to_bytes(4, "little").hex() if formatted else self.size,
+            "command": self.command.encode("ascii").ljust(12, b'\x00')[:12].hex(),
+            "size": self.size.to_bytes(4, "little").hex(),
+            "checksum": self.checksum.hex(),
+        }
+
+    def to_data(self) -> dict:
+        return {
+            "magic_bytes": self.magic_bytes.hex(),
+            "command": self.command,
+            "size": self.size,
             "checksum": self.checksum.hex(),
         }
 

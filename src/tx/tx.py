@@ -1,7 +1,6 @@
 """
 The classes for BitClone transactions
 """
-import json
 import re
 from io import SEEK_CUR
 
@@ -72,16 +71,25 @@ class TxIn(Serializable):
         ]
         return b''.join(parts)
 
-    def to_dict(self, formatted: bool = True, is_coinbase: bool = False) -> dict:
+    def to_dict(self) -> dict:
+        ss_len = len(self.scriptsig)
+        return {
+            "txid": self.txid.hex(),  # little-endian (natural byte order)
+            "vout": self.vout.to_bytes(TX.VOUT, "little").hex(),
+            "scriptsig_size": write_compact_size(ss_len).hex(),
+            "scriptsig": self.scriptsig.hex(),
+            "sequence": self.sequence.to_bytes(TX.SEQUENCE, "little").hex()
+        }
+
+    def to_data(self, is_coinbase: bool = False) -> dict:
         ss_len = len(self.scriptsig)
         decoded_scriptsig = self._decode_scriptsig()
         return {
-            "txid": self.txid[::-1].hex() if formatted else self.txid.hex(),
-            "vout": self.vout.to_bytes(TX.VOUT, "little").hex() if formatted else self.vout,
-            "scriptsig_size": write_compact_size(ss_len).hex() if formatted else ss_len,
-            "scriptsig": self.scriptsig.hex() if not is_coinbase or (is_coinbase and decoded_scriptsig is None) else
-            decoded_scriptsig,
-            "sequence": self.sequence.to_bytes(TX.SEQUENCE, "little").hex() if formatted else self.sequence
+            "txid": self.txid[::-1].hex(),  # big-endian for display
+            "vout": self.vout,
+            "scriptsig_size": ss_len,
+            "scriptsig": self.scriptsig.hex() if not is_coinbase or decoded_scriptsig is None else decoded_scriptsig,
+            "sequence": self.sequence
         }
 
     def _decode_scriptsig(self) -> str | None:
@@ -130,11 +138,19 @@ class TxOut(Serializable):
         """
         return self.amount.to_bytes(TX.AMOUNT, "little") + serialize_data(self.scriptpubkey)
 
-    def to_dict(self, formatted: bool = True) -> dict:
+    def to_dict(self) -> dict:
         scriptpubkey_len = len(self.scriptpubkey)
         return {
-            "amount": self.amount.to_bytes(TX.AMOUNT, "little").hex() if formatted else self.amount,
-            "scriptpubkey_size": write_compact_size(scriptpubkey_len).hex() if formatted else scriptpubkey_len,
+            "amount": self.amount.to_bytes(TX.AMOUNT, "little").hex(),
+            "scriptpubkey_size": write_compact_size(scriptpubkey_len).hex(),
+            "scriptpubkey": self.scriptpubkey.hex()
+        }
+
+    def to_data(self) -> dict:
+        scriptpubkey_len = len(self.scriptpubkey)
+        return {
+            "amount": self.amount,
+            "scriptpubkey_size": scriptpubkey_len,
             "scriptpubkey": self.scriptpubkey.hex()
         }
 
@@ -174,14 +190,29 @@ class Witness(Serializable):
         item_bytes = b''.join([serialize_data(item) for item in self.items])
         return write_compact_size(stack_items) + item_bytes
 
-    def to_dict(self, formatted: bool = True) -> dict:
+    def to_dict(self) -> dict:
         stack_items = len(self.items)
         items_dict = {}
 
         for x, item in enumerate(self.items):
             size = len(item)
             items_dict[str(x)] = {
-                "size": write_compact_size(size).hex() if formatted else size,
+                "size": write_compact_size(size).hex(),
+                "item": item.hex(),
+            }
+
+        return {
+            "stack_items": write_compact_size(stack_items).hex(),
+            "items": items_dict,
+        }
+
+    def to_data(self) -> dict:
+        stack_items = len(self.items)
+        items_dict = {}
+
+        for x, item in enumerate(self.items):
+            items_dict[str(x)] = {
+                "size": len(item),
                 "item": item.hex(),
             }
 
@@ -245,34 +276,31 @@ class UTXO(Serializable):
         ]
         return b''.join(parts)
 
-    def to_dict(self, formatted: bool = True):
+    def to_dict(self) -> dict:
         txid = self.outpoint[:32]
         vout = self.outpoint[32:]
         return {
             "outpoint": self.outpoint.hex(),
-            "txid": txid[::-1].hex() if formatted else txid.hex(),
-            "vout": vout.hex() if formatted else int.from_bytes(vout, "little"),
-            "amount": self.amount.to_bytes(UTXO_SERIAL.AMOUNT, "little").hex() if formatted else self.amount,
+            "txid": txid.hex(),  # little-endian (natural byte order)
+            "vout": vout.hex(),
+            "amount": self.amount.to_bytes(UTXO_SERIAL.AMOUNT, "little").hex(),
             "scriptpubkey": self.scriptpubkey.hex(),
-            "block_height": self.block_height.to_bytes(UTXO_SERIAL.HEIGHT,
-                                                       "little") if formatted else self.block_height,
-            "is_coinbase": int(self.is_coinbase).to_bytes(UTXO_SERIAL.IS_COINBASE,
-                                                          "little") if formatted else self.is_coinbase
+            "block_height": self.block_height.to_bytes(UTXO_SERIAL.HEIGHT, "little").hex(),
+            "is_coinbase": int(self.is_coinbase).to_bytes(UTXO_SERIAL.IS_COINBASE, "little").hex()
         }
 
-    def to_json(self, formatted: bool = True):
-        return json.dumps(self.to_dict(formatted), indent=2)
-
-    def __eq__(self, other):
-        if not isinstance(other, UTXO):
-            return False
-        return self.outpoint == other.outpoint
-
-    def __hash__(self):
-        return hash(self.outpoint)
-
-    def __str__(self):
-        return f"UTXO({self.outpoint.hex()[:8]}...:{self.outpoint.hex()[-8:]}, {self.amount} sats)"
+    def to_data(self) -> dict:
+        txid = self.outpoint[:32]
+        vout = self.outpoint[32:]
+        return {
+            "outpoint": self.outpoint.hex(),
+            "txid": txid[::-1].hex(),  # big-endian for display
+            "vout": int.from_bytes(vout, "little"),
+            "amount": self.amount,
+            "scriptpubkey": self.scriptpubkey.hex(),
+            "block_height": self.block_height,
+            "is_coinbase": self.is_coinbase
+        }
 
 
 class Transaction(Serializable):
@@ -525,46 +553,67 @@ class Transaction(Serializable):
 
         return b''.join(parts)
 
-    def to_dict(self, formatted: bool = True) -> dict:
-        # Get input and output list
-        inputs = [i.to_dict(formatted, self.is_coinbase) for i in self.inputs]
-        outputs = [o.to_dict(formatted) for o in self.outputs]
+    def to_dict(self) -> dict:
+        inputs = [i.to_dict() for i in self.inputs]
+        outputs = [o.to_dict() for o in self.outputs]
 
-        # Begin dictionary construction
         tx_dict = {
-            "txid": self.txid[::-1].hex() if formatted else self.txid.hex(),  # Reverse byte order for display
-            "wtxid": self.wtxid[::-1].hex() if formatted else self.wtxid.hex(),  # Reverse byte order for display
+            "txid": self.txid.hex(),  # little-endian (natural byte order)
+            "wtxid": self.wtxid.hex(),
             "wu": self.wu,
             "bytes": self.length,
             "vbytes": self.vbytes,
-            "version": self.version.to_bytes(TX.VERSION, "little").hex() if formatted else self.version
+            "version": self.version.to_bytes(TX.VERSION, "little").hex()
         }
 
-        # Segwit check | add marker and flag
         if self.is_segwit:
-            tx_dict.update({
-                "marker": 0x00,
-                "flag": 0x01
-            })
+            tx_dict.update({"marker": "00", "flag": "01"})
 
-        # Add inputs and outputs
         tx_dict.update({
-            "input_num": write_compact_size(len(self.inputs)).hex() if formatted else len(self.inputs),
+            "input_num": write_compact_size(len(self.inputs)).hex(),
             "inputs": inputs,
-            "output_num": write_compact_size(len(self.outputs)).hex() if formatted else len(self.outputs),
+            "output_num": write_compact_size(len(self.outputs)).hex(),
             "outputs": outputs
         })
 
-        # Segwit check | add witness
         if self.is_segwit:
-            witness = [w.to_dict(formatted) for w in self.witness]
-            tx_dict.update({
-                "witness": witness
-            })
+            tx_dict.update({"witness": [w.to_dict() for w in self.witness]})
 
-        # Add locktime and return
         tx_dict.update({
-            "locktime": self.locktime.to_bytes(TX.LOCKTIME, "little").hex() if formatted else self.locktime,
+            "locktime": self.locktime.to_bytes(TX.LOCKTIME, "little").hex(),
+            "is_segwit": self.is_segwit,
+            "is_coinbase": self.is_coinbase
+        })
+        return tx_dict
+
+    def to_data(self) -> dict:
+        inputs = [i.to_data(self.is_coinbase) for i in self.inputs]
+        outputs = [o.to_data() for o in self.outputs]
+
+        tx_dict = {
+            "txid": self.txid[::-1].hex(),  # big-endian for display
+            "wtxid": self.wtxid[::-1].hex(),
+            "wu": self.wu,
+            "bytes": self.length,
+            "vbytes": self.vbytes,
+            "version": self.version
+        }
+
+        if self.is_segwit:
+            tx_dict.update({"marker": 0x00, "flag": 0x01})
+
+        tx_dict.update({
+            "input_num": len(self.inputs),
+            "inputs": inputs,
+            "output_num": len(self.outputs),
+            "outputs": outputs
+        })
+
+        if self.is_segwit:
+            tx_dict.update({"witness": [w.to_data() for w in self.witness]})
+
+        tx_dict.update({
+            "locktime": self.locktime,
             "is_segwit": self.is_segwit,
             "is_coinbase": self.is_coinbase
         })

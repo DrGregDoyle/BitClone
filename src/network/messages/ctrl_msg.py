@@ -36,10 +36,11 @@ class PingPongParent(Message):
     def to_payload(self) -> bytes:
         return self._format_nonce()
 
-    def payload_dict(self, formatted: bool = True) -> dict:
-        return {
-            "nonce": self._format_nonce().hex() if formatted else self.nonce
-        }
+    def payload_dict(self) -> dict:
+        return {"nonce": self._format_nonce().hex()}
+
+    def payload_data(self) -> dict:
+        return {"nonce": self.nonce}
 
 
 # === CONTROL MESSAGE CLASSES === #
@@ -82,15 +83,26 @@ class Addr(Message):
             parts.append(addr.to_bytes())
         return b''.join(parts)
 
-    def payload_dict(self, formatted: bool = True) -> dict:
+    def payload_dict(self) -> dict:
         count = len(self.addr_list)
         addr_dict = {}
         for x in range(count):
             temp_addr = self.addr_list[x]
-            addr_dict.update({f"addr_{x}": temp_addr.to_dict(formatted)})
+            addr_dict.update({f"addr_{x}": temp_addr.to_dict()})
         return {
-            "count": write_compact_size(count).hex() if formatted else count,
+            "count": write_compact_size(count).hex(),
             "net_addrs": addr_dict
+        }
+
+    def payload_data(self) -> dict:
+        count = len(self.addr_list)
+        addr_dict = {}
+        for x in range(count):
+            temp_addr = self.addr_list[x]
+            addr_dict.update({f"addr_{x}": temp_addr.to_data()})
+        return {
+            "count": count,
+            "net_addr": addr_dict
         }
 
 
@@ -120,10 +132,11 @@ class FeeFilter(Message):
     def to_payload(self) -> bytes:
         return self.feerate.to_bytes(8, "little")
 
-    def payload_dict(self, formatted: bool = True) -> dict:
-        return {
-            "feerate": self.feerate.to_bytes(8, "little").hex() if formatted else self.feerate
-        }
+    def payload_dict(self) -> dict:
+        return {"feerate": self.feerate.to_bytes(8, "little").hex()}
+
+    def payload_data(self) -> dict:
+        return {"feerate": self.feerate}
 
 
 class FilterAdd(Message):
@@ -156,9 +169,15 @@ class FilterAdd(Message):
     def to_payload(self) -> bytes:
         return write_compact_size(self.element_size) + self.element
 
-    def payload_dict(self, formatted: bool = True) -> dict:
+    def payload_dict(self) -> dict:
         return {
-            "element_size": write_compact_size(self.element_size).hex() if formatted else self.element_size,
+            "element_size": write_compact_size(self.element_size).hex(),
+            "element": self.element.hex()
+        }
+
+    def payload_data(self) -> dict:
+        return {
+            "element_size": self.element_size,
             "element": self.element.hex()
         }
 
@@ -220,14 +239,24 @@ class FilterLoad(Message):
         ]
         return b"".join(parts)
 
-    def payload_dict(self, formatted: bool = True) -> dict:
+    def payload_dict(self) -> dict:
         filter_bytes = len(self.bitfilter)
         return {
-            "filter_bytes": write_compact_size(filter_bytes).hex() if formatted else filter_bytes,
+            "filter_bytes": write_compact_size(filter_bytes).hex(),
             "bitfilter": self.bitfilter.hex(),
-            "hash_num": self.hash_num.to_bytes(4, "little") if formatted else self.hash_num,
-            "tweak": self.tweak.to_bytes(4, "little") if formatted else self.tweak,
+            "hash_num": self.hash_num.to_bytes(4, "little"),
+            "tweak": self.tweak.to_bytes(4, "little"),
             "flags": self.flags.value
+        }
+
+    def payload_data(self) -> dict:
+        filter_bytes = len(self.bitfilter)
+        return {
+            "filter_bytes": filter_bytes,
+            "bitfilter": self.bitfilter.hex(),
+            "hash_num": self.hash_num,
+            "tweak": self.tweak,
+            "flags": self.flags.name
         }
 
 
@@ -300,10 +329,18 @@ class Reject(Message):
         ]
         return b''.join(parts)
 
-    def payload_dict(self, formatted: bool = True) -> dict:
+    def payload_dict(self) -> dict:
         return {
             "message_type": self.message_type,
-            "reject_type": self.reject_type.value if formatted else self.reject_type.name,
+            "reject_type": self.reject_type.value,
+            "reject_reason": self.reject_reason,
+            "extra_data": self.extra_data.hex()
+        }
+
+    def payload_data(self) -> dict:
+        return {
+            "message_type": self.message_type,
+            "reject_type": self.reject_type.name,
             "reject_reason": self.reject_reason,
             "extra_data": self.extra_data.hex()
         }
@@ -392,13 +429,25 @@ class Version(Message):
         ]
         return b''.join(parts)
 
-    def payload_dict(self, formatted: bool = True) -> dict:
+    def payload_dict(self) -> dict:
         return {
             "protocol_version": self.protocol_version,
             "services": self.services.name,
             "time": self.timestamp,
             "remote_netaddr": self.remote_net_addr.to_dict(),
             "local_netaddr": self.local_net_addr.to_dict(),
+            "nonce": self.nonce,
+            "user_agent": self.user_agent,
+            "last_block": self.last_block
+        }
+
+    def payload_data(self) -> dict:
+        return {
+            "protocol_version": self.protocol_version,
+            "services": self.services.name,
+            "time": self.timestamp,
+            "remote_netaddr": self.remote_net_addr.to_data(),
+            "local_netaddr": self.local_net_addr.to_data(),
             "nonce": self.nonce,
             "user_agent": self.user_agent,
             "last_block": self.last_block

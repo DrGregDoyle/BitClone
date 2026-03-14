@@ -78,12 +78,20 @@ class NetAddr(Serializable):
             self.port.to_bytes(2, "big")
         ])
 
-    def to_dict(self, formatted: bool = True):
+    def to_dict(self):
         return {
-            "time": self.timestamp.to_bytes(4, "little").hex() if formatted else self.timestamp,
+            "time": self.timestamp.to_bytes(4, "little").hex(),
             "services": self.services.name,
-            "ip_addr": self.ip_addr.to_bytes().hex() if formatted else self.ip_addr.ip,
-            "port": self.port.to_bytes(2, "big").hex() if formatted else self.port
+            "ip_addr": self.ip_addr.to_bytes().hex(),
+            "port": self.port.to_bytes(2, "big").hex()
+        }
+
+    def to_data(self) -> dict:
+        return {
+            "time": self.timestamp,
+            "services": self.services.name,
+            "ip_addr": self.ip_addr.ip,
+            "port": self.port
         }
 
 
@@ -124,9 +132,15 @@ class InvVector(Serializable):
     def to_bytes(self) -> bytes:
         return self.inv_type.serialized + self.obj_hash
 
-    def to_dict(self, formatted: bool = True) -> dict:
+    def to_dict(self) -> dict:
         return {
-            "type": self.inv_type.serialized.hex() if formatted else self.inv_type.name,
+            "type": self.inv_type.serialized.hex(),
+            "hash": self.obj_hash.hex()
+        }
+
+    def to_data(self) -> dict:
+        return {
+            "type": self.inv_type.name,
             "hash": self.obj_hash.hex()
         }
 
@@ -200,10 +214,16 @@ class PrefilledTx(Serializable):
 
         return write_compact_size(diff_ind) + self.tx.to_bytes()
 
-    def to_dict(self, formatted: bool = True) -> dict:
+    def to_dict(self) -> dict:
         return {
-            "block_index": write_compact_size(self.block_index).hex() if formatted else self.block_index,
+            "block_index": write_compact_size(self.block_index).hex(),
             "tx": self.tx.to_bytes().hex(),
+        }
+
+    def to_data(self) -> dict:
+        return {
+            "block_index": self.block_index,
+            "tx": self.tx.to_bytes().hex()
         }
 
 
@@ -249,8 +269,11 @@ class ShortID(Serializable):
         """Return the 6-byte short ID"""
         return self.shortid
 
-    def to_dict(self, formatted: bool = True) -> dict:
+    def to_dict(self) -> dict:
         return {"short_id": self.shortid.hex()}
+
+    def to_data(self) -> dict:
+        return self.to_dict()
 
     @staticmethod
     def validate_shortid(block_header: bytes, nonce: int, txid: bytes) -> bool:
@@ -357,18 +380,34 @@ class HeaderAndShortIDs(Serializable):
 
         return b''.join(parts)
 
-    def to_dict(self, formatted: bool = True):
-        short_id_dict = {f'short_id_{x}': self.short_ids[x].to_dict(formatted) for x in range(len(self.short_ids))}
+    def to_dict(self):
+        short_id_dict = {f'short_id_{x}': self.short_ids[x].to_dict() for x in range(len(self.short_ids))}
 
         prefilled_tx_dict = {}
         for i, ptx in enumerate(self.prefilled_txs):
-            prefilled_tx_dict[f'prefilled_tx_{i}'] = ptx.to_dict(formatted)
+            prefilled_tx_dict[f'prefilled_tx_{i}'] = ptx.to_dict()
 
         return {
             "header": self.header.hex(),
             "nonce": self.nonce,
             "short_ids_length": len(self.short_ids),
             "short_ids": short_id_dict,
+            "prefilled_txs_length": len(self.prefilled_txs),
+            "prefilled_txs": prefilled_tx_dict
+        }
+
+    def to_data(self) -> dict:
+        short_id_data = {f'short_id_{x}': self.short_ids[x].to_data() for x in range(len(self.short_ids))}
+
+        prefilled_tx_dict = {}
+        for i, ptx in enumerate(self.prefilled_txs):
+            prefilled_tx_dict[f'prefilled_tx_{i}'] = ptx.to_data()
+
+        return {
+            "header": self.header.hex(),
+            "nonce": self.nonce,
+            "short_ids_length": len(self.short_ids),
+            "short_ids": short_id_data,
             "prefilled_txs_length": len(self.prefilled_txs),
             "prefilled_txs": prefilled_tx_dict
         }
@@ -407,14 +446,24 @@ class BlockTransactions(Serializable):
         tx_parts = [tx.to_bytes() for tx in self.txs]
         return self.block_hash + write_compact_size(tx_num) + b''.join(tx_parts)
 
-    def to_dict(self, formatted: bool = True):
+    def to_dict(self):
         tx_num = len(self.txs)
         return {
             # Formatted block_hash is reversed for display
-            "block_hash": self.block_hash[::-1].hex() if formatted else self.block_hash.hex(),
-            "txs_length": write_compact_size(tx_num).hex() if formatted else tx_num,
+            "block_hash": self.block_hash.hex(),
+            "txs_length": write_compact_size(tx_num).hex(),
             "txs": {
-                f"tx_{x}": self.txs[x].to_dict(formatted) for x in range(tx_num)
+                f"tx_{x}": self.txs[x].to_dict() for x in range(tx_num)
+            }
+        }
+
+    def to_data(self) -> dict:
+        tx_num = len(self.txs)
+        return {
+            "block_hash": self.block_hash[::-1].hex(),
+            "txs_length": tx_num,
+            "txs": {
+                f"tx_{x}": self.txs[x].to_data() for x in range(tx_num)
             }
         }
 
@@ -462,14 +511,18 @@ class BlockTransactionsRequest(Serializable):
         index_parts = [write_compact_size(diff) for diff in diff_indices]
         return self.block_hash + write_compact_size(index_num) + b''.join(index_parts)
 
-    def to_dict(self, formatted: bool = True):
-        index_num = len(self.indices)
-        formatted_indices = encode_differential(self.indices) if formatted else self.indices
-
+    def to_dict(self):
         return {
-            "block_hash": self.block_hash[::-1].hex() if formatted else self.block_hash.hex(),
-            "index_num": write_compact_size(index_num).hex() if formatted else index_num,
-            "indices": formatted_indices
+            "block_hash": self.block_hash.hex(),
+            "index_num": write_compact_size(len(self.indices)).hex(),
+            "indices": encode_differential(self.indices)
+        }
+
+    def to_data(self) -> dict:
+        return {
+            "block_hash": self.block_hash[::-1].hex(),
+            "index_num": len(self.indices),
+            "indices": self.indices,
         }
 
 
@@ -498,5 +551,5 @@ if __name__ == "__main__":
     test_tx_indices = [1, 4, 5]
     test_block_txn_req = BlockTransactionsRequest(another_known_block_hash, test_tx_indices)
     print(sep)
-    print(f"BLOCK TX REQUEST: {test_block_txn_req.to_json(False)}")
+    print(f"BLOCK TX REQUEST: {test_block_txn_req.to_json()}")
     print(sep)
