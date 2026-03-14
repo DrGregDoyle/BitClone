@@ -740,3 +740,99 @@ def test_notif2(engine):
     engine.execute_script(test_script)
     assert engine.stack.stack[0] == b'\x03'
     assert engine.stack.height == 1
+
+
+# ==============================================================================
+# OP_CHECKLOCKTIMEVERIFY (0xb1)
+# ==============================================================================
+
+from secrets import token_bytes as _token_bytes
+from src.core import TX
+from src.script.context import ExecutionContext
+from src.tx import TxIn, TxOut, Witness, Transaction
+
+
+def _make_cltv_ctx(tx_locktime: int, sequence: int, input_index: int = 0) -> ExecutionContext:
+    """Build a real ExecutionContext with one TxIn whose sequence and the
+    transaction's locktime are fully controlled, suitable for CLTV testing.
+    """
+    inp = TxIn(
+        txid=_token_bytes(TX.TXID),
+        vout=0,
+        scriptsig=b"",
+        sequence=sequence,
+    )
+    tx = Transaction(
+        inputs=[inp],
+        outputs=[TxOut(amount=1000, scriptpubkey=b"")],
+        witness=[Witness([])],
+        locktime=tx_locktime,
+    )
+    return ExecutionContext(tx=tx, input_index=input_index, utxo=None)
+
+
+def _cltv_script(locktime: int) -> bytes:
+    """Encode locktime as a Bitcoin ScriptNum with OP_PUSHBYTES_n prefix + OP_CLTV (0xb1)."""
+    locktime_bytes = BitNum(locktime).to_bytes()
+    push_len = len(locktime_bytes).to_bytes(1, "big")
+    return push_len + locktime_bytes + b"\xb1"
+
+
+# --- Passing cases ---
+
+def test_cltv_valid_block_height(engine):
+    """Stack locktime (500_000) <= tx locktime (600_000), both block heights, sequence not final -> passes."""
+    ctx = _make_cltv_ctx(tx_locktime=600_000, sequence=0xFFFFFFFE)
+    assert engine.execute_script(_cltv_script(500_000), ctx), \
+        "OP_CLTV should pass: tx locktime >= stack locktime (block height)"
+
+
+def test_cltv_valid_timestamp(engine):
+    """Stack locktime (500_000_000) <= tx locktime (600_000_000), both timestamps, sequence not final -> passes."""
+    ctx = _make_cltv_ctx(tx_locktime=600_000_000, sequence=0xFFFFFFFE)
+    assert engine.execute_script(_cltv_script(500_000_000), ctx), \
+        "OP_CLTV should pass: tx locktime >= stack locktime (timestamp)"
+
+
+def test_cltv_valid_exact_locktime(engine):
+    """Stack locktime == tx locktime -> BIP 65 allows equality, script passes."""
+    ctx = _make_cltv_ctx(tx_locktime=700_000, sequence=0xFFFFFFFE)
+    assert engine.execute_script(_cltv_script(700_000), ctx), \
+        "OP_CLTV should pass: stack locktime exactly equals tx locktime"
+
+
+# --- Failing cases ---
+
+def test_cltv_fail_empty_stack(engine):
+    """OP_CLTV with an empty stack -> condition 1 fires, script fails."""
+    ctx = _make_cltv_ctx(tx_locktime=600_000, sequence=0xFFFFFFFE)
+    assert not engine.execute_script(b"\xb1", ctx), \
+        "OP_CLTV should fail when the stack is empty"
+
+
+def test_cltv_fail_locktime_not_reached(engine):
+    """tx locktime (400_000) < stack locktime (500_000) -> condition 5 fires, script fails."""
+    ctx = _make_cltv_ctx(tx_locktime=400_000, sequence=0xFFFFFFFE)
+    assert not engine.execute_script(_cltv_script(500_000), ctx), \
+        "OP_CLTV should fail when tx locktime has not yet reached stack locktime"
+
+
+def test_cltv_fail_sequence_final(engine):
+    """nSequence == 0xFFFFFFFF disables locktime -> condition 3 fires, script fails."""
+    ctx = _make_cltv_ctx(tx_locktime=600_000, sequence=0xFFFFFFFF)
+    assert not engine.execute_script(_cltv_script(500_000), ctx), \
+        "OP_CLTV should fail when nSequence is 0xFFFFFFFF"
+
+
+def test_cltv_fail_type_mismatch_height_vs_timestamp(engine):
+    """Stack has a block height (500_000) but tx has a timestamp (600_000_000) -> condition 4 fires."""
+    ctx = _make_cltv_ctx(tx_locktime=600_000_000, sequence=0xFFFFFFFE)
+    assert not engine.execute_script(_cltv_script(500_000), ctx), \
+        "OP_CLTV should fail on locktime type mismatch (height vs timestamp)"
+
+
+def test_cltv_fail_type_mismatch_timestamp_vs_height(engine):
+    """Stack has a timestamp (500_000_000) but tx has a block height (600_000) -> condition 4 fires."""
+    ctx = _make_cltv_ctx(tx_locktime=600_000, sequence=0xFFFFFFFE)
+    assert not engine.execute_script(_cltv_script(500_000_000), ctx), \
+        "OP_CLTV should fail on locktime type mismatch (timestamp vs height)"

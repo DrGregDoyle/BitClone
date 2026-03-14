@@ -7,6 +7,7 @@ from io import BytesIO
 
 from src.core.byte_stream import get_stream, read_stream, read_little_int
 from src.core.exceptions import ScriptEngineError
+from src.core.logging import get_logger
 from src.core.opcodes import OPCODES
 from src.cryptography import sha256
 from src.script.context import ExecutionContext
@@ -18,9 +19,11 @@ from src.script.stack import BitStack, BitNum
 from src.tx.tx import Witness
 
 __all__ = ["ScriptEngine"]
+logger = get_logger(__name__)
 
 _OP = OPCODES()
 op_verify = OPCODE_MAP[0x69]
+LOCKTIME_THRESHOLD = 500_000_000
 
 
 @dataclass(slots=True)
@@ -57,7 +60,8 @@ class ScriptEngine:
         self.alt_stack.clear()
         self.ops_log = []
 
-    def _read_instructions(self, stream: BytesIO) -> Instruction | None:
+    @staticmethod
+    def _read_instructions(stream: BytesIO) -> Instruction | None:
         """
         Read a single instruction (opcode + any pushdata) from the stream.
         Returns None at end of stream.
@@ -204,7 +208,8 @@ class ScriptEngine:
             case _:
                 raise ScriptEngineError(f"Unhandled signature opcode: {opcode}")
 
-    def _stack_value_is_true(self, v: bytes) -> bool:
+    @staticmethod
+    def _stack_value_is_true(v: bytes) -> bool:
         """
         Bitcoin truthiness: false iff the ScriptNum value is 0.
         """
@@ -351,6 +356,65 @@ class ScriptEngine:
 
         # Push bool
         self.stack.pushbool(matches == len(sigs))
+
+    def _checklocktime(self, ctx: ExecutionContext) -> bool:
+        """
+        OP_CHECKLOCKTIMEVERIFY: When executed, if any of the following conditions are true, the script interpreter will terminate with an error:
+
+            -the stack is empty; or
+            -the top item on the stack is less than 0; or
+            -the lock-time type (height vs. timestamp) of the top stack item and the nLockTime field are not the
+            same; or
+            -the top stack item is greater than the transaction's nLockTime field; or
+            -the nSequence field of the txin is 0xffffffff;
+
+        Otherwise, script execution will continue as if a NOP had been executed.
+        """
+        # --- check stack non-empty
+        if self.stack.height == 0:
+            self.ops_log.append("OP_CHECKLOCKTIMEVERIFY fails: empty stack")
+            return False
+
+        # --- top item is negative
+        locktime_bytes = self.stack.top
+        locktime = BitNum.from_bytes(locktime_bytes)
+        if locktime < 0:
+            self.ops_log.append("OP_CHECKLOCKTIMEVERIFY fails: negative locktime")
+            return False
+
+        # --- get tx from ctx for nLockTime field
+        tx = ctx.tx
+        input_index = ctx.input_index
+        if tx is None:
+            self.ops_log.append("OP_CHECKLOCKTIMEVERIFY fails: tx missing from context")
+            return False
+
+        # --- check txIn sequence to make sure its not 0xffffffff
+        sequence = tx.inputs[input_index].sequence
+        if sequence == 0xffffffff:
+            self.ops_log.append("OP_CHECKLOCKTIMEVERIFY fails: input sequence set to 0xffffffff")
+            return False
+
+        # --- locktime type must match
+        tx_locktime = tx.locktime
+        stack_is_timestamp = locktime >= LOCKTIME_THRESHOLD
+        tx_is_timestamp = tx_locktime >= LOCKTIME_THRESHOLD
+        if stack_is_timestamp != tx_is_timestamp:
+            stack_type = "timestamp" if stack_is_timestamp else "block height"
+            tx_type = "timestamp" if tx_is_timestamp else "block height"
+            self.ops_log.append(
+                f"OP_CHECKLOCKTIMEVERIFY fails: locktime type mismatch -- "
+                f"stack uses {stack_type} but tx nLockTime uses {tx_type}"
+            )
+            return False
+
+        # --- tx locktime must be >= stack locktime
+        if tx_locktime < locktime:
+            self.ops_log.append("OP_CHECKLOCKTIMEVERIFY fails: tx locktime is less than locktime")
+            return False
+
+        # --- locktime verified | functions as NOP
+        return True
 
     def validate_segwit(self, scriptpubkey: ScriptPubKey, ctx: ExecutionContext) -> bool:
         """
@@ -577,6 +641,11 @@ class ScriptEngine:
             # --- Signature-related opcodes that don't call OP_VERIFY ---
             if opcode in [0xac, 0xae]:
                 self._handle_signatures(opcode, ctx)
+                continue
+
+            # --- Check Locktime Verify (OP_CLTV)
+            if opcode == 0xb1:
+                valid_script = self._checklocktime(ctx)
                 continue
 
             # --- All remaining opcodes: dispatch via OPCODE_MAP ---
