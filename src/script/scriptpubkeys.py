@@ -11,7 +11,6 @@ from src.script.script_types import BaseScript, ScriptType
 # --- OP_CODES --- #
 OP_0 = b'\x00'
 OP_PUSHBYTES_20 = b'\x14'
-OP_PUSHBYTES_22 = b'\x16'
 OP_PUSHBYTES_32 = b'\x20'
 OP_PUSHBYTES_33 = b'\x21'
 OP_PUSHBYTES_65 = b'\x41'
@@ -25,6 +24,8 @@ OP_HASH160 = b'\xa9'
 
 # --- CONSTANTS --- #
 PUBKEY_LENGTHS = [33, 65]
+
+__all__ = ["P2PK_Key", "P2PKH_Key", "P2MS_Key", "P2SH_Key", "P2TR_Key", "P2WSH_Key", "P2WPKH_Key"]
 
 
 class ScriptPubKey(BaseScript, ABC):

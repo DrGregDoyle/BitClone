@@ -181,32 +181,32 @@ class BlockValidator:
         Dispatches to the correct script/signature verification path
         per input based on scriptpubkey type.
         """
-        # for i, (txin, utxo) in enumerate(zip(tx.inputs, utxos)):
-        #     script_type = classify_script(utxo.scriptpubkey)
-        #
-        #     if script_type == ScriptType.P2PKH:
-        #         if not self._verify_p2pkh(tx, i, utxo):
-        #             return False
-        #
-        #     elif script_type == ScriptType.P2WPKH:
-        #         if not self._verify_p2wpkh(tx, i, utxo):
-        #             return False
-        #
-        #     elif script_type == ScriptType.P2WSH:
-        #         if not self._verify_p2wsh(tx, i, utxo):
-        #             return False
-        #
-        #     elif script_type == ScriptType.P2TR:
-        #         if not self._verify_p2tr(tx, i, utxos):
-        #             return False
-        #
-        #     elif script_type == ScriptType.P2SH:
-        #         if not self._verify_p2sh(tx, i, utxo):
-        #             return False
-        #
-        #     else:
-        #         logger.error(f"Unknown script type for input {i}")
-        #         return False
+        for i, (txin, utxo) in enumerate(zip(tx.inputs, utxos)):
+            script_type = classify_script(utxo.scriptpubkey)
+
+            if script_type == ScriptType.P2PKH:
+                if not self._verify_p2pkh(tx, i, utxo):
+                    return False
+
+            elif script_type == ScriptType.P2WPKH:
+                if not self._verify_p2wpkh(tx, i, utxo):
+                    return False
+
+            elif script_type == ScriptType.P2WSH:
+                if not self._verify_p2wsh(tx, i, utxo):
+                    return False
+
+            elif script_type == ScriptType.P2TR:
+                if not self._verify_p2tr(tx, i, utxos):
+                    return False
+
+            elif script_type == ScriptType.P2SH:
+                if not self._verify_p2sh(tx, i, utxo):
+                    return False
+
+            else:
+                logger.error(f"Unknown script type for input {i}")
+                return False
 
         return True
 
