@@ -3,7 +3,7 @@ The DerivationPath class for use in the Wallet
 """
 from enum import Enum
 
-from src.script.script_types import P2PKH_Key, P2WPKH_Key, P2TR_Key, P2SH_Key
+from src.script.scriptpubkeys import P2PKH_Key, P2SH_Key, P2WPKH_Key, P2TR_Key
 
 __all__ = ["DerivationPath"]
 

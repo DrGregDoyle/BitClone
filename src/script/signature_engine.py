@@ -13,7 +13,7 @@ from src.cryptography import ecdsa, verify_ecdsa, schnorr_verify, schnorr_sig, h
     SECP256K1
 from src.data import encode_der_signature, decode_der_signature, PubKey, get_control_block, \
     Leaf, TweakPubkey, Tree, get_tweak, get_control_byte
-from src.script.script_types import P2TR_Key
+from src.script.scriptpubkeys import P2TR_Key
 from src.tx import Transaction, Witness, UTXO
 
 __all__ = ["SigHash", "SignatureEngine"]

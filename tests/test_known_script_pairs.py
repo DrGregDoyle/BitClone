@@ -11,9 +11,8 @@ from src.core import OPCODES, TX
 from src.core.byte_stream import serialize_data
 from src.data import Leaf, get_control_block, TweakPubkey
 from src.script.context import ExecutionContext
-from src.script.script_types import P2PK_Key, P2PKH_Key, P2MS_Key, P2SH_Key, P2WPKH_Key, P2WSH_Key, P2TR_Key, \
-    P2PK_Sig, \
-    P2PKH_Sig, P2MS_Sig, P2SH_Sig, P2SH_P2WPKH_Sig
+from src.script.scriptpubkeys import P2PK_Key, P2PKH_Key, P2MS_Key, P2SH_Key, P2WPKH_Key, P2WSH_Key, P2TR_Key
+from src.script.scriptsigs import P2PK_Sig, P2PKH_Sig, P2MS_Sig, P2SH_Sig, P2SH_P2WPKH_Sig
 from src.tx import Transaction, Witness
 from src.tx.tx import UTXO
 

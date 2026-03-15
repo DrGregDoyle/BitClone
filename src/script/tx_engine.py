@@ -5,7 +5,8 @@ from src.core import SignatureError
 from src.cryptography import hash160
 from src.data import PubKey
 from src.script.parser import to_asm
-from src.script.script_types import P2PKH_Key, P2SH_Key, P2MS_Key, P2PK_Sig, P2PKH_Sig, P2MS_Sig, P2SH_Sig
+from src.script.scriptpubkeys import P2PKH_Key, P2MS_Key, P2SH_Key
+from src.script.scriptsigs import P2PK_Sig, P2PKH_Sig, P2MS_Sig, P2SH_Sig
 from src.script.signature_engine import SignatureEngine, SigHash
 from src.tx import Transaction
 
