@@ -8,7 +8,7 @@ from src.script.parser import to_asm
 from src.script.scriptpubkeys import P2PKH_Key, P2MS_Key, P2SH_Key
 from src.script.scriptsigs import P2PK_Sig, P2PKH_Sig, P2MS_Sig, P2SH_Sig
 from src.script.signature_engine import SignatureEngine, SigHash
-from src.tx import Transaction
+from src.tx import Tx
 
 
 class TxEngine:
@@ -18,7 +18,7 @@ class TxEngine:
 
 
 # --- DER-ENCODED SIGNATURES --- #
-def get_legacy_sig(private_key: bytes | int, tx: Transaction, input_index: int, scriptpubkey: bytes, sighash_num: int
+def get_legacy_sig(private_key: bytes | int, tx: Tx, input_index: int, scriptpubkey: bytes, sighash_num: int
 = 1) -> bytes:
     """
     Given a private key, a Transaction, input_index, a Scriptpubkey and sighash value, we return the DER-Encoded
@@ -40,7 +40,7 @@ def get_legacy_sig(private_key: bytes | int, tx: Transaction, input_index: int, 
     return der_encoding + SigHash(sighash_num).to_byte()
 
 
-def get_segwit_sig(private_key: bytes | int, tx: Transaction, input_index: int, amount: int, scriptpubkey: bytes,
+def get_segwit_sig(private_key: bytes | int, tx: Tx, input_index: int, amount: int, scriptpubkey: bytes,
                    sighash_num: int = 1) -> bytes:
     """
     We return the DER-encoded signature using the segwit sighash algorithm
@@ -61,8 +61,8 @@ def get_segwit_sig(private_key: bytes | int, tx: Transaction, input_index: int, 
 
 # --- SIGN TRANSACTION TYPES --- #
 
-def sign_p2pk_tx(private_key: bytes | int, tx: Transaction, input_index: int, scriptpubkey: bytes, sighash_num: int
-= 1) -> Transaction:
+def sign_p2pk_tx(private_key: bytes | int, tx: Tx, input_index: int, scriptpubkey: bytes, sighash_num: int
+= 1) -> Tx:
     """
     We return the Tx with a P2Pk scriptsig
     """
@@ -72,8 +72,8 @@ def sign_p2pk_tx(private_key: bytes | int, tx: Transaction, input_index: int, sc
     return tx
 
 
-def sign_p2pkh_tx(private_key: bytes | int, tx: Transaction, input_index: int, scriptpubkey: bytes, sighash_num: int
-= 1) -> Transaction:
+def sign_p2pkh_tx(private_key: bytes | int, tx: Tx, input_index: int, scriptpubkey: bytes, sighash_num: int
+= 1) -> Tx:
     """
     We get the signature for the given transaction and insert it into the scriptsig of the Transaction input at the
     given input_index
@@ -87,8 +87,8 @@ def sign_p2pkh_tx(private_key: bytes | int, tx: Transaction, input_index: int, s
     return tx
 
 
-def sign_p2ms_tx(private_keys: list[bytes | int], tx: Transaction, input_index: int, scriptpubkey: bytes,
-                 sighash_num: int = 1) -> Transaction:
+def sign_p2ms_tx(private_keys: list[bytes | int], tx: Tx, input_index: int, scriptpubkey: bytes,
+                 sighash_num: int = 1) -> Tx:
     """
     Pay to MultiScript. Will create the P2MS sighash
     """
@@ -101,8 +101,8 @@ def sign_p2ms_tx(private_keys: list[bytes | int], tx: Transaction, input_index: 
     return tx
 
 
-def sign_p2sh_tx(private_key: bytes | int, tx: Transaction, input_index: int, scriptpubkey: bytes,
-                 redeem_script: bytes, sighash_num: int = 1) -> Transaction:
+def sign_p2sh_tx(private_key: bytes | int, tx: Tx, input_index: int, scriptpubkey: bytes,
+                 redeem_script: bytes, sighash_num: int = 1) -> Tx:
     """
     We create the P2SH ScriptSig for a P2SH ScriptPubKey with only one signature
     """
@@ -123,12 +123,12 @@ def sign_p2sh_tx(private_key: bytes | int, tx: Transaction, input_index: int, sc
 
 def sign_p2sh_p2ms_tx(
         private_keys: list[bytes | int],
-        tx: Transaction,
+        tx: Tx,
         input_index: int,
         scriptpubkey: bytes,
         redeem_script: bytes,
         sighash_num: int = 1,
-) -> Transaction:
+) -> Tx:
     """
     Sign a P2SH-wrapped multisig (P2SH-P2MS) input.
     """
@@ -306,11 +306,11 @@ if __name__ == "__main__":
 
     test_scriptpubkey = P2PKH_Key(test_pubkey.compressed())
 
-    unsigned_tx = Transaction.from_bytes(bytes.fromhex(
+    unsigned_tx = Tx.from_bytes(bytes.fromhex(
         "0100000001b7994a0db2f373a29227e1d90da883c6ce1cb0dd2d6812e4558041ebbbcfa54b0000000000ffffffff01983a0000000000001976a914b3e2819b6262e0b1f19fc7229d75677f347c91ac88ac00000000"))
-    unsigned_copy = Transaction.from_bytes(unsigned_tx.to_bytes())
+    unsigned_copy = Tx.from_bytes(unsigned_tx.to_bytes())
     signed_tx = sign_p2pkh_tx(known_privkey, unsigned_tx, 0, test_scriptpubkey.script)
-    lmab_tx = Transaction.from_bytes(bytes.fromhex(
+    lmab_tx = Tx.from_bytes(bytes.fromhex(
         "0100000001b7994a0db2f373a29227e1d90da883c6ce1cb0dd2d6812e4558041ebbbcfa54b000000006a473044022008f4f37e2d8f74e18c1b8fde2374d5f28402fb8ab7fd1cc5b786aa40851a70cb02201f40afd1627798ee8529095ca4b205498032315240ac322c9d8ff0f205a93a580121024aeaf55040fa16de37303d13ca1dde85f4ca9baa36e2963a27a1c0c1165fe2b1ffffffff01983a0000000000001976a914b3e2819b6262e0b1f19fc7229d75677f347c91ac88ac00000000"))
 
     # --- LOGGING

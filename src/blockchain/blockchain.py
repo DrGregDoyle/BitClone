@@ -11,7 +11,7 @@ from src.core import get_logger, TransactionError, TX
 from src.data import bits_to_target, target_to_bits, MerkleTree
 from src.database.database import BitCloneDatabase, DB_PATH
 from src.tx import TxIn
-from src.tx.tx import UTXO, Transaction
+from src.tx.tx import UTXO, Tx
 
 logger = get_logger(__name__)
 
@@ -320,7 +320,7 @@ class Blockchain:
 
         return True
 
-    def _validate_tx(self, tx: Transaction, block: Block, next_height: int, pending_utxos: dict[bytes, UTXO],
+    def _validate_tx(self, tx: Tx, block: Block, next_height: int, pending_utxos: dict[bytes, UTXO],
                      seen_outpoints: set[bytes]) -> bool:
         """
         Validate a single non-coinbase transaction.
@@ -400,7 +400,7 @@ class Blockchain:
 
     # --- Fee calculation
 
-    def _get_tx_fee(self, tx: Transaction) -> int:
+    def _get_tx_fee(self, tx: Tx) -> int:
         """
         Given a tx, we return the sum of the ouputs minus the sum of the inputs. If this value is negative we raise
         an error.

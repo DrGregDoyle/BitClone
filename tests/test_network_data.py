@@ -146,13 +146,13 @@ def test_headerandshortids(getrand_headerandshortids):
 
 def test_blocktxns(getrand_blocktxns):
     random_blocktxn = getrand_blocktxns()
-    from_bytes_blocktxn = BlockTransactions.from_bytes(random_blocktxn.to_bytes())
+    from_bytes_blocktxn = BlockTxns.from_bytes(random_blocktxn.to_bytes())
     assert from_bytes_blocktxn == random_blocktxn, "Failed to_bytes -> from_bytes construction for BlockTransactions."
 
 
 def test_blocktxnrqst(getrand_blocktxnrqst):
     random_blocktxnrqst = getrand_blocktxnrqst()
-    from_bytes_blocktxnrqst = BlockTransactionsRequest.from_bytes(random_blocktxnrqst.to_bytes())
+    from_bytes_blocktxnrqst = BlockTxnsRequest.from_bytes(random_blocktxnrqst.to_bytes())
     assert from_bytes_blocktxnrqst == random_blocktxnrqst, \
         "Failed to_bytes -> from_bytes construction for BlockTransactionsRequest."
 
@@ -164,8 +164,8 @@ def test_blocktxnrqst(getrand_blocktxnrqst):
 ])
 def test_blocktxnrqst_edge_cases(indices):
     from secrets import token_bytes
-    rqst = BlockTransactionsRequest(block_hash=token_bytes(32), indices=indices)
-    recovered = BlockTransactionsRequest.from_bytes(rqst.to_bytes())
+    rqst = BlockTxnsRequest(block_hash=token_bytes(32), indices=indices)
+    recovered = BlockTxnsRequest.from_bytes(rqst.to_bytes())
     assert recovered.indices == indices, \
         f"BlockTransactionsRequest failed round-trip for indices={indices}"
 

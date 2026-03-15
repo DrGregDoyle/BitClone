@@ -10,7 +10,7 @@ from src.core.logging import get_logger
 from src.cryptography import hash256
 
 logger = get_logger(__name__)
-__all__ = ["TxIn", "TxOut", "Witness", "Transaction", "UTXO"]
+__all__ = ["TxIn", "TxOut", "Witness", "Tx", "UTXO"]
 
 # --- CACHE KEYS --- #
 SEGWIT_KEY = "is_segwit"
@@ -303,7 +303,7 @@ class UTXO(Serializable):
         }
 
 
-class Transaction(Serializable):
+class Tx(Serializable):
     """
     Transaction
     =============================================================================

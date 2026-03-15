@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 
 from src.core import TX
 from src.mempool.mempool import MemPool, MemPoolTx
-from src.tx import TxIn, TxOut, Transaction, UTXO
+from src.tx import TxIn, TxOut, Tx, UTXO
 
 
 # ---------------------------------------------------------------------------
@@ -40,7 +40,7 @@ def make_utxo(txid: bytes, vout: int = 0, amount: int = 100_000,
 
 
 def make_spending_tx(utxos: list[UTXO], output_amount: int,
-                     sequence: int = 0xffffffff) -> Transaction:
+                     sequence: int = 0xffffffff) -> Tx:
     """
     Build an unsigned transaction that spends every UTXO in the list and
     sends output_amount sats to an OP_1 anyone-can-spend output.
@@ -57,7 +57,7 @@ def make_spending_tx(utxos: list[UTXO], output_amount: int,
         for u in utxos
     ]
     outputs = [TxOut(amount=output_amount, scriptpubkey=b'\x51')]
-    return Transaction(inputs=inputs, outputs=outputs)
+    return Tx(inputs=inputs, outputs=outputs)
 
 
 def make_mempool_with_utxos(utxos: list[UTXO]) -> MemPool:
@@ -216,7 +216,7 @@ class TestAddTxRejectionCases(unittest.TestCase):
             sequence=0xffffffff,
         )
         coinbase_output = TxOut(amount=625_000_000, scriptpubkey=b'\x51')
-        coinbase_tx = Transaction(inputs=[coinbase_input], outputs=[coinbase_output])
+        coinbase_tx = Tx(inputs=[coinbase_input], outputs=[coinbase_output])
 
         result = mp.add_tx(coinbase_tx.to_bytes())
         self.assertFalse(result)

@@ -15,7 +15,7 @@ from src.network.datatypes.network_data import *
 from src.network.datatypes.network_types import Services
 from src.network.messages.data_msg import *
 from src.script import ScriptEngine, SignatureEngine
-from src.tx import TxIn, TxOut, Witness, Transaction
+from src.tx import TxIn, TxOut, Witness, Tx
 
 
 # --- Plain helper functions (logic lives here, fixtures wrap these) --- #
@@ -53,16 +53,16 @@ def _getrand_witnessfield() -> Witness:
     return Witness(items)
 
 
-def _getrand_tx(segwit: bool = True) -> Transaction:
+def _getrand_tx(segwit: bool = True) -> Tx:
     input_num = randint(1, 4)
     inputs = [_getrand_txinput() for _ in range(input_num)]
     outputs = [_getrand_txoutput() for _ in range(randint(1, 4))]
     witness = [_getrand_witnessfield() for _ in range(input_num)] if segwit else None
     locktime = int.from_bytes(token_bytes(TX.LOCKTIME), "little")
-    return Transaction(inputs, outputs, witness, locktime)
+    return Tx(inputs, outputs, witness, locktime)
 
 
-def _getrand_coinbase(segwit: bool = True) -> Transaction:
+def _getrand_coinbase(segwit: bool = True) -> Tx:
     random_height = randint(500_000, 999_999)
     random_height_bytes = random_height.to_bytes((random_height.bit_length() + 7) // 8, "big")
     coinbase_txin = TxIn(
@@ -72,7 +72,7 @@ def _getrand_coinbase(segwit: bool = True) -> Transaction:
         sequence=0xffffffff
     )
     witness_reserve_val = b'\x00' * 32 if segwit else None
-    return Transaction(
+    return Tx(
         inputs=[coinbase_txin],
         outputs=[_getrand_txoutput() for _ in range(randint(5, 10))],
         witness=[Witness(witness_reserve_val)],
@@ -111,15 +111,15 @@ def _getrand_prefilledtx() -> PrefilledTx:
     )
 
 
-def _getrand_blocktxns() -> BlockTransactions:
-    return BlockTransactions(
+def _getrand_blocktxns() -> BlockTxns:
+    return BlockTxns(
         block_hash=token_bytes(32),
         txs=[_getrand_tx() for _ in range(randint(5, 10))]
     )
 
 
-def _getrand_blocktxnrqst() -> BlockTransactionsRequest:
-    return BlockTransactionsRequest(
+def _getrand_blocktxnrqst() -> BlockTxnsRequest:
+    return BlockTxnsRequest(
         block_hash=token_bytes(32),
         indices=_getrand_sorted_index(),
     )

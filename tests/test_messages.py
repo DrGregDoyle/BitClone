@@ -366,15 +366,15 @@ def test_sendcmpct(announce, version):
 def test_txmessage(getrand_tx):
     # --- Construction
     random_tx = getrand_tx()
-    tx_msg = TxMessage(random_tx)
+    tx_msg = Txn(random_tx)
 
     # --- Bytes and Payload
     tx_msg_bytes = tx_msg.to_bytes()
     tx_msg_payload = tx_msg.payload
 
     # --- Reconstruction
-    from_bytes_txmsg = TxMessage.from_bytes(tx_msg_bytes)
-    from_payload_txmsg = TxMessage.from_payload(tx_msg_payload)
+    from_bytes_txmsg = Txn.from_bytes(tx_msg_bytes)
+    from_payload_txmsg = Txn.from_payload(tx_msg_payload)
 
     # --- Asserts
     assert from_bytes_txmsg == tx_msg, "TxMessage failed to_bytes -> from_bytes construction"

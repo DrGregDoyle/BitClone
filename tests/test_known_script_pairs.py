@@ -13,7 +13,7 @@ from src.data import Leaf, get_control_block, TweakPubkey
 from src.script.context import ExecutionContext
 from src.script.scriptpubkeys import P2PK_Key, P2PKH_Key, P2MS_Key, P2SH_Key, P2WPKH_Key, P2WSH_Key, P2TR_Key
 from src.script.scriptsigs import P2PK_Sig, P2PKH_Sig, P2MS_Sig, P2SH_Sig, P2SH_P2WPKH_Sig
-from src.tx import Transaction, Witness
+from src.tx import Tx, Witness
 from src.tx.tx import UTXO
 
 OP_PUSHBYTES_20 = OPCODES.get_byte("OP_PUSHBYTES_20")
@@ -37,7 +37,7 @@ def test_p2pk_pair(script_engine):
 
     # Setup
     p2pk_key = P2PK_Key.from_bytes(p2pk_key_bytes)
-    p2pk_tx = Transaction.from_bytes(p2pk_tx_bytes)
+    p2pk_tx = Tx.from_bytes(p2pk_tx_bytes)
     p2pk_utxo = UTXO(
         outpoint=p2pk_txid_display[::-1] + (1).to_bytes(TX.VOUT, "little"),
         amount=25000000000,
@@ -71,7 +71,7 @@ def test_p2pkh_pair(script_engine):
     # --- Construct elements
     p2pkh_key = P2PKH_Key.from_bytes(p2pkh_key_bytes)
     p2pkh_sig = P2PKH_Sig.from_bytes(p2pkh_sig_bytes)
-    p2pkh_tx = Transaction.from_bytes(p2pkh_tx_bytes)
+    p2pkh_tx = Tx.from_bytes(p2pkh_tx_bytes)
     p2pkh_utxo = UTXO(
         outpoint=p2pkh_txid_display[::-1] + (1).to_bytes(TX.VOUT, "little"),  # Reverse display bytes
         amount=82974043165,
@@ -102,7 +102,7 @@ def test_p2ms_pair(script_engine):
     # --- Construct elements
     p2ms_key = P2MS_Key.from_bytes(p2ms_key_bytes)
     p2ms_sig = P2MS_Sig.from_bytes(p2ms_sig_bytes)
-    p2ms_tx = Transaction.from_bytes(p2ms_tx_bytes)
+    p2ms_tx = Tx.from_bytes(p2ms_tx_bytes)
     p2ms_utxo = UTXO(
         outpoint=p2ms_txid_display[::-1] + (0).to_bytes(TX.VOUT, "little"),  # Reverse display bytes
         amount=1690000,
@@ -132,7 +132,7 @@ def test_p2sh_p2ms_pair(script_engine):
     # --- Construct elements
     p2sh_p2ms_key = P2SH_Key.from_bytes(p2sh_p2ms_key_bytes)
     p2sh_p2ms_sig = P2SH_Sig.from_bytes(p2sh_p2ms_sig_bytes)
-    p2sh_p2ms_tx = Transaction.from_bytes(p2sh_p2ms_tx_bytes)
+    p2sh_p2ms_tx = Tx.from_bytes(p2sh_p2ms_tx_bytes)
     p2sh_p2ms_utxo = UTXO(
         outpoint=p2sh_p2ms_txid_display[::-1] + (1).to_bytes(TX.VOUT, "little"),  # Reverse display bytes
         amount=10000000,
@@ -164,7 +164,7 @@ def test_p2sh_p2wpkh_pair(script_engine):
     p2sh_key = P2SH_Key.from_bytes(p2sh_key_bytes)
     p2wpkh_key = P2WPKH_Key.from_bytes(p2wpkh_key_bytes)
     p2sh_p2wpkh_sig = P2SH_P2WPKH_Sig.from_bytes(p2sh_p2wpkh_sig_bytes)
-    p2sh_p2wpkh_tx = Transaction.from_bytes(p2sh_p2wpkh_tx_bytes)
+    p2sh_p2wpkh_tx = Tx.from_bytes(p2sh_p2wpkh_tx_bytes)
     p2sh_p2wpkh_utxo = UTXO(
         outpoint=p2sh_p2wpkh_txid_display[::-1] + (0).to_bytes(TX.VOUT, "little"),  # Reverse display bytes
         amount=25552,
@@ -204,7 +204,7 @@ def test_p2wpkh(script_engine):
     # --- Construct objects
     p2wpkh_key = P2WPKH_Key.from_bytes(p2wpkh_key_bytes)
     p2wpkh_witness = Witness([p2wpkh_witsig, p2wpkh_witpubkey])
-    p2wpkh_tx = Transaction.from_bytes(p2wpkh_tx_bytes)
+    p2wpkh_tx = Tx.from_bytes(p2wpkh_tx_bytes)
     p2wpkh_height = randint(1, 1_000_000)
     p2wpkh_utxo = UTXO(
         outpoint=p2wpkh_txid_bytes[::-1] + (0).to_bytes(TX.VOUT, "little"),  # Reverse display bytes for use
@@ -258,7 +258,7 @@ def test_p2wsh(script_engine):
     p2wsh_witness_script = p2wsh_witness.items[-1]  # Last data in p2wsh witness field is the witness script for hashing
 
     # Tx
-    p2wsh_tx = Transaction.from_bytes(
+    p2wsh_tx = Tx.from_bytes(
         bytes.fromhex(
             "010000000001016542b657eea04a75b1582969b5b532b3110b392b4b553297435a11b064e2eb460100000000ffffffff02c454fd000000000017a9145e7be6ec3e2382c669aaf3c71da1056f47b9024d875b07330200000000220020ea166bf0492c6f908e45404932e0f39c0571a71007c22b872548cd20f19a92f504004730440220415899bbee08e42376d06e8f86c92b4987613c2816352fe09cd1479fd639f18c02200db57f508f69e266d76c23891708158bda18690c165a41b0aa88303b97609f780147304402203973de2303e8787767090dd25c8a4dc97ce1aa7eb4c0962f13952ed4e856ff8e02203f1bb425def789eea8be46407d10b3c8730407176aef4dc2c29865eb5e5542bf0169522103848e308569b644372a5eb26665f1a8c34ca393c130b376db2fae75c43500013c2103cec1ee615c17e06d4f4b0a08617dffb8e568936bdff18fb057832a58ad4d1b752103eed7ae80c34d70f5ba93f93965f69f3c691da0f4607f242f4fd6c7a48789233e53aeee9c0900")
     )
@@ -292,7 +292,7 @@ def test_keypath(script_engine):
         block_height=861957
     )
 
-    p2tr_tx = Transaction.from_bytes(
+    p2tr_tx = Tx.from_bytes(
         bytes.fromhex(
             "02000000000101ec9016580d98a93909faf9d2f431e74f781b438d81372bb6aab4db67725c11a70000000000ffffffff0110270000000000001600144e44ca792ce545acba99d41304460dd1f53be3840141b693a0797b24bae12ed0516a2f5ba765618dca89b75e498ba5b745b71644362298a45ca39230d10a02ee6290a91cebf9839600f7e35158a447ea182ea0e022ae0100000000")
     )
@@ -324,7 +324,7 @@ def test_simple_spendpath(script_engine):
     p2tr_key = P2TR_Key(p2tr_xonly_pubkey_bytes, [p2tr_leaf_script])
     p2tr_control_block = get_control_block(p2tr_xonly_pubkey_bytes, p2tr_leaf.leaf_hash)
     p2tr_witness = Witness(items=[p2tr_leaf_inputs, p2tr_leaf_script, p2tr_control_block])
-    p2tr_tx = Transaction.from_bytes(p2tr_tx_bytes)
+    p2tr_tx = Tx.from_bytes(p2tr_tx_bytes)
     p2tr_utxo = UTXO(
         outpoint=p2tr_txid_display_bytes[::-1] + (1).to_bytes(TX.VOUT, "little"),
         amount=20000,
@@ -360,7 +360,7 @@ def test_simple_sig_spendpath(script_engine):
     )
 
     # --- Spend elements
-    p2tr_tx = Transaction.from_bytes(
+    p2tr_tx = Tx.from_bytes(
         bytes.fromhex(
             "020000000001013cfe8b95d22502698fd98837f83d8d4be31ee3eddd9d1ab1a95654c64604c4d10000000000ffffffff01983a0000000000001600140de745dc58d8e62e6f47bde30cd5804a82016f9e034101769105cbcbdcaaee5e58cd201ba3152477fda31410df8b91b4aee2c4864c7700615efb425e002f146a39ca0a4f2924566762d9213bd33f825fad83977fba7f0122206d4ddc0e47d2e8f82cbe2fc2d0d749e7bd3338112cecdc76d8f831ae6620dbe0ac21c0924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a332900000000")
     )
@@ -402,7 +402,7 @@ def test_scriptpath_spend(script_engine):
     )
 
     # --- Known tx
-    known_tx = Transaction.from_bytes(bytes.fromhex(
+    known_tx = Tx.from_bytes(bytes.fromhex(
         "02000000000101d7c0aa93d852c70ed440c5295242c2ac06f41c3a2a174b5a5b112cebdf0f7bec0000000000ffffffff01260100000000000016001492b8c3a56fac121ddcdffbc85b02fb9ef681038a03010302538781c0924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a33291324300a84045033ec539f60c70d582c48b9acf04150da091694d83171b44ec9bf2c4bf1ca72f7b8538e9df9bdfd3ba4c305ad11587f12bbfafa00d58ad6051d54962df196af2827a86f4bde3cf7d7c1a9dcb6e17f660badefbc892309bb145f00000000"))
 
     test_ctx = ExecutionContext(

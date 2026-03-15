@@ -7,7 +7,7 @@ from pathlib import Path
 from src.block.block import Block
 from src.core import get_logger
 from src.database.block_files import BlockFileManager
-from src.tx.tx import UTXO, Transaction
+from src.tx.tx import UTXO, Tx
 
 DB_PATH = Path(__file__).parent / "db_files" / "bitclone.db"
 
@@ -167,7 +167,7 @@ class BitCloneDatabase:
             result = conn.execute("SELECT COUNT(*) FROM utxos").fetchone()
             return result[0] if result else 0
 
-    def get_utxos(self, tx: Transaction) -> list[UTXO] | None:
+    def get_utxos(self, tx: Tx) -> list[UTXO] | None:
         """
         We return a list of UTXOS associated with the tx inputs. If any are missing we return None.
         """

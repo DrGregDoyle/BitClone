@@ -8,14 +8,14 @@ from secrets import token_bytes
 
 from src.block.block import Block
 from src.database import BitCloneDatabase
-from src.tx.tx import Transaction, TxIn, TxOut
+from src.tx.tx import Tx, TxIn, TxOut
 
 TEST_DB_PATH = Path(__file__).parent / "db_files" / "test_blocks.db"
 
 
 # --- HELPERS --- #
 
-def create_test_transaction(num_inputs: int = 2, num_outputs: int = 2, is_coinbase: bool = False) -> Transaction:
+def create_test_transaction(num_inputs: int = 2, num_outputs: int = 2, is_coinbase: bool = False) -> Tx:
     """Create a test transaction"""
     if is_coinbase:
         # Coinbase tx has special input
@@ -44,7 +44,7 @@ def create_test_transaction(num_inputs: int = 2, num_outputs: int = 2, is_coinba
         for _ in range(num_outputs)
     ]
 
-    return Transaction(
+    return Tx(
         inputs=inputs,
         outputs=outputs,
         locktime=0,

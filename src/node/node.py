@@ -6,7 +6,7 @@ import time
 from src.block.block import Block
 from src.blockchain.blockchain import Blockchain
 from src.mempool.mempool import MemPool
-from src.tx.tx import Transaction, TxIn, TxOut
+from src.tx.tx import Tx, TxIn, TxOut
 from src.wallet.wallet import Wallet  # Future import
 
 
@@ -64,7 +64,7 @@ class Node:
 
         return block_template
 
-    def _create_coinbase_tx(self, height: int, fees: int) -> Transaction:
+    def _create_coinbase_tx(self, height: int, fees: int) -> Tx:
         """
         Create coinbase transaction for new block
 
@@ -93,7 +93,7 @@ class Node:
             scriptpubkey=payout_scriptpubkey
         )
 
-        return Transaction(
+        return Tx(
             inputs=[coinbase_input],
             outputs=[coinbase_output],
             version=2,
@@ -146,7 +146,7 @@ class Node:
 
     # --- MEMPOOL MANAGEMENT --- #
 
-    def _get_mempool_transactions(self) -> list[Transaction]:
+    def _get_mempool_transactions(self) -> list[Tx]:
         """
         Get transactions from mempool to include in block
 
@@ -156,12 +156,12 @@ class Node:
         # TODO: Implement fee-based prioritization
         return self.mempool.copy()
 
-    def add_transaction_to_mempool(self, tx: Transaction):
+    def add_transaction_to_mempool(self, tx: Tx):
         """Add a transaction to the mempool"""
         # TODO: Validate transaction before adding
         self.mempool.append(tx)
 
-    def _calculate_fees(self, transactions: list[Transaction]) -> int:
+    def _calculate_fees(self, transactions: list[Tx]) -> int:
         """
         Calculate total fees from transactions
 

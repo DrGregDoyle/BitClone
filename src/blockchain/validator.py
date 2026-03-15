@@ -8,7 +8,7 @@ from src.data import MerkleTree
 from src.script import SignatureEngine
 from src.script.script_engine import ScriptEngine
 from src.tx import TxIn
-from src.tx.tx import UTXO, Transaction
+from src.tx.tx import UTXO, Tx
 
 logger = get_logger(__name__)
 COINBASE_MATURITY = 100
@@ -140,7 +140,7 @@ class BlockValidator:
 
         return True
 
-    def _validate_tx(self, tx: Transaction, block: Block, next_height: int,
+    def _validate_tx(self, tx: Tx, block: Block, next_height: int,
                      pending_utxos: dict, seen_outpoints: set,
                      get_utxo_fn, get_block_at_height_fn) -> bool:
         """Locktime, maturity, double-spend, relative locktime, then scripts"""
@@ -176,7 +176,7 @@ class BlockValidator:
 
     # --- Script validation ---
 
-    def _validate_scripts(self, tx: Transaction, utxos: list[UTXO]) -> bool:
+    def _validate_scripts(self, tx: Tx, utxos: list[UTXO]) -> bool:
         """
         Dispatches to the correct script/signature verification path
         per input based on scriptpubkey type.
@@ -210,35 +210,35 @@ class BlockValidator:
 
         return True
 
-    def _verify_p2pkh(self, tx: Transaction, input_index: int, utxo: UTXO) -> bool:
+    def _verify_p2pkh(self, tx: Tx, input_index: int, utxo: UTXO) -> bool:
         sighash = self.sig_engine.get_legacy_sighash(tx, input_index, utxo.scriptpubkey)
         # Parse txin.scriptsig for sig + pubkey, then:
         # return self.sig_engine.verify_ecdsa_sig(sig, sighash, pubkey)
         raise NotImplementedError
 
-    def _verify_p2wpkh(self, tx: Transaction, input_index: int, utxo: UTXO) -> bool:
+    def _verify_p2wpkh(self, tx: Tx, input_index: int, utxo: UTXO) -> bool:
         sighash = self.sig_engine.get_segwit_sighash(tx, input_index, utxo.amount, utxo.scriptpubkey)
         # Parse witness stack for sig + pubkey, then verify
         raise NotImplementedError
 
-    def _verify_p2wsh(self, tx: Transaction, input_index: int, utxo: UTXO) -> bool:
+    def _verify_p2wsh(self, tx: Tx, input_index: int, utxo: UTXO) -> bool:
         # Hash witness script, check against scriptpubkey, then execute
         raise NotImplementedError
 
-    def _verify_p2tr(self, tx: Transaction, input_index: int, utxos: list[UTXO]) -> bool:
+    def _verify_p2tr(self, tx: Tx, input_index: int, utxos: list[UTXO]) -> bool:
         # Detect key-path vs script-path from witness stack, then:
         # key-path:    sig_engine.get_taproot_sighash(..., ext_flag=0)
         # script-path: sig_engine.get_taproot_sighash(..., ext_flag=1)
         raise NotImplementedError
 
-    def _verify_p2sh(self, tx: Transaction, input_index: int, utxo: UTXO) -> bool:
+    def _verify_p2sh(self, tx: Tx, input_index: int, utxo: UTXO) -> bool:
         # Deserialize redeem script from scriptsig, hash and compare, then execute
         raise NotImplementedError
 
     # --- Locktime helpers (moved from Blockchain) ---
 
     @staticmethod
-    def _validate_locktime(tx: Transaction, next_height: int) -> bool:
+    def _validate_locktime(tx: Tx, next_height: int) -> bool:
         ...
 
     @staticmethod

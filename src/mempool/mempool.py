@@ -7,7 +7,7 @@ from pathlib import Path
 from src.core import ReadError, get_logger, TransactionError
 from src.database.database import BitCloneDatabase
 from src.script import ScriptEngine
-from src.tx import Transaction
+from src.tx import Tx
 
 logger = get_logger(__name__)
 
@@ -20,8 +20,8 @@ class MemPoolTx:
     A transaction along with mempool metadata
     """
 
-    def __init__(self, tx: bytes | Transaction, fee: int, ancestors: list = None, descendants: list = None) -> None:
-        self.tx = tx if isinstance(tx, Transaction) else Transaction.from_bytes(tx)
+    def __init__(self, tx: bytes | Tx, fee: int, ancestors: list = None, descendants: list = None) -> None:
+        self.tx = tx if isinstance(tx, Tx) else Tx.from_bytes(tx)
         self.fee = fee
         self.ancestors = ancestors or []
         self.descendants = descendants or []
@@ -67,7 +67,7 @@ class MemPool:
         self.total_vbytes = 0  # Update with every tx added or removed
         self.spent_outpoints = set()  # Update with every tx added or removed
 
-    def add_tx(self, candidate_tx: bytes | Transaction) -> bool:
+    def add_tx(self, candidate_tx: bytes | Tx) -> bool:
         """
         We validate the candidate_tx and return True or False based on whether the transaction was added to the pool.
         """
@@ -76,7 +76,7 @@ class MemPool:
 
         # --- Get the Transaction object
         try:
-            tx = Transaction.from_bytes(candidate_tx) if isinstance(candidate_tx, bytes) else candidate_tx
+            tx = Tx.from_bytes(candidate_tx) if isinstance(candidate_tx, bytes) else candidate_tx
         except (ReadError, ValueError) as e:
             logger.error(f"Failed to decode tx from byte stream: {e}")
             return False
@@ -140,7 +140,7 @@ class MemPool:
         # --- Get list sorted by ancestor_feerate
         txid_list = sorted(self.mempool.values(), key=lambda mptx: mptx.ancestor_feerate, reverse=True)
 
-    def _validate_tx(self, tx: Transaction) -> bool:
+    def _validate_tx(self, tx: Tx) -> bool:
         # --- Check if tx is in mempool
         if tx.txid in self.mempool.keys():
             logger.error(f"Transaction with id {tx.txid} already exists in mempool.")
@@ -178,7 +178,7 @@ class MemPool:
 
         return True
 
-    def _get_utxos(self, tx: Transaction) -> list:
+    def _get_utxos(self, tx: Tx) -> list:
         """
         We obtain a list of utxos from the given transaction. Raise error if the utxo cannot be retrieved.
         """
@@ -190,7 +190,7 @@ class MemPool:
             utxos.append(temp_utxo)
         return utxos
 
-    def _get_fee(self, tx: Transaction) -> int:
+    def _get_fee(self, tx: Tx) -> int:
         """
         We return the tx fee amount in sats
         """
@@ -215,7 +215,7 @@ class MemPool:
         self._remove_metadata(mempool_tx.tx)
         del self.mempool[txid]
 
-    def _add_metadata(self, tx: Transaction) -> None:
+    def _add_metadata(self, tx: Tx) -> None:
         """
         When a tx is to be added to the pool, we track some metadata for the pool.
         """
@@ -226,7 +226,7 @@ class MemPool:
         for txin in tx.inputs:
             self.spent_outpoints.add(txin.outpoint)
 
-    def _remove_metadata(self, tx: Transaction) -> None:
+    def _remove_metadata(self, tx: Tx) -> None:
         """
         When a tx is removed from the pool, we also remove its tracked metadata.
         """

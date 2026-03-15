@@ -14,7 +14,7 @@ from src.cryptography import ecdsa, verify_ecdsa, schnorr_verify, schnorr_sig, h
 from src.data import encode_der_signature, decode_der_signature, PubKey, get_control_block, \
     Leaf, TweakPubkey, Tree, get_tweak, get_control_byte
 from src.script.scriptpubkeys import P2TR_Key
-from src.tx import Transaction, Witness, UTXO
+from src.tx import Tx, Witness, UTXO
 
 __all__ = ["SigHash", "SignatureEngine"]
 
@@ -46,7 +46,7 @@ class SignatureEngine:
 
     # --- SIGHASH ALGORITHMS --- #
 
-    def get_legacy_sighash(self, tx: Transaction, input_index: int, scriptpubkey: bytes, sighash_num: int = 1):
+    def get_legacy_sighash(self, tx: Tx, input_index: int, scriptpubkey: bytes, sighash_num: int = 1):
         """
         Computes legacy message_hash for signing:
             1. Remove all existing script_sigs
@@ -79,13 +79,13 @@ class SignatureEngine:
         # 4. Return sighash
         return hash256(data)
 
-    def get_segwit_sighash(self, tx: Transaction, input_index: int, amount: int, scriptpubkey: bytes, sighash_num:
+    def get_segwit_sighash(self, tx: Tx, input_index: int, amount: int, scriptpubkey: bytes, sighash_num:
     int = 1):
         """
         We return the sighash for a segwit Transaction
         """
         # 1. Get copy of tx
-        tx_copy = Transaction.from_bytes(tx.to_bytes())
+        tx_copy = Tx.from_bytes(tx.to_bytes())
 
         # 2. Construct the preimage and preimage hash
         # 2-1. version
@@ -144,7 +144,7 @@ class SignatureEngine:
         return hash256(preimage_sighash)
 
     def get_taproot_sighash(self,
-                            tx: Transaction,
+                            tx: Tx,
                             input_index: int,
                             utxos: list[UTXO],  # List of UTXOs for ALL inputs in order
                             ext_flag: int = 0,
@@ -158,7 +158,7 @@ class SignatureEngine:
         NOTE: We expect the list of utxos to correspond to the list of inputs in the tx
         """
         # Copy tx
-        tx_copy = Transaction.from_bytes(tx.to_bytes())
+        tx_copy = Tx.from_bytes(tx.to_bytes())
 
         #  Get elements for pre-image
         hash_type = SigHash(sighash_num)
@@ -301,7 +301,7 @@ if __name__ == "__main__":
     test_p2tr_pubkey = P2TR_Key(_xonly_pubkey, leaf_scripts)
 
     # --- SPEND
-    unsigned_raw_tx = Transaction.from_bytes(bytes.fromhex(
+    unsigned_raw_tx = Tx.from_bytes(bytes.fromhex(
         "02000000000101d7c0aa93d852c70ed440c5295242c2ac06f41c3a2a174b5a5b112cebdf0f7bec0000000000ffffffff01260100000000000016001492b8c3a56fac121ddcdffbc85b02fb9ef681038a0000000000"))
 
     # --- CREATE CONTROL BLOCK
@@ -316,11 +316,11 @@ if __name__ == "__main__":
         script_inputs, script, control_block
     ])
 
-    signed_tx = Transaction.from_bytes(unsigned_raw_tx.to_bytes())
+    signed_tx = Tx.from_bytes(unsigned_raw_tx.to_bytes())
     signed_tx.witness = [witness]
 
     # --- VALIDATE AGAINST KNOWN TX
-    known_tx = Transaction.from_bytes(bytes.fromhex(
+    known_tx = Tx.from_bytes(bytes.fromhex(
         "02000000000101d7c0aa93d852c70ed440c5295242c2ac06f41c3a2a174b5a5b112cebdf0f7bec0000000000ffffffff01260100000000000016001492b8c3a56fac121ddcdffbc85b02fb9ef681038a03010302538781c0924c163b385af7093440184af6fd6244936d1288cbb41cc3812286d3f83a33291324300a84045033ec539f60c70d582c48b9acf04150da091694d83171b44ec9bf2c4bf1ca72f7b8538e9df9bdfd3ba4c305ad11587f12bbfafa00d58ad6051d54962df196af2827a86f4bde3cf7d7c1a9dcb6e17f660badefbc892309bb145f00000000"))
     witnesses_agree = known_tx.witness[0] == witness
     txs_agree = known_tx == signed_tx

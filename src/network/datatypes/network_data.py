@@ -20,10 +20,10 @@ from src.core.byte_stream import write_compact_size
 from src.cryptography.hash_functions import sha256
 from src.data import IP_ADDRESS, BitIP, decode_differential, encode_differential
 from src.network.datatypes.network_types import Services, InvType
-from src.tx.tx import Transaction
+from src.tx.tx import Tx
 
-__all__ = ["BlockTransactions", "NetAddr", "InvVector", "PrefilledTx", "ShortID", "HeaderAndShortIDs",
-           "BlockTransactionsRequest"]
+__all__ = ["BlockTxns", "NetAddr", "InvVector", "PrefilledTx", "ShortID", "HeaderAndShortIDs",
+           "BlockTxnsRequest"]
 logger = get_logger(__name__)
 IP_LIKE = Union[IP_ADDRESS, str, BitIP]
 
@@ -176,7 +176,7 @@ class PrefilledTx(Serializable):
     """
     __slots__ = ("block_index", "tx")
 
-    def __init__(self, block_index: int, tx: Transaction):
+    def __init__(self, block_index: int, tx: Tx):
         self.block_index = block_index
         self.tx = tx
 
@@ -195,7 +195,7 @@ class PrefilledTx(Serializable):
         block_index = prev_ind + diff_ind + 1
 
         # tx
-        tx = Transaction.from_bytes(stream)
+        tx = Tx.from_bytes(stream)
 
         return cls(block_index, tx)
 
@@ -415,7 +415,7 @@ class HeaderAndShortIDs(Serializable):
         }
 
 
-class BlockTransactions(Serializable):
+class BlockTxns(Serializable):
     """Provides some requested txs from a block
     =================================================================================
     |   name        |   datatype            |   serialzed format    |   byte size   |
@@ -426,7 +426,7 @@ class BlockTransactions(Serializable):
     =================================================================================
     """
 
-    def __init__(self, block_hash: bytes, txs: list[Transaction]):
+    def __init__(self, block_hash: bytes, txs: list[Tx]):
         self.block_hash = block_hash
         self.txs = txs
 
@@ -439,7 +439,7 @@ class BlockTransactions(Serializable):
 
         # txs
         tx_len = read_compact_size(stream)
-        txs = [Transaction.from_bytes(stream) for _ in range(tx_len)]
+        txs = [Tx.from_bytes(stream) for _ in range(tx_len)]
 
         return cls(block_hash, txs)
 
@@ -470,7 +470,7 @@ class BlockTransactions(Serializable):
         }
 
 
-class BlockTransactionsRequest(Serializable):
+class BlockTxnsRequest(Serializable):
     """Used to list tx indices in a block being requested
     =============================================================================
     |   name        |   datatype        |   serialzed format    |   byte size   |
@@ -542,16 +542,16 @@ if __name__ == "__main__":
         "010000000199db128ad1e9247b8f9182ff57c45949230ff2e9c3f1dd26e6f1c9799ae563c7000000008b48304502203153950a39db89129739d79655e18e844910fc390df3e757444608d68ab7c802022100d679e030889cb2467451c172f8d63c58e85be633f1acdbf85fab87ed95c9eee9014104d0ed1abeba4ecb8e1cdeb2531e0b9adda7541482b60c86e637af94ec82c3aefa777ea9ea50d5242504d19fa4a0500c072db5e5addee09d6808b57d75dd1dd48bffffffff02008eb462000000001976a9143f6a97f34f8c5f6cc697d9650498f3f27060489a88acc0d8a700000000001976a9143478fffab9d7e8d5ec19199e46dcfcf6c6ecb2cf88ac00000000")
     known_tx_bytes2 = bytes.fromhex(
         "0100000001d38c4935a387c0cd0658bddaf9553cdf743221e248cbc02e360ace70fdee721b010000008b4830450221009fce94f4489c0f412d181780a5131cf2bd8d926c38878bb520047e4498e85292022078cca9f887ff4c143800eca06c3faa970b65e14013abe1bb45d548e9c6e3825a014104d987807bdac7bc5935067fa4704e87b6a45c3451f4a0b939a513d3cddc1177a729a5d62195abb94b0c532f616b5e5f0f4b09c15008f9470bf5a8c91e01d5995fffffffff02c0d8a700000000001976a914795c679389d97af7ee450f1237bd8944d03b4bff88ac80dc6461000000001976a914526a1a0926fb3d9df1f7ab101075553106f8d84e88ac00000000")
-    tx1 = Transaction.from_bytes(known_tx_bytes1)
-    tx2 = Transaction.from_bytes(known_tx_bytes2)
+    tx1 = Tx.from_bytes(known_tx_bytes1)
+    tx2 = Tx.from_bytes(known_tx_bytes2)
 
-    test_block_tx = BlockTransactions(known_block_hash, [tx1, tx2])
+    test_block_tx = BlockTxns(known_block_hash, [tx1, tx2])
     print(f"BLOCK TRANSACTION: {test_block_tx.to_json()}")
 
     # --- BLOCK TX REQUEST--- #
     another_known_block_hash = bytes.fromhex("000000000000001154bd96cd2f7c153eee36d2f61faafdf5564bde0348d890d2")[::-1]
     test_tx_indices = [1, 4, 5]
-    test_block_txn_req = BlockTransactionsRequest(another_known_block_hash, test_tx_indices)
+    test_block_txn_req = BlockTxnsRequest(another_known_block_hash, test_tx_indices)
     print(sep)
     print(f"BLOCK TX REQUEST: {test_block_txn_req.to_json()}")
     print(sep)

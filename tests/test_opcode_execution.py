@@ -749,7 +749,7 @@ def test_notif2(engine):
 from secrets import token_bytes as _token_bytes
 from src.core import TX
 from src.script.context import ExecutionContext
-from src.tx import TxIn, TxOut, Witness, Transaction
+from src.tx import TxIn, TxOut, Witness, Tx
 
 
 def _make_cltv_ctx(tx_locktime: int, sequence: int, input_index: int = 0) -> ExecutionContext:
@@ -762,7 +762,7 @@ def _make_cltv_ctx(tx_locktime: int, sequence: int, input_index: int = 0) -> Exe
         scriptsig=b"",
         sequence=sequence,
     )
-    tx = Transaction(
+    tx = Tx(
         inputs=[inp],
         outputs=[TxOut(amount=1000, scriptpubkey=b"")],
         witness=[Witness([])],

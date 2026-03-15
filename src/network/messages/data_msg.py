@@ -5,12 +5,12 @@ from src.block.block import Block, BlockHeader
 from src.core import SERIALIZED, get_bytes, get_stream, read_compact_size, NetworkDataError, read_little_int, \
     read_stream
 from src.core.byte_stream import write_compact_size
-from src.network.datatypes.network_data import InvVector, BlockTransactions, BlockTransactionsRequest, HeaderAndShortIDs
+from src.network.datatypes.network_data import InvVector, BlockTxns, BlockTxnsRequest, HeaderAndShortIDs
 from src.network.messages.message import Message, EmptyMessage
-from src.tx import Transaction
+from src.tx import Tx
 
 __all__ = ['BlockMessage', 'BlockTxn', 'CmpctBlock', 'GetBlockTxn', 'GetBlocks', 'GetData', 'GetHeaders', 'Headers',
-           'Inv', 'MemPool', 'MerkleBlock', 'NotFound', 'SendCmpct', 'TxMessage']
+           'Inv', 'MemPool', 'MerkleBlock', 'NotFound', 'SendCmpct', 'Txn']
 
 
 # === PARENT CLASSES === #
@@ -185,14 +185,14 @@ class BlockTxn(Message):
     """
     COMMAND = "blocktxn"
 
-    def __init__(self, txn: BlockTransactions):
+    def __init__(self, txn: BlockTxns):
         super().__init__()
         self.txn = txn
 
     @classmethod
     def from_payload(cls, byte_stream: SERIALIZED):
         stream = get_stream(byte_stream)
-        txn = BlockTransactions.from_bytes(stream)
+        txn = BlockTxns.from_bytes(stream)
         return cls(txn)
 
     def to_payload(self) -> bytes:
@@ -255,7 +255,7 @@ class GetBlockTxn(Message):
     """
     COMMAND = "getblocktxn"
 
-    def __init__(self, block_txn_req: BlockTransactionsRequest):
+    def __init__(self, block_txn_req: BlockTxnsRequest):
         super().__init__()
         self.block_txn_req = block_txn_req
 
@@ -263,7 +263,7 @@ class GetBlockTxn(Message):
     def from_payload(cls, byte_stream: SERIALIZED):
         stream = get_stream(byte_stream)
 
-        block_txn_req = BlockTransactionsRequest.from_bytes(stream)
+        block_txn_req = BlockTxnsRequest.from_bytes(stream)
         return cls(block_txn_req)
 
     def to_payload(self) -> bytes:
@@ -502,7 +502,7 @@ class SendCmpct(Message):
         }
 
 
-class TxMessage(Message):
+class Txn(Message):
     """
     We transmit a Block in a message
     =============================================================================
@@ -513,14 +513,14 @@ class TxMessage(Message):
     """
     COMMAND = "tx"
 
-    def __init__(self, tx: Transaction):
+    def __init__(self, tx: Tx):
         super().__init__()  # For magic bytes
         self.tx = tx
 
     @classmethod
     def from_payload(cls, byte_stream: SERIALIZED):
         tx_bytes = get_bytes(byte_stream)
-        return cls(Transaction.from_bytes(tx_bytes))
+        return cls(Tx.from_bytes(tx_bytes))
 
     def to_payload(self):
         return self.tx.to_bytes()
@@ -548,8 +548,8 @@ if __name__ == "__main__":
     # --- TX MESSAGE --- #
     known_tx_bytes = bytes.fromhex(
         "0100000001c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd3704000000004847304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd410220181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d0901ffffffff0200ca9a3b00000000434104ae1a62fe09c5f51b13905f07f06b99a2f7159b2225f374cd378d71302fa28414e7aab37397f554a7df5f142c21c1b7303b8a0626f1baded5c72a704f7e6cd84cac00286bee0000000043410411db93e1dcdb8a016b49840f8c53bc1eb68a382e97b1482ecad7b148a6909a5cb2e0eaddfb84ccf9744464f82e160bfa9b8b64f9d4c03f999b8643f656b412a3ac00000000")
-    known_tx = Transaction.from_bytes(known_tx_bytes)
-    test_tx_msg = TxMessage(known_tx)
+    known_tx = Tx.from_bytes(known_tx_bytes)
+    test_tx_msg = Txn(known_tx)
 
     # --- INV MESSAGE --- #
     known_inv_bytes = bytes.fromhex(
@@ -574,10 +574,10 @@ if __name__ == "__main__":
         "010000000199db128ad1e9247b8f9182ff57c45949230ff2e9c3f1dd26e6f1c9799ae563c7000000008b48304502203153950a39db89129739d79655e18e844910fc390df3e757444608d68ab7c802022100d679e030889cb2467451c172f8d63c58e85be633f1acdbf85fab87ed95c9eee9014104d0ed1abeba4ecb8e1cdeb2531e0b9adda7541482b60c86e637af94ec82c3aefa777ea9ea50d5242504d19fa4a0500c072db5e5addee09d6808b57d75dd1dd48bffffffff02008eb462000000001976a9143f6a97f34f8c5f6cc697d9650498f3f27060489a88acc0d8a700000000001976a9143478fffab9d7e8d5ec19199e46dcfcf6c6ecb2cf88ac00000000")
     known_tx_bytes2 = bytes.fromhex(
         "0100000001d38c4935a387c0cd0658bddaf9553cdf743221e248cbc02e360ace70fdee721b010000008b4830450221009fce94f4489c0f412d181780a5131cf2bd8d926c38878bb520047e4498e85292022078cca9f887ff4c143800eca06c3faa970b65e14013abe1bb45d548e9c6e3825a014104d987807bdac7bc5935067fa4704e87b6a45c3451f4a0b939a513d3cddc1177a729a5d62195abb94b0c532f616b5e5f0f4b09c15008f9470bf5a8c91e01d5995fffffffff02c0d8a700000000001976a914795c679389d97af7ee450f1237bd8944d03b4bff88ac80dc6461000000001976a914526a1a0926fb3d9df1f7ab101075553106f8d84e88ac00000000")
-    tx1 = Transaction.from_bytes(known_tx_bytes1)
-    tx2 = Transaction.from_bytes(known_tx_bytes2)
+    tx1 = Tx.from_bytes(known_tx_bytes1)
+    tx2 = Tx.from_bytes(known_tx_bytes2)
 
-    test_block_tx = BlockTransactions(known_block_hash, [tx1, tx2])
+    test_block_tx = BlockTxns(known_block_hash, [tx1, tx2])
     test_block_tx_msg = BlockTxn(test_block_tx)
 
     # --- MERKLEBLOCK --- #

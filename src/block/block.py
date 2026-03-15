@@ -10,7 +10,7 @@ from src.core.formats import BLOCK
 from src.core.serializable import Serializable
 from src.cryptography import hash256
 from src.data import bits_to_target, MerkleTree
-from src.tx import Transaction
+from src.tx import Tx
 
 
 class BlockHeader(Serializable):
@@ -129,7 +129,7 @@ class Block(Serializable):
                  timestamp: int = None,
                  bits: bytes = None,
                  nonce: int = None,
-                 txs: list[Transaction] = None
+                 txs: list[Tx] = None
                  ):
         self.version = version or BLOCK.VERSION
         self.prev_block = prev_block or b'\x00' * BLOCK.PREV_BLOCK
@@ -149,12 +149,12 @@ class Block(Serializable):
 
         # Read in txs
         tx_num = read_compact_size(stream)
-        txs = [Transaction.from_bytes(stream) for _ in range(tx_num)]
+        txs = [Tx.from_bytes(stream) for _ in range(tx_num)]
 
         return cls.from_header(header, txs)
 
     @classmethod
-    def from_header(cls, header: BlockHeader, txs: list[Transaction]):
+    def from_header(cls, header: BlockHeader, txs: list[Tx]):
         return cls(
             version=header.version,
             prev_block=header.prev_block,
