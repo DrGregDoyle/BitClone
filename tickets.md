@@ -33,3 +33,5 @@
 - ~~Change Transactions to Tx and network related transactions to Txn~~
 - Simplify SignatureEngine - either add abstract methods or just use the functions
 - Add ControlBlock validation methods in validate_segwit function in ScriptEngine
+- Get rid of Execution context
+- Create a class called LoadedTx or similar, which contains a tx with one or more referenced UTXOs

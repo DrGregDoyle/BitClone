@@ -417,6 +417,20 @@ class ScriptEngine:
         # --- locktime verified | functions as NOP
         return True
 
+    def _parse_control_block(self, control_block: bytes) -> tuple:
+        """
+        We parse the control block and return a tuple containing the parity bit, the x-only pubkey and the merkle proof.
+        """
+        block_stream = get_stream(control_block)
+
+        control_byte = read_stream(block_stream, 1)
+        xonly_pubkey = read_stream(block_stream, 32)
+        merkle_proof = read_stream(block_stream, len(control_block) - 33)
+
+        print(f"CONTROL BYTE: {control_byte.hex()}")
+        print(f"XONLY PUBKEY: {xonly_pubkey.hex()}")
+        print(f"MERKLE PROOF: {merkle_proof.hex()}")
+
     def validate_segwit(self, scriptpubkey: ScriptPubKey, ctx: ExecutionContext) -> bool:
         """
         For use with P2WPKH and P2WSH
@@ -519,6 +533,7 @@ class ScriptEngine:
                 leaf_script = witness_items.pop(-1)  # second last element is leaf script
 
                 # TODO: Add control_block validation methods
+                self._parse_control_block(control_block)
 
                 # Push remaining witness items and execute leaf_script
                 self.stack.pushlist(witness_items)
