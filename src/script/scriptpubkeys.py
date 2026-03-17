@@ -25,7 +25,7 @@ OP_HASH160 = b'\xa9'
 # --- CONSTANTS --- #
 PUBKEY_LENGTHS = [33, 65]
 
-__all__ = ["P2PK_Key", "P2PKH_Key", "P2MS_Key", "P2SH_Key", "P2TR_Key", "P2WSH_Key", "P2WPKH_Key"]
+__all__ = ["P2PK_Key", "P2PKH_Key", "P2MS_Key", "P2SH_Key", "P2TR_Key", "P2WSH_Key", "P2WPKH_Key", "ScriptPubKey"]
 
 
 class ScriptPubKey(BaseScript, ABC):

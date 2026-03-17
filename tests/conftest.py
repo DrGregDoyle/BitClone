@@ -14,7 +14,7 @@ from src.network import InvType
 from src.network.datatypes.network_data import *
 from src.network.datatypes.network_types import Services
 from src.network.messages.data_msg import *
-from src.script import ScriptEngine, SignatureEngine
+from src.script import ScriptEngine
 from src.tx import TxIn, TxOut, Witness, Tx
 
 
@@ -314,8 +314,3 @@ def getrand_netaddr():
 @pytest.fixture()
 def script_engine():
     return ScriptEngine()
-
-
-@pytest.fixture()
-def sig_engine():
-    return SignatureEngine()

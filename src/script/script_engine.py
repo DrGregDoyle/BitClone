@@ -10,12 +10,12 @@ from src.core.exceptions import ScriptEngineError
 from src.core.logging import get_logger
 from src.core.opcodes import OPCODES
 from src.cryptography import sha256
+from src.script import signature_engine as sig_engine
 from src.script.context import ExecutionContext
 from src.script.opcode_map import OPCODE_MAP
 from src.script.parser import to_asm
 from src.script.scriptpubkeys import ScriptPubKey, P2PKH_Key, P2SH_Key, P2WPKH_Key, P2WSH_Key, P2TR_Key
 from src.script.scriptsigs import ScriptSig
-from src.script.signature_engine import SignatureEngine
 from src.script.stack import BitStack, BitNum
 from src.tx.tx import Witness
 
@@ -54,7 +54,7 @@ class ScriptEngine:
         self.stack = BitStack()
         self.alt_stack = BitStack()
         self.ops_log = []
-        self.sig_engine = SignatureEngine()
+        # self.sig_engine = SignatureEngine()
 
     def clear_stacks(self):
         self.stack.clear()
@@ -235,7 +235,7 @@ class ScriptEngine:
         # Tapscript (script-path Taproot)
         if getattr(ctx, "tapscript", False):
             utxos = ctx.utxo_list if getattr(ctx, "utxo_list", None) else [utxo]
-            return self.sig_engine.get_taproot_sighash(
+            return sig_engine.get_taproot_sighash(
                 tx=tx,
                 input_index=input_index,
                 utxos=utxos,
@@ -246,7 +246,7 @@ class ScriptEngine:
 
         # Segwit v0 (P2WPKH / P2WSH)
         if getattr(ctx, "is_segwit", False):
-            return self.sig_engine.get_segwit_sighash(
+            return sig_engine.get_segwit_sighash(
                 tx=tx,
                 input_index=input_index,
                 amount=utxo.amount,
@@ -255,7 +255,7 @@ class ScriptEngine:
             )
 
         # Legacy
-        return self.sig_engine.get_legacy_sighash(
+        return sig_engine.get_legacy_sighash(
             tx=tx,
             input_index=input_index,
             scriptpubkey=script_code,
@@ -268,14 +268,14 @@ class ScriptEngine:
         """
         # Tapscript uses Schnorr over x-only pubkeys.
         if getattr(ctx, "tapscript", False):
-            return self.sig_engine.verify_schnorr_sig(
+            return sig_engine.verify_schnorr_sig(
                 xonly_pubkey=pubkey,
                 msg=message_hash,
                 sig=der_sig,
             )
 
         # Legacy + segwit v0 use ECDSA.
-        return self.sig_engine.verify_ecdsa_sig(
+        return sig_engine.verify_ecdsa_sig(
             signature=der_sig,
             message=message_hash,
             public_key=pubkey,
@@ -285,7 +285,7 @@ class ScriptEngine:
         # Get context elements
         tx = ctx.tx
         utxo = ctx.utxo
-        input_index = ctx.input_index
+        # input_index = ctx.input_index
 
         # Validate
         if tx is None or utxo is None:
@@ -349,7 +349,7 @@ class ScriptEngine:
             sighash_num = sig[-1]
             message_hash = self._compute_sighash(ctx, script_code, sighash_num)
 
-            if self.sig_engine.verify_ecdsa_sig(signature=der_sig, message=message_hash, public_key=pub):
+            if sig_engine.verify_ecdsa_sig(signature=der_sig, message=message_hash, public_key=pub):
                 matches += 1
                 sig_index += 1
 
@@ -504,13 +504,13 @@ class ScriptEngine:
                     hash_type = 0
 
                 tweaked_pubkey = scriptpubkey.script[2:]
-                sighash = self.sig_engine.get_taproot_sighash(
+                sighash = sig_engine.get_taproot_sighash(
                     tx=tx,
                     input_index=input_index,
                     utxos=[utxo],
                     sighash_num=hash_type
                 )
-                valid_sig = self.sig_engine.verify_schnorr_sig(tweaked_pubkey, msg=sighash, sig=sig)
+                valid_sig = sig_engine.verify_schnorr_sig(tweaked_pubkey, msg=sighash, sig=sig)
                 return valid_sig
             else:
                 # Script-path | All witness elements are datapushes
@@ -698,7 +698,7 @@ class ScriptEngine:
             - Stack is empty
             - Only element left on the stack is OP_0 (aka b'')
             - More than one element left on the stack
-            - Script exits prematurely (e.g OP_RETURN)
+            - Script exits prematurely (e.g. OP_RETURN)
         """
         if self.stack.height != 1:
             # Handles empty stack and more than one element left on stack

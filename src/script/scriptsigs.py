@@ -15,7 +15,7 @@ OP_PUSHBYTES_22 = b'\x16'
 # --- CONSTANTS --- #
 PUBKEY_LENGTHS = [33, 65]
 
-__all__ = ["P2PK_Sig", "P2PKH_Sig", "P2MS_Sig", "P2SH_Sig", "P2SH_P2WPKH_Sig"]
+__all__ = ["P2PK_Sig", "P2PKH_Sig", "P2MS_Sig", "P2SH_Sig", "P2SH_P2WPKH_Sig", "ScriptSig"]
 
 
 class ScriptSig(BaseScript, ABC):

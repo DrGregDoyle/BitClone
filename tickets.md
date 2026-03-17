@@ -31,3 +31,5 @@
 - ~~Add all possible getrand functions to conftest for testing~~
 - ~~Separate scriptpubkey and scriptsig into separate files. Have ScriptType as enum for classification~~
 - ~~Change Transactions to Tx and network related transactions to Txn~~
+- Simplify SignatureEngine - either add abstract methods or just use the functions
+- Add ControlBlock validation methods in validate_segwit function in ScriptEngine

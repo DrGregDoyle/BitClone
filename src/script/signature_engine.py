@@ -7,8 +7,7 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-from src.core import SignatureError, TX, TAPROOT
-from src.core.byte_stream import write_compact_size
+from src.core import SignatureError, TX, TAPROOT, write_compact_size
 from src.cryptography import ecdsa, verify_ecdsa, schnorr_verify, schnorr_sig, hash256, sha256, tapsighash_hash, \
     SECP256K1
 from src.data import encode_der_signature, decode_der_signature, PubKey, get_control_block, \
@@ -16,7 +15,8 @@ from src.data import encode_der_signature, decode_der_signature, PubKey, get_con
 from src.script.scriptpubkeys import P2TR_Key
 from src.tx import Tx, Witness, UTXO
 
-__all__ = ["SigHash", "SignatureEngine"]
+__all__ = ["SigHash", "get_legacy_sighash", "get_segwit_sighash", "get_taproot_sighash", "get_schnorr_sig",
+           "verify_schnorr_sig", "get_ecdsa_sig", "verify_ecdsa_sig"]
 
 
 class SigHash(IntEnum):
@@ -41,239 +41,217 @@ class SigHash(IntEnum):
         return self.value.to_bytes(4, "little")
 
 
-class SignatureEngine:
-    """Pure cryptographic operations for signatures"""
+def get_legacy_sighash(tx: Tx, input_index: int, scriptpubkey: bytes, sighash_num: int = 1):
+    """
+    Computes legacy message_hash for signing:
+        1. Remove all existing script_sigs
+        2. Put the script_pubkey from referenced output in the script_sig for the input.
+        3. Append the sighash byte(s) at the end of the serialized tx data
+        4. Hash the serialized tx data
+    We require the following from the SignatureContext:
+        script_code == scriptpubkey
 
-    # --- SIGHASH ALGORITHMS --- #
+    """
+    # Verify
+    if any(t is None for t in [tx, input_index, sighash_num, scriptpubkey]):
+        raise SignatureError("Insufficient context items for legacy signature hash")
 
-    def get_legacy_sighash(self, tx: Tx, input_index: int, scriptpubkey: bytes, sighash_num: int = 1):
-        """
-        Computes legacy message_hash for signing:
-            1. Remove all existing script_sigs
-            2. Put the script_pubkey from referenced output in the script_sig for the input.
-            3. Append the sighash byte(s) at the end of the serialized tx data
-            4. Hash the serialized tx data
-        We require the following from the SignatureContext:
-            script_code == scriptpubkey
+    # Get tx_copy
+    tx_copy = tx.clone()
 
-        """
-        # Verify
-        if any(t is None for t in [tx, input_index, sighash_num, scriptpubkey]):
-            raise SignatureError("Insufficient context items for legacy signature hash")
+    # 1, Remove all existing scriptsigs
+    for i in tx_copy.inputs:
+        i.scriptsig = bytes()
 
-        # Get tx_copy
-        # tx_copy = Transaction.from_bytes(tx.to_bytes())
-        tx_copy = tx.clone()
+    # 2. Put scriptpubkey in the scriptsig for the input
+    tx_copy.inputs[input_index].scriptsig = scriptpubkey
 
-        # 1, Remove all existing scriptsigs
-        for i in tx_copy.inputs:
-            i.scriptsig = bytes()
+    # 3. Append the sighash byte at the end of the serialized tx data
+    sighash = SigHash(sighash_num)
+    data = tx_copy.to_bytes() + sighash.for_hashing()
 
-        # 2. Put scriptpubkey in the scriptsig for the input
-        tx_copy.inputs[input_index].scriptsig = scriptpubkey
+    # 4. Return sighash
+    return hash256(data)
 
-        # 3. Append the sighash byte at the end of the serialized tx data
-        sighash = SigHash(sighash_num)
-        data = tx_copy.to_bytes() + sighash.for_hashing()
 
-        # 4. Return sighash
-        return hash256(data)
+def get_segwit_sighash(tx: Tx, input_index: int, amount: int, scriptpubkey: bytes, sighash_num:
+int = 1):
+    """
+    We return the sighash for a segwit Transaction
+    """
+    # 1. Get copy of tx
+    tx_copy = Tx.from_bytes(tx.to_bytes())
 
-    def get_segwit_sighash(self, tx: Tx, input_index: int, amount: int, scriptpubkey: bytes, sighash_num:
-    int = 1):
-        """
-        We return the sighash for a segwit Transaction
-        """
-        # 1. Get copy of tx
-        tx_copy = Tx.from_bytes(tx.to_bytes())
+    # 2. Construct the preimage and preimage hash
+    # 2-1. version
+    serialized_version = tx_copy.version.to_bytes(TX.VERSION, "little")
 
-        # 2. Construct the preimage and preimage hash
-        # 2-1. version
-        serialized_version = tx_copy.version.to_bytes(TX.VERSION, "little")
+    # 2-2. hash256(serialized txid+vout for all the inputs in the tx)
+    serialized_inputs = b''.join([txin.outpoint for txin in tx_copy.inputs])
+    hashed_inputs = hash256(serialized_inputs)
 
-        # 2-2. hash256(serialized txid+vout for all the inputs in the tx)
-        serialized_inputs = b''.join([txin.outpoint for txin in tx_copy.inputs])
-        hashed_inputs = hash256(serialized_inputs)
+    # 2-3. Serialize and hash the sequence of each input
+    serialized_sequences = b''.join([txin.sequence.to_bytes(TX.SEQUENCE, "little") for txin in tx_copy.inputs])
+    hashed_sequences = hash256(serialized_sequences)
 
-        # 2-3. Serialize and hash the sequence of each input
-        serialized_sequences = b''.join([txin.sequence.to_bytes(TX.SEQUENCE, "little") for txin in tx_copy.inputs])
-        hashed_sequences = hash256(serialized_sequences)
+    # 2-4. Serialize the outpoint for the input we're signing
+    my_input = tx_copy.inputs[input_index]
+    my_input_outpoint = my_input.outpoint
 
-        # 2-4. Serialize the outpoint for the input we're signing
-        my_input = tx_copy.inputs[input_index]
-        my_input_outpoint = my_input.outpoint
+    # 2-5. Create script for the input we're signing
+    scriptcode = scriptpubkey  # Either P2WPKH or P2WSH. The latter is a witness script, the former is P2PKH
 
-        # 2-5. Create script for the input we're signing
-        scriptcode = scriptpubkey  # Either P2WPKH or P2WSH. The latter is a witness script, the former is P2PKH
+    # 2-6. Amount
+    serialized_amount = amount.to_bytes(TX.AMOUNT, "little")
 
-        # 2-6. Amount
-        serialized_amount = amount.to_bytes(TX.AMOUNT, "little")
+    # 2-7. My Sequence
+    my_sequence = my_input.sequence.to_bytes(TX.SEQUENCE, "little")
 
-        # 2-7. My Sequence
-        my_sequence = my_input.sequence.to_bytes(TX.SEQUENCE, "little")
+    # 2-8. Serialized and hash all outputs
+    serialized_outputs = b''.join([txout.to_bytes() for txout in tx_copy.outputs])
+    hashed_outputs = hash256(serialized_outputs)
 
-        # 2-8. Serialized and hash all outputs
-        serialized_outputs = b''.join([txout.to_bytes() for txout in tx_copy.outputs])
-        hashed_outputs = hash256(serialized_outputs)
+    # 2-9. Locktime
+    serialized_locktime = tx_copy.locktime.to_bytes(TX.LOCKTIME, "little")
 
-        # 2-9. Locktime
-        serialized_locktime = tx_copy.locktime.to_bytes(TX.LOCKTIME, "little")
+    # 2.10 Construct pre-image
+    preimage = (
+            serialized_version + hashed_inputs + hashed_sequences + my_input_outpoint + scriptcode +
+            serialized_amount + my_sequence + hashed_outputs + serialized_locktime
+    )
 
-        # 2.10 Construct pre-image
-        preimage = (
-                serialized_version + hashed_inputs + hashed_sequences + my_input_outpoint + scriptcode +
-                serialized_amount + my_sequence + hashed_outputs + serialized_locktime
+    # 2-11. Add signature hash type
+    preimage_sighash = preimage + SigHash(sighash_num).for_hashing()
+
+    return hash256(preimage_sighash)
+
+
+def get_taproot_sighash(tx: Tx,
+                        input_index: int,
+                        utxos: list[UTXO],  # List of UTXOs for ALL inputs in order
+                        ext_flag: int = 0,
+                        sighash_num: int = 1,
+                        annex: bytes = None,
+                        leaf_hash: bytes = None,  # Necesary for script-path spend
+                        codesep_pos: bytes = bytes.fromhex("ffffffff")):
+    """
+    We return the taproot sighash for any type of taproot spend
+
+    NOTE: We expect the list of utxos to correspond to the list of inputs in the tx
+    """
+    # Copy tx
+    tx_copy = Tx.from_bytes(tx.to_bytes())
+
+    #  Get elements for pre-image
+    hash_type = SigHash(sighash_num)
+    hash_byte = hash_type.to_byte()
+    version = tx_copy.version.to_bytes(TX.VERSION, "little")
+    locktime = tx_copy.locktime.to_bytes(TX.LOCKTIME, "little")
+
+    # --- TX ELEMENTS --- #
+    _prevouts = b''.join([txin.outpoint for txin in tx_copy.inputs])
+    _sequences = b''.join([txin.sequence.to_bytes(TX.SEQUENCE, "little") for txin in tx_copy.inputs])
+    _outputs = b''.join([txout.to_bytes() for txout in tx_copy.outputs])
+
+    # 1. Get context elements
+    if ext_flag == 1:
+        # Script-path spend
+        amounts = [u.amount for u in utxos]
+        scriptpubkeys = [u.scriptpubkey for u in utxos]
+        _amounts = b''.join([a.to_bytes(TX.AMOUNT, "little") for a in amounts])
+        _pubkeys = b''.join([write_compact_size(len(pubkey)) + pubkey for pubkey in scriptpubkeys])
+
+    else:
+        # Key-path spend
+        utxo = utxos[0]
+        amount = utxo.amount
+        scriptpubkey = utxo.scriptpubkey
+        _amounts = amount.to_bytes(TX.AMOUNT, "little")
+        _pubkeys = write_compact_size(len(scriptpubkey)) + scriptpubkey
+
+    # --- HASHING --- #
+    hash_prevouts = sha256(_prevouts)
+    hash_amounts = sha256(_amounts)
+    hash_pubkeys = sha256(_pubkeys)
+    hash_outputs = sha256(_outputs)
+    hash_sequences = sha256(_sequences)
+
+    spend_type_int = (2 * ext_flag) + (1 if annex else 0)
+    spend_type = spend_type_int.to_bytes(1, "little")
+
+    # Input specific
+    temp_input = tx_copy.inputs[input_index]
+    temp_utxo = utxos[input_index]
+    input_outpoint = temp_input.outpoint
+    input_amount = temp_utxo.amount.to_bytes(TX.AMOUNT, "little")  # From signature Context
+    input_scriptpubkey = temp_utxo.scriptpubkey
+    input_sequence = temp_input.sequence.to_bytes(TX.SEQUENCE, "little")
+    input_index_bytes = input_index.to_bytes(TX.INDEX, "little")
+
+    hash_annex = b''
+    if annex:
+        hash_annex = sha256(
+            write_compact_size(len(annex)) + annex
         )
 
-        # 2-11. Add signature hash type
-        preimage_sighash = preimage + SigHash(sighash_num).for_hashing()
+    hash_single_output = sha256(tx_copy.outputs[input_index].to_bytes())
 
-        # # --- LOGGING --- #
-        # print(" --- SEGWIT SIGHASH ---")
-        # print("---" * 80)
-        # print(f"VERSION: {serialized_version.hex()}")
-        # print(f"HASHED INPUTS: {hashed_inputs.hex()}")
-        # print(f"HASHED SEQUENCES: {hashed_sequences.hex()}")
-        # print(f"INPUT: {my_input_outpoint.hex()}")
-        # print(f"SCRIPTCODE: {scriptcode.hex()}")
-        # print(f"AMOUNT: {serialized_amount.hex()}")
-        # print(f"SEQUENCE: {my_sequence.hex()}")
-        # print(f"HASHED OUTPUTS: {hashed_outputs.hex()}")
-        # print(f"LOCKTIME: {serialized_locktime.hex()}")
-        # Return hash of pre-image
-        return hash256(preimage_sighash)
+    # 3. Assemble message for TapSighash hash function
+    message = hash_byte + version + locktime
 
-    def get_taproot_sighash(self,
-                            tx: Tx,
-                            input_index: int,
-                            utxos: list[UTXO],  # List of UTXOs for ALL inputs in order
-                            ext_flag: int = 0,
-                            sighash_num: int = 1,
-                            annex: bytes = None,
-                            leaf_hash: bytes = None,  # Necesary for script-path spend
-                            codesep_pos: bytes = bytes.fromhex("ffffffff")):
-        """
-        We return the taproot sighash for any type of taproot spend
+    if hash_type not in [SigHash.ALL_ANYONECANPAY, SigHash.NONE_ANYONECANPAY, SigHash.SINGLE_ANYONECANPAY]:
+        # Not an ANYONECANPAY Sighash
+        message += hash_prevouts + hash_amounts + hash_pubkeys + hash_sequences
 
-        NOTE: We expect the list of utxos to correspond to the list of inputs in the tx
-        """
-        # Copy tx
-        tx_copy = Tx.from_bytes(tx.to_bytes())
+        # Sighash.ALL
+        if hash_type == SigHash.ALL:
+            message += hash_outputs
 
-        #  Get elements for pre-image
-        hash_type = SigHash(sighash_num)
-        hash_byte = hash_type.to_byte()
-        version = tx_copy.version.to_bytes(TX.VERSION, "little")
-        locktime = tx_copy.locktime.to_bytes(TX.LOCKTIME, "little")
+        # Spend type and annex
+        message += spend_type + input_index_bytes + hash_annex
 
-        # --- TX ELEMENTS --- #
-        _prevouts = b''.join([txin.outpoint for txin in tx_copy.inputs])
-        _sequences = b''.join([txin.sequence.to_bytes(TX.SEQUENCE, "little") for txin in tx_copy.inputs])
-        _outputs = b''.join([txout.to_bytes() for txout in tx_copy.outputs])
+        # Sighash.SINGLE
+        if hash_type == SigHash.SINGLE:
+            message += hash_single_output
+    else:
+        # ANYONECANPAY
+        message += spend_type + input_outpoint + input_amount + input_scriptpubkey + input_sequence + hash_annex
 
-        # 1. Get context elements
-        if ext_flag == 1:
-            # Script-path spend
-            amounts = [u.amount for u in utxos]
-            scriptpubkeys = [u.scriptpubkey for u in utxos]
-            _amounts = b''.join([a.to_bytes(TX.AMOUNT, "little") for a in amounts])
-            _pubkeys = b''.join([write_compact_size(len(pubkey)) + pubkey for pubkey in scriptpubkeys])
+    # Get sighash_epoch and create extension if necessary
+    extension = b''
+    if ext_flag:
+        # leaf_hash = ctx.merkle_root if ctx.leaf_hash is None else ctx.leaf_hash
+        extension = leaf_hash + TAPROOT.PUBKEY_VERSION + codesep_pos
 
-        else:
-            # Key-path spend
-            utxo = utxos[0]
-            amount = utxo.amount
-            scriptpubkey = utxo.scriptpubkey
-            _amounts = amount.to_bytes(TX.AMOUNT, "little")
-            _pubkeys = write_compact_size(len(scriptpubkey)) + scriptpubkey
+    sighash_epoch = TAPROOT.SIGHASH_EPOCH
+    return tapsighash_hash(sighash_epoch + message + extension)
 
-        # --- HASHING --- #
-        hash_prevouts = sha256(_prevouts)
-        hash_amounts = sha256(_amounts)
-        hash_pubkeys = sha256(_pubkeys)
-        hash_outputs = sha256(_outputs)
-        hash_sequences = sha256(_sequences)
 
-        spend_type_int = (2 * ext_flag) + (1 if annex else 0)
-        spend_type = spend_type_int.to_bytes(1, "little")
+# --- Schnorr --- #
+def get_schnorr_sig(priv_key: int, msg: bytes, aux_bytes: bytes = None) -> bytes:
+    # Validation here
+    return schnorr_sig(priv_key, msg, aux_bytes)
 
-        # Input specific
-        temp_input = tx_copy.inputs[input_index]
-        temp_utxo = utxos[input_index]
-        input_outpoint = temp_input.outpoint
-        input_amount = temp_utxo.amount.to_bytes(TX.AMOUNT, "little")  # From signature Context
-        input_scriptpubkey = temp_utxo.scriptpubkey
-        input_sequence = temp_input.sequence.to_bytes(TX.SEQUENCE, "little")
-        input_index_bytes = input_index.to_bytes(TX.INDEX, "little")
 
-        hash_annex = b''
-        if annex:
-            hash_annex = sha256(
-                write_compact_size(len(annex)) + annex
-            )
+def verify_schnorr_sig(xonly_pubkey: int | bytes, msg: bytes, sig: bytes) -> bool:
+    # Validation here
+    return schnorr_verify(xonly_pubkey, msg, sig)
 
-        hash_single_output = sha256(tx_copy.outputs[input_index].to_bytes())
 
-        # 3. Assemble message for TapSighash hash function
-        message = hash_byte + version + locktime
+# --- ECDSA --- #
+def get_ecdsa_sig(private_key: int, message: bytes):
+    """
+    Returns DER-encoded ECDSA signature
+    """
+    # Validation here
+    r, s = ecdsa(private_key, message)
+    return encode_der_signature(r, s)
 
-        if hash_type not in [SigHash.ALL_ANYONECANPAY, SigHash.NONE_ANYONECANPAY, SigHash.SINGLE_ANYONECANPAY]:
-            # Not an ANYONECANPAY Sighash
-            message += hash_prevouts + hash_amounts + hash_pubkeys + hash_sequences
 
-            # Sighash.ALL
-            if hash_type == SigHash.ALL:
-                message += hash_outputs
-
-            # Spend type and annex
-            message += spend_type + input_index_bytes + hash_annex
-
-            # Sighash.SINGLE
-            if hash_type == SigHash.SINGLE:
-                message += hash_single_output
-        else:
-            # ANYONECANPAY
-            message += spend_type + input_outpoint + input_amount + input_scriptpubkey + input_sequence + hash_annex
-
-        # Get sighash_epoch and create extension if necessary
-        extension = b''
-        if ext_flag:
-            # leaf_hash = ctx.merkle_root if ctx.leaf_hash is None else ctx.leaf_hash
-            extension = leaf_hash + TAPROOT.PUBKEY_VERSION + codesep_pos
-
-        sighash_epoch = TAPROOT.SIGHASH_EPOCH
-
-        # # --- TESTING
-        # print(f"SHA PREVOUTS: {hash_prevouts.hex()}")
-        # print(f"SHA AMOUNTS: {hash_amounts.hex()}")
-        # print(f"SHA SEQUENCES: {hash_sequences.hex()}")
-        # print(f"SHA SCRIPTPUBKEYS: {hash_pubkeys.hex()}")
-        # print(f"SHA OUTPUTS: {hash_outputs.hex()}")
-
-        return tapsighash_hash(sighash_epoch + message + extension)
-
-    # --- Schnorr --- #
-    def get_schnorr_sig(self, priv_key: int, msg: bytes, aux_bytes: bytes = None) -> bytes:
-        # Validation here
-        return schnorr_sig(priv_key, msg, aux_bytes)
-
-    def verify_schnorr_sig(self, xonly_pubkey: int | bytes, msg: bytes, sig: bytes) -> bool:
-        # Validation here
-        return schnorr_verify(xonly_pubkey, msg, sig)
-
-    # --- ECDSA --- #
-    def get_ecdsa_sig(self, private_key: int, message: bytes):
-        """
-        Returns DER-encoded ECDSA signature
-        """
-        # Validation here
-        r, s = ecdsa(private_key, message)
-        return encode_der_signature(r, s)
-
-    def verify_ecdsa_sig(self, signature: bytes, message: bytes, public_key: bytes):
-        signature_tuple = decode_der_signature(signature)
-        pubkey = PubKey.from_bytes(public_key)
-        return verify_ecdsa(signature_tuple, message, pubkey.to_point())
+def verify_ecdsa_sig(signature: bytes, message: bytes, public_key: bytes):
+    signature_tuple = decode_der_signature(signature)
+    pubkey = PubKey.from_bytes(public_key)
+    return verify_ecdsa(signature_tuple, message, pubkey.to_point())
 
 
 # --- TESTING --- #
