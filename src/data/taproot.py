@@ -9,7 +9,7 @@ from src.cryptography import tapleaf_hash, tapbranch_hash, taptweak_hash, Point
 from src.data.ecc_keys import PubKey
 
 __all__ = ["Leaf", "Branch", "Tree", "TweakPubkey", "get_unbalanced_merkle_root", "get_control_byte",
-           "get_control_block", "get_tweak", "validate_merkle_path"]
+           "get_control_block", "get_tweak", "validate_merkle_path", "validate_control_block", "compute_merkle_root"]
 
 
 class Leaf:
@@ -18,9 +18,9 @@ class Leaf:
     """
     __slots__ = ("script", "serialized", "leaf_hash")
 
-    def __init__(self, script: bytes):
+    def __init__(self, script: bytes, leaf_version: bytes = TAPROOT.VERSION_BYTE):
         self.script = script
-        self.serialized = TAPROOT.VERSION_BYTE + write_compact_size(len(script)) + self.script
+        self.serialized = leaf_version + write_compact_size(len(script)) + self.script
         self.leaf_hash = tapleaf_hash(self.serialized)
 
     def to_dict(self):
@@ -239,18 +239,62 @@ def validate_merkle_path(leaf_hash: bytes, merkle_path: bytes, merkle_root: byte
     if len(merkle_root) != TAPROOT.PUBKEY_BYTELEN:
         raise TaprootError(f"Merkle root is not {TAPROOT.PUBKEY_BYTELEN} bytes")
 
-    # --- Divide merkle path
-    hash_list = [merkle_path[x: x + TAPROOT.PUBKEY_BYTELEN] for x in range(0, len(merkle_path), TAPROOT.PUBKEY_BYTELEN)]
-    print(f"HASH LIST: {[h.hex() for h in hash_list]}")
+    return compute_merkle_root(leaf_hash, merkle_path) == merkle_root
 
-    # --- Create merkle_root from leaf_hash and hash_list
-    current_branch = Branch(hash_list[0], leaf_hash)
-    for x in range(1, len(hash_list)):
-        next_hash = hash_list[x]
-        current_branch = Branch(next_hash, current_branch.branch_hash)
 
-    # --- Verify last branch with merkle_root
-    return current_branch.branch_hash == merkle_root
+def compute_merkle_root(leaf_hash: bytes, merkle_path: bytes) -> bytes:
+    """Walk the merkle path chunks to reconstruct the merkle root."""
+    if not merkle_path:
+        return leaf_hash  # Single-leaf tree
+    hash_list = [
+        merkle_path[i: i + TAPROOT.PUBKEY_BYTELEN]
+        for i in range(0, len(merkle_path), TAPROOT.PUBKEY_BYTELEN)
+    ]
+    current = leaf_hash
+    for h in hash_list:
+        current = Branch(current, h).branch_hash
+    return current
+
+
+def validate_control_block(control_block: bytes, leaf_script: bytes, tweaked_pubkey_bytes: bytes) -> bool:
+    """
+    Validates a Taproot script-path control block per BIP-341:
+        1. Parse control byte -> leaf_version + parity
+        2. Extract internal pubkey (bytes 1-32) and merkle path (bytes 33+)
+        3. Compute leaf hash using the leaf_version from the control block
+        4. Walk the merkle path to reconstruct the merkle root
+        5. Recompute the tweaked pubkey from internal_pubkey + merkle_root
+        6. Check parity bit matches the tweaked pubkey's y-coordinate
+        7. Compare the x-only tweaked pubkey against the one in the scriptpubkey
+    """
+    # 1 & 2. Parse control block
+    if len(control_block) < 33:
+        raise TaprootError("Control block too short")
+    if (len(control_block) - 33) % TAPROOT.PUBKEY_BYTELEN != 0:
+        raise TaprootError(f"Merkle path not divisible by {TAPROOT.PUBKEY_BYTELEN}")
+
+    control_byte = control_block[0]
+    leaf_version = bytes([control_byte & 0xfe])  # Mask off parity bit
+    parity = control_byte & 0x01
+    internal_pubkey_bytes = control_block[1:33]
+    merkle_path = control_block[33:]
+
+    # 3. Compute leaf hash using leaf_version from the control block (not hardcoded)
+    serialized_leaf = leaf_version + write_compact_size(len(leaf_script)) + leaf_script
+    leaf_hash = tapleaf_hash(serialized_leaf)
+
+    # 4. Reconstruct merkle root
+    merkle_root = compute_merkle_root(leaf_hash, merkle_path)
+
+    # 5. Recompute tweaked pubkey
+    tweaked = TweakPubkey(xonly_pubkey=internal_pubkey_bytes, merkle_root=merkle_root)
+
+    # 6. Check parity
+    if tweaked.tweaked_pubkey.to_point().y % 2 != parity:
+        return False
+
+    # 7. Compare x-only bytes
+    return tweaked.tweaked_pubkey.x_bytes() == tweaked_pubkey_bytes
 
 
 if __name__ == "__main__":

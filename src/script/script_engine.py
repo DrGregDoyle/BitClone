@@ -10,6 +10,7 @@ from src.core.exceptions import ScriptEngineError
 from src.core.logging import get_logger
 from src.core.opcodes import OPCODES
 from src.cryptography import sha256
+from src.data import validate_control_block
 from src.script import signature_engine as sig_engine
 from src.script.context import ExecutionContext
 from src.script.opcode_map import OPCODE_MAP
@@ -427,9 +428,12 @@ class ScriptEngine:
         xonly_pubkey = read_stream(block_stream, 32)
         merkle_proof = read_stream(block_stream, len(control_block) - 33)
 
+        # --- LOGGING
         print(f"CONTROL BYTE: {control_byte.hex()}")
         print(f"XONLY PUBKEY: {xonly_pubkey.hex()}")
         print(f"MERKLE PROOF: {merkle_proof.hex()}")
+
+        return control_byte[-1], xonly_pubkey, merkle_proof
 
     def validate_segwit(self, scriptpubkey: ScriptPubKey, ctx: ExecutionContext) -> bool:
         """
@@ -531,9 +535,12 @@ class ScriptEngine:
                 witness_items = list(witness_field.items)  # shallow copy
                 control_block = witness_items.pop(-1)  # Last element of witness is control block
                 leaf_script = witness_items.pop(-1)  # second last element is leaf script
+                tweaked_pubkey_bytes = scriptpubkey.script[2:]  # Same as key-path
 
-                # TODO: Add control_block validation methods
-                self._parse_control_block(control_block)
+                # --- Validate control block
+                if not validate_control_block(control_block, leaf_script, tweaked_pubkey_bytes):
+                    logger.error(f"Control block {control_block} not valid")
+                    return False
 
                 # Push remaining witness items and execute leaf_script
                 self.stack.pushlist(witness_items)
