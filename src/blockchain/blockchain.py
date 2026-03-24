@@ -10,6 +10,7 @@ from src.blockchain.genesis_block import genesis_block
 from src.core import get_logger, TransactionError, TX
 from src.data import bits_to_target, target_to_bits, MerkleTree
 from src.database.database import BitCloneDatabase, DB_PATH
+from src.script import ExecutionContext, ScriptPubKey
 from src.tx import TxIn
 from src.tx.tx import UTXO, Tx
 
@@ -369,6 +370,30 @@ class Blockchain:
                 logger.error(f"Relative locktime not yet supported: {txin.outpoint.hex()}")
                 return False
 
+        return True
+
+    def _validate_tx_scripts(self, tx: Tx, utxos: list[UTXO]) -> bool:
+        for i, txin in enumerate(tx.inputs):
+            ctx = ExecutionContext(
+                tx=tx,
+                input_index=i,
+                utxos=utxos,
+                script_code=None,
+                is_segwit=False,
+                tapscript=False,
+                merkle_root=None,
+            )
+
+            spent_utxo = utxos[i]
+            scriptpubkey = ScriptPubKey.from_bytes(spent_utxo.scriptpubkey)
+
+            if scriptpubkey.is_segwit:
+                ok = self.script_engine.validate_segwit(scriptpubkey, ctx)
+            else:
+                ok = self.script_engine.validate_script_pair(scriptpubkey, txin.scriptsig, ctx)
+
+            if not ok:
+                return False
         return True
 
     def _check_relative_locktime(self, txin: TxIn, utxo: UTXO, block: Block, next_height: int) -> bool:

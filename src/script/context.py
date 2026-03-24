@@ -13,13 +13,13 @@ __all__ = ["ExecutionContext"]
 
 @dataclass(frozen=True)
 class ExecutionContext:
-    tx: Optional['Transaction'] = None
+    tx: Optional['Tx'] = None
     input_index: Optional[int] = None
     utxos: Optional[list['UTXO']] = None
     script_code: Optional[bytes] = None  # For P2SH/witness
     tapscript: bool = False
     is_segwit: bool = False
-    merkle_root: bytes = None
+    merkle_root: Optional[bytes] = None
 
     @property
     def utxo(self):
