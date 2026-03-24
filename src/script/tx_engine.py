@@ -7,14 +7,8 @@ from src.data import PubKey
 from src.script.parser import to_asm
 from src.script.scriptpubkeys import P2PKH_Key, P2MS_Key, P2SH_Key
 from src.script.scriptsigs import P2PK_Sig, P2PKH_Sig, P2MS_Sig, P2SH_Sig
-from src.script.signature_engine import SignatureEngine, SigHash
+from src.script.sig_ops import SignatureEngine, SigHash
 from src.tx import Tx
-
-
-class TxEngine:
-
-    def __init__(self, sig_engine: SignatureEngine | None = None):
-        self.sig_engine = sig_engine or SignatureEngine()
 
 
 # --- DER-ENCODED SIGNATURES --- #

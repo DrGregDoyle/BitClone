@@ -46,7 +46,7 @@ def test_p2pk_pair(script_engine):
     )
     p2pk_ctx = ExecutionContext(
         tx=p2pk_tx,
-        utxo=p2pk_utxo,
+        utxos=[p2pk_utxo],
         input_index=0
     )
     p2pk_scriptsig = P2PK_Sig.from_bytes(p2pk_scriptsig_bytes)
@@ -81,7 +81,7 @@ def test_p2pkh_pair(script_engine):
     p2pkh_ctx = ExecutionContext(
         tx=p2pkh_tx,
         input_index=0,
-        utxo=p2pkh_utxo
+        utxos=[p2pkh_utxo]
     )
 
     # --- Validate
@@ -112,7 +112,7 @@ def test_p2ms_pair(script_engine):
     p2ms_ctx = ExecutionContext(
         tx=p2ms_tx,
         input_index=0,
-        utxo=p2ms_utxo
+        utxos=[p2ms_utxo]
     )
 
     # --- validate
@@ -142,7 +142,7 @@ def test_p2sh_p2ms_pair(script_engine):
     p2sh_p2ms_ctx = ExecutionContext(
         tx=p2sh_p2ms_tx,
         input_index=11,
-        utxo=p2sh_p2ms_utxo
+        utxos=[p2sh_p2ms_utxo]
     )
 
     # --- Validate
@@ -176,7 +176,7 @@ def test_p2sh_p2wpkh_pair(script_engine):
     p2sh_p2wpkh_ctx = ExecutionContext(
         tx=p2sh_p2wpkh_tx,
         input_index=0,
-        utxo=p2sh_p2wpkh_utxo,
+        utxos=[p2sh_p2wpkh_utxo],
         is_segwit=True,
         script_code=p2sh_p2wpkh_scriptcode
     )
@@ -219,7 +219,7 @@ def test_p2wpkh(script_engine):
     p2wpkh_ctx = ExecutionContext(
         tx=p2wpkh_tx,
         input_index=0,
-        utxo=p2wpkh_utxo,
+        utxos=[p2wpkh_utxo],
         is_segwit=True,
         script_code=p2wpkh_scriptcode
     )
@@ -267,7 +267,7 @@ def test_p2wsh(script_engine):
     p2wsh_ctx = ExecutionContext(
         tx=p2wsh_tx,
         input_index=0,
-        utxo=p2wsh_utxo,
+        utxos=[p2wsh_utxo],
         is_segwit=True,
         script_code=serialize_data(p2wsh_witness_script)
     )
@@ -300,7 +300,7 @@ def test_keypath(script_engine):
     p2tr_ctx = ExecutionContext(
         tx=p2tr_tx,
         input_index=0,
-        utxo=p2tr_utxo,
+        utxos=[p2tr_utxo],
         is_segwit=True,
         tapscript=True
     )
@@ -334,7 +334,7 @@ def test_simple_spendpath(script_engine):
     p2tr_context = ExecutionContext(
         tx=p2tr_tx,
         input_index=1,
-        utxo=p2tr_utxo,
+        utxos=[p2tr_utxo],
         is_segwit=True,
         tapscript=True
     )
@@ -367,7 +367,7 @@ def test_simple_sig_spendpath(script_engine):
     ptr2_context = ExecutionContext(
         tx=p2tr_tx,
         input_index=0,
-        utxo=p2tr_utxo,
+        utxos=[p2tr_utxo],
         is_segwit=True,
         tapscript=True,
         merkle_root=temp_leaf.leaf_hash
@@ -408,7 +408,7 @@ def test_scriptpath_spend(script_engine):
     test_ctx = ExecutionContext(
         tx=known_tx,
         input_index=0,
-        utxo=test_p2tr_utxo,
+        utxos=[test_p2tr_utxo],
         tapscript=True,
         is_segwit=True
     )

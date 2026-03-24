@@ -8,5 +8,5 @@ from src.script.script_engine import *
 from src.script.script_types import *
 from src.script.scriptpubkeys import *
 from src.script.scriptsigs import *
-from src.script.signature_engine import *
+from src.script.sig_ops import *
 from src.script.stack import *

@@ -11,7 +11,7 @@ from src.core.logging import get_logger
 from src.core.opcodes import OPCODES
 from src.cryptography import sha256
 from src.data import validate_control_block
-from src.script import signature_engine as sig_engine
+from src.script import sig_ops as sig_engine
 from src.script.context import ExecutionContext
 from src.script.opcode_map import OPCODE_MAP
 from src.script.parser import to_asm
@@ -227,15 +227,14 @@ class ScriptEngine:
         Compute the appropriate sighash for the current context (legacy / segwit / tapscript).
         """
         tx = ctx.tx
-        utxo = ctx.utxo
+        utxos = ctx.utxos
         input_index = ctx.input_index
 
-        if tx is None or utxo is None:
+        if tx is None or utxos is None:
             raise ScriptEngineError("Missing context elements for sighash computation")
 
         # Tapscript (script-path Taproot)
         if getattr(ctx, "tapscript", False):
-            utxos = ctx.utxo_list if getattr(ctx, "utxo_list", None) else [utxo]
             return sig_engine.get_taproot_sighash(
                 tx=tx,
                 input_index=input_index,
@@ -250,7 +249,7 @@ class ScriptEngine:
             return sig_engine.get_segwit_sighash(
                 tx=tx,
                 input_index=input_index,
-                amount=utxo.amount,
+                amount=utxos[input_index].amount,
                 scriptpubkey=script_code,
                 sighash_num=sighash_num,
             )
@@ -285,11 +284,11 @@ class ScriptEngine:
     def _handle_checksig(self, ctx: ExecutionContext):
         # Get context elements
         tx = ctx.tx
-        utxo = ctx.utxo
-        # input_index = ctx.input_index
+        utxos = ctx.utxos
+        input_index = ctx.input_index
 
         # Validate
-        if tx is None or utxo is None:
+        if tx is None or utxos is None:
             raise ScriptEngineError("Missing context elements for OP_CHECKSIG")
 
         # Pop pubkey and signature
@@ -303,7 +302,7 @@ class ScriptEngine:
         sighash_num = sig[-1]
 
         # Use script_code from context if available (for P2SH), otherwise use scriptpubkey
-        script_code = ctx.script_code if getattr(ctx, "script_code", None) else utxo.scriptpubkey
+        script_code = ctx.script_code if getattr(ctx, "script_code", None) else utxos[input_index].scriptpubkey
 
         # Compute sighash based on context (legacy/segwit/tapscript)
         message_hash = self._compute_sighash(ctx, script_code, sighash_num)

@@ -768,7 +768,7 @@ def _make_cltv_ctx(tx_locktime: int, sequence: int, input_index: int = 0) -> Exe
         witness=[Witness([])],
         locktime=tx_locktime,
     )
-    return ExecutionContext(tx=tx, input_index=input_index, utxo=None)
+    return ExecutionContext(tx=tx, input_index=input_index, utxos=None)
 
 
 def _cltv_script(locktime: int) -> bytes:
