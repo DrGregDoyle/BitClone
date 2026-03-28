@@ -7,7 +7,7 @@ from pathlib import Path
 from src.block.block import Block
 from src.core import get_logger
 from src.database.block_files import BlockFileManager
-from src.tx.tx import UTXO, Tx
+from src.tx.tx import Tx, UTXO
 
 DB_PATH = Path(__file__).parent / "db_files" / "bitclone.db"
 
@@ -17,267 +17,234 @@ logger = get_logger(__name__)
 
 class BitCloneDatabase:
     def __init__(self, db_path=DB_PATH, testing=False):
-        self.db_path = db_path
+        # --- Establish db path
+        self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Block file manager
+        # --- testing bool
+        self.testing = testing
+
+        # --- Block file manager
         blocks_dir = self.db_path.parent / "blocks"
         self.block_files = BlockFileManager(blocks_dir)
 
+        # --- Persistent connection
+        self.conn: sqlite3.Connection | None = sqlite3.connect(self.db_path)
+        self.conn.execute("PRAGMA foreign_keys = ON")
         self._initialize_database()
 
-    def _initialize_database(self):
-        """Creates necessary tables if they do not exist."""
-        with sqlite3.connect(self.db_path) as conn:
-            c = conn.cursor()
-            c.execute('''
-                      CREATE TABLE IF NOT EXISTS utxos
-                      (
-                          outpoint
-                          BLOB
-                          NOT
-                          NULL, -- 36 bytes
-                          amount
-                          INTEGER
-                          NOT
-                          NULL, -- satoshis
-                          script_pubkey
-                          BLOB
-                          NOT
-                          NULL, -- raw bytes
-                          height
-                          INTEGER
-                          NOT
-                          NULL,
-                          coinbase
-                          INTEGER
-                          NOT
-                          NULL
-                          DEFAULT
-                          0
-                          CHECK (
-                          coinbase
-                          IN
-                      (
-                          0,
-                          1
-                      )),
-                          PRIMARY KEY
-                      (
-                          outpoint
-                      )
-                          ) WITHOUT ROWID
-                      ''')
-            # Blocks metadata table
-            c.execute('''
-                      CREATE TABLE IF NOT EXISTS blocks
-                      (
-                          height
-                          INTEGER
-                          PRIMARY
-                          KEY,
-                          block_hash
-                          BLOB
-                          NOT
-                          NULL
-                          UNIQUE,
-                          prev_hash
-                          BLOB
-                          NOT
-                          NULL,
-                          timestamp
-                          INTEGER
-                          NOT
-                          NULL,
-                          file_number
-                          INTEGER
-                          NOT
-                          NULL,
-                          file_offset
-                          INTEGER
-                          NOT
-                          NULL,
-                          block_size
-                          INTEGER
-                          NOT
-                          NULL
-                      )
-                      ''')
+    def _require_conn(self) -> sqlite3.Connection:
+        """Return the active connection or raise if the database is closed."""
+        if self.conn is None:
+            raise RuntimeError("Database connection is closed.")
+        return self.conn
 
-            # Index for faster lookups by hash
-            c.execute('''
-                      CREATE INDEX IF NOT EXISTS idx_block_hash
-                          ON blocks(block_hash)
-                      ''')
+    def _initialize_database(self) -> None:
+        """Create necessary tables if they do not exist."""
+        conn = self._require_conn()
+        with conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS utxos
+                (
+                    outpoint BLOB NOT NULL,
+                    amount INTEGER NOT NULL,
+                    script_pubkey BLOB NOT NULL,
+                    height INTEGER NOT NULL,
+                    coinbase INTEGER NOT NULL DEFAULT 0
+                        CHECK (coinbase IN (0, 1)),
+                    PRIMARY KEY (outpoint)
+                ) WITHOUT ROWID
+            """)
 
-            conn.commit()
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS blocks
+                (
+                    height INTEGER PRIMARY KEY,
+                    block_hash BLOB NOT NULL UNIQUE,
+                    prev_hash BLOB NOT NULL,
+                    timestamp INTEGER NOT NULL,
+                    file_number INTEGER NOT NULL,
+                    file_offset INTEGER NOT NULL,
+                    block_size INTEGER NOT NULL
+                )
+            """)
 
-    def _clear_db(self):
-        """Wipes the database and creates a fresh one."""
-        # Remove tables
-        with sqlite3.connect(self.db_path) as conn:
-            c = conn.cursor()
-            c.execute("DROP TABLE IF EXISTS utxos")
-            c.execute("DROP TABLE IF EXISTS blocks")
-            conn.commit()
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_block_hash
+                ON blocks(block_hash)
+            """)
+
+    def _clear_db(self) -> None:
+        """Wipe the database and recreate a fresh schema."""
+        conn = self._require_conn()
+        with conn:
+            conn.execute("DROP TABLE IF EXISTS utxos")
+            conn.execute("DROP TABLE IF EXISTS blocks")
 
         # Remove all .dat block files to keep storage in sync with the DB
         deleted = self.block_files.clear_block_files()
-        logger.info(f"Cleared {deleted} block file(s) from disk.")
+        logger.info(f"Cleared {deleted} block file(s) from disk).")
 
-        # Create new db
         self._initialize_database()
 
     # --- UTXOS --- #
     def add_utxo(self, u: UTXO) -> None:
-        """Insert a UTXO (fails on duplicate outpoint)."""
-        with sqlite3.connect(self.db_path) as conn:
+        """Insert a UTXO."""
+        conn = self._require_conn()
+        with conn:
             conn.execute(
-                "INSERT INTO utxos(outpoint, amount, script_pubkey, height, coinbase) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (u.outpoint, u.amount, u.scriptpubkey, u.block_height or 0, 1 if u.is_coinbase else 0),
+                """
+                INSERT INTO utxos(outpoint, amount, script_pubkey, height, coinbase)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    u.outpoint,
+                    u.amount,
+                    u.scriptpubkey,
+                    u.block_height or 0,
+                    1 if u.is_coinbase else 0,
+                ),
             )
-            conn.commit()
 
     def get_utxo(self, outpoint: bytes) -> UTXO | None:
-        """Fetch a UTXO by (txid, vout) or None."""
-        with sqlite3.connect(self.db_path) as conn:
-            row = conn.execute(
-                "SELECT outpoint, amount, script_pubkey, height, coinbase "
-                "FROM utxos WHERE outpoint=?",
-                (outpoint,),
-            ).fetchone()
-        if not row:
-            return None
-        outpoint, amt, spk, h, cb = row
-        return UTXO(outpoint, amt, spk, h, bool(cb))
+        """Fetch a UTXO by outpoint."""
+        conn = self._require_conn()
+        row = conn.execute(
+            """
+            SELECT outpoint, amount, script_pubkey, height, coinbase
+            FROM utxos
+            WHERE outpoint = ?
+            """,
+            (outpoint,),
+        ).fetchone()
 
-    def remove_utxo(self, outpoint: bytes):
-        """Remove a UTXO from the set"""
-        with sqlite3.connect(self.db_path) as conn:
+        if row is None:
+            return None
+
+        row_outpoint, amount, scriptpubkey, height, coinbase = row
+        return UTXO(row_outpoint, amount, scriptpubkey, height, bool(coinbase))
+
+    def remove_utxo(self, outpoint: bytes) -> None:
+        """Remove a UTXO from the set."""
+        conn = self._require_conn()
+        with conn:
             conn.execute(
-                "DELETE FROM utxos WHERE outpoint=?",
+                "DELETE FROM utxos WHERE outpoint = ?",
                 (outpoint,),
             )
-            conn.commit()
 
     def count_utxos(self) -> int:
         """Return the total number of UTXOs in the database."""
-        with sqlite3.connect(self.db_path) as conn:
-            result = conn.execute("SELECT COUNT(*) FROM utxos").fetchone()
-            return result[0] if result else 0
+        conn = self._require_conn()
+        row = conn.execute("SELECT COUNT(*) FROM utxos").fetchone()
+        return row[0] if row is not None else 0
 
     def get_utxos(self, tx: Tx) -> list[UTXO] | None:
-        """
-        We return a list of UTXOS associated with the tx inputs. If any are missing we return None.
-        """
+        """Return the UTXOs for tx inputs, or None if any are missing."""
         utxos = []
         for txin in tx.inputs:
-            temp_utxo = self.get_utxo(txin.outpoint)
-            if temp_utxo is None:
+            utxo = self.get_utxo(txin.outpoint)
+            if utxo is None:
                 logger.error(f"Missing utxo for outpoint {txin.outpoint.hex()}. Invalid tx.")
                 return None
-            utxos.append(temp_utxo)
+            utxos.append(utxo)
         return utxos
 
     # --- BLOCKS --- #
-    def add_block(self, block, block_height: int):
-        """
-        Add block to storage
-
-        Args:
-            block: Block object
-            block_height: Height in the blockchain
-        """
-        # Serialize block
+    def add_block(self, block: Block, block_height: int) -> None:
+        """Add a block to storage."""
         block_bytes = block.to_bytes()
-
-        # Write to file
         file_num, offset, size = self.block_files.write_block(block_bytes)
 
-        # Store metadata in database
         header = block.get_header()
-        with sqlite3.connect(self.db_path) as conn:
+        conn = self._require_conn()
+        with conn:
             conn.execute(
-                "INSERT INTO blocks (height, block_hash, prev_hash, timestamp, "
-                "file_number, file_offset, block_size) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (block_height,
-                 header.block_id,
-                 block.prev_block,
-                 block.timestamp,
-                 file_num,
-                 offset,
-                 size)
+                """
+                INSERT INTO blocks (
+                    height, block_hash, prev_hash, timestamp,
+                    file_number, file_offset, block_size
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    block_height,
+                    header.block_id,
+                    block.prev_block,
+                    block.timestamp,
+                    file_num,
+                    offset,
+                    size,
+                ),
             )
-            conn.commit()
 
-    def get_block(self, block_hash: bytes):
-        """Retrieve block by hash"""
-        with sqlite3.connect(self.db_path) as conn:
-            row = conn.execute(
-                "SELECT file_number, file_offset, block_size "
-                "FROM blocks WHERE block_hash=?",
-                (block_hash,)
-            ).fetchone()
+    def get_block(self, block_hash: bytes) -> Block | None:
+        """Retrieve a block by hash."""
+        conn = self._require_conn()
+        row = conn.execute(
+            """
+            SELECT file_number, file_offset, block_size
+            FROM blocks
+            WHERE block_hash = ?
+            """,
+            (block_hash,),
+        ).fetchone()
 
-        if not row:
+        if row is None:
             return None
 
         file_num, offset, size = row
         block_bytes = self.block_files.read_block(file_num, offset, size)
-
         return Block.from_bytes(block_bytes)
 
-    def get_block_at_height(self, height: int):
-        """Retrieve block by height"""
-        with sqlite3.connect(self.db_path) as conn:
-            row = conn.execute(
-                "SELECT file_number, file_offset, block_size "
-                "FROM blocks WHERE height=?",
-                (height,)
-            ).fetchone()
+    def get_block_at_height(self, height: int) -> Block | None:
+        """Retrieve a block by height."""
+        conn = self._require_conn()
+        row = conn.execute(
+            """
+            SELECT file_number, file_offset, block_size
+            FROM blocks
+            WHERE height = ?
+            """,
+            (height,),
+        ).fetchone()
 
-        if not row:
+        if row is None:
             return None
 
         file_num, offset, size = row
         block_bytes = self.block_files.read_block(file_num, offset, size)
-
         return Block.from_bytes(block_bytes)
 
     def get_chain_height(self) -> int:
-        """Get current blockchain height"""
-        with sqlite3.connect(self.db_path) as conn:
-            row = conn.execute("SELECT MAX(height) FROM blocks").fetchone()
-            return row[0] if row[0] is not None else -1
+        """Return the current blockchain height."""
+        conn = self._require_conn()
+        row = conn.execute("SELECT MAX(height) FROM blocks").fetchone()
+        return row[0] if row and row[0] is not None else -1
 
-    def get_latest_block(self):
-        """Get the tip of the blockchain"""
+    def get_latest_block(self) -> Block | None:
+        """Return the tip of the blockchain."""
         height = self.get_chain_height()
         if height < 0:
             return None
         return self.get_block_at_height(height)
 
     # --- DB MAINTENANCE --- #
-    def wipe_db(self):
-        """Primarily used in testing"""
+    def wipe_db(self) -> None:
+        """Primarily used in testing."""
         self._clear_db()
 
     def close(self) -> None:
-        """No-op — connections are opened and closed per-operation. Exists for a clean teardown interface."""
-        pass
+        """Close owned resources."""
+        if self.conn is not None:
+            self.conn.close()
+            self.conn = None
 
+        if hasattr(self.block_files, "close"):
+            self.block_files.close()
 
-# --- TESTING --- #
-if __name__ == "__main__":
-    test_db = BitCloneDatabase()
+    def __enter__(self):
+        return self
 
-    test_utxo = UTXO(
-        outpoint=b'\x00' * 36,
-        amount=0xfff,
-        scriptpubkey=b'beefdead',
-        block_height=1,
-        is_coinbase=False
-    )
-    test_db.add_utxo(test_utxo)
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()

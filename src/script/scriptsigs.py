@@ -130,14 +130,20 @@ class P2MS_Sig(ScriptSig):
         if b[0] != 0:
             return False
 
-        # Check siglength for each sig
+        # Walk each pushed item; every item must be a DER-encoded signature (starts
+        # with 0x30).  This rejects P2SH scriptsigs whose final pushed item is a
+        # redeem script (begins with an OP_n byte such as 0x51), even though its
+        # push-length byte also falls in the valid 0x01–0x4b range.
         signatures = []
         scriptsig = b[1:]
         while True:
             opcode = scriptsig[0]
             if not (0x01 <= opcode <= 0x4b):
                 return False
-            signatures.append(scriptsig[1:1 + opcode])
+            item = scriptsig[1:1 + opcode]
+            if not item or item[0] != 0x30:  # DER compound type tag
+                return False
+            signatures.append(item)
             scriptsig = scriptsig[1 + opcode:]
             if scriptsig == b'':
                 break
@@ -223,8 +229,8 @@ class P2SH_P2WPKH_Sig(ScriptSig):
 SCRIPTSIG_CLASSIFIERS: tuple[type[ScriptSig], ...] = (
     P2SH_P2WPKH_Sig,  # specific leading byte (0x16), checked first
     P2MS_Sig,  # OP_0 + signature walk
-    P2PKH_Sig,  # sig + pubkey structure
     P2SH_Sig,  # backwards redeem-script walk, fairly loose
+    P2PKH_Sig,  # sig + pubkey structure
     P2PK_Sig,  # b[0] == len(b[1:]), maximally loose — must be last
 )
 

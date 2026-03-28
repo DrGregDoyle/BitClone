@@ -620,6 +620,31 @@ class Tx(Serializable):
         return tx_dict
 
 
+class LoadedTx:
+    """
+    A class with a Transaction and one or more referenced UTXOS
+    """
+
+    def __init__(self, tx: Tx, utxos: list[UTXO] | UTXO):
+        utxos = utxos if isinstance(utxos, list) else [utxos]
+
+        # Map each txin outpoint to its index for O(1) lookup
+        outpoint_to_index = {txin.outpoint: i for i, txin in enumerate(tx.inputs)}
+
+        # Validate each UTXO and record the corresponding txin index
+        indices = []
+        for utxo in utxos:
+            if utxo.outpoint not in outpoint_to_index:
+                raise ValueError(
+                    f"UTXO outpoint {utxo.outpoint.hex()} does not correspond to any input in the transaction"
+                )
+            indices.append(outpoint_to_index[utxo.outpoint])
+
+        self.tx = tx
+        self.utxos = utxos
+        self.indices = indices
+
+
 # -- TESTING ---
 if __name__ == "__main__":
     sep = "===" * 50
