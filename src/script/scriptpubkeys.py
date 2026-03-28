@@ -25,7 +25,8 @@ OP_HASH160 = b'\xa9'
 # --- CONSTANTS --- #
 PUBKEY_LENGTHS = [33, 65]
 
-__all__ = ["P2PK_Key", "P2PKH_Key", "P2MS_Key", "P2SH_Key", "P2TR_Key", "P2WSH_Key", "P2WPKH_Key", "ScriptPubKey"]
+__all__ = ["P2PK_Key", "P2PKH_Key", "P2MS_Key", "P2SH_Key", "P2TR_Key", "P2WSH_Key", "P2WPKH_Key", "ScriptPubKey",
+           "get_scriptpubkey_type", "get_scriptpubkey_class", "classify_scriptpubkey"]
 
 
 class ScriptPubKey(BaseScript, ABC):
@@ -379,3 +380,40 @@ class P2TR_Key(ScriptPubKey):
     @property
     def address(self) -> str:
         return encode_bech32(self.script[2:], hrp='bc', witver=1)  # OP_1
+
+
+# --- Classifier --- #
+SCRIPTPUBKEY_CLASSIFIERS: tuple[type[ScriptPubKey], ...] = (
+    P2PKH_Key,
+    P2SH_Key,
+    P2WPKH_Key,
+    P2WSH_Key,
+    P2TR_Key,
+    P2PK_Key,
+    P2MS_Key,
+)
+
+
+def get_scriptpubkey_class(script_bytes: bytes) -> type[ScriptPubKey]:
+    """
+    Return the ScriptPubKey subclass matching the serialized scriptPubKey.
+    """
+    for cls in SCRIPTPUBKEY_CLASSIFIERS:
+        if cls.matches(script_bytes):
+            return cls
+    raise ScriptPubKeyError("Unrecognized scriptPubKey type")
+
+
+def get_scriptpubkey_type(script_bytes: bytes) -> ScriptType:
+    """
+    Return the ScriptType matching the serialized scriptPubKey.
+    """
+    return get_scriptpubkey_class(script_bytes).script_type
+
+
+def classify_scriptpubkey(script_bytes: bytes) -> ScriptPubKey:
+    """
+    Parse the serialized scriptPubKey into its matching ScriptPubKey object.
+    """
+    cls = get_scriptpubkey_class(script_bytes)
+    return cls.from_bytes(script_bytes)

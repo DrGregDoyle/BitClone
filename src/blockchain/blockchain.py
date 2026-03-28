@@ -10,7 +10,7 @@ from src.blockchain.genesis_block import genesis_block
 from src.core import get_logger, TransactionError, TX
 from src.data import bits_to_target, target_to_bits, MerkleTree
 from src.database.database import BitCloneDatabase, DB_PATH
-from src.script import ExecutionContext, ScriptPubKey
+from src.script import classify_scriptpubkey, ExecutionContext, P2WSH_Key, P2WPKH_Key, P2TR_Key, ScriptEngine
 from src.tx import TxIn
 from src.tx.tx import UTXO, Tx
 
@@ -385,12 +385,13 @@ class Blockchain:
             )
 
             spent_utxo = utxos[i]
-            scriptpubkey = ScriptPubKey.from_bytes(spent_utxo.scriptpubkey)
+            scriptpubkey = classify_scriptpubkey(spent_utxo.scriptpubkey)
 
-            if scriptpubkey.is_segwit:
-                ok = self.script_engine.validate_segwit(scriptpubkey, ctx)
+            script_engine = ScriptEngine()
+            if type(scriptpubkey) in [P2WPKH_Key, P2WSH_Key, P2TR_Key]:
+                ok = script_engine.validate_segwit(scriptpubkey, ctx)
             else:
-                ok = self.script_engine.validate_script_pair(scriptpubkey, txin.scriptsig, ctx)
+                ok = script_engine.validate_script_pair(scriptpubkey, txin.scriptsig, ctx)
 
             if not ok:
                 return False
