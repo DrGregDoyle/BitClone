@@ -10,7 +10,8 @@ from src.blockchain.genesis_block import genesis_block
 from src.core import get_logger, TransactionError, TX
 from src.data import bits_to_target, target_to_bits, MerkleTree
 from src.database.database import BitCloneDatabase, DB_PATH
-from src.script import classify_scriptpubkey, ExecutionContext, P2WSH_Key, P2WPKH_Key, P2TR_Key, ScriptEngine
+from src.script import classify_scriptpubkey, ExecutionContext, P2WSH_Key, P2WPKH_Key, P2TR_Key, ScriptEngine, \
+    classify_scriptsig
 from src.tx import TxIn
 from src.tx.tx import UTXO, Tx
 
@@ -391,7 +392,8 @@ class Blockchain:
             if type(scriptpubkey) in [P2WPKH_Key, P2WSH_Key, P2TR_Key]:
                 ok = script_engine.validate_segwit(scriptpubkey, ctx)
             else:
-                ok = script_engine.validate_script_pair(scriptpubkey, txin.scriptsig, ctx)
+                scriptsig = classify_scriptsig(txin.scriptsig)
+                ok = script_engine.validate_script_pair(scriptpubkey, scriptsig, ctx)
 
             if not ok:
                 return False

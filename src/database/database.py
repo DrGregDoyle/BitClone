@@ -264,6 +264,10 @@ class BitCloneDatabase:
         """Primarily used in testing"""
         self._clear_db()
 
+    def close(self) -> None:
+        """No-op — connections are opened and closed per-operation. Exists for a clean teardown interface."""
+        pass
+
 
 # --- TESTING --- #
 if __name__ == "__main__":

@@ -15,7 +15,8 @@ OP_PUSHBYTES_22 = b'\x16'
 # --- CONSTANTS --- #
 PUBKEY_LENGTHS = [33, 65]
 
-__all__ = ["P2PK_Sig", "P2PKH_Sig", "P2MS_Sig", "P2SH_Sig", "P2SH_P2WPKH_Sig", "ScriptSig"]
+__all__ = ["P2PK_Sig", "P2PKH_Sig", "P2MS_Sig", "P2SH_Sig", "P2SH_P2WPKH_Sig", "ScriptSig", "get_scriptsig_class",
+           "get_scriptsig_type", "classify_scriptsig"]
 
 
 class ScriptSig(BaseScript, ABC):
@@ -85,6 +86,10 @@ class P2PKH_Sig(ScriptSig):
     def matches(cls, b: bytes) -> bool:
         sig_len = b[0]
         offset = 1 + sig_len
+
+        if offset >= len(b):  # no room for a pubkey — not P2PKH
+            return False
+
         sig = b[1:offset]
         pubkey_len = b[offset]
         pubkey = b[offset + 1: offset + 1 + pubkey_len]
@@ -92,6 +97,7 @@ class P2PKH_Sig(ScriptSig):
         truth_list = [
             0x01 <= sig_len <= 0x4b,
             len(sig) == sig_len,
+            pubkey_len in PUBKEY_LENGTHS,  # tighter: must be 33 or 65
             len(pubkey) == pubkey_len
         ]
         return all(truth_list)
@@ -211,3 +217,38 @@ class P2SH_P2WPKH_Sig(ScriptSig):
         obj = object.__new__(cls)
         obj.script = scriptsig
         return obj
+
+
+# --- Classifier --- #
+SCRIPTSIG_CLASSIFIERS: tuple[type[ScriptSig], ...] = (
+    P2SH_P2WPKH_Sig,  # specific leading byte (0x16), checked first
+    P2MS_Sig,  # OP_0 + signature walk
+    P2PKH_Sig,  # sig + pubkey structure
+    P2SH_Sig,  # backwards redeem-script walk, fairly loose
+    P2PK_Sig,  # b[0] == len(b[1:]), maximally loose — must be last
+)
+
+
+def get_scriptsig_class(script_bytes: bytes) -> type[ScriptSig]:
+    """
+    Return the ScriptSig subclass matching the serialized scriptSig.
+    """
+    for cls in SCRIPTSIG_CLASSIFIERS:
+        if cls.matches(script_bytes):
+            return cls
+    raise ScriptSigError("Unrecognized scriptSig type")
+
+
+def get_scriptsig_type(script_bytes: bytes) -> ScriptType:
+    """
+    Return the ScriptType matching the serialized scriptSig.
+    """
+    return get_scriptsig_class(script_bytes).script_type
+
+
+def classify_scriptsig(script_bytes: bytes) -> ScriptSig:
+    """
+    Parse the serialized scriptSig into its matching ScriptSig object.
+    """
+    cls = get_scriptsig_class(script_bytes)
+    return cls.from_bytes(script_bytes)
