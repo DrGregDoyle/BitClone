@@ -135,15 +135,7 @@ class Blockchain:
         return self.db.get_block_at_height(height)
 
     def get_utxo(self, outpoint: bytes) -> UTXO | None:
-        """
-        Look up a UTXO by outpoint
-
-        Args:
-            outpoint: 36-byte outpoint (txid + vout)
-
-        Returns:
-            UTXO if found, None otherwise
-        """
+        """Look up a UTXO by outpoint"""
         return self.db.get_utxo(outpoint)
 
     def utxo_count(self) -> int:
@@ -348,6 +340,8 @@ class Blockchain:
                     logger.error(f"Tx {tx.txid.hex()} absolute time-based locktime not yet reached")
                     return False
 
+        utxos: list[UTXO] = []
+
         for txin in tx.inputs:
             utxo = pending_utxos.get(txin.outpoint) or self.db.get_utxo(txin.outpoint)
 
@@ -371,6 +365,13 @@ class Blockchain:
                 logger.error(f"Relative locktime not yet supported: {txin.outpoint.hex()}")
                 return False
 
+            utxos.append(utxo)
+
+        # --- Script validation (including segwit / taproot)
+        if not self._validate_tx_scripts(tx, utxos):
+            logger.error(f"Script validation failed for tx: {tx.txid.hex()}")
+            return False
+
         return True
 
     def _validate_tx_scripts(self, tx: Tx, utxos: list[UTXO]) -> bool:
@@ -380,7 +381,7 @@ class Blockchain:
                 input_index=i,
                 utxos=utxos,
                 script_code=None,
-                is_segwit=False,
+                is_segwit=tx.is_segwit,
                 tapscript=False,
                 merkle_root=None,
             )

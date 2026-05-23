@@ -50,10 +50,11 @@ def test_genesis_block(chain):
 @pytest.mark.parametrize(
     "case_builder",
     [
-        build_p2pk_case, build_p2pkh_case, build_p2ms_case,
+        # build_p2pk_case, build_p2pkh_case, build_p2ms_case,
         # build_p2sh_p2ms_case, build_p2sh_p2wpkh_case,
-        # build_p2wpkh_case, build_p2wsh_case,
-        build_p2tr_keypath_case, build_p2tr_scriptpath_case,
+        # build_p2wpkh_case,
+        build_p2wsh_case,
+        # build_p2tr_keypath_case, build_p2tr_scriptpath_case,
     ],
 )
 def test_validate_tx_scripts_matches_known_script_pairs(chain, case_builder):

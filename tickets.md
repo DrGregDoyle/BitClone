@@ -39,7 +39,9 @@
 - [ ] Get rid of Execution context
 - [ ] Create a class called `LoadedTx` (or similar) which contains a tx with one or more referenced UTXOs
 - [ ] Add `close` / `shutdown` methods to `Blockchain`
-- [ ] Modify `BitCloneDatabase` to use a persistent connection
+- [x] Modify `BitCloneDatabase` to use a persistent connection
+- [ ] Improve P2SH and other script methods using signatures within signatures, or other script types for
+  locking/unlocking
 
 ---
 

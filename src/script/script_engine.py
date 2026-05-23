@@ -15,7 +15,8 @@ from src.script import sig_ops as sig_engine
 from src.script.context import ExecutionContext
 from src.script.opcode_map import OPCODE_MAP
 from src.script.parser import to_asm
-from src.script.scriptpubkeys import ScriptPubKey, P2PKH_Key, P2SH_Key, P2WPKH_Key, P2WSH_Key, P2TR_Key
+from src.script.script_types import ScriptType
+from src.script.scriptpubkeys import ScriptPubKey, P2PKH_Key, P2SH_Key, P2WPKH_Key
 from src.script.scriptsigs import ScriptSig
 from src.script.stack import BitStack, BitNum
 from src.tx.tx import Witness
@@ -452,12 +453,13 @@ class ScriptEngine:
         is_p2wsh = False
         is_p2tr = False
 
-        if P2WPKH_Key.matches(scriptpubkey.script):
-            is_p2wpkh = True
-        if P2WSH_Key.matches(scriptpubkey.script):
-            is_p2wsh = True
-        if P2TR_Key.matches(scriptpubkey.script):
-            is_p2tr = True
+        match scriptpubkey.script_type:
+            case ScriptType.P2WPKH:
+                is_p2wpkh = True
+            case ScriptType.P2WSH:
+                is_p2wsh = True
+            case ScriptType.P2TR:
+                is_p2tr = True
 
         # TODO: Add validation here for ScriptPubKey type for mandatory spend fields
 
@@ -524,7 +526,7 @@ class ScriptEngine:
                 sighash = sig_engine.get_taproot_sighash(
                     tx=tx,
                     input_index=input_index,
-                    utxos=[utxo],
+                    utxos=ctx.utxos,
                     sighash_num=hash_type
                 )
                 valid_sig = sig_engine.verify_schnorr_sig(tweaked_pubkey, msg=sighash, sig=sig)
