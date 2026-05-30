@@ -5,6 +5,7 @@ import json
 from dataclasses import replace, dataclass
 from io import BytesIO
 
+from src.core import serialize_data
 from src.core.byte_stream import get_stream, read_stream, read_little_int
 from src.core.exceptions import ScriptEngineError
 from src.core.logging import get_logger
@@ -504,6 +505,9 @@ class ScriptEngine:
             # Push items to Witness field in reverse order
             sig_list = witness_field.items[:-1][::-1]
             self.stack.pushlist(sig_list)
+
+            # Add serialized script as script code
+            ctx = ctx.with_script_code(serialize_data(script))
 
             # Execute the P2WSH script
             self.execute_script(script, ctx)
