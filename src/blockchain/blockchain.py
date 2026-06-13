@@ -394,6 +394,7 @@ class Blockchain:
                 ok = script_engine.validate_segwit(scriptpubkey, ctx)
             else:
                 scriptsig = classify_scriptsig(txin.scriptsig)
+                print(f"BLOCKCHAIN SCRIPTSIG: {scriptsig.to_json()}")
                 ok = script_engine.validate_script_pair(scriptpubkey, scriptsig, ctx)
 
             if not ok:
