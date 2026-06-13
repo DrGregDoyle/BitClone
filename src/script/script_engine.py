@@ -597,13 +597,12 @@ class ScriptEngine:
             # Get pubkeyhash from P2SH-P2WPKH_Sig and create P2PKH script
             pubkeyhash = scriptsig.script[3:]
             p2pkh_script = P2PKH_Key.from_pubkeyhash(pubkeyhash)
-
+            
             # BIP143 scriptCode is the length-prefixed P2PKH script (e.g. 0x19 + 25 bytes)
-            bip143_script_code = bytes([len(p2pkh_script.script)]) + p2pkh_script.script
-            p2pkh_ctx = replace(ctx, script_code=bip143_script_code)
+            new_ctx = replace(ctx, script_code=serialize_data(p2pkh_script.script))
 
             # Execute the P2PKH script
-            self.execute_script(p2pkh_script.script, p2pkh_ctx)
+            self.execute_script(p2pkh_script.script, new_ctx)
         else:
             # Execute redeem script
             new_ctx = replace(ctx, script_code=redeem_script)  # ExecutionContext is immutable.
