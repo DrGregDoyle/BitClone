@@ -8,6 +8,7 @@ from secrets import token_bytes
 
 from src.block.block import Block
 from src.database import BitCloneDatabase
+from src.database.database import calc_block_work
 from src.tx.tx import Tx, TxIn, TxOut
 
 TEST_DB_PATH = Path(__file__).parent / "db_files" / "test_blocks.db"
@@ -303,6 +304,62 @@ def test_database_persistence():
         assert retrieved.get_header().block_id == block_hash, f"Block {height} hash mismatch after reload"
 
     print("✓ Database persistence works!")
+
+
+def test_block_index_entry_is_created_for_stored_block():
+    test_db = BitCloneDatabase(TEST_DB_PATH)
+    test_db.wipe_db()
+
+    block = create_test_block(prev_hash=b"\x00" * 32, num_txs=2)
+    block_hash = block.get_header().block_id
+    test_db.add_block(block, block_height=0)
+
+    entry = test_db.get_block_index(block_hash)
+
+    assert entry is not None
+    assert entry.block_hash == block_hash
+    assert entry.prev_hash == block.prev_block
+    assert entry.height == 0
+    assert entry.bits == block.bits
+    assert entry.work == calc_block_work(block.bits)
+    assert entry.chainwork == entry.work
+    assert entry.active
+    assert entry.status == "valid"
+
+
+def test_block_index_accumulates_parent_chainwork():
+    test_db = BitCloneDatabase(TEST_DB_PATH)
+    test_db.wipe_db()
+
+    block_a = create_test_block(prev_hash=b"\x00" * 32, num_txs=2)
+    block_b = create_test_block(prev_hash=block_a.get_header().block_id, num_txs=2)
+
+    test_db.add_block(block_a, block_height=0)
+    test_db.add_block(block_b, block_height=1)
+
+    entry_a = test_db.get_block_index(block_a.get_header().block_id)
+    entry_b = test_db.get_block_index(block_b.get_header().block_id)
+
+    assert entry_b.chainwork == entry_a.chainwork + entry_b.work
+
+
+def test_best_header_prefers_most_chainwork_over_active_height():
+    test_db = BitCloneDatabase(TEST_DB_PATH)
+    test_db.wipe_db()
+
+    active_block = create_test_block(prev_hash=b"\x00" * 32, num_txs=2)
+    high_work_header = create_test_block(prev_hash=b"\x00" * 32, num_txs=2)
+    high_work_header.bits = b"\x1c\x00\xff\xff"
+
+    test_db.add_block(active_block, block_height=0)
+    test_db.add_block_index(high_work_header, block_height=0, active=False)
+
+    best_header = test_db.get_best_header()
+    active_tip = test_db.get_active_tip()
+
+    assert best_header.block_hash == high_work_header.get_header().block_id
+    assert not best_header.active
+    assert active_tip.block_hash == active_block.get_header().block_id
 
 
 # --- RUN ALL TESTS --- #

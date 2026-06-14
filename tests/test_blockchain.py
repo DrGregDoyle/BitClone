@@ -233,3 +233,38 @@ def test_adjust_target_never_exceeds_genesis_target(chain):
     chain._adjust_target()
 
     assert chain.target == genesis_target
+
+
+def test_best_header_can_differ_from_active_tip(chain):
+    high_work_header = Block(
+        prev_block=chain.tip.block_id,
+        bits=b"\x1c\x00\xff\xff",
+        txs=[genesis_block.txs[0]],
+    )
+    chain.db.add_block_index(high_work_header, block_height=chain.height + 1, active=False)
+
+    assert chain.get_best_header().block_hash == high_work_header.block_id
+    assert chain.tip == genesis_block
+
+
+def test_would_reorganize_to_higher_work_inactive_header(chain):
+    high_work_header = Block(
+        prev_block=chain.tip.block_id,
+        bits=b"\x1c\x00\xff\xff",
+        txs=[genesis_block.txs[0]],
+    )
+    chain.db.add_block_index(high_work_header, block_height=chain.height + 1, active=False)
+
+    assert chain.would_reorganize_to(high_work_header.block_id)
+
+
+def test_reorganize_to_is_not_implemented_until_undo_data_exists(chain):
+    high_work_header = Block(
+        prev_block=chain.tip.block_id,
+        bits=b"\x1c\x00\xff\xff",
+        txs=[genesis_block.txs[0]],
+    )
+    chain.db.add_block_index(high_work_header, block_height=chain.height + 1, active=False)
+
+    with pytest.raises(NotImplementedError):
+        chain.reorganize_to(high_work_header.block_id)

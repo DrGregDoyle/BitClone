@@ -8,6 +8,7 @@ from src.core import ReadError, get_logger, TransactionError
 from src.database.database import BitCloneDatabase
 from src.script import ScriptEngine
 from src.tx import LoadedTx, Tx
+from src.tx.validation import TxValidationContext, validate_loaded_tx
 
 logger = get_logger(__name__)
 
@@ -151,19 +152,24 @@ class MemPool:
             logger.error(f"Cannot add coinbase tx to the mempool")
             return False
 
-        # --- Check doublespend
+        # --- Mempool double-spend policy
         for txin in tx.inputs:
             if txin.outpoint in self.spent_outpoints:
                 logger.error(f"Double spend detected: {txin.outpoint.hex()}")
                 return False
 
-        # --- Check fees
         try:
-            tx_fee = self._get_fee(tx)
-        except (ReadError, TransactionError) as e:
+            loaded_tx = LoadedTx(tx, self._get_utxos(tx))
+        except (ReadError, TransactionError, ValueError) as e:
             logger.error(f"Validation error: {e}")
             return False
 
+        if not validate_loaded_tx(loaded_tx, TxValidationContext(validate_scripts=False)):
+            return False
+
+        tx_fee = loaded_tx.fee
+
+        # --- Check fees
         if tx_fee < self.min_fee * tx.vbytes:
             logger.error(
                 f"Fee too low: {tx_fee} sats ({tx_fee / tx.vbytes:.2f} sat/vb), minimum is {self.min_fee} sat/vb")

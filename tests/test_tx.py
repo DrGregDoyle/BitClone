@@ -8,6 +8,7 @@ import pytest
 
 from src.core import TransactionError
 from src.tx import LoadedTx, TxIn, TxOut, UTXO, Witness, Tx
+from src.tx.validation import TxValidationContext, validate_loaded_tx
 
 sys.path.append(os.path.dirname(__file__))
 
@@ -114,3 +115,41 @@ def test_loaded_tx_rejects_negative_fee():
 
     with pytest.raises(TransactionError, match="Negative fee"):
         _ = loaded_tx.fee
+
+
+def test_validate_loaded_tx_rejects_duplicate_inputs():
+    outpoint = b"\x11" * 32 + (0).to_bytes(4, "little")
+    tx = Tx(
+        inputs=[
+            TxIn(outpoint[:32], outpoint[32:], b"", 0xffffffff),
+            TxIn(outpoint[:32], outpoint[32:], b"", 0xffffffff),
+        ],
+        outputs=[TxOut(900, b"\x51")],
+    )
+    loaded_tx = LoadedTx(
+        tx,
+        [
+            UTXO(outpoint, 1_000, b"\x51", 100),
+            UTXO(outpoint, 1_000, b"\x51", 100),
+        ],
+    )
+
+    assert not validate_loaded_tx(loaded_tx, TxValidationContext(validate_scripts=False))
+
+
+def test_validate_loaded_tx_uses_injected_script_validator():
+    outpoint = b"\x11" * 32 + (0).to_bytes(4, "little")
+    tx = Tx(
+        inputs=[TxIn(outpoint[:32], outpoint[32:], b"", 0xffffffff)],
+        outputs=[TxOut(900, b"\x51")],
+    )
+    loaded_tx = LoadedTx(tx, UTXO(outpoint, 1_000, b"\x51", 100))
+
+    assert validate_loaded_tx(
+        loaded_tx,
+        TxValidationContext(validate_scripts=True, script_validator=lambda candidate: candidate is loaded_tx),
+    )
+    assert not validate_loaded_tx(
+        loaded_tx,
+        TxValidationContext(validate_scripts=True, script_validator=lambda candidate: False),
+    )

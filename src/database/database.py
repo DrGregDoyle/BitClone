@@ -6,13 +6,56 @@ from pathlib import Path
 
 from src.block.block import Block
 from src.core import get_logger
+from src.data import bits_to_target
 from src.database.block_files import BlockFileManager
 from src.tx.tx import Tx, UTXO
 
 DB_PATH = Path(__file__).parent / "db_files" / "bitclone.db"
 
-__all__ = ["BitCloneDatabase", "DB_PATH"]
+__all__ = ["BitCloneDatabase", "BlockIndexEntry", "DB_PATH", "calc_block_work"]
 logger = get_logger(__name__)
+
+MAX_TARGET_PLUS_ONE = 1 << 256
+CHAINWORK_BYTES = 32
+
+
+class BlockIndexEntry:
+    """
+    Metadata for a block/header in the chain index.
+    """
+    __slots__ = ("block_hash", "prev_hash", "height", "bits", "timestamp", "work", "chainwork", "active", "status")
+
+    def __init__(
+            self,
+            block_hash: bytes,
+            prev_hash: bytes,
+            height: int,
+            bits: bytes,
+            timestamp: int,
+            work: int,
+            chainwork: int,
+            active: bool,
+            status: str,
+    ):
+        self.block_hash = block_hash
+        self.prev_hash = prev_hash
+        self.height = height
+        self.bits = bits
+        self.timestamp = timestamp
+        self.work = work
+        self.chainwork = chainwork
+        self.active = active
+        self.status = status
+
+
+def calc_block_work(bits: bytes) -> int:
+    """
+    Return the amount of chainwork represented by a block target.
+    """
+    target = int.from_bytes(bits_to_target(bits), "big")
+    if target <= 0:
+        return 0
+    return MAX_TARGET_PLUS_ONE // (target + 1)
 
 
 class BitCloneDatabase:
@@ -74,12 +117,39 @@ class BitCloneDatabase:
                 ON blocks(block_hash)
             """)
 
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS block_index
+                (
+                    block_hash BLOB PRIMARY KEY,
+                    prev_hash BLOB NOT NULL,
+                    height INTEGER NOT NULL,
+                    bits BLOB NOT NULL,
+                    timestamp INTEGER NOT NULL,
+                    work BLOB NOT NULL,
+                    chainwork BLOB NOT NULL,
+                    active INTEGER NOT NULL DEFAULT 0
+                        CHECK (active IN (0, 1)),
+                    status TEXT NOT NULL DEFAULT 'valid'
+                ) WITHOUT ROWID
+            """)
+
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_block_index_active_height
+                ON block_index(active, height)
+            """)
+
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_block_index_chainwork
+                ON block_index(chainwork)
+            """)
+
     def _clear_db(self) -> None:
         """Wipe the database and recreate a fresh schema."""
         conn = self._require_conn()
         with conn:
             conn.execute("DROP TABLE IF EXISTS utxos")
             conn.execute("DROP TABLE IF EXISTS blocks")
+            conn.execute("DROP TABLE IF EXISTS block_index")
 
         # Remove all .dat block files to keep storage in sync with the DB
         deleted = self.block_files.clear_block_files()
@@ -178,6 +248,109 @@ class BitCloneDatabase:
                 ),
             )
 
+            self._add_block_index_entry(block, block_height, active=True, conn=conn)
+
+    def _add_block_index_entry(
+            self,
+            block: Block,
+            block_height: int,
+            active: bool,
+            conn: sqlite3.Connection | None = None,
+    ) -> None:
+        header = block.get_header()
+        conn = conn or self._require_conn()
+        parent_entry = self.get_block_index(header.prev_block)
+        work = calc_block_work(block.bits)
+        parent_chainwork = parent_entry.chainwork if parent_entry is not None else 0
+        chainwork = parent_chainwork + work
+
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO block_index (
+                block_hash, prev_hash, height, bits, timestamp,
+                work, chainwork, active, status
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                header.block_id,
+                block.prev_block,
+                block_height,
+                block.bits,
+                block.timestamp,
+                work.to_bytes(CHAINWORK_BYTES, "big"),
+                chainwork.to_bytes(CHAINWORK_BYTES, "big"),
+                1 if active else 0,
+                "valid",
+            ),
+        )
+
+    def add_block_index(self, block: Block, block_height: int, active: bool = False) -> None:
+        """
+        Add or update block/header metadata without writing full block data.
+        """
+        conn = self._require_conn()
+        with conn:
+            self._add_block_index_entry(block, block_height, active=active, conn=conn)
+
+    def get_block_index(self, block_hash: bytes) -> BlockIndexEntry | None:
+        conn = self._require_conn()
+        row = conn.execute(
+            """
+            SELECT block_hash, prev_hash, height, bits, timestamp, work, chainwork, active, status
+            FROM block_index
+            WHERE block_hash = ?
+            """,
+            (block_hash,),
+        ).fetchone()
+
+        return self._row_to_block_index_entry(row)
+
+    def get_best_header(self) -> BlockIndexEntry | None:
+        conn = self._require_conn()
+        row = conn.execute(
+            """
+            SELECT block_hash, prev_hash, height, bits, timestamp, work, chainwork, active, status
+            FROM block_index
+            ORDER BY chainwork DESC, height DESC
+            LIMIT 1
+            """
+        ).fetchone()
+
+        return self._row_to_block_index_entry(row)
+
+    def get_active_tip(self) -> BlockIndexEntry | None:
+        conn = self._require_conn()
+        row = conn.execute(
+            """
+            SELECT block_hash, prev_hash, height, bits, timestamp, work, chainwork, active, status
+            FROM block_index
+            WHERE active = 1
+            ORDER BY height DESC
+            LIMIT 1
+            """
+        ).fetchone()
+
+        return self._row_to_block_index_entry(row)
+
+    @staticmethod
+    def _row_to_block_index_entry(row) -> BlockIndexEntry | None:
+        if row is None:
+            return None
+
+        block_hash, prev_hash, height, bits, timestamp, work, chainwork, active, status = row
+        return BlockIndexEntry(
+            block_hash=block_hash,
+            prev_hash=prev_hash,
+            height=height,
+            bits=bits,
+            timestamp=timestamp,
+            work=int.from_bytes(work, "big"),
+            chainwork=int.from_bytes(chainwork, "big"),
+            active=bool(active),
+            status=status,
+        )
+
     def get_block(self, block_hash: bytes) -> Block | None:
         """Retrieve a block by hash."""
         conn = self._require_conn()
@@ -218,9 +391,8 @@ class BitCloneDatabase:
 
     def get_chain_height(self) -> int:
         """Return the current blockchain height."""
-        conn = self._require_conn()
-        row = conn.execute("SELECT MAX(height) FROM blocks").fetchone()
-        return row[0] if row and row[0] is not None else -1
+        active_tip = self.get_active_tip()
+        return active_tip.height if active_tip is not None else -1
 
     def get_latest_block(self) -> Block | None:
         """Return the tip of the blockchain."""

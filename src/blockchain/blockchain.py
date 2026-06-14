@@ -2,18 +2,17 @@
 The Blockchain class
 """
 import json
-import time
 from pathlib import Path
+import time
 
 from src.block.block import Block
 from src.blockchain.genesis_block import genesis_block
 from src.core import get_logger, TransactionError, TX
 from src.data import bits_to_target, target_to_bits, MerkleTree
 from src.database.database import BitCloneDatabase, DB_PATH
-from src.script import classify_scriptpubkey, ExecutionContext, P2WSH_Key, P2WPKH_Key, P2TR_Key, ScriptEngine, \
-    ScriptType, classify_scriptsig
 from src.tx import TxIn
 from src.tx.tx import LoadedTx, UTXO, Tx
+from src.tx.validation import TxValidationContext, validate_loaded_tx, validate_tx_scripts
 
 logger = get_logger(__name__)
 
@@ -138,9 +137,35 @@ class Blockchain:
         """Look up a UTXO by outpoint"""
         return self.db.get_utxo(outpoint)
 
+    def get_block_index(self, block_hash: bytes):
+        """Retrieve block index metadata by block hash."""
+        return self.db.get_block_index(block_hash)
+
+    def get_best_header(self):
+        """Return the indexed header with the most cumulative work."""
+        return self.db.get_best_header()
+
     def utxo_count(self) -> int:
         """Return the total number of UTXOs in the set"""
         return self.db.count_utxos()
+
+    def would_reorganize_to(self, block_hash: bytes) -> bool:
+        """
+        Return True if the indexed block has more cumulative work than the active tip.
+        """
+        candidate = self.db.get_block_index(block_hash)
+        active_tip = self.db.get_active_tip()
+        if candidate is None or active_tip is None or candidate.active:
+            return False
+        return candidate.chainwork > active_tip.chainwork
+
+    def reorganize_to(self, block_hash: bytes) -> bool:
+        """
+        Placeholder for future active-chain reorganisation.
+        """
+        if not self.would_reorganize_to(block_hash):
+            return False
+        raise NotImplementedError("Chain reorganisation requires undo data and active-chain rewrites.")
 
     # --- Add block
 
@@ -329,17 +354,6 @@ class Blockchain:
         Returns:
             True if valid, False otherwise.
         """
-        # --- BIP65 absolute locktime
-        if tx.locktime > 0 and any(txin.sequence < 0xffffffff for txin in tx.inputs):
-            if tx.locktime < 500_000_000:
-                if tx.locktime >= next_height:
-                    logger.error(f"Tx {tx.txid.hex()} absolute block-height locktime not yet reached")
-                    return False
-            else:
-                if tx.locktime > int(time.time()):
-                    logger.error(f"Tx {tx.txid.hex()} absolute time-based locktime not yet reached")
-                    return False
-
         utxos: list[UTXO] = []
 
         for txin in tx.inputs:
@@ -349,69 +363,29 @@ class Blockchain:
                 logger.error(f"Input references missing UTXO: {txin.outpoint.hex()}")
                 return False
 
-            # --- Coinbase maturity
-            if utxo.is_coinbase and (next_height - utxo.block_height) < COINBASE_MATURITY:
-                logger.error(f"Coinbase UTXO spent before maturity: {txin.outpoint.hex()}")
-                return False
-
-            # --- Intra-block double spend
-            if txin.outpoint in seen_outpoints:
-                logger.error(f"Double spend within block: {txin.outpoint.hex()}")
-                return False
-            seen_outpoints.add(txin.outpoint)
-
-            # --- BIP68 relative locktime
-            if not self._check_relative_locktime(txin, utxo, block, next_height):
-                logger.error(f"Relative locktime not yet supported: {txin.outpoint.hex()}")
-                return False
-
             utxos.append(utxo)
 
         loaded_tx = LoadedTx(tx, utxos)
+        validation_ctx = TxValidationContext(
+            next_height=next_height,
+            block_timestamp=block.timestamp,
+            seen_outpoints=seen_outpoints,
+            get_block_at_height=self.db.get_block_at_height,
+            coinbase_maturity=COINBASE_MATURITY,
+            check_locktime=True,
+            check_relative_locktime=True,
+            validate_scripts=True,
+            script_validator=self._validate_tx_scripts,
+        )
 
-        # --- Script validation (including segwit / taproot)
-        if not self._validate_tx_scripts(loaded_tx):
-            logger.error(f"Script validation failed for tx: {tx.txid.hex()}")
+        if not validate_loaded_tx(loaded_tx, validation_ctx):
             return False
 
         return True
 
     def _validate_tx_scripts(self, tx: Tx | LoadedTx, utxos: list[UTXO] | None = None) -> bool:
         loaded_tx = tx if isinstance(tx, LoadedTx) else LoadedTx(tx, utxos)
-        tx = loaded_tx.tx
-        utxos = loaded_tx.utxos
-
-        for i, txin in enumerate(tx.inputs):
-            spent_utxo = loaded_tx.utxo_for_input(i)
-            scriptpubkey = classify_scriptpubkey(spent_utxo.scriptpubkey)
-            scriptsig = None
-
-            input_is_native_segwit = type(scriptpubkey) in [P2WPKH_Key, P2WSH_Key, P2TR_Key]
-            input_is_nested_segwit = False
-            if not input_is_native_segwit:
-                scriptsig = classify_scriptsig(txin.scriptsig)
-                input_is_nested_segwit = scriptsig.script_type == ScriptType.P2SH_P2WPKH
-
-            ctx = ExecutionContext(
-                tx=tx,
-                input_index=i,
-                utxos=utxos,
-                script_code=None,
-                is_segwit=input_is_native_segwit or input_is_nested_segwit,
-                tapscript=False,
-                merkle_root=None,
-            )
-
-            script_engine = ScriptEngine()
-            if input_is_native_segwit:
-                ok = script_engine.validate_segwit(scriptpubkey, ctx)
-            else:
-                # print(f"BLOCKCHAIN SCRIPTSIG: {scriptsig.to_json()}")
-                ok = script_engine.validate_script_pair(scriptpubkey, scriptsig, ctx)
-
-            if not ok:
-                return False
-        return True
+        return validate_tx_scripts(loaded_tx)
 
     def _check_relative_locktime(self, txin: TxIn, utxo: UTXO, block: Block, next_height: int) -> bool:
         """
