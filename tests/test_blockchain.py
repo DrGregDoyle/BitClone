@@ -1,10 +1,12 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from src.block.block import Block
 from src.blockchain.blockchain import Blockchain, COINBASE_MATURITY
 from src.blockchain.genesis_block import genesis_block
+from src.data import bits_to_target
 from src.tx.tx import Tx, TxIn, TxOut, UTXO
 from tests.script_vectors import *
 
@@ -173,3 +175,52 @@ def test_validate_tx_accepts_pending_utxo_from_same_block(chain):
     assert chain._validate_block_txs(block), (
         "Tx spending pending UTXO from earlier in same block failed validation"
     )
+
+
+def test_retarget_window_constant_uses_seconds():
+    assert Blockchain.TWO_WEEK_SECONDS == 14 * 24 * 60 * 60
+
+
+def test_adjust_target_keeps_target_when_window_takes_two_weeks(chain):
+    chain._height = 2016
+    chain._target = (1000).to_bytes(32, "big")
+    chain._tip = SimpleNamespace(timestamp=Blockchain.TWO_WEEK_SECONDS)
+    chain.get_block_at_height = lambda height: SimpleNamespace(timestamp=0)
+
+    chain._adjust_target()
+
+    assert int.from_bytes(chain.target, "big") == 1000
+
+
+def test_adjust_target_clamps_to_quarter_window(chain):
+    chain._height = 2016
+    chain._target = (1000).to_bytes(32, "big")
+    chain._tip = SimpleNamespace(timestamp=1)
+    chain.get_block_at_height = lambda height: SimpleNamespace(timestamp=0)
+
+    chain._adjust_target()
+
+    assert int.from_bytes(chain.target, "big") == 250
+
+
+def test_adjust_target_clamps_to_four_times_window(chain):
+    chain._height = 2016
+    chain._target = (1000).to_bytes(32, "big")
+    chain._tip = SimpleNamespace(timestamp=Blockchain.TWO_WEEK_SECONDS * 10)
+    chain.get_block_at_height = lambda height: SimpleNamespace(timestamp=0)
+
+    chain._adjust_target()
+
+    assert int.from_bytes(chain.target, "big") == 4000
+
+
+def test_adjust_target_never_exceeds_genesis_target(chain):
+    genesis_target = bits_to_target(Blockchain.GENESIS_BLOCK_BITS)
+    chain._height = 2016
+    chain._target = genesis_target
+    chain._tip = SimpleNamespace(timestamp=Blockchain.TWO_WEEK_SECONDS * 4)
+    chain.get_block_at_height = lambda height: SimpleNamespace(timestamp=0)
+
+    chain._adjust_target()
+
+    assert chain.target == genesis_target

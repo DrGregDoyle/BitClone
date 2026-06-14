@@ -34,7 +34,7 @@ class Blockchain:
     """
 
     # --- Constants
-    TWO_WEEK_SECONDS = 20_160
+    TWO_WEEK_SECONDS = 14 * 24 * 60 * 60
     HALVING_INTERVAL = 210_000
     MAX_WEIGHT = 4_000_000  # 4 million WU
     INITIAL_SUBSIDY = 5_000_000_000  # 50 BTC in satoshis
