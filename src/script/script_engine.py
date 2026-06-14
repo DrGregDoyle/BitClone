@@ -480,6 +480,9 @@ class ScriptEngine:
             pubkeyhash = scriptpubkey.script[2:]
             p2pkh_script = P2PKH_Key.from_pubkeyhash(pubkeyhash)
 
+            # BIP143 uses the serialized P2PKH script as scriptCode for P2WPKH.
+            ctx = ctx.with_script_code(serialize_data(p2pkh_script.script))
+
             # Execute the P2PKH script
             self.execute_script(p2pkh_script.script, ctx)
 

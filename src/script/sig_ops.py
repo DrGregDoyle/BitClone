@@ -65,7 +65,7 @@ def get_legacy_sighash(tx: Tx, input_index: int, scriptpubkey: bytes, sighash_nu
 
     # 3. Append the sighash byte at the end of the serialized tx data
     sighash = SigHash(sighash_num)
-    data = tx_copy.to_bytes() + sighash.for_hashing()
+    data = tx_copy._get_txid_preimage() + sighash.for_hashing()
 
     # 4. Return sighash
     return hash256(data)

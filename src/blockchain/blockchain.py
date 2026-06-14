@@ -11,7 +11,7 @@ from src.core import get_logger, TransactionError, TX
 from src.data import bits_to_target, target_to_bits, MerkleTree
 from src.database.database import BitCloneDatabase, DB_PATH
 from src.script import classify_scriptpubkey, ExecutionContext, P2WSH_Key, P2WPKH_Key, P2TR_Key, ScriptEngine, \
-    classify_scriptsig
+    ScriptType, classify_scriptsig
 from src.tx import TxIn
 from src.tx.tx import UTXO, Tx
 
@@ -376,25 +376,31 @@ class Blockchain:
 
     def _validate_tx_scripts(self, tx: Tx, utxos: list[UTXO]) -> bool:
         for i, txin in enumerate(tx.inputs):
+            spent_utxo = utxos[i]
+            scriptpubkey = classify_scriptpubkey(spent_utxo.scriptpubkey)
+            scriptsig = None
+
+            input_is_native_segwit = type(scriptpubkey) in [P2WPKH_Key, P2WSH_Key, P2TR_Key]
+            input_is_nested_segwit = False
+            if not input_is_native_segwit:
+                scriptsig = classify_scriptsig(txin.scriptsig)
+                input_is_nested_segwit = scriptsig.script_type == ScriptType.P2SH_P2WPKH
+
             ctx = ExecutionContext(
                 tx=tx,
                 input_index=i,
                 utxos=utxos,
                 script_code=None,
-                is_segwit=tx.is_segwit,
+                is_segwit=input_is_native_segwit or input_is_nested_segwit,
                 tapscript=False,
                 merkle_root=None,
             )
 
-            spent_utxo = utxos[i]
-            scriptpubkey = classify_scriptpubkey(spent_utxo.scriptpubkey)
-
             script_engine = ScriptEngine()
-            if type(scriptpubkey) in [P2WPKH_Key, P2WSH_Key, P2TR_Key]:
+            if input_is_native_segwit:
                 ok = script_engine.validate_segwit(scriptpubkey, ctx)
             else:
-                scriptsig = classify_scriptsig(txin.scriptsig)
-                print(f"BLOCKCHAIN SCRIPTSIG: {scriptsig.to_json()}")
+                # print(f"BLOCKCHAIN SCRIPTSIG: {scriptsig.to_json()}")
                 ok = script_engine.validate_script_pair(scriptpubkey, scriptsig, ctx)
 
             if not ok:
