@@ -4,13 +4,13 @@ The classes for BitClone transactions
 import re
 from io import SEEK_CUR
 
-from src.core import (Serializable, SERIALIZED, get_stream, read_little_int, read_stream, TX, deserialize_data,
-                      serialize_data, read_compact_size, write_compact_size, UTXO_SERIAL)
+from src.core import (Serializable, SERIALIZED, TransactionError, get_stream, read_little_int, read_stream, TX,
+                      deserialize_data, serialize_data, read_compact_size, write_compact_size, UTXO_SERIAL)
 from src.core.logging import get_logger
 from src.cryptography import hash256
 
 logger = get_logger(__name__)
-__all__ = ["TxIn", "TxOut", "Witness", "Tx", "UTXO"]
+__all__ = ["TxIn", "TxOut", "Witness", "Tx", "UTXO", "LoadedTx"]
 
 # --- CACHE KEYS --- #
 SEGWIT_KEY = "is_segwit"
@@ -622,27 +622,55 @@ class Tx(Serializable):
 
 class LoadedTx:
     """
-    A class with a Transaction and one or more referenced UTXOS
+    A transaction bundled with the UTXOs spent by its inputs.
+
+    The UTXOs must be complete and in the same order as ``tx.inputs``. Keeping
+    that invariant here lets validation code pass one object around instead of
+    repeatedly trusting that separate ``tx`` and ``utxos`` values stayed aligned.
     """
+    __slots__ = ("tx", "utxos")
 
     def __init__(self, tx: Tx, utxos: list[UTXO] | UTXO):
+        if utxos is None:
+            raise ValueError("LoadedTx requires referenced UTXOs")
+
         utxos = utxos if isinstance(utxos, list) else [utxos]
 
-        # Map each txin outpoint to its index for O(1) lookup
-        outpoint_to_index = {txin.outpoint: i for i, txin in enumerate(tx.inputs)}
+        if len(utxos) != len(tx.inputs):
+            raise ValueError(
+                f"LoadedTx requires one UTXO per input: got {len(utxos)} UTXO(s) for {len(tx.inputs)} input(s)"
+            )
 
-        # Validate each UTXO and record the corresponding txin index
-        indices = []
-        for utxo in utxos:
-            if utxo.outpoint not in outpoint_to_index:
+        for i, (txin, utxo) in enumerate(zip(tx.inputs, utxos)):
+            if utxo.outpoint != txin.outpoint:
                 raise ValueError(
-                    f"UTXO outpoint {utxo.outpoint.hex()} does not correspond to any input in the transaction"
+                    f"UTXO at index {i} has outpoint {utxo.outpoint.hex()}, "
+                    f"expected {txin.outpoint.hex()}"
                 )
-            indices.append(outpoint_to_index[utxo.outpoint])
 
         self.tx = tx
         self.utxos = utxos
-        self.indices = indices
+
+    @property
+    def input_total(self) -> int:
+        return sum(utxo.amount for utxo in self.utxos)
+
+    @property
+    def output_total(self) -> int:
+        return sum(txout.amount for txout in self.tx.outputs)
+
+    @property
+    def fee(self) -> int:
+        fee = self.input_total - self.output_total
+        if fee < 0:
+            raise TransactionError(
+                f"Input total {self.input_total}, output total {self.output_total}. "
+                f"Negative fee value: {-fee} for tx {self.tx.txid.hex()}"
+            )
+        return fee
+
+    def utxo_for_input(self, input_index: int) -> UTXO:
+        return self.utxos[input_index]
 
 
 # -- TESTING ---

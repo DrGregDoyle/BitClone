@@ -7,7 +7,7 @@ from pathlib import Path
 from src.core import ReadError, get_logger, TransactionError
 from src.database.database import BitCloneDatabase
 from src.script import ScriptEngine
-from src.tx import Tx
+from src.tx import LoadedTx, Tx
 
 logger = get_logger(__name__)
 
@@ -194,18 +194,7 @@ class MemPool:
         """
         We return the tx fee amount in sats
         """
-        # setup
-        utxos = self._get_utxos(tx)
-        input_total = 0
-        output_total = 0
-        for utxo in utxos:
-            input_total += utxo.amount
-        for output in tx.outputs:
-            output_total += output.amount
-        tx_fee = input_total - output_total
-        if tx_fee < 0:
-            raise TransactionError("Output total exceeds input total")
-        return tx_fee
+        return LoadedTx(tx, self._get_utxos(tx)).fee
 
     def _remove_tx(self, txid: bytes) -> None:
         """Remove a tx from the mempool and clean up all references."""

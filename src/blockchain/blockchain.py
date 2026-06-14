@@ -13,7 +13,7 @@ from src.database.database import BitCloneDatabase, DB_PATH
 from src.script import classify_scriptpubkey, ExecutionContext, P2WSH_Key, P2WPKH_Key, P2TR_Key, ScriptEngine, \
     ScriptType, classify_scriptsig
 from src.tx import TxIn
-from src.tx.tx import UTXO, Tx
+from src.tx.tx import LoadedTx, UTXO, Tx
 
 logger = get_logger(__name__)
 
@@ -367,16 +367,22 @@ class Blockchain:
 
             utxos.append(utxo)
 
+        loaded_tx = LoadedTx(tx, utxos)
+
         # --- Script validation (including segwit / taproot)
-        if not self._validate_tx_scripts(tx, utxos):
+        if not self._validate_tx_scripts(loaded_tx):
             logger.error(f"Script validation failed for tx: {tx.txid.hex()}")
             return False
 
         return True
 
-    def _validate_tx_scripts(self, tx: Tx, utxos: list[UTXO]) -> bool:
+    def _validate_tx_scripts(self, tx: Tx | LoadedTx, utxos: list[UTXO] | None = None) -> bool:
+        loaded_tx = tx if isinstance(tx, LoadedTx) else LoadedTx(tx, utxos)
+        tx = loaded_tx.tx
+        utxos = loaded_tx.utxos
+
         for i, txin in enumerate(tx.inputs):
-            spent_utxo = utxos[i]
+            spent_utxo = loaded_tx.utxo_for_input(i)
             scriptpubkey = classify_scriptpubkey(spent_utxo.scriptpubkey)
             scriptsig = None
 

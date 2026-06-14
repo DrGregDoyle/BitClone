@@ -7,7 +7,7 @@ from src.block.block import Block
 from src.blockchain.blockchain import Blockchain, COINBASE_MATURITY
 from src.blockchain.genesis_block import genesis_block
 from src.data import bits_to_target
-from src.tx.tx import Tx, TxIn, TxOut, UTXO
+from src.tx.tx import LoadedTx, Tx, TxIn, TxOut, UTXO
 from tests.script_vectors import *
 
 TEST_DB_PATH = Path(__file__).parent / "db_files" / "test_blockchain.db"
@@ -85,6 +85,15 @@ def test_validate_tx_scripts_matches_known_script_pairs(chain, case_builder):
     )
 
 
+def test_validate_tx_scripts_accepts_loaded_tx(chain):
+    case = build_p2pkh_case()
+    _insert_utxos(chain, case.utxos)
+
+    assert chain._validate_tx_scripts(LoadedTx(case.tx, case.utxos)), (
+        "_validate_tx_scripts failed for LoadedTx"
+    )
+
+
 def test_validate_tx_scripts_rejects_modified_scriptsig(chain):
     case = build_p2pkh_case()
     _insert_utxos(chain, case.utxos)
@@ -133,7 +142,7 @@ def test_validate_tx_immature_coinbase_fails(chain):
 
 
 def test_validate_tx_detects_intrablock_double_spend(chain):
-    chain._validate_tx_scripts = lambda tx, utxos: True
+    chain._validate_tx_scripts = lambda tx, utxos=None: True
 
     funding_outpoint = b"\x11" * 32 + (0).to_bytes(4, "little")
     chain.db.add_utxo(
@@ -155,7 +164,7 @@ def test_validate_tx_detects_intrablock_double_spend(chain):
 
 
 def test_validate_tx_accepts_pending_utxo_from_same_block(chain):
-    chain._validate_tx_scripts = lambda tx, utxos: True
+    chain._validate_tx_scripts = lambda tx, utxos=None: True
 
     funding_outpoint = b"\x22" * 32 + (0).to_bytes(4, "little")
     chain.db.add_utxo(
