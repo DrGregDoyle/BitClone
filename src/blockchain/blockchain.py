@@ -310,7 +310,7 @@ class Blockchain:
                     block_height=next_height,
                     is_coinbase=False,
                 )
-                pending_utxos[utxo.outpoint()] = utxo
+                pending_utxos[utxo.outpoint] = utxo
 
         return True
 

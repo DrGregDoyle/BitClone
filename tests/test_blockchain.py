@@ -2,9 +2,10 @@ from pathlib import Path
 
 import pytest
 
+from src.block.block import Block
 from src.blockchain.blockchain import Blockchain, COINBASE_MATURITY
 from src.blockchain.genesis_block import genesis_block
-from src.tx.tx import UTXO
+from src.tx.tx import Tx, TxIn, TxOut, UTXO
 from tests.script_vectors import *
 
 TEST_DB_PATH = Path(__file__).parent / "db_files" / "test_blockchain.db"
@@ -13,6 +14,20 @@ TEST_DB_PATH = Path(__file__).parent / "db_files" / "test_blockchain.db"
 def _insert_utxos(chain: Blockchain, utxos: list[UTXO]) -> None:
     for utxo in utxos:
         chain.db.add_utxo(utxo)
+
+
+def _dummy_tx(spent_outpoint: bytes, amount: int = 900) -> Tx:
+    return Tx(
+        inputs=[
+            TxIn(
+                txid=spent_outpoint[:32],
+                vout=spent_outpoint[32:],
+                scriptsig=b"",
+                sequence=0xffffffff,
+            )
+        ],
+        outputs=[TxOut(amount=amount, scriptpubkey=b"\x51")],
+    )
 
 
 @pytest.fixture()
@@ -116,10 +131,45 @@ def test_validate_tx_immature_coinbase_fails(chain):
 
 
 def test_validate_tx_detects_intrablock_double_spend(chain):
-    # Need to refactor this using dummy data
-    pass
+    chain._validate_tx_scripts = lambda tx, utxos: True
+
+    funding_outpoint = b"\x11" * 32 + (0).to_bytes(4, "little")
+    chain.db.add_utxo(
+        UTXO(
+            outpoint=funding_outpoint,
+            amount=1_000,
+            scriptpubkey=b"\x51",
+            block_height=chain.height,
+        )
+    )
+
+    tx_a = _dummy_tx(funding_outpoint)
+    tx_b = _dummy_tx(funding_outpoint)
+    block = Block(prev_block=chain.tip.block_id, txs=[genesis_block.txs[0], tx_a, tx_b])
+
+    assert not chain._validate_block_txs(block), (
+        "Block with intra-block double spend unexpectedly passed validation"
+    )
 
 
 def test_validate_tx_accepts_pending_utxo_from_same_block(chain):
-    # Need to refactor this using dummy data
-    pass
+    chain._validate_tx_scripts = lambda tx, utxos: True
+
+    funding_outpoint = b"\x22" * 32 + (0).to_bytes(4, "little")
+    chain.db.add_utxo(
+        UTXO(
+            outpoint=funding_outpoint,
+            amount=1_000,
+            scriptpubkey=b"\x51",
+            block_height=chain.height,
+        )
+    )
+
+    parent_tx = _dummy_tx(funding_outpoint, amount=900)
+    child_outpoint = parent_tx.txid + (0).to_bytes(4, "little")
+    child_tx = _dummy_tx(child_outpoint, amount=800)
+    block = Block(prev_block=chain.tip.block_id, txs=[genesis_block.txs[0], parent_tx, child_tx])
+
+    assert chain._validate_block_txs(block), (
+        "Tx spending pending UTXO from earlier in same block failed validation"
+    )
