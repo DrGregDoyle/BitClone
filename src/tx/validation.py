@@ -14,6 +14,9 @@ from src.tx.tx import LoadedTx, UTXO
 
 logger = get_logger(__name__)
 
+MAX_MONEY = 21_000_000 * 100_000_000
+MAX_TX_WEIGHT = 4_000_000
+
 
 @dataclass(slots=True)
 class TxValidationContext:
@@ -38,6 +41,9 @@ def validate_loaded_tx(loaded_tx: LoadedTx, ctx: TxValidationContext | None = No
     """
     ctx = ctx or TxValidationContext()
     tx = loaded_tx.tx
+
+    if not _validate_tx_structure(loaded_tx):
+        return False
 
     if tx.is_coinbase:
         logger.error("Coinbase transaction cannot be validated as a regular spend")
@@ -80,6 +86,55 @@ def validate_loaded_tx(loaded_tx: LoadedTx, ctx: TxValidationContext | None = No
     script_validator = ctx.script_validator or validate_tx_scripts
     if ctx.validate_scripts and not script_validator(loaded_tx):
         logger.error(f"Script validation failed for tx: {tx.txid.hex()}")
+        return False
+
+    return True
+
+
+def _validate_tx_structure(loaded_tx: LoadedTx) -> bool:
+    tx = loaded_tx.tx
+
+    if not tx.inputs:
+        logger.error("Regular transaction must have at least one input")
+        return False
+
+    if not tx.outputs:
+        logger.error("Transaction must have at least one output")
+        return False
+
+    for output in tx.outputs:
+        if output.amount < 0:
+            logger.error("Transaction output has a negative amount")
+            return False
+        if output.amount > MAX_MONEY:
+            logger.error(f"Transaction output amount exceeds max money: {output.amount}")
+            return False
+
+    output_total = loaded_tx.output_total
+    if output_total > MAX_MONEY:
+        logger.error(f"Transaction output total exceeds max money: {output_total}")
+        return False
+
+    for utxo in loaded_tx.utxos:
+        if utxo.amount < 0:
+            logger.error(f"Referenced UTXO has a negative amount: {utxo.outpoint.hex()}")
+            return False
+        if utxo.amount > MAX_MONEY:
+            logger.error(f"Referenced UTXO amount exceeds max money: {utxo.outpoint.hex()}")
+            return False
+
+    if tx.is_segwit and len(tx.witness) != len(tx.inputs):
+        logger.error("SegWit transaction must have one witness field per input")
+        return False
+
+    try:
+        tx_weight = tx.wu
+    except Exception as e:
+        logger.error(f"Transaction weight calculation failed: {e}")
+        return False
+
+    if tx_weight > MAX_TX_WEIGHT:
+        logger.error(f"Transaction weight {tx_weight} WU exceeds max {MAX_TX_WEIGHT} WU")
         return False
 
     return True

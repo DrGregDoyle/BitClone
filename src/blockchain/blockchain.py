@@ -19,6 +19,23 @@ logger = get_logger(__name__)
 __all__ = ["Blockchain"]
 
 COINBASE_MATURITY = 100
+MEDIAN_TIME_SPAN = 11
+MAX_FUTURE_BLOCK_TIME = 2 * 60 * 60
+MIN_COINBASE_SCRIPT_SIZE = 2
+MAX_COINBASE_SCRIPT_SIZE = 100
+MAX_BLOCK_SIGOP_COST = 80_000
+WITNESS_SCALE_FACTOR = 4
+
+OP_PUSHDATA1 = 0x4c
+OP_PUSHDATA2 = 0x4d
+OP_PUSHDATA4 = 0x4e
+OP_1 = 0x51
+OP_16 = 0x60
+OP_CHECKSIG = 0xac
+OP_CHECKSIGVERIFY = 0xad
+OP_CHECKMULTISIG = 0xae
+OP_CHECKMULTISIGVERIFY = 0xaf
+OP_CHECKSIGADD = 0xba
 
 
 class Blockchain:
@@ -190,7 +207,7 @@ class Blockchain:
             self._height = new_height
             self._tip = block
             self._block_subsidy = self.calc_subsidy(new_height)
-            self._adjust_target()
+            self._target = bits_to_target(block.bits)
 
             return True
 
@@ -233,8 +250,13 @@ class Blockchain:
         Full block validation against current chain state.
         Returns True only if the block may be appended as the next block.
         """
+        if not block.txs:
+            logger.error("Block must contain at least one transaction")
+            return False
+
         # --- Get validation elements
         block_header = block.get_header()
+        next_height = self._height + 1
 
         # --- Genesis block: check prev_block is all 0's
         if self.tip is None:
@@ -247,10 +269,13 @@ class Blockchain:
                 logger.error(f"Previous block_id in chain {self.tip.block_id.hex()} doesn't match "
                              f"prev_block in block: {block.prev_block.hex()}")
                 return False
-        # --- Timestamp check: block must not be more than 2 hours in the future
-        current_time = int(time.time())
-        if block.timestamp > current_time + 7200:
-            logger.error(f"Block timestamp {block.timestamp} is more than 2 hours in the future")
+
+        if not self._validate_block_timestamp(block):
+            return False
+
+        expected_bits = self._expected_bits_for_height(next_height)
+        if block.bits != expected_bits:
+            logger.error(f"Block bits {block.bits.hex()} do not match expected bits {expected_bits.hex()}")
             return False
 
         if not self.validate_pow(block):
@@ -262,8 +287,20 @@ class Blockchain:
             logger.error(f"Block weight {block.weight} WU exceeds max {self.MAX_WEIGHT} WU")
             return False
 
+        # --- Sigop cost
+        sigop_cost = self._block_sigop_cost(block)
+        if sigop_cost > MAX_BLOCK_SIGOP_COST:
+            logger.error(f"Block sigop cost {sigop_cost} exceeds max {MAX_BLOCK_SIGOP_COST}")
+            return False
+
+        # --- Duplicate txids
+        txids = [tx.txid for tx in block.txs]
+        if len(txids) != len(set(txids)):
+            logger.error("Block contains duplicate transaction ids")
+            return False
+
         # --- Merkle root
-        calc_root = MerkleTree([tx.txid for tx in block.txs]).merkle_root
+        calc_root = MerkleTree(txids).merkle_root
         if calc_root != block_header.merkle_root:
             logger.error(f"Merkle root mismatch: calculated {calc_root.hex()}")
             return False
@@ -288,6 +325,128 @@ class Blockchain:
         """
         return int.from_bytes(block.block_id, "little") < int.from_bytes(bits_to_target(block.bits), "big")
 
+    def _validate_block_timestamp(self, block: Block, current_time: int | None = None) -> bool:
+        """
+        Check future-time and median-time-past rules for a candidate block.
+        """
+        current_time = int(time.time()) if current_time is None else current_time
+        if block.timestamp > current_time + MAX_FUTURE_BLOCK_TIME:
+            logger.error(f"Block timestamp {block.timestamp} is more than 2 hours in the future")
+            return False
+
+        median_time_past = self._median_time_past()
+        if median_time_past is not None and block.timestamp <= median_time_past:
+            logger.error(f"Block timestamp {block.timestamp} is not greater than MTP {median_time_past}")
+            return False
+
+        return True
+
+    def _median_time_past(self) -> int | None:
+        """
+        Return the median timestamp of the last up-to-11 active blocks.
+        """
+        if self._height < 0:
+            return None
+
+        timestamps = []
+        first_height = max(0, self._height - MEDIAN_TIME_SPAN + 1)
+        for height in range(first_height, self._height + 1):
+            block = self.get_block_at_height(height)
+            if block is not None:
+                timestamps.append(block.timestamp)
+
+        if not timestamps:
+            return None
+
+        timestamps.sort()
+        return timestamps[len(timestamps) // 2]
+
+    def _expected_bits_for_height(self, height: int) -> bytes:
+        """
+        Return the compact target that the next block at ``height`` must use.
+        """
+        if height == 0:
+            return self.GENESIS_BLOCK_BITS
+
+        if height % 2016 != 0:
+            return self.bits
+
+        first_block = self.get_block_at_height(height - 2016)
+        last_block = self.tip
+        if first_block is None or last_block is None:
+            return self.bits
+
+        new_target = self._calculate_retarget(self._target, first_block.timestamp, last_block.timestamp)
+        return target_to_bits(new_target.to_bytes(32, "big"))
+
+    def _calculate_retarget(self, current_target: bytes, first_timestamp: int, last_timestamp: int) -> int:
+        actual_time = last_timestamp - first_timestamp
+        actual_time = max(actual_time, self.TWO_WEEK_SECONDS // 4)
+        actual_time = min(actual_time, self.TWO_WEEK_SECONDS * 4)
+
+        new_target = int.from_bytes(current_target, "big") * actual_time // self.TWO_WEEK_SECONDS
+        genesis_target = int.from_bytes(bits_to_target(self.GENESIS_BLOCK_BITS), "big")
+        return min(new_target, genesis_target)
+
+    def _block_sigop_cost(self, block: Block) -> int:
+        return sum(self._tx_sigop_cost(tx) for tx in block.txs)
+
+    def _tx_sigop_cost(self, tx: Tx) -> int:
+        sigops = 0
+        for txin in tx.inputs:
+            sigops += self._count_sigops(txin.scriptsig)
+        for txout in tx.outputs:
+            sigops += self._count_sigops(txout.scriptpubkey)
+        return sigops * WITNESS_SCALE_FACTOR
+
+    @staticmethod
+    def _count_sigops(script: bytes) -> int:
+        sigops = 0
+        previous_opcode = None
+        i = 0
+
+        while i < len(script):
+            opcode = script[i]
+            i += 1
+
+            if 1 <= opcode <= 75:
+                i += opcode
+                previous_opcode = opcode
+                continue
+            if opcode == OP_PUSHDATA1:
+                if i >= len(script):
+                    break
+                data_len = script[i]
+                i += 1 + data_len
+                previous_opcode = opcode
+                continue
+            if opcode == OP_PUSHDATA2:
+                if i + 2 > len(script):
+                    break
+                data_len = int.from_bytes(script[i:i + 2], "little")
+                i += 2 + data_len
+                previous_opcode = opcode
+                continue
+            if opcode == OP_PUSHDATA4:
+                if i + 4 > len(script):
+                    break
+                data_len = int.from_bytes(script[i:i + 4], "little")
+                i += 4 + data_len
+                previous_opcode = opcode
+                continue
+
+            if opcode in (OP_CHECKSIG, OP_CHECKSIGVERIFY, OP_CHECKSIGADD):
+                sigops += 1
+            elif opcode in (OP_CHECKMULTISIG, OP_CHECKMULTISIGVERIFY):
+                if previous_opcode is not None and OP_1 <= previous_opcode <= OP_16:
+                    sigops += previous_opcode - OP_1 + 1
+                else:
+                    sigops += 20
+
+            previous_opcode = opcode
+
+        return sigops
+
     def _validate_coinbase(self, block: Block) -> bool:
         """
         We validate the coinbase tx in the block
@@ -297,6 +456,11 @@ class Blockchain:
         # --- Verify 1st tx in block is coinbase
         if not coinbase_tx.is_coinbase:
             logger.error(f"First tx in block not coinbase tx: {coinbase_tx.txid}")
+            return False
+
+        scriptsig_len = len(coinbase_tx.inputs[0].scriptsig)
+        if scriptsig_len < MIN_COINBASE_SCRIPT_SIZE or scriptsig_len > MAX_COINBASE_SCRIPT_SIZE:
+            logger.error(f"Coinbase script size {scriptsig_len} outside allowed range 2..100")
             return False
 
         # --- Verify no other tx is a coinbase

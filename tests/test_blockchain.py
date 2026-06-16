@@ -4,9 +4,9 @@ from types import SimpleNamespace
 import pytest
 
 from src.block.block import Block
-from src.blockchain.blockchain import Blockchain, COINBASE_MATURITY
+from src.blockchain.blockchain import Blockchain, COINBASE_MATURITY, MAX_BLOCK_SIGOP_COST, WITNESS_SCALE_FACTOR
 from src.blockchain.genesis_block import genesis_block
-from src.data import bits_to_target
+from src.data import bits_to_target, target_to_bits
 from src.tx.tx import LoadedTx, Tx, TxIn, TxOut, UTXO
 from tests.script_vectors import *
 
@@ -29,6 +29,13 @@ def _dummy_tx(spent_outpoint: bytes, amount: int = 900) -> Tx:
             )
         ],
         outputs=[TxOut(amount=amount, scriptpubkey=b"\x51")],
+    )
+
+
+def _coinbase_tx(scriptsig: bytes = b"\x01\x01", amount: int = 0, scriptpubkey: bytes = b"\x51") -> Tx:
+    return Tx(
+        inputs=[TxIn(b"\x00" * 32, 0xffffffff, scriptsig, 0xffffffff)],
+        outputs=[TxOut(amount=amount, scriptpubkey=scriptpubkey)],
     )
 
 
@@ -184,6 +191,73 @@ def test_validate_tx_accepts_pending_utxo_from_same_block(chain):
     assert chain._validate_block_txs(block), (
         "Tx spending pending UTXO from earlier in same block failed validation"
     )
+
+
+def test_validate_block_rejects_empty_tx_list(chain):
+    block = Block(prev_block=chain.tip.block_id, txs=[_coinbase_tx()])
+    block.txs = []
+
+    assert not chain._validate_block(block)
+
+
+def test_validate_block_rejects_duplicate_txids(chain):
+    chain.validate_pow = lambda block: True
+    coinbase_tx = _coinbase_tx()
+    block = Block(
+        prev_block=chain.tip.block_id,
+        timestamp=max(chain.tip.timestamp + 1, 1_600_000_000),
+        bits=chain.bits,
+        txs=[coinbase_tx, coinbase_tx],
+    )
+
+    assert not chain._validate_block(block)
+
+
+@pytest.mark.parametrize("scriptsig", [b"\x51", b"\x51" * 101])
+def test_validate_coinbase_rejects_script_size_outside_consensus_limits(chain, scriptsig):
+    block = Block(prev_block=chain.tip.block_id, txs=[_coinbase_tx(scriptsig=scriptsig)])
+
+    assert not chain._validate_coinbase(block)
+
+
+def test_block_sigop_cost_counts_legacy_signature_ops(chain):
+    checksigs = (MAX_BLOCK_SIGOP_COST // WITNESS_SCALE_FACTOR) + 1
+    block = Block(prev_block=chain.tip.block_id, txs=[_coinbase_tx(scriptpubkey=b"\xac" * checksigs)])
+
+    assert chain._block_sigop_cost(block) == checksigs * WITNESS_SCALE_FACTOR
+    assert chain._block_sigop_cost(block) > MAX_BLOCK_SIGOP_COST
+
+
+def test_count_sigops_skips_pushed_data(chain):
+    script = bytes([1, 0xac]) + b"\xac"
+
+    assert chain._count_sigops(script) == 1
+
+
+def test_validate_block_timestamp_rejects_timestamp_at_mtp(chain):
+    block = Block(prev_block=chain.tip.block_id, timestamp=chain.tip.timestamp, bits=chain.bits, txs=[_coinbase_tx()])
+
+    assert not chain._validate_block_timestamp(block, current_time=chain.tip.timestamp)
+
+
+def test_validate_block_timestamp_rejects_more_than_two_hours_in_future(chain):
+    now = 1_700_000_000
+    block = Block(prev_block=chain.tip.block_id, timestamp=now + 7201, bits=chain.bits, txs=[_coinbase_tx()])
+
+    assert not chain._validate_block_timestamp(block, current_time=now)
+
+
+def test_expected_bits_uses_current_bits_between_retargets(chain):
+    assert chain._expected_bits_for_height(chain.height + 1) == chain.bits
+
+
+def test_expected_bits_retargets_at_interval_boundary(chain):
+    chain._height = 2015
+    chain._target = (1000).to_bytes(32, "big")
+    chain._tip = SimpleNamespace(timestamp=Blockchain.TWO_WEEK_SECONDS)
+    chain.get_block_at_height = lambda height: SimpleNamespace(timestamp=0)
+
+    assert chain._expected_bits_for_height(2016) == target_to_bits((1000).to_bytes(32, "big"))
 
 
 def test_retarget_window_constant_uses_seconds():

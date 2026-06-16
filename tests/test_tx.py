@@ -8,9 +8,24 @@ import pytest
 
 from src.core import TransactionError
 from src.tx import LoadedTx, TxIn, TxOut, UTXO, Witness, Tx
-from src.tx.validation import TxValidationContext, validate_loaded_tx
+from src.tx.validation import MAX_MONEY, MAX_TX_WEIGHT, TxValidationContext, validate_loaded_tx
 
 sys.path.append(os.path.dirname(__file__))
+
+
+def _loaded_tx(
+        *,
+        inputs: list[TxIn] | None = None,
+        outputs: list[TxOut] | None = None,
+        utxos: list[UTXO] | UTXO | None = None,
+        witness: list[Witness] | None = None,
+) -> LoadedTx:
+    outpoint = b"\x11" * 32 + (0).to_bytes(4, "little")
+    tx_inputs = inputs if inputs is not None else [TxIn(outpoint[:32], outpoint[32:], b"", 0xffffffff)]
+    tx_outputs = outputs if outputs is not None else [TxOut(900, b"\x51")]
+    tx = Tx(inputs=tx_inputs, outputs=tx_outputs, witness=witness)
+    tx_utxos = utxos if utxos is not None else UTXO(outpoint, 1_000, b"\x51", 100)
+    return LoadedTx(tx, tx_utxos)
 
 
 def test_txinput(getrand_txinput):
@@ -117,6 +132,24 @@ def test_loaded_tx_rejects_negative_fee():
         _ = loaded_tx.fee
 
 
+def test_validate_loaded_tx_accepts_structurally_valid_tx():
+    loaded_tx = _loaded_tx()
+
+    assert validate_loaded_tx(loaded_tx, TxValidationContext(validate_scripts=False))
+
+
+def test_validate_loaded_tx_rejects_empty_inputs():
+    loaded_tx = LoadedTx(Tx(inputs=[], outputs=[TxOut(0, b"\x51")]), [])
+
+    assert not validate_loaded_tx(loaded_tx, TxValidationContext(validate_scripts=False))
+
+
+def test_validate_loaded_tx_rejects_empty_outputs():
+    loaded_tx = _loaded_tx(outputs=[])
+
+    assert not validate_loaded_tx(loaded_tx, TxValidationContext(validate_scripts=False))
+
+
 def test_validate_loaded_tx_rejects_duplicate_inputs():
     outpoint = b"\x11" * 32 + (0).to_bytes(4, "little")
     tx = Tx(
@@ -133,6 +166,56 @@ def test_validate_loaded_tx_rejects_duplicate_inputs():
             UTXO(outpoint, 1_000, b"\x51", 100),
         ],
     )
+
+    assert not validate_loaded_tx(loaded_tx, TxValidationContext(validate_scripts=False))
+
+
+def test_validate_loaded_tx_rejects_negative_output_amount():
+    loaded_tx = _loaded_tx(outputs=[TxOut(-1, b"\x51")])
+
+    assert not validate_loaded_tx(loaded_tx, TxValidationContext(validate_scripts=False))
+
+
+def test_validate_loaded_tx_rejects_output_amount_above_max_money():
+    loaded_tx = _loaded_tx(outputs=[TxOut(MAX_MONEY + 1, b"\x51")])
+
+    assert not validate_loaded_tx(loaded_tx, TxValidationContext(validate_scripts=False))
+
+
+def test_validate_loaded_tx_rejects_output_total_above_max_money():
+    outpoint_a = b"\x11" * 32 + (0).to_bytes(4, "little")
+    outpoint_b = b"\x22" * 32 + (1).to_bytes(4, "little")
+    loaded_tx = _loaded_tx(
+        inputs=[
+            TxIn(outpoint_a[:32], outpoint_a[32:], b"", 0xffffffff),
+            TxIn(outpoint_b[:32], outpoint_b[32:], b"", 0xffffffff),
+        ],
+        outputs=[TxOut(MAX_MONEY, b"\x51"), TxOut(1, b"\x51")],
+        utxos=[
+            UTXO(outpoint_a, MAX_MONEY, b"\x51", 100),
+            UTXO(outpoint_b, 1, b"\x51", 100),
+        ],
+    )
+
+    assert not validate_loaded_tx(loaded_tx, TxValidationContext(validate_scripts=False))
+
+
+def test_validate_loaded_tx_rejects_invalid_utxo_amount():
+    outpoint = b"\x11" * 32 + (0).to_bytes(4, "little")
+    loaded_tx = _loaded_tx(utxos=UTXO(outpoint, -1, b"\x51", 100))
+
+    assert not validate_loaded_tx(loaded_tx, TxValidationContext(validate_scripts=False))
+
+
+def test_validate_loaded_tx_rejects_witness_count_mismatch():
+    loaded_tx = _loaded_tx(witness=[Witness([]), Witness([])])
+
+    assert not validate_loaded_tx(loaded_tx, TxValidationContext(validate_scripts=False))
+
+
+def test_validate_loaded_tx_rejects_oversized_tx_weight(monkeypatch):
+    monkeypatch.setattr(Tx, "wu", property(lambda self: MAX_TX_WEIGHT + 1))
+    loaded_tx = _loaded_tx()
 
     assert not validate_loaded_tx(loaded_tx, TxValidationContext(validate_scripts=False))
 
