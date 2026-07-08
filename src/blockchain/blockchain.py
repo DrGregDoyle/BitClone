@@ -87,6 +87,18 @@ class Blockchain:
         self._tip: Block | None = None
         self.add_block(genesis_block)
 
+    def close(self) -> None:
+        """
+        Close resources owned by the blockchain.
+        """
+        self.db.close()
+
+    def shutdown(self) -> None:
+        """
+        Alias for close(), used by higher-level runtime coordinators.
+        """
+        self.close()
+
     # --- Blockchain calculations
     @staticmethod
     def calc_subsidy(height: int) -> int:

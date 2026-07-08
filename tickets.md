@@ -38,7 +38,7 @@
 - ~~Add ControlBlock validation methods in validate_segwit function in ScriptEngine~~
 - [ ] Get rid of Execution context
 - [x] ~~Create a class called `LoadedTx` (or similar) which contains a tx with one or more referenced UTXOs~~
-- [ ] Add `close` / `shutdown` methods to `Blockchain`
+- [x] ~~Add `close` / `shutdown` methods to `Blockchain`~~
 - [x] Modify `BitCloneDatabase` to use a persistent connection
 - [ ] Improve P2SH and other script methods using signatures within signatures, or other script types for
   locking/unlocking
@@ -99,7 +99,8 @@
 - [x] ~~Evict stale transactions by age~~
 - [ ] Use the node's active-chain UTXO database instead of a separate test DB
 - [ ] Enable full script validation for mempool admission
-- [ ] Finish fee-rate ordering and block-template transaction selection
+- [x] ~~Basic fee-rate ordering and block-template transaction selection~~
+- [ ] Finish dependency-aware block-template transaction selection
 - [ ] Enforce ancestor/descendant count and size limits
 - [ ] Add orphan transaction pool for spends whose parents are not known yet
 - [ ] Replace-by-Fee (RBF) logic — BIP 125
@@ -167,10 +168,10 @@
 - [ ] Config file loading — data directory, ports, network (mainnet / testnet / regtest), peers
 - [ ] Regtest mode — mine blocks on demand for local testing
 - [ ] Logging levels (DEBUG / INFO / WARNING) and log rotation
-- [ ] Graceful startup and shutdown sequence wiring all components together
+- [x] ~~Basic startup and shutdown sequence wiring for Node, Blockchain, MemPool, and Miner~~
 - [ ] Node entrypoint (`main.py` or CLI) that wires Blockchain, Mempool, Network, RPC together
-- [ ] Fix `Node` runtime wiring so Blockchain, MemPool, wallet, mining, and networking share consistent APIs
-- [ ] Make Blockchain and MemPool use the same chainstate/UTXO database
+- [x] ~~Fix `Node` runtime wiring so Blockchain, MemPool, wallet, mining, and networking share consistent APIs~~
+- [x] ~~Make Blockchain and MemPool use the same chainstate/UTXO database path~~
 - [ ] Add clean shutdown for database connections, peer connections, miner threads, and background tasks
 - [ ] Add data directory layout for blocks, chainstate, peers, wallet, logs, and config
 - [ ] Add startup recovery checks for interrupted block/UTXO writes

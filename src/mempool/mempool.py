@@ -68,6 +68,12 @@ class MemPool:
         self.total_vbytes = 0  # Update with every tx added or removed
         self.spent_outpoints = set()  # Update with every tx added or removed
 
+    def __len__(self) -> int:
+        return len(self.mempool)
+
+    def __contains__(self, txid: bytes) -> bool:
+        return txid in self.mempool
+
     def add_tx(self, candidate_tx: bytes | Tx) -> bool:
         """
         We validate the candidate_tx and return True or False based on whether the transaction was added to the pool.
@@ -139,7 +145,30 @@ class MemPool:
         We select a list of txs to be included in a block.
         """
         # --- Get list sorted by ancestor_feerate
-        txid_list = sorted(self.mempool.values(), key=lambda mptx: mptx.ancestor_feerate, reverse=True)
+        selected: list[Tx] = []
+        block_weight = 0
+        tx_list = sorted(self.mempool.values(), key=lambda mptx: mptx.ancestor_feerate, reverse=True)
+
+        for mptx in tx_list:
+            next_weight = block_weight + mptx.tx.wu
+            if next_weight > self.max_block_weight:
+                continue
+            selected.append(mptx.tx)
+            block_weight = next_weight
+
+        return selected
+
+    def get_fee(self, txid: bytes) -> int:
+        """
+        Return the fee for a transaction currently in the mempool.
+        """
+        return self.mempool[txid].fee
+
+    def close(self) -> None:
+        """
+        Close resources owned by the mempool.
+        """
+        self.btcdb.close()
 
     def _validate_tx(self, tx: Tx) -> bool:
         # --- Check if tx is in mempool
