@@ -8,6 +8,7 @@ import time
 from src.block.block import Block
 from src.blockchain.genesis_block import genesis_block
 from src.core import get_logger, TransactionError, TX
+from src.cryptography import hash256
 from src.data import bits_to_target, target_to_bits, MerkleTree
 from src.database.database import BitCloneDatabase, DB_PATH
 from src.tx import TxIn
@@ -25,6 +26,9 @@ MIN_COINBASE_SCRIPT_SIZE = 2
 MAX_COINBASE_SCRIPT_SIZE = 100
 MAX_BLOCK_SIGOP_COST = 80_000
 WITNESS_SCALE_FACTOR = 4
+WITNESS_RESERVED_VALUE_SIZE = 32
+WITNESS_COMMITMENT_HEADER = bytes.fromhex("6a24aa21a9ed")
+WITNESS_COMMITMENT_SIZE = len(WITNESS_COMMITMENT_HEADER) + 32
 
 OP_PUSHDATA1 = 0x4c
 OP_PUSHDATA2 = 0x4d
@@ -306,7 +310,11 @@ class Blockchain:
             return False
 
         # --- Coinbase
-        if not self._validate_coinbase(block):
+        if not self._validate_coinbase(block, next_height):
+            return False
+
+        # --- Witness commitment
+        if not self._validate_witness_commitment(block):
             return False
 
         # --- Non-coinbase transactions
@@ -447,10 +455,11 @@ class Blockchain:
 
         return sigops
 
-    def _validate_coinbase(self, block: Block) -> bool:
+    def _validate_coinbase(self, block: Block, block_height: int | None = None) -> bool:
         """
         We validate the coinbase tx in the block
         """
+        block_height = self._height + 1 if block_height is None else block_height
         coinbase_tx = block.txs[0]
 
         # --- Verify 1st tx in block is coinbase
@@ -461,6 +470,9 @@ class Blockchain:
         scriptsig_len = len(coinbase_tx.inputs[0].scriptsig)
         if scriptsig_len < MIN_COINBASE_SCRIPT_SIZE or scriptsig_len > MAX_COINBASE_SCRIPT_SIZE:
             logger.error(f"Coinbase script size {scriptsig_len} outside allowed range 2..100")
+            return False
+
+        if block_height > 0 and not self._validate_bip34_height(coinbase_tx.inputs[0].scriptsig, block_height):
             return False
 
         # --- Verify no other tx is a coinbase
@@ -477,6 +489,105 @@ class Blockchain:
 
         # --- All clear
         return True
+
+    def _validate_bip34_height(self, scriptsig: bytes, block_height: int) -> bool:
+        if not scriptsig:
+            logger.error("Coinbase script missing BIP34 height commitment")
+            return False
+
+        push_len = scriptsig[0]
+        if push_len == 0 or push_len > 5:
+            logger.error(f"Coinbase BIP34 height uses invalid push length {push_len}")
+            return False
+
+        if len(scriptsig) < 1 + push_len:
+            logger.error("Coinbase BIP34 height push exceeds script size")
+            return False
+
+        height_bytes = scriptsig[1:1 + push_len]
+        if not self._is_minimally_encoded_script_num(height_bytes):
+            logger.error("Coinbase BIP34 height is not minimally encoded")
+            return False
+
+        committed_height = self._decode_script_num(height_bytes)
+        if committed_height != block_height:
+            logger.error(f"Coinbase BIP34 height {committed_height} does not match block height {block_height}")
+            return False
+
+        return True
+
+    @staticmethod
+    def _decode_script_num(data: bytes) -> int:
+        if not data:
+            return 0
+
+        value = int.from_bytes(data, "little")
+        if data[-1] & 0x80:
+            value &= ~(0x80 << (8 * (len(data) - 1)))
+            return -value
+        return value
+
+    @staticmethod
+    def _is_minimally_encoded_script_num(data: bytes) -> bool:
+        if not data:
+            return True
+
+        if (data[-1] & 0x7f) == 0:
+            if len(data) == 1 or (data[-2] & 0x80) == 0:
+                return False
+
+        return True
+
+    def _validate_witness_commitment(self, block: Block) -> bool:
+        witness_present = any(tx.is_segwit for tx in block.txs[1:])
+        commitment = self._find_witness_commitment(block.txs[0])
+
+        if not witness_present:
+            return True
+
+        if commitment is None:
+            logger.error("SegWit block missing coinbase witness commitment")
+            return False
+
+        reserved_value = self._get_coinbase_witness_reserved_value(block.txs[0])
+        if reserved_value is None:
+            return False
+
+        witness_root = self._witness_merkle_root(block)
+        expected_commitment = hash256(witness_root + reserved_value)
+        if commitment != expected_commitment:
+            logger.error("Coinbase witness commitment does not match witness merkle root")
+            return False
+
+        return True
+
+    @staticmethod
+    def _find_witness_commitment(coinbase_tx: Tx) -> bytes | None:
+        commitment = None
+        for txout in coinbase_tx.outputs:
+            script = txout.scriptpubkey
+            if len(script) >= WITNESS_COMMITMENT_SIZE and script[:len(WITNESS_COMMITMENT_HEADER)] == WITNESS_COMMITMENT_HEADER:
+                commitment = script[len(WITNESS_COMMITMENT_HEADER):WITNESS_COMMITMENT_SIZE]
+        return commitment
+
+    @staticmethod
+    def _get_coinbase_witness_reserved_value(coinbase_tx: Tx) -> bytes | None:
+        if len(coinbase_tx.witness) != 1:
+            logger.error("Coinbase transaction must have exactly one witness field in a SegWit block")
+            return None
+
+        witness_items = coinbase_tx.witness[0].items
+        if len(witness_items) != 1 or len(witness_items[0]) != WITNESS_RESERVED_VALUE_SIZE:
+            logger.error("Coinbase witness reserved value must be exactly one 32-byte stack item")
+            return None
+
+        return witness_items[0]
+
+    @staticmethod
+    def _witness_merkle_root(block: Block) -> bytes:
+        wtxids = [b"\x00" * 32]
+        wtxids.extend(tx.wtxid for tx in block.txs[1:])
+        return MerkleTree(wtxids).merkle_root
 
     def _validate_block_txs(self, block: Block) -> bool:
         """

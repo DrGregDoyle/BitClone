@@ -4,10 +4,17 @@ from types import SimpleNamespace
 import pytest
 
 from src.block.block import Block
-from src.blockchain.blockchain import Blockchain, COINBASE_MATURITY, MAX_BLOCK_SIGOP_COST, WITNESS_SCALE_FACTOR
+from src.blockchain.blockchain import (
+    Blockchain,
+    COINBASE_MATURITY,
+    MAX_BLOCK_SIGOP_COST,
+    WITNESS_COMMITMENT_HEADER,
+    WITNESS_SCALE_FACTOR,
+)
 from src.blockchain.genesis_block import genesis_block
+from src.cryptography import hash256
 from src.data import bits_to_target, target_to_bits
-from src.tx.tx import LoadedTx, Tx, TxIn, TxOut, UTXO
+from src.tx.tx import LoadedTx, Tx, TxIn, TxOut, UTXO, Witness
 from tests.script_vectors import *
 
 TEST_DB_PATH = Path(__file__).parent / "db_files" / "test_blockchain.db"
@@ -37,6 +44,34 @@ def _coinbase_tx(scriptsig: bytes = b"\x01\x01", amount: int = 0, scriptpubkey: 
         inputs=[TxIn(b"\x00" * 32, 0xffffffff, scriptsig, 0xffffffff)],
         outputs=[TxOut(amount=amount, scriptpubkey=scriptpubkey)],
     )
+
+
+def _bip34_height_script(height: int, extra: bytes = b"") -> bytes:
+    height_bytes = height.to_bytes((height.bit_length() + 7) // 8 or 1, "little")
+    if height_bytes[-1] & 0x80:
+        height_bytes += b"\x00"
+    return bytes([len(height_bytes)]) + height_bytes + extra
+
+
+def _segwit_tx() -> Tx:
+    return Tx(
+        inputs=[TxIn(b"\x33" * 32, 0, b"", 0xffffffff)],
+        outputs=[TxOut(1, b"\x51")],
+        witness=[Witness([b"stack item"])],
+    )
+
+
+def _segwit_block_with_commitment(reserved_value: bytes = b"\x00" * 32, bad_commitment: bool = False) -> Block:
+    coinbase_tx = _coinbase_tx(scriptsig=_bip34_height_script(1))
+    coinbase_tx.witness = [Witness([reserved_value])]
+    spend_tx = _segwit_tx()
+    block = Block(prev_block=genesis_block.block_id, txs=[coinbase_tx, spend_tx])
+    witness_root = Blockchain._witness_merkle_root(block)
+    commitment = hash256(witness_root + reserved_value)
+    if bad_commitment:
+        commitment = b"\xff" * 32
+    coinbase_tx.outputs.append(TxOut(0, WITNESS_COMMITMENT_HEADER + commitment))
+    return block
 
 
 @pytest.fixture()
@@ -218,6 +253,64 @@ def test_validate_coinbase_rejects_script_size_outside_consensus_limits(chain, s
     block = Block(prev_block=chain.tip.block_id, txs=[_coinbase_tx(scriptsig=scriptsig)])
 
     assert not chain._validate_coinbase(block)
+
+
+def test_validate_coinbase_accepts_bip34_height_commitment(chain):
+    block = Block(prev_block=chain.tip.block_id, txs=[_coinbase_tx(scriptsig=_bip34_height_script(1))])
+
+    assert chain._validate_coinbase(block, block_height=1)
+
+
+def test_validate_coinbase_rejects_wrong_bip34_height(chain):
+    block = Block(prev_block=chain.tip.block_id, txs=[_coinbase_tx(scriptsig=_bip34_height_script(2))])
+
+    assert not chain._validate_coinbase(block, block_height=1)
+
+
+def test_validate_coinbase_rejects_nonminimal_bip34_height(chain):
+    block = Block(prev_block=chain.tip.block_id, txs=[_coinbase_tx(scriptsig=b"\x02\x01\x00")])
+
+    assert not chain._validate_coinbase(block, block_height=1)
+
+
+def test_validate_witness_commitment_allows_legacy_block_without_commitment(chain):
+    block = Block(prev_block=chain.tip.block_id, txs=[_coinbase_tx()])
+
+    assert chain._validate_witness_commitment(block)
+
+
+def test_validate_witness_commitment_accepts_valid_segwit_commitment(chain):
+    block = _segwit_block_with_commitment()
+
+    assert chain._validate_witness_commitment(block)
+
+
+def test_validate_witness_commitment_rejects_missing_commitment(chain):
+    block = _segwit_block_with_commitment()
+    block.txs[0].outputs = [TxOut(0, b"\x51")]
+
+    assert not chain._validate_witness_commitment(block)
+
+
+def test_validate_witness_commitment_rejects_bad_commitment(chain):
+    block = _segwit_block_with_commitment(bad_commitment=True)
+
+    assert not chain._validate_witness_commitment(block)
+
+
+def test_validate_witness_commitment_rejects_bad_reserved_value_shape(chain):
+    block = _segwit_block_with_commitment()
+    block.txs[0].witness = [Witness([b"too short"])]
+
+    assert not chain._validate_witness_commitment(block)
+
+
+def test_find_witness_commitment_uses_highest_output_index(chain):
+    block = _segwit_block_with_commitment()
+    expected = block.txs[0].outputs[-1].scriptpubkey[len(WITNESS_COMMITMENT_HEADER):]
+    block.txs[0].outputs.insert(0, TxOut(0, WITNESS_COMMITMENT_HEADER + b"\x11" * 32))
+
+    assert chain._find_witness_commitment(block.txs[0]) == expected
 
 
 def test_block_sigop_cost_counts_legacy_signature_ops(chain):

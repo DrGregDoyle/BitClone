@@ -37,60 +37,121 @@
 - ~~Simplify SignatureEngine - either add abstract methods or just use the functions~~
 - ~~Add ControlBlock validation methods in validate_segwit function in ScriptEngine~~
 - [ ] Get rid of Execution context
-- [ ] Create a class called `LoadedTx` (or similar) which contains a tx with one or more referenced UTXOs
+- [x] ~~Create a class called `LoadedTx` (or similar) which contains a tx with one or more referenced UTXOs~~
 - [ ] Add `close` / `shutdown` methods to `Blockchain`
 - [x] Modify `BitCloneDatabase` to use a persistent connection
 - [ ] Improve P2SH and other script methods using signatures within signatures, or other script types for
   locking/unlocking
+- [ ] Remove runtime artifacts from version control (`__pycache__`, `.pyc`, local sqlite DB files)
+- [ ] Add `.gitignore` rules for node data directories, block files, sqlite databases, and Python cache files
+- [ ] Split consensus logic, policy logic, node orchestration, and wallet concerns into clearer module boundaries
 
 ---
 
 ## Block Validation
 
-- [ ] Verify Merkle root against block header
-- [ ] Enforce proof-of-work target (`bits` → `target` comparison)
-- [ ] Validate coinbase reward amount per height (halving schedule)
-- [ ] Enforce block size / weight limits
-- [ ] Check for duplicate txids within a block
-- [ ] Median Time Past (MTP) enforcement for locktime and sequence
-- [ ] Validate `nLockTime` and `nSequence` fields on transactions
+- [x] ~~Verify Merkle root against block header~~
+- [x] ~~Enforce proof-of-work target (`bits` → `target` comparison)~~
+- [x] ~~Validate coinbase reward amount per height (halving schedule)~~
+- [x] ~~Enforce block size / weight limits~~
+- [x] ~~Check for duplicate txids within a block~~
+- [x] ~~Median Time Past (MTP) enforcement for block timestamps~~
+- [x] ~~Validate `nLockTime` and `nSequence` fields on transactions~~
+- [x] ~~Validate expected compact target bits at each height~~
+- [x] ~~Validate SegWit witness commitment in coinbase transaction~~
+- [x] ~~Validate coinbase script size and BIP34 height commitment~~
+- [x] ~~Reject duplicate spends within a block~~
+- [x] ~~Support intra-block UTXO dependencies during validation~~
+- [x] ~~Enforce coinbase maturity for spent coinbase outputs~~
+- [ ] Add exact historical consensus activation handling (BIP16, BIP34, BIP65, BIP66, SegWit, Taproot)
+- [ ] Add BIP30 duplicate transaction edge-case handling
+- [ ] Harden sigop counting for P2SH, P2WSH, and tapscript paths
+- [ ] Enforce standard and consensus script flags by network/height
+- [ ] Add test vectors from Bitcoin Core where practical for blocks, scripts, and transactions
+- [ ] Add explicit mainnet/testnet/regtest chain parameter objects
 
 ---
 
 ## Chain Management
 
-- [ ] Fork detection — track competing chain tips by cumulative work
+- [x] ~~Persist block index entries with cumulative chainwork~~
+- [x] ~~Detect when an indexed side-chain tip has more cumulative work than the active tip~~
+- [ ] Fork detection — track competing chain tips by cumulative work during normal block/header processing
 - [ ] Reorganisation (reorg) logic — rollback UTXOs and re-apply the winning chain
+- [ ] Store undo data for every connected block so UTXO changes can be reversed
+- [ ] Mark active/inactive block index entries during reorg
+- [ ] Atomically update block files, block index, chain tip, and UTXO set
 - [ ] Orphan block pool — hold blocks whose parent is not yet known
+- [ ] Header-first chain sync state machine
+- [ ] Block locator generation for `getheaders` / `getblocks`
+- [ ] Best-header tracking separate from best-active-block tracking
 - [ ] Checkpoint map — hard-coded known-good hashes at key heights
+- [ ] Pruning mode design (optional later; archival node first)
 
 ---
 
 ## Mempool
 
-- [ ] In-memory pool of validated, unconfirmed transactions
-- [ ] Fee-rate (sat/vbyte) calculation and ordering
-- [ ] Ancestor / descendant tracking for CPFP (Child Pays For Parent)
+- [x] ~~In-memory pool of validated, unconfirmed transactions~~
+- [x] ~~Basic fee-rate (sat/vbyte) calculation~~
+- [x] ~~Basic ancestor / descendant tracking for CPFP (Child Pays For Parent)~~
+- [x] ~~Reject duplicate mempool txids and simple mempool double spends~~
+- [x] ~~Evict stale transactions by age~~
+- [ ] Use the node's active-chain UTXO database instead of a separate test DB
+- [ ] Enable full script validation for mempool admission
+- [ ] Finish fee-rate ordering and block-template transaction selection
+- [ ] Enforce ancestor/descendant count and size limits
+- [ ] Add orphan transaction pool for spends whose parents are not known yet
 - [ ] Replace-by-Fee (RBF) logic — BIP 125
-- [ ] Eviction policy for low-fee and stale transactions
+- [ ] Eviction policy for low-fee transactions under memory pressure
+- [ ] Rolling minimum relay fee after eviction
+- [ ] Package validation and package relay groundwork
+- [ ] Reject non-standard transactions separately from consensus-invalid transactions
 - [ ] Mempool persistence across restarts (optional dump/load)
+
+---
+
+## Mining / Block Template
+
+- [x] ~~Basic proof-of-work mining loop with stop signal and hashrate stats~~
+- [x] ~~Basic coinbase transaction construction with BIP34-style height push~~
+- [ ] Fix mining proof-of-work integer byte order to match consensus validation
+- [ ] Wire `Miner` into `Node` lifecycle and CLI commands
+- [ ] Build block templates from `MemPool.get_block_template()`
+- [ ] Add correct SegWit witness commitment to mined blocks when needed
+- [ ] Use chain-derived `bits` / target instead of a node-local default difficulty field
+- [ ] Stop and rebuild mining work when the chain tip or mempool changes
+- [ ] Add regtest-only easy-mining mode for development
+- [ ] Add tests that mined blocks pass `Blockchain.add_block()`
 
 ---
 
 ## Wallet
 
-- [ ] HD key derivation (BIP 32 / 44 / 84 / 86)
+- [x] ~~BIP32 extended key derivation primitives~~
+- [x] ~~BIP39 mnemonic-to-seed wallet creation~~
+- [x] ~~Derivation path helpers for BIP44 / BIP49 / BIP84 / BIP86 addresses~~
+- [ ] Complete HD wallet account scanning and gap-limit handling
 - [ ] Key storage (encrypted on disk)
 - [ ] UTXO tracking per address/key
-- [ ] Transaction builder — select UTXOs, construct outputs, compute change
+- [x] ~~Initial transaction builder skeleton~~
+- [ ] Complete transaction builder — select UTXOs, construct outputs, compute change
 - [ ] Fee estimation using mempool fee-rate histogram
 - [ ] Sign transactions (ECDSA P2PKH/P2WPKH, Schnorr P2TR)
 - [ ] Watch-only wallet mode
+- [ ] Separate wallet runtime from full-node consensus/runtime code
+- [ ] Persist wallet metadata independently from chainstate
 
 ---
 
-## RPC / API Layer
+## CLI / RPC / API Layer
 
+- [ ] CLI entrypoint (`main.py`, `python -m src`, or console script)
+- [ ] CLI config commands: initialize data dir, select network, inspect config
+- [ ] CLI chain commands: `status`, `getblock`, `getblockheader`, `gettxout`, `getchaintip`
+- [ ] CLI mempool commands: `sendrawtransaction`, `getrawmempool`, `decoderawtransaction`
+- [ ] CLI peer commands: `addnode`, `disconnect`, `peers`
+- [ ] CLI regtest/dev commands: `generateblock`, `wipe-chain`, `loadblock`
 - [ ] Local JSON-RPC server (standard Bitcoin RPC interface where possible)
 - [ ] `getblockchaininfo` — height, tip hash, IBD status
 - [ ] `getrawmempool` — list unconfirmed txids
@@ -108,17 +169,30 @@
 - [ ] Logging levels (DEBUG / INFO / WARNING) and log rotation
 - [ ] Graceful startup and shutdown sequence wiring all components together
 - [ ] Node entrypoint (`main.py` or CLI) that wires Blockchain, Mempool, Network, RPC together
+- [ ] Fix `Node` runtime wiring so Blockchain, MemPool, wallet, mining, and networking share consistent APIs
+- [ ] Make Blockchain and MemPool use the same chainstate/UTXO database
+- [ ] Add clean shutdown for database connections, peer connections, miner threads, and background tasks
+- [ ] Add data directory layout for blocks, chainstate, peers, wallet, logs, and config
+- [ ] Add startup recovery checks for interrupted block/UTXO writes
+- [ ] Add structured progress output for CLI-first operation
 
 ---
 
 ## Testing
 
-- [ ] Block validation unit tests (Merkle, PoW, coinbase reward)
+- [x] ~~Block validation unit tests for several consensus checks~~
+- [ ] Expand block validation unit tests with Bitcoin Core vectors (Merkle, PoW, coinbase reward, witness commitment)
 - [ ] Reorg and fork simulation tests
+- [x] ~~Basic mempool tests~~
 - [ ] Mempool eviction and RBF tests
 - [ ] Wallet signing and UTXO selection tests
 - [ ] RPC endpoint integration tests
 - [ ] IBD simulation against a local regtest peer
+- [ ] CLI command integration tests
+- [ ] Node lifecycle startup/shutdown tests
+- [ ] P2P handshake tests using in-process sockets
+- [ ] Header sync tests with synthetic chains
+- [ ] Block download tests with out-of-order delivery
 
 ---
 
@@ -135,6 +209,8 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 As a node, I want to open and accept TCP connections on port 8333 (mainnet)
 so that I can communicate with Bitcoin peers.
 
+- [x] ~~Synchronous outbound TCP connection helper~~
+- [x] ~~Connection state tracking for basic outbound connections~~
 - Async TCP listener (asyncio)
 - Outbound connection to a hardcoded seed peer
 - Connection state tracking (CONNECTING → CONNECTED → READY)
@@ -143,6 +219,7 @@ so that I can communicate with Bitcoin peers.
 As a node, I want to complete the `version` / `verack` handshake with a peer
 so that both sides agree on protocol version and capabilities before exchanging data.
 
+- [x] ~~`version` and `verack` message serialization/deserialization~~
 - Send `version` message on connect
 - Receive and validate peer `version`
 - Send and receive `verack`
@@ -152,9 +229,12 @@ so that both sides agree on protocol version and capabilities before exchanging 
 As a node, I want to parse and serialise the Bitcoin P2P message envelope
 (magic bytes, command, length, checksum) so that all message types share a common wire format.
 
-- `MessageEnvelope` class with `to_bytes` / `from_bytes`
-- Checksum validation (double-SHA256)
-- Network magic constants (mainnet / testnet / regtest)
+- [x] ~~Message header/envelope serialization with `to_bytes` / `from_bytes`~~
+- [x] ~~Checksum validation (double-SHA256)~~
+- [x] ~~Network magic constants and allowed magic validation~~
+- [ ] Strict per-network magic selection instead of accepting all known magic values
+- [ ] Unknown-command handling and peer misbehavior response
+- [ ] Maximum payload size enforcement
 
 ---
 
@@ -191,6 +271,7 @@ evicts misbehaving or stale peers, and reconnects on disconnect.
 As a node, I want to announce and request inventory items (blocks and transactions)
 using `inv` and `getdata` so that I can discover and fetch new data from peers.
 
+- [x] ~~`inv`, `getdata`, `notfound`, block, and tx message serialization/deserialization~~
 - Send `inv` when a new block or tx enters the mempool
 - Handle incoming `inv` and issue `getdata` for unknown items
 - Deduplicate in-flight requests
@@ -199,7 +280,7 @@ using `inv` and `getdata` so that I can discover and fetch new data from peers.
 As a node, I want to receive `tx` messages from peers, validate the transaction,
 and add it to the mempool so that unconfirmed transactions propagate across the network.
 
-- Deserialise `tx` message into `Tx` object
+- [x] ~~Deserialise `tx` message into `Tx` object~~
 - Run script validation and fee checks
 - Add to mempool on success; log and ignore on failure
 
@@ -207,9 +288,9 @@ and add it to the mempool so that unconfirmed transactions propagate across the 
 As a node, I want to receive `block` messages, validate the full block,
 and extend the chain so that I stay in sync with the network tip.
 
-- Deserialise `block` message
-- Run block validation (PoW, Merkle, scripts, coinbase)
-- Update UTXO set and chain height on success
+- [x] ~~Deserialise `block` message~~
+- [x] ~~Run append-only block validation (PoW, Merkle, scripts, coinbase)~~
+- [x] ~~Update UTXO set and chain height on successful append-only active-chain block~~
 - Trigger reorg logic if needed
 
 ---
@@ -221,7 +302,7 @@ As a node starting from genesis, I want to download all block headers first
 so that I can verify proof-of-work on the full chain before downloading block data.
 
 - Send `getheaders` with known tip locator
-- Parse `headers` response (up to 2000 headers per message)
+- [x] ~~Parse `headers` response (up to 2000 headers per message)~~
 - Validate each header's PoW and chain linkage
 - Loop until peer returns fewer than 2000 headers
 
