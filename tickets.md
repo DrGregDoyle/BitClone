@@ -147,11 +147,16 @@
 
 ## CLI / RPC / API Layer
 
-- [ ] CLI entrypoint (`main.py`, `python -m src`, or console script)
+- [x] ~~CLI entrypoint (`python -m src`)~~
 - [ ] CLI config commands: initialize data dir, select network, inspect config
-- [ ] CLI chain commands: `status`, `getblock`, `getblockheader`, `gettxout`, `getchaintip`
-- [ ] CLI mempool commands: `sendrawtransaction`, `getrawmempool`, `decoderawtransaction`
+- [x] ~~CLI `status` command~~
+- [x] ~~CLI `getblock` command~~
+- [x] ~~CLI `gettxout` command~~
+- [ ] CLI chain commands: `getblockheader`, `getchaintip`
+- [x] ~~CLI `sendrawtransaction` command~~
+- [ ] CLI mempool commands: `getrawmempool`, `decoderawtransaction`
 - [ ] CLI peer commands: `addnode`, `disconnect`, `peers`
+- [x] ~~CLI `build-template` dev command~~
 - [ ] CLI regtest/dev commands: `generateblock`, `wipe-chain`, `loadblock`
 - [ ] Local JSON-RPC server (standard Bitcoin RPC interface where possible)
 - [ ] `getblockchaininfo` — height, tip hash, IBD status
