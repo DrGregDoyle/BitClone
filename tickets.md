@@ -41,8 +41,8 @@
 - [x] Modify `BitCloneDatabase` to use a persistent connection
 - [ ] Improve P2SH and other script methods using signatures within signatures, or other script types for
   locking/unlocking
-- [ ] Remove runtime artifacts from version control (`__pycache__`, `.pyc`, local sqlite DB files)
-- [ ] Add `.gitignore` rules for node data directories, block files, sqlite databases, and Python cache files
+- [x] Remove runtime artifacts from version control (`__pycache__`, `.pyc`, local sqlite DB files)
+- [x] Add `.gitignore` rules for node data directories, block files, sqlite databases, and Python cache files
 - [ ] Split consensus logic, policy logic, node orchestration, and wallet concerns into clearer module boundaries
 
 ---

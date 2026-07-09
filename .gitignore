@@ -1,10 +1,30 @@
 # Database files
 *.db
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
 
 # Database directories
 db_files/
 tests/db_files/
 tests/db_files/blocks
+
+# Node runtime data
+/.bitclone/
+/data/
+/chainstate/
+/blocks/
+/peers/
+/logs/
+/wallet/
+blk*.dat
 
 # Pytest cache
 .pytest_cache/
