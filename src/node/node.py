@@ -45,7 +45,7 @@ class Node:
         self.mempool = mempool or MemPool(db_path=chain_db_path, blocks_dir=self.config.blocks_dir)
         self.wallet = wallet
         self.miner = miner or Miner()
-        self.transport = transport or Transport()
+        self.transport = transport or Transport(magic_bytes=self.config.magic_bytes)
         self.started = False
 
     # --- Lifecycle ----------------------------------------------------- #
@@ -206,6 +206,7 @@ class Node:
         return {
             "started": self.started,
             "network": self.config.network.value,
+            "magic_bytes": self.config.magic_bytes.hex(),
             "data_dir": str(self.config.data_dir),
             "db_path": str(self.db_path),
             "height": self.blockchain.height,

@@ -1,4 +1,5 @@
 from src.config import BitCloneConfig, NetworkName
+from src.core import MAGICBYTES
 
 
 def test_config_builds_network_scoped_paths(tmp_path):
@@ -13,6 +14,7 @@ def test_config_builds_network_scoped_paths(tmp_path):
     assert config.logs_dir == tmp_path / "regtest" / "logs"
     assert config.wallet_dir == tmp_path / "regtest" / "wallet"
     assert config.db_path == tmp_path / "regtest" / "chainstate" / "bitclone.db"
+    assert config.magic_bytes == MAGICBYTES.REGTEST
 
 
 def test_config_db_path_override_keeps_network_layout(tmp_path):
@@ -20,6 +22,7 @@ def test_config_db_path_override_keeps_network_layout(tmp_path):
     config = BitCloneConfig.from_options(data_dir=tmp_path / "data", network="testnet", db_path=db_path)
 
     assert config.network == NetworkName.TESTNET
+    assert config.magic_bytes == MAGICBYTES.TESTNET
     assert config.db_path == db_path
     assert config.blocks_dir == tmp_path / "data" / "testnet" / "blocks"
 

@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 from src.block.block import Block
+from src.core import MAGICBYTES
 from src.node.node import Node
 from src.tx.tx import Tx, TxIn, TxOut
 
@@ -22,6 +23,7 @@ def test_node_initializes_components_with_shared_db_path(tmp_path):
         assert node.wallet is None
         assert node.miner is not None
         assert node.transport is not None
+        assert node.transport.magic_bytes == MAGICBYTES.MAINNET
     finally:
         node.close()
 
@@ -38,7 +40,19 @@ def test_node_status_returns_structured_runtime_data(tmp_path):
         assert status["utxo_count"] == node.blockchain.utxo_count()
         assert status["mempool_size"] == 0
         assert status["bits"] == node.blockchain.bits.hex()
+        assert status["magic_bytes"] == MAGICBYTES.MAINNET.hex()
         assert status["mining"] is False
+    finally:
+        node.close()
+
+
+def test_node_uses_configured_network_magic(tmp_path):
+    node = Node(data_dir=tmp_path, network="regtest")
+
+    try:
+        assert node.config.magic_bytes == MAGICBYTES.REGTEST
+        assert node.transport.magic_bytes == MAGICBYTES.REGTEST
+        assert node.status()["magic_bytes"] == MAGICBYTES.REGTEST.hex()
     finally:
         node.close()
 

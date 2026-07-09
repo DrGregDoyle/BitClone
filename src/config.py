@@ -8,6 +8,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from src.core import MAGICBYTES
+
 
 class NetworkName(str, Enum):
     MAINNET = "mainnet"
@@ -71,6 +73,16 @@ class BitCloneConfig:
     def db_path(self) -> Path:
         return self.db_path_override or self.chainstate_dir / "bitclone.db"
 
+    @property
+    def magic_bytes(self) -> bytes:
+        match self.network:
+            case NetworkName.MAINNET:
+                return MAGICBYTES.MAINNET
+            case NetworkName.TESTNET:
+                return MAGICBYTES.TESTNET
+            case NetworkName.REGTEST:
+                return MAGICBYTES.REGTEST
+
     def initialize(self) -> dict[str, str]:
         """
         Create the data-directory layout and a minimal config file if missing.
@@ -96,6 +108,7 @@ class BitCloneConfig:
             "data_dir": str(self.data_dir),
             "config_path": str(self.config_path),
             "network": self.network.value,
+            "magic_bytes": self.magic_bytes.hex(),
             "network_dir": str(self.network_dir),
             "chainstate_dir": str(self.chainstate_dir),
             "blocks_dir": str(self.blocks_dir),

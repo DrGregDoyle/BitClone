@@ -57,9 +57,9 @@ class Message(Serializable, ABC):
     _registry: dict[str, type["Message"]] = {}
     __slots__ = ("magic_bytes",)
 
-    def __init__(self):
+    def __init__(self, magic_bytes: bytes = DEFAULT_MAGIC):
         # Magic bytes are fixed per-network at object creation
-        self.magic_bytes = DEFAULT_MAGIC
+        self.magic_bytes = magic_bytes
 
     def __init_subclass__(cls, **kw):
         """
@@ -161,8 +161,8 @@ class EmptyMessage(Message):
     """
     __slots__ = ()
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, magic_bytes: bytes = DEFAULT_MAGIC):
+        super().__init__(magic_bytes=magic_bytes)
 
     @classmethod
     def from_payload(cls, byte_stream: SERIALIZED = b''):

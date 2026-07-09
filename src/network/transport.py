@@ -10,7 +10,8 @@ from typing import Optional
 
 from src.core import NetworkError
 from src.network.datatypes.network_types import PeerState
-from src.network.messages.header import Header, ALLOWED_MAGIC
+from src.core import MAGICBYTES
+from src.network.messages.header import Header
 from src.network.messages.message import Message, validate_package
 from src.network.peer import Peer
 
@@ -28,11 +29,10 @@ class Connection:
 class Transport:
     """Manages connections and sending/receiving messages."""
 
-    def __init__(self, timeout: int = 120):
+    def __init__(self, timeout: int = 120, magic_bytes: bytes = MAGICBYTES.MAINNET):
         self._timeout = timeout
         self._conns: dict[tuple[str, int], Connection] = {}
-        # If you want strict network-only later, replace this with a single expected magic.
-        self._allowed_magic = ALLOWED_MAGIC
+        self.magic_bytes = magic_bytes
 
     def connect(self, peer: Peer) -> None:
         if peer.key in self._conns:
@@ -67,6 +67,7 @@ class Transport:
 
     def send(self, peer: Peer, message: Message) -> None:
         conn = self._require_conn(peer)
+        message.magic_bytes = self.magic_bytes
         data = message.to_bytes()
         conn.sock.sendall(data)
         conn.last_tx = time.time()
@@ -78,9 +79,11 @@ class Transport:
         header_bytes = self._recv_exact(conn.sock, 24)
         header = Header.from_bytes(header_bytes)
 
-        # --- Validate magic bytes (container membership must be against a real tuple/list, not a class)
-        if header.magic_bytes not in self._allowed_magic:
-            raise NetworkError(f"Unknown magic bytes: {header.magic_bytes.hex()}")
+        if header.magic_bytes != self.magic_bytes:
+            raise NetworkError(
+                f"Unexpected network magic bytes: {header.magic_bytes.hex()} "
+                f"(expected {self.magic_bytes.hex()})"
+            )
 
         payload_bytes = self._recv_exact(conn.sock, header.size)
 

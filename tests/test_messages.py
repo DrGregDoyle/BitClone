@@ -11,6 +11,7 @@ from src.network.datatypes.network_types import *
 from src.network.messages.ctrl_msg import *
 from src.network.messages.data_msg import *
 from src.network.messages.message import EmptyMessage
+from src.core import MAGICBYTES
 
 
 @pytest.mark.parametrize("msg_class, expected_command", [
@@ -50,6 +51,12 @@ def test_ping_pong():
     assert test_ping_msg.header.size == test_pong_msg.header.size, "Ping/Pong size mismatch"
     assert test_ping_msg.header.magic_bytes == test_pong_msg.header.magic_bytes, "Ping/Pong magic_bytes mismatch"
     assert test_ping_msg.payload == test_pong_msg.payload, "Ping/Pong payload mismatch"
+
+
+def test_message_constructor_accepts_configured_magic_bytes():
+    msg = EmptyMessage(magic_bytes=MAGICBYTES.REGTEST)
+
+    assert msg.header.magic_bytes == MAGICBYTES.REGTEST
 
 
 # --- Serialization -> Deserialization loops --- #

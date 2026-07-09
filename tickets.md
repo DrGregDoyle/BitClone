@@ -241,7 +241,7 @@ As a node, I want to parse and serialise the Bitcoin P2P message envelope
 - [x] Message header/envelope serialization with `to_bytes` / `from_bytes`
 - [x] Checksum validation (double-SHA256)
 - [x] Network magic constants and allowed magic validation
-- [ ] Strict per-network magic selection instead of accepting all known magic values
+- [x] Strict per-network magic selection instead of accepting all known magic values
 - [ ] Unknown-command handling and peer misbehavior response
 - [ ] Maximum payload size enforcement
 
