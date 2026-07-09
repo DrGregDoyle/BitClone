@@ -9,7 +9,7 @@ from typing import Any
 
 from src.block.block import Block
 from src.blockchain.blockchain import Blockchain
-from src.database.database import DB_PATH
+from src.config import BitCloneConfig, NetworkName
 from src.mempool.mempool import MemPool
 from src.mining.miner import Miner
 from src.network.transport import Transport
@@ -28,17 +28,21 @@ class Node:
     def __init__(
             self,
             db_path: str | Path | None = None,
+            data_dir: str | Path | None = None,
+            network: str | NetworkName = NetworkName.MAINNET,
+            config: BitCloneConfig | None = None,
             blockchain: Blockchain | None = None,
             mempool: MemPool | None = None,
             wallet: Wallet | None = None,
             miner: Miner | None = None,
             transport: Transport | None = None,
     ):
-        self.db_path = Path(db_path) if db_path is not None else DB_PATH
+        self.config = config or BitCloneConfig.from_options(data_dir=data_dir, network=network, db_path=db_path)
+        self.db_path = self.config.db_path
 
-        self.blockchain = blockchain or Blockchain(db_path=self.db_path)
+        self.blockchain = blockchain or Blockchain(db_path=self.db_path, blocks_dir=self.config.blocks_dir)
         chain_db_path = getattr(self.blockchain.db, "db_path", self.db_path)
-        self.mempool = mempool or MemPool(db_path=chain_db_path)
+        self.mempool = mempool or MemPool(db_path=chain_db_path, blocks_dir=self.config.blocks_dir)
         self.wallet = wallet
         self.miner = miner or Miner()
         self.transport = transport or Transport()
@@ -201,6 +205,9 @@ class Node:
         tip = self.blockchain.tip
         return {
             "started": self.started,
+            "network": self.config.network.value,
+            "data_dir": str(self.config.data_dir),
+            "db_path": str(self.db_path),
             "height": self.blockchain.height,
             "tip": tip.block_id[::-1].hex() if tip else None,
             "utxo_count": self.blockchain.utxo_count(),

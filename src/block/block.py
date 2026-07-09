@@ -96,7 +96,7 @@ class BlockHeader(Serializable):
             "previous_block": self.prev_block[::-1].hex(),
             "merkle_root": self.merkle_root[::-1].hex(),
             "timestamp": self.timestamp,
-            "bits": self.bits.hex()[::-1],
+            "bits": self.bits.hex(),
             "nonce": self.nonce
         }
 

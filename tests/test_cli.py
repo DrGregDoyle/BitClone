@@ -20,6 +20,7 @@ def test_status_outputs_json(tmp_path, capsys):
     assert output["height"] == 0
     assert output["mempool_size"] == 0
     assert output["started"] is False
+    assert output["network"] == "mainnet"
 
 
 def test_status_outputs_plain_text(tmp_path, capsys):
@@ -29,6 +30,32 @@ def test_status_outputs_plain_text(tmp_path, capsys):
     output = capsys.readouterr().out
     assert "height: 0" in output
     assert "mempool_size: 0" in output
+
+
+def test_init_creates_data_directory_layout(tmp_path, capsys):
+    exit_code = main(["--data-dir", str(tmp_path), "--network", "regtest", "--json", "init"])
+
+    assert exit_code == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["network"] == "regtest"
+    assert output["db_path"] == str(tmp_path / "regtest" / "chainstate" / "bitclone.db")
+    assert (tmp_path / "bitclone.toml").exists()
+    assert (tmp_path / "regtest" / "chainstate").is_dir()
+    assert (tmp_path / "regtest" / "blocks").is_dir()
+    assert (tmp_path / "regtest" / "peers").is_dir()
+    assert (tmp_path / "regtest" / "logs").is_dir()
+    assert (tmp_path / "regtest" / "wallet").is_dir()
+
+
+def test_status_uses_data_dir_and_network_without_db_path(tmp_path, capsys):
+    exit_code = main(["--data-dir", str(tmp_path), "--network", "regtest", "--json", "status"])
+
+    assert exit_code == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["network"] == "regtest"
+    assert output["db_path"] == str(tmp_path / "regtest" / "chainstate" / "bitclone.db")
+    assert (tmp_path / "regtest" / "chainstate" / "bitclone.db").exists()
+    assert (tmp_path / "regtest" / "blocks").is_dir()
 
 
 def test_build_template_outputs_candidate_block(tmp_path, capsys):
@@ -72,6 +99,66 @@ def test_getblock_finds_genesis_block(tmp_path, capsys):
     output = json.loads(capsys.readouterr().out)
     assert output["found"] is True
     assert output["block"]["tx_num"] == 1
+
+
+def test_getchaintip_outputs_active_tip(tmp_path, capsys):
+    db_path = tmp_path / "node.db"
+    node = Node(db_path=db_path)
+    try:
+        block_hash = node.blockchain.tip.block_id[::-1].hex()
+    finally:
+        node.close()
+
+    exit_code = main(["--db-path", str(db_path), "--json", "getchaintip"])
+
+    assert exit_code == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["found"] is True
+    assert output["tip"]["height"] == 0
+    assert output["tip"]["block_hash"] == block_hash
+    assert output["tip"]["active"] is True
+
+
+def test_getchaintip_outputs_plain_text(tmp_path, capsys):
+    exit_code = main(["--db-path", str(tmp_path / "node.db"), "getchaintip"])
+
+    assert exit_code == 0
+    output = capsys.readouterr().out
+    assert "found: True" in output
+    assert "height" in output
+
+
+def test_getblockheader_finds_genesis_header(tmp_path, capsys):
+    db_path = tmp_path / "node.db"
+    node = Node(db_path=db_path)
+    try:
+        block_hash = node.blockchain.tip.block_id[::-1].hex()
+    finally:
+        node.close()
+
+    exit_code = main(["--db-path", str(db_path), "--json", "getblockheader", block_hash])
+
+    assert exit_code == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["found"] is True
+    assert output["height"] == 0
+    assert output["header"]["block_hash"] == block_hash
+    assert output["header"]["bits"] == "1d00ffff"
+    assert output["index"]["height"] == 0
+    assert output["index"]["active"] is True
+
+
+def test_getblockheader_returns_not_found_for_unknown_hash(tmp_path, capsys):
+    unknown_hash = "11" * 32
+
+    exit_code = main(["--db-path", str(tmp_path / "node.db"), "--json", "getblockheader", unknown_hash])
+
+    assert exit_code == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output == {
+        "found": False,
+        "block_hash": unknown_hash,
+    }
 
 
 def test_sendrawtransaction_prints_txid_for_rejected_tx(tmp_path, capsys):

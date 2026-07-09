@@ -59,7 +59,7 @@ def calc_block_work(bits: bytes) -> int:
 
 
 class BitCloneDatabase:
-    def __init__(self, db_path=DB_PATH, testing=False):
+    def __init__(self, db_path=DB_PATH, testing=False, blocks_dir: Path | None = None):
         # --- Establish db path
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -68,7 +68,7 @@ class BitCloneDatabase:
         self.testing = testing
 
         # --- Block file manager
-        blocks_dir = self.db_path.parent / "blocks"
+        blocks_dir = blocks_dir or self.db_path.parent / "blocks"
         self.block_files = BlockFileManager(blocks_dir)
 
         # --- Persistent connection

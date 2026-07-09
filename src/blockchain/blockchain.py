@@ -62,9 +62,9 @@ class Blockchain:
 
     # --- Construction/Reset
 
-    def __init__(self, db_path: Path = DB_PATH):
+    def __init__(self, db_path: Path = DB_PATH, blocks_dir: Path | None = None):
         # --- Main db
-        self.db = BitCloneDatabase(db_path)
+        self.db = BitCloneDatabase(db_path, blocks_dir=blocks_dir)
         self.utxo_stats = {}  # Dictionary for tracking status of UTXO set
 
         # --- State tracking

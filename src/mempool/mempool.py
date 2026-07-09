@@ -48,7 +48,7 @@ class MemPool:
     MIN_FEE = 1  # sats/vbyte = feerate
     MAX_BLOCK_WEIGHT = 4_000_000  # 4 million wu
 
-    def __init__(self, db_path: Path = TEST_DB_PATH) -> None:
+    def __init__(self, db_path: Path = TEST_DB_PATH, blocks_dir: Path | None = None) -> None:
         # --- MemPool constants
         self.max_size = MemPool.MAX_SIZE
         self.max_time = MemPool.MAX_TIME
@@ -56,7 +56,7 @@ class MemPool:
         self.max_block_weight = MemPool.MAX_BLOCK_WEIGHT
 
         # --- UTXO set
-        self.btcdb = BitCloneDatabase(db_path)
+        self.btcdb = BitCloneDatabase(db_path, blocks_dir=blocks_dir)
 
         # --- Script Engine for Tx Validation
         self.script_engine = ScriptEngine()
