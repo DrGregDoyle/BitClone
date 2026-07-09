@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from src.config import BitCloneConfig, NetworkName
+from src.core import ReadError, TransactionError
 from src.node.node import Node
 from src.tx.tx import Tx
 
@@ -55,6 +56,16 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sendraw = subparsers.add_parser("sendrawtransaction", help="Submit a raw transaction hex string to the mempool.")
     sendraw.add_argument("tx_hex", help="Serialized transaction hex.")
+
+    decoderaw = subparsers.add_parser("decoderawtransaction", help="Decode a raw transaction hex string.")
+    decoderaw.add_argument("tx_hex", help="Serialized transaction hex.")
+
+    getrawmempool = subparsers.add_parser("getrawmempool", help="List mempool transaction ids.")
+    getrawmempool.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Include fee, size, and ancestor/descendant metadata.",
+    )
 
     getblock = subparsers.add_parser("getblock", help="Read a block by display hash.")
     getblock.add_argument("block_hash", help="Block hash in display byte order.")
@@ -125,6 +136,13 @@ def _format_block_header(node: Node, block_hash: bytes, display_hash: str) -> di
     }
 
 
+def _decode_tx(tx_hex: str) -> Tx:
+    try:
+        return Tx.from_bytes(_decode_hex(tx_hex, "tx_hex"))
+    except (ReadError, TransactionError, ValueError) as e:
+        raise argparse.ArgumentTypeError(f"tx_hex is not a valid serialized transaction: {e}") from e
+
+
 def _handle_command(node: Node, args: argparse.Namespace) -> Any:
     match args.command:
         case "status":
@@ -138,12 +156,17 @@ def _handle_command(node: Node, args: argparse.Namespace) -> Any:
             block_hash = _decode_display_hash(args.block_hash, "block_hash")
             return _format_block_header(node, block_hash, args.block_hash)
         case "sendrawtransaction":
-            tx = Tx.from_bytes(_decode_hex(args.tx_hex, "tx_hex"))
+            tx = _decode_tx(args.tx_hex)
             accepted = node.submit_tx(tx)
             return {
                 "accepted": accepted,
                 "txid": tx.txid[::-1].hex(),
             }
+        case "decoderawtransaction":
+            tx = _decode_tx(args.tx_hex)
+            return tx.to_data()
+        case "getrawmempool":
+            return node.mempool.to_data(verbose=args.verbose)
         case "getblock":
             block_hash = _decode_display_hash(args.block_hash, "block_hash")
             block = node.blockchain.get_block(block_hash)

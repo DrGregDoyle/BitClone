@@ -164,6 +164,32 @@ class MemPool:
         """
         return self.mempool[txid].fee
 
+    def get_txids(self) -> list[str]:
+        """
+        Return mempool transaction ids in display byte order.
+        """
+        return [txid[::-1].hex() for txid in self.mempool]
+
+    def to_data(self, verbose: bool = False):
+        """
+        Return mempool contents for CLI/RPC display.
+        """
+        if not verbose:
+            return self.get_txids()
+
+        return {
+            txid[::-1].hex(): {
+                "fee": mptx.fee,
+                "vbytes": mptx.tx.vbytes,
+                "feerate": mptx.feerate,
+                "ancestor_feerate": mptx.ancestor_feerate,
+                "arrival_time": mptx.arrival_time,
+                "ancestor_count": len(mptx.ancestors),
+                "descendant_count": len(mptx.descendants),
+            }
+            for txid, mptx in self.mempool.items()
+        }
+
     def close(self) -> None:
         """
         Close resources owned by the mempool.

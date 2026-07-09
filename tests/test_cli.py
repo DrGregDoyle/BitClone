@@ -1,6 +1,9 @@
 import json
+from types import SimpleNamespace
 
-from src.cli import main
+import pytest
+
+from src.cli import _handle_command, main
 from src.node.node import Node
 from src.tx.tx import Tx, TxIn, TxOut, UTXO
 
@@ -199,3 +202,60 @@ def test_sendrawtransaction_accepts_valid_tx_when_utxo_exists(tmp_path, capsys):
     output = json.loads(capsys.readouterr().out)
     assert output["accepted"] is True
     assert output["txid"] == tx.txid[::-1].hex()
+
+
+def test_decoderawtransaction_outputs_transaction_data(tmp_path, capsys):
+    tx = _coinbase_tx()
+
+    exit_code = main(["--db-path", str(tmp_path / "node.db"), "--json", "decoderawtransaction", tx.to_bytes().hex()])
+
+    assert exit_code == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["txid"] == tx.txid[::-1].hex()
+    assert output["is_coinbase"] is True
+    assert output["output_num"] == 1
+
+
+def test_decoderawtransaction_rejects_invalid_bytes(tmp_path):
+    with pytest.raises(SystemExit) as exc:
+        main(["--db-path", str(tmp_path / "node.db"), "decoderawtransaction", "deadbeef"])
+
+    assert exc.value.code == 2
+
+
+def test_getrawmempool_outputs_empty_list_for_fresh_cli_node(tmp_path, capsys):
+    exit_code = main(["--db-path", str(tmp_path / "node.db"), "--json", "getrawmempool"])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == []
+
+
+def test_getrawmempool_verbose_outputs_transaction_metadata(tmp_path):
+    node = Node(db_path=tmp_path / "node.db")
+    try:
+        funding_txid = b"\x22" * 32
+        utxo = UTXO(
+            outpoint=funding_txid + (0).to_bytes(4, "little"),
+            amount=100_000,
+            scriptpubkey=b"\x51",
+            block_height=1,
+        )
+        node.blockchain.db.add_utxo(utxo)
+
+        tx = Tx(
+            inputs=[TxIn(funding_txid, 0, b"", 0xffffffff)],
+            outputs=[TxOut(90_000, b"\x51")],
+        )
+        assert node.submit_tx(tx)
+
+        output = _handle_command(node, SimpleNamespace(command="getrawmempool", verbose=True))
+        txid = tx.txid[::-1].hex()
+
+        assert list(output) == [txid]
+        assert output[txid]["fee"] == 10_000
+        assert output[txid]["vbytes"] == tx.vbytes
+        assert output[txid]["feerate"] == 10_000 / tx.vbytes
+        assert output[txid]["ancestor_count"] == 0
+        assert output[txid]["descendant_count"] == 0
+    finally:
+        node.close()

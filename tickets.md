@@ -156,7 +156,8 @@
 - [x] CLI `getblockheader` command
 - [x] CLI `getchaintip` command
 - [x] CLI `sendrawtransaction` command
-- [ ] CLI mempool commands: `getrawmempool`, `decoderawtransaction`
+- [x] CLI `getrawmempool` command
+- [x] CLI `decoderawtransaction` command
 - [ ] CLI peer commands: `addnode`, `disconnect`, `peers`
 - [x] CLI `build-template` dev command
 - [ ] CLI regtest/dev commands: `generateblock`, `wipe-chain`, `loadblock`
