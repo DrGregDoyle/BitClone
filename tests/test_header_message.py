@@ -2,11 +2,13 @@ import json
 
 import pytest
 
-from src.core import MAGICBYTES, NetworkError
+from src.core import MAGICBYTES, NETWORK, NetworkError
 from src.cryptography import hash256
 from src.network.messages.ctrl_msg import VerAck
 from src.network.messages.header import Header
 from src.network.messages.message import Message
+
+UNSUPPORTED_NAMECOIN_MAGIC = b"\xf9\xbe\xb4\xfe"
 
 
 def test_header_roundtrip_from_payload():
@@ -27,11 +29,13 @@ def test_header_command_field_is_12_bytes_padded():
     hdr = Header.from_payload(payload, command="ping", magic_bytes=MAGICBYTES.MAINNET)
 
     raw = hdr.to_bytes()
-    cmd_field = raw[4:16]
+    command_start = NETWORK.MAGIC_LENGTH
+    command_end = command_start + NETWORK.COMMAND_LENGTH
+    cmd_field = raw[command_start:command_end]
 
-    assert len(cmd_field) == 12
+    assert len(cmd_field) == NETWORK.COMMAND_LENGTH
     assert cmd_field.startswith(b"ping")
-    assert cmd_field[4:] == b"\x00" * 8
+    assert cmd_field[len(b"ping"):] == b"\x00" * (NETWORK.COMMAND_LENGTH - len(b"ping"))
 
     parsed = Header.from_bytes(raw)
     assert parsed.command == "ping"
@@ -39,16 +43,33 @@ def test_header_command_field_is_12_bytes_padded():
 
 def test_header_rejects_unknown_magic_bytes():
     payload = b"abc"
-    checksum = hash256(payload)[:4]
+    checksum = hash256(payload)[:NETWORK.CHECKSUM_LENGTH]
     bad_magic = b"\x01\x02\x03\x04"
 
     with pytest.raises(NetworkError):
         Header(command="version", size=len(payload), checksum=checksum, magic_bytes=bad_magic)
 
 
+def test_header_accepts_signet_magic_bytes():
+    payload = b"abc"
+    checksum = hash256(payload)[:NETWORK.CHECKSUM_LENGTH]
+
+    header = Header(command="version", size=len(payload), checksum=checksum, magic_bytes=MAGICBYTES.SIGNET)
+
+    assert header.magic_bytes == MAGICBYTES.SIGNET
+
+
+def test_header_rejects_namecoin_magic_bytes():
+    payload = b"abc"
+    checksum = hash256(payload)[:NETWORK.CHECKSUM_LENGTH]
+
+    with pytest.raises(NetworkError):
+        Header(command="version", size=len(payload), checksum=checksum, magic_bytes=UNSUPPORTED_NAMECOIN_MAGIC)
+
+
 def test_header_rejects_unknown_command():
     payload = b"abc"
-    checksum = hash256(payload)[:4]
+    checksum = hash256(payload)[:NETWORK.CHECKSUM_LENGTH]
 
     with pytest.raises(NetworkError):
         Header(command="not_a_real_command", size=len(payload), checksum=checksum, magic_bytes=MAGICBYTES.MAINNET)
@@ -61,13 +82,18 @@ def test_header_rejects_bad_checksum_length():
 
 def test_header_allows_payloads_over_64kb():
     # Bitcoin message payload size field is 4 bytes (uint32). This should be allowed.
-    Header(command="version", size=0x10000, checksum=b"\x00" * 4, magic_bytes=MAGICBYTES.MAINNET)
+    Header(
+        command="version",
+        size=0x10000,
+        checksum=b"\x00" * NETWORK.CHECKSUM_LENGTH,
+        magic_bytes=MAGICBYTES.MAINNET,
+    )
 
 
-def test_verack_serializes_to_24_byte_header_only():
+def test_verack_serializes_to_header_only():
     msg = VerAck()
     raw = msg.to_bytes()
-    assert len(raw) == 24
+    assert len(raw) == NETWORK.HEADER_LENGTH
 
     parsed = VerAck.from_bytes(raw)
     assert isinstance(parsed, VerAck)
@@ -92,7 +118,8 @@ def test_from_bytes_does_not_require_eof():
 def test_checksum_mismatch_raises():
     msg = VerAck()
     raw = bytearray(msg.to_bytes())
-    raw[20] ^= 0x01  # flip one bit in checksum field (bytes 20-23 of header)
+    checksum_start = NETWORK.HEADER_LENGTH - NETWORK.CHECKSUM_LENGTH
+    raw[checksum_start] ^= 0x01
     with pytest.raises(Exception):
         VerAck.from_bytes(bytes(raw))
 #

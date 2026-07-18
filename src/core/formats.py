@@ -43,18 +43,17 @@ class MAGICBYTES:
     TESTNET: Final[bytes] = b'\x0b\x11\x09\x07'
     REGTEST: Final[bytes] = b'\xfa\xbf\xb5\xda'
     SIGNET: Final[bytes] = b'\x0a\x03\xcf\x40'
-    NAMECOIN: Final[bytes] = b'\xf9\xbe\xb4\xfe'
-    ALLOWED_MAGIC: Final[tuple] = (MAINNET, TESTNET, REGTEST, SIGNET, NAMECOIN)
+    ALLOWED_MAGIC: Final[tuple[bytes, ...]] = (MAINNET, TESTNET, REGTEST, SIGNET)
 
     @classmethod
     def __contains__(cls, item):
         """Allow 'in' operator to check if magic bytes are valid"""
-        return item in (cls.MAINNET, cls.TESTNET, cls.REGTEST)
+        return item in cls.ALLOWED_MAGIC
 
     @classmethod
     def __iter__(cls):
         """Allow iteration over magic bytes values"""
-        return iter([cls.MAINNET, cls.TESTNET, cls.REGTEST])
+        return iter(cls.ALLOWED_MAGIC)
 
 
 class NETWORK:
@@ -69,6 +68,12 @@ class NETWORK:
     REGTEST_PORT: Final[int] = 18444
     SIGNET_PORT: Final[int] = 38333
 
+    MAGIC_LENGTH: Final[int] = 4
+    COMMAND_LENGTH: Final[int] = 12
+    PAYLOAD_SIZE_LENGTH: Final[int] = 4
+    CHECKSUM_LENGTH: Final[int] = 4
+    HEADER_LENGTH: Final[int] = MAGIC_LENGTH + COMMAND_LENGTH + PAYLOAD_SIZE_LENGTH + CHECKSUM_LENGTH
+
     ALLOWED_COMMANDS: Final[frozenset] = frozenset([
         "version", "verack", "addr", "inv", "getdata", "getblocks", "getheaders",
         "tx", "block", "headers", "getaddr", "ping", "pong", "notfound", "mempool",
@@ -80,7 +85,6 @@ class NETWORK:
         "submitorder", "checkorder", "reply", "alert"
     ])
 
-    COMMAND_LENGTH: Final[int] = 12
     MAX_SHORTID_NONCE: Final[int] = 0xffffffffffffffff
     INV_HASH_SIZE: Final[int] = 32
 

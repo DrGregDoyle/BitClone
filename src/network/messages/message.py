@@ -7,8 +7,6 @@ from src.core import Serializable, MAGICBYTES, SERIALIZED, get_stream, read_stre
 from src.cryptography import hash256
 from src.network import Header
 
-DEFAULT_MAGIC = MAGICBYTES.MAINNET
-
 __all__ = ["Message", "validate_package", "EmptyMessage"]
 
 logger = get_logger(__name__)
@@ -18,7 +16,7 @@ def validate_package(header: Header, payload: bytes) -> bool:
     """
     We validate the Header values against the payload
     """
-    calc_checksum = hash256(payload)[:4]
+    calc_checksum = hash256(payload)[:NETWORK.CHECKSUM_LENGTH]
     calc_size = len(payload)
 
     # checksum
@@ -57,7 +55,7 @@ class Message(Serializable, ABC):
     _registry: dict[str, type["Message"]] = {}
     __slots__ = ("magic_bytes",)
 
-    def __init__(self, magic_bytes: bytes = DEFAULT_MAGIC):
+    def __init__(self, magic_bytes: bytes = MAGICBYTES.MAINNET):
         # Magic bytes are fixed per-network at object creation
         self.magic_bytes = magic_bytes
 
@@ -96,7 +94,7 @@ class Message(Serializable, ABC):
     def _get_header(self, payload: bytes):
         command = getattr(self.__class__, "COMMAND", "testing")
         size = len(payload) if payload else 0
-        checksum = hash256(payload)[:4] if payload else hash256(b'')[:4]
+        checksum = hash256(payload)[:NETWORK.CHECKSUM_LENGTH]
         return Header(command, size, checksum, self.magic_bytes)
 
     @classmethod
@@ -122,7 +120,7 @@ class Message(Serializable, ABC):
     def from_bytes(cls, byte_stream: SERIALIZED):
         """Deserialize an instance from full message."""
         stream = get_stream(byte_stream)  # Get message
-        header = Header.from_bytes(read_stream(stream, 24))  # Get header
+        header = Header.from_bytes(read_stream(stream, NETWORK.HEADER_LENGTH))
         payload_bytes = read_stream(stream, header.size)  # Get message payload
 
         # --- Validate package
@@ -161,7 +159,7 @@ class EmptyMessage(Message):
     """
     __slots__ = ()
 
-    def __init__(self, magic_bytes: bytes = DEFAULT_MAGIC):
+    def __init__(self, magic_bytes: bytes = MAGICBYTES.MAINNET):
         super().__init__(magic_bytes=magic_bytes)
 
     @classmethod

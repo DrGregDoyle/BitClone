@@ -27,6 +27,14 @@ def test_config_db_path_override_keeps_network_layout(tmp_path):
     assert config.blocks_dir == tmp_path / "data" / "testnet" / "blocks"
 
 
+def test_config_supports_signet(tmp_path):
+    config = BitCloneConfig.from_options(data_dir=tmp_path, network="signet")
+
+    assert config.network == NetworkName.SIGNET
+    assert config.magic_bytes == MAGICBYTES.SIGNET
+    assert config.network_dir == tmp_path / "signet"
+
+
 def test_initialize_creates_data_directory_layout(tmp_path):
     config = BitCloneConfig.from_options(data_dir=tmp_path, network="regtest")
 

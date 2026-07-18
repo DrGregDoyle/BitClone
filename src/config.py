@@ -15,6 +15,7 @@ class NetworkName(str, Enum):
     MAINNET = "mainnet"
     TESTNET = "testnet"
     REGTEST = "regtest"
+    SIGNET = "signet"
 
 
 DEFAULT_DATA_DIR = Path.home() / ".bitclone"
@@ -82,6 +83,8 @@ class BitCloneConfig:
                 return MAGICBYTES.TESTNET
             case NetworkName.REGTEST:
                 return MAGICBYTES.REGTEST
+            case NetworkName.SIGNET:
+                return MAGICBYTES.SIGNET
 
     def initialize(self) -> dict[str, str]:
         """

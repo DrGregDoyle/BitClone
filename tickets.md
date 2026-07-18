@@ -218,14 +218,14 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 As a developer, I want to address focused refactors, maintenance, and bug fixes discovered during Sprint 1
 so that the networking foundation remains consistent as new capabilities are added.
 
-- [ ] Remove module-level aliases of format constants such as `DEFAULT_MAGIC = MAGICBYTES.MAINNET`; use the format
+- [x] Remove module-level aliases of format constants such as `DEFAULT_MAGIC = MAGICBYTES.MAINNET`; use the format
   class attributes directly
-- [ ] Remove the local `ALLOWED_MAGIC` list and stale alias comments from `network/messages/header.py`
-- [ ] Define shared P2P envelope sizes in `NETWORK` (`MAGIC_LENGTH`, `PAYLOAD_SIZE_LENGTH`, `CHECKSUM_LENGTH`, and
+- [x] Remove the local `ALLOWED_MAGIC` list and stale alias comments from `network/messages/header.py`
+- [x] Define shared P2P envelope sizes in `NETWORK` (`MAGIC_LENGTH`, `PAYLOAD_SIZE_LENGTH`, `CHECKSUM_LENGTH`, and
   `HEADER_LENGTH`) and replace duplicated literals in header, message, and transport code
-- [ ] Use the existing `NETWORK.COMMAND_LENGTH` throughout message-header serialization and validation
-- [ ] Reconcile supported Bitcoin network magic values: support mainnet, testnet, and regtest now; reserve signet for
-  explicit future support; remove Namecoin from Bitcoin transport validation
+- [x] Use the existing `NETWORK.COMMAND_LENGTH` throughout message-header serialization and validation
+- [x] Reconcile supported Bitcoin network magic values: support mainnet, testnet, regtest, and signet; remove Namecoin
+  from Bitcoin transport validation
 - [ ] Centralize protocol-wide limits such as inventory entries, `getblocks` results, `headers` results, and maximum
   payload size in `NETWORK`
 - [ ] Replace duplicated network wire-field sizes in control messages, data messages, compact-filter messages, and

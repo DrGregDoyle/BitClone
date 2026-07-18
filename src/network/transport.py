@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from src.core import NetworkError
+from src.core import NETWORK, NetworkError
 from src.network.datatypes.network_types import PeerState
 from src.core import MAGICBYTES
 from src.network.messages.header import Header
@@ -82,7 +82,7 @@ class Transport:
     def recv_one(self, peer: Peer, expected_command: Optional[str] = None) -> Message:
         conn = self._require_conn(peer)
 
-        header_bytes = self._recv_exact(conn.sock, 24)
+        header_bytes = self._recv_exact(conn.sock, NETWORK.HEADER_LENGTH)
         header = Header.from_bytes(header_bytes)
 
         if header.magic_bytes != self.magic_bytes:

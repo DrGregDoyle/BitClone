@@ -6,10 +6,6 @@ from src.core import Serializable, SERIALIZED, get_stream, MAGICBYTES, NETWORK, 
     read_little_int
 from src.cryptography import hash256
 
-# DEFAULT_MAGIC = MAGICBYTES.MAINNET
-# ALLOWED_COMMANDS = NETWORK.ALLOWED_COMMANDS
-ALLOWED_MAGIC = [MAGICBYTES.MAINNET, MAGICBYTES.REGTEST, MAGICBYTES.TESTNET]
-
 
 class Header(Serializable):
     """
@@ -35,30 +31,30 @@ class Header(Serializable):
         stream = get_stream(byte_stream)
 
         # Magic bytes = 4 bytes
-        magic_bytes = read_stream(stream, 4)
+        magic_bytes = read_stream(stream, NETWORK.MAGIC_LENGTH)
 
         # Command = 12 encoded ascii bytes, padded with zero bytes
-        command = (read_stream(stream, 12)).strip(b'\x00').decode("ascii")
+        command = read_stream(stream, NETWORK.COMMAND_LENGTH).strip(b'\x00').decode("ascii")
 
         # size = 4 byte little-endian
-        size = read_little_int(stream, 4)
+        size = read_little_int(stream, NETWORK.PAYLOAD_SIZE_LENGTH)
 
         # checksum = 4 bytes
-        checksum = read_stream(stream, 4)
+        checksum = read_stream(stream, NETWORK.CHECKSUM_LENGTH)
 
         return cls(command, size, checksum, magic_bytes)
 
     @classmethod
     def from_payload(cls, payload: bytes, command: str, magic_bytes: bytes = MAGICBYTES.MAINNET):
         size = len(payload)
-        checksum = hash256(payload)[:4]
+        checksum = hash256(payload)[:NETWORK.CHECKSUM_LENGTH]
         return cls(command, size, checksum, magic_bytes)
 
     def to_bytes(self) -> bytes:
         parts = [
             self.magic_bytes,
-            self.command.encode("ascii").ljust(12, b'\x00')[:12],
-            self.size.to_bytes(4, "little"),
+            self.command.encode("ascii").ljust(NETWORK.COMMAND_LENGTH, b'\x00')[:NETWORK.COMMAND_LENGTH],
+            self.size.to_bytes(NETWORK.PAYLOAD_SIZE_LENGTH, "little"),
             self.checksum
         ]
         return b''.join(parts)
@@ -66,8 +62,10 @@ class Header(Serializable):
     def to_dict(self) -> dict:
         return {
             "magic_bytes": self.magic_bytes.hex(),
-            "command": self.command.encode("ascii").ljust(12, b'\x00')[:12].hex(),
-            "size": self.size.to_bytes(4, "little").hex(),
+            "command": self.command.encode("ascii").ljust(
+                NETWORK.COMMAND_LENGTH, b'\x00'
+            )[:NETWORK.COMMAND_LENGTH].hex(),
+            "size": self.size.to_bytes(NETWORK.PAYLOAD_SIZE_LENGTH, "little").hex(),
             "checksum": self.checksum.hex(),
         }
 
@@ -94,15 +92,16 @@ class Header(Serializable):
 
     def _validate_magic_bytes(self, magic_bytes: bytes):
         """Verify the magic bytes is in the list of allowed magic bytes"""
-        if magic_bytes not in ALLOWED_MAGIC:
+        if magic_bytes not in MAGICBYTES.ALLOWED_MAGIC:
             raise NetworkError(f"Unknown magic bytes: {magic_bytes.hex()} ")
 
     def _validate_size(self, size: int):
-        if size < 0 or size > 0xffffffff:
+        max_size = (1 << (8 * NETWORK.PAYLOAD_SIZE_LENGTH)) - 1
+        if size < 0 or size > max_size:
             raise NetworkError(f"Invalid size value: {size}")
 
     def _validate_checksum(self, checksum: bytes):
-        if len(checksum) != 4:
+        if len(checksum) != NETWORK.CHECKSUM_LENGTH:
             raise NetworkError(f"Incorrect bytes size for checksum: {checksum.hex()}")
 
 
