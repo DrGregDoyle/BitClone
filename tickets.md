@@ -1,207 +1,6 @@
-# BitClone ToDo List
+# BitClone Active Tickets
 
----
-
-## Formatting Tasks
-
-- [x] Each Serializable class will have a table in the docstring containing:
-    - [x] variable name
-    - [x] data type in python
-    - [x] serialized format
-    - [x] serialized length
-
----
-
-## Implementation Tasks
-
-- [x] Serialized to_dict method
-- [x] Have a flag for formatted vs plaintext
-- [x] Default will be serialized formatted
-- [x] The to_payload and to_dict methods will overlap.
-- [x] Needs to be ordered in serialization order
-- [x] Modify serializable - have to_dict method to produce the serialized format, and to_data to produce the raw data (for
-  display)
-- [x] Block Dict
-    - [x] Add target as well as bits
-- [x] Network
-    - [x] Create BitIP class for handling ip addresses
-    - [x] Needs to inherit from Serializable.
-- [x] Add the CheckLockTimeVerify opcode (redefine NOP2)
-- [x] Use the imported formatted class within each file, don't assign these to be file variables, this is unnecessary
-  extra work
-- [x] Straighten out the is_version bools with NetAddr and Addr and Version Messages
-- [x] Add all possible getrand functions to conftest for testing
-- [x] Separate scriptpubkey and scriptsig into separate files. Have ScriptType as enum for classification
-- [x] Change Transactions to Tx and network related transactions to Txn
-- [x] Simplify SignatureEngine - either add abstract methods or just use the functions
-- [x] Add ControlBlock validation methods in validate_segwit function in ScriptEngine
-- [ ] Get rid of Execution context
-- [x] Create a class called `LoadedTx` (or similar) which contains a tx with one or more referenced UTXOs
-- [x] Add `close` / `shutdown` methods to `Blockchain`
-- [x] Modify `BitCloneDatabase` to use a persistent connection
-- [ ] Improve P2SH and other script methods using signatures within signatures, or other script types for
-  locking/unlocking
-- [x] Remove runtime artifacts from version control (`__pycache__`, `.pyc`, local sqlite DB files)
-- [x] Add `.gitignore` rules for node data directories, block files, sqlite databases, and Python cache files
-- [ ] Split consensus logic, policy logic, node orchestration, and wallet concerns into clearer module boundaries
-
----
-
-## Block Validation
-
-- [x] Verify Merkle root against block header
-- [x] Enforce proof-of-work target (`bits` → `target` comparison)
-- [x] Validate coinbase reward amount per height (halving schedule)
-- [x] Enforce block size / weight limits
-- [x] Check for duplicate txids within a block
-- [x] Median Time Past (MTP) enforcement for block timestamps
-- [x] Validate `nLockTime` and `nSequence` fields on transactions
-- [x] Validate expected compact target bits at each height
-- [x] Validate SegWit witness commitment in coinbase transaction
-- [x] Validate coinbase script size and BIP34 height commitment
-- [x] Reject duplicate spends within a block
-- [x] Support intra-block UTXO dependencies during validation
-- [x] Enforce coinbase maturity for spent coinbase outputs
-- [ ] Add exact historical consensus activation handling (BIP16, BIP34, BIP65, BIP66, SegWit, Taproot)
-- [ ] Add BIP30 duplicate transaction edge-case handling
-- [ ] Harden sigop counting for P2SH, P2WSH, and tapscript paths
-- [ ] Enforce standard and consensus script flags by network/height
-- [ ] Add test vectors from Bitcoin Core where practical for blocks, scripts, and transactions
-- [ ] Add explicit mainnet/testnet/regtest chain parameter objects
-
----
-
-## Chain Management
-
-- [x] Persist block index entries with cumulative chainwork
-- [x] Detect when an indexed side-chain tip has more cumulative work than the active tip
-- [ ] Fork detection — track competing chain tips by cumulative work during normal block/header processing
-- [ ] Reorganisation (reorg) logic — rollback UTXOs and re-apply the winning chain
-- [ ] Store undo data for every connected block so UTXO changes can be reversed
-- [ ] Mark active/inactive block index entries during reorg
-- [ ] Atomically update block files, block index, chain tip, and UTXO set
-- [ ] Orphan block pool — hold blocks whose parent is not yet known
-- [ ] Header-first chain sync state machine
-- [ ] Block locator generation for `getheaders` / `getblocks`
-- [ ] Best-header tracking separate from best-active-block tracking
-- [ ] Checkpoint map — hard-coded known-good hashes at key heights
-- [ ] Pruning mode design (optional later; archival node first)
-
----
-
-## Mempool
-
-- [x] In-memory pool of validated, unconfirmed transactions
-- [x] Basic fee-rate (sat/vbyte) calculation
-- [x] Basic ancestor / descendant tracking for CPFP (Child Pays For Parent)
-- [x] Reject duplicate mempool txids and simple mempool double spends
-- [x] Evict stale transactions by age
-- [ ] Use the node's active-chain UTXO database instead of a separate test DB
-- [ ] Enable full script validation for mempool admission
-- [x] Basic fee-rate ordering and block-template transaction selection
-- [ ] Finish dependency-aware block-template transaction selection
-- [ ] Enforce ancestor/descendant count and size limits
-- [ ] Add orphan transaction pool for spends whose parents are not known yet
-- [ ] Replace-by-Fee (RBF) logic — BIP 125
-- [ ] Eviction policy for low-fee transactions under memory pressure
-- [ ] Rolling minimum relay fee after eviction
-- [ ] Package validation and package relay groundwork
-- [ ] Reject non-standard transactions separately from consensus-invalid transactions
-- [ ] Mempool persistence across restarts (optional dump/load)
-
----
-
-## Mining / Block Template
-
-- [x] Basic proof-of-work mining loop with stop signal and hashrate stats
-- [x] Basic coinbase transaction construction with BIP34-style height push
-- [ ] Fix mining proof-of-work integer byte order to match consensus validation
-- [ ] Wire `Miner` into `Node` lifecycle and CLI commands
-- [ ] Build block templates from `MemPool.get_block_template()`
-- [ ] Add correct SegWit witness commitment to mined blocks when needed
-- [ ] Use chain-derived `bits` / target instead of a node-local default difficulty field
-- [ ] Stop and rebuild mining work when the chain tip or mempool changes
-- [ ] Add regtest-only easy-mining mode for development
-- [ ] Add tests that mined blocks pass `Blockchain.add_block()`
-
----
-
-## Wallet
-
-- [x] BIP32 extended key derivation primitives
-- [x] BIP39 mnemonic-to-seed wallet creation
-- [x] Derivation path helpers for BIP44 / BIP49 / BIP84 / BIP86 addresses
-- [ ] Complete HD wallet account scanning and gap-limit handling
-- [ ] Key storage (encrypted on disk)
-- [ ] UTXO tracking per address/key
-- [x] Initial transaction builder skeleton
-- [ ] Complete transaction builder — select UTXOs, construct outputs, compute change
-- [ ] Fee estimation using mempool fee-rate histogram
-- [ ] Sign transactions (ECDSA P2PKH/P2WPKH, Schnorr P2TR)
-- [ ] Watch-only wallet mode
-- [ ] Separate wallet runtime from full-node consensus/runtime code
-- [ ] Persist wallet metadata independently from chainstate
-
----
-
-## CLI / RPC / API Layer
-
-- [x] CLI entrypoint (`python -m src`)
-- [x] CLI config command: initialize data dir
-- [x] CLI global `--data-dir` and `--network` options
-- [ ] CLI config commands: inspect config
-- [x] CLI `status` command
-- [x] CLI `getblock` command
-- [x] CLI `gettxout` command
-- [x] CLI `getblockheader` command
-- [x] CLI `getchaintip` command
-- [x] CLI `sendrawtransaction` command
-- [x] CLI `getrawmempool` command
-- [x] CLI `decoderawtransaction` command
-- [ ] CLI peer commands: `addnode`, `disconnect`, `peers`
-- [x] CLI `build-template` dev command
-- [ ] CLI regtest/dev commands: `generateblock`, `wipe-chain`, `loadblock`
-- [ ] Local JSON-RPC server (standard Bitcoin RPC interface where possible)
-- [ ] `getblockchaininfo` — height, tip hash, IBD status
-- [ ] `getrawmempool` — list unconfirmed txids
-- [ ] `getrawtransaction` / `decoderawtransaction`
-- [ ] `sendrawtransaction` — submit a signed tx to mempool + broadcast
-- [ ] `getutxo` / `gettxout`
-- [ ] `generateblock` (regtest mode only)
-
----
-
-## Configuration & Operations
-
-- [ ] Config file loading — data directory, ports, network (mainnet / testnet / regtest), peers
-- [ ] Regtest mode — mine blocks on demand for local testing
-- [ ] Logging levels (DEBUG / INFO / WARNING) and log rotation
-- [x] Basic startup and shutdown sequence wiring for Node, Blockchain, MemPool, and Miner
-- [x] Node entrypoint (`python -m src`) that wires Blockchain and Mempool through Node
-- [x] Fix `Node` runtime wiring so Blockchain, MemPool, wallet, mining, and networking share consistent APIs
-- [x] Make Blockchain and MemPool use the same chainstate/UTXO database path
-- [ ] Add clean shutdown for database connections, peer connections, miner threads, and background tasks
-- [x] Add data directory layout for blocks, chainstate, peers, wallet, logs, and config
-- [ ] Add startup recovery checks for interrupted block/UTXO writes
-- [ ] Add structured progress output for CLI-first operation
-
----
-
-## Testing
-
-- [x] Block validation unit tests for several consensus checks
-- [ ] Expand block validation unit tests with Bitcoin Core vectors (Merkle, PoW, coinbase reward, witness commitment)
-- [ ] Reorg and fork simulation tests
-- [x] Basic mempool tests
-- [ ] Mempool eviction and RBF tests
-- [ ] Wallet signing and UTXO selection tests
-- [ ] RPC endpoint integration tests
-- [ ] IBD simulation against a local regtest peer
-- [ ] CLI command integration tests
-- [ ] Node lifecycle startup/shutdown tests
-- [ ] P2P handshake tests using in-process sockets
-- [ ] Header sync tests with synthetic chains
-- [ ] Block download tests with out-of-order delivery
+This file contains active work only. Completed tickets are maintained in [archived_tickets.md](archived_tickets.md).
 
 ---
 
@@ -209,76 +8,6 @@
 
 Connect BitClone to the live Bitcoin network so it can discover peers, download the blockchain,
 and propagate transactions and blocks in accordance with the Bitcoin P2P protocol.
-
----
-
-### Sprint 1 — Connection & Handshake
-
-**Status: Complete**
-
-**Story 0 — Cleanup and Maintenance**
-As a developer, I want to address focused refactors, maintenance, and bug fixes discovered during Sprint 1
-so that the networking foundation remains consistent as new capabilities are added.
-
-- [x] Remove module-level aliases of format constants such as `DEFAULT_MAGIC = MAGICBYTES.MAINNET`; use the format
-  class attributes directly
-- [x] Remove the local `ALLOWED_MAGIC` list and stale alias comments from `network/messages/header.py`
-- [x] Define shared P2P envelope sizes in `NETWORK` (`MAGIC_LENGTH`, `PAYLOAD_SIZE_LENGTH`, `CHECKSUM_LENGTH`, and
-  `HEADER_LENGTH`) and replace duplicated literals in header, message, and transport code
-- [x] Use the existing `NETWORK.COMMAND_LENGTH` throughout message-header serialization and validation
-- [x] Reconcile supported Bitcoin network magic values: support mainnet, testnet, regtest, and signet; remove Namecoin
-  from Bitcoin transport validation
-- [x] Centralize protocol-wide limits such as inventory entries, `getblocks` results, `headers` results, and maximum
-  payload size in `NETWORK`
-- [x] Replace duplicated network wire-field sizes in control messages, data messages, compact-filter messages, and
-  network datatypes with shared format constants where doing so improves clarity
-- [x] Replace hard-coded values where a matching format constant already exists, such as using `TX.TXID` instead of
-  the literal `32` for transaction IDs
-- [x] Remove remaining module-level format aliases outside networking, such as `BYTE_LEN = ECC.COORD_BYTES` in
-  `cryptography/schnorr.py`
-- [x] Add a Bitcoin Core P2P command-coverage audit without using the upstream command list as a framing allowlist
-    - [x] Add a public `Message.registered_commands()` method returning an immutable set of imported/registered commands
-    - [x] Maintain a reviewed snapshot of Bitcoin Core's `ALL_NET_MESSAGE_TYPES`, including the upstream version or
-      commit used to produce it
-    - [x] Report commands implemented by BitClone, known upstream but not implemented, and implemented locally but
-      absent or deprecated upstream
-    - [x] For the Bitcoin Core v31.0 target, report `addrv2` and `sendtxrcncl` as unimplemented and `reject` as a
-      deprecated command still implemented by BitClone; track post-v31.0 `feature` separately
-    - [x] Add tests that detect command-coverage drift while continuing to deserialize valid unsupported commands as
-      `UnknownMessage`
-    - [x] Review the snapshot whenever BitClone changes its target Bitcoin Core version
-- [x] Add or update focused tests for every cleanup or bug-fix ticket
-
-**Story 1.1 — TCP Peer Connection**
-As a node, I want to open and accept TCP connections on port 8333 (mainnet)
-so that I can communicate with Bitcoin peers.
-
-- [x] Synchronous outbound TCP connection helper
-- [x] Connection state tracking for basic outbound connections
-- [x] Async TCP listener (asyncio)
-- [x] Outbound connection to an explicitly supplied fixed peer using the selected network's default P2P port
-- [x] Connection state tracking (CONNECTING → CONNECTED → READY)
-
-**Story 1.2 — Version Handshake**
-As a node, I want to complete the `version` / `verack` handshake with a peer
-so that both sides agree on protocol version and capabilities before exchanging data.
-
-- [x] `version` and `verack` message serialization/deserialization
-- [x] Send `version` message on connect
-- [x] Receive and validate peer `version`
-- [x] Send and receive `verack`
-- [x] Reject peers below minimum protocol version (70001)
-
-**Story 1.3 — Message Framing**
-As a node, I want to parse and serialise the Bitcoin P2P message envelope
-(magic bytes, command, length, checksum) so that all message types share a common wire format.
-
-- [x] Message header/envelope serialization with `to_bytes` / `from_bytes`
-- [x] Checksum validation (double-SHA256)
-- [x] Network magic constants and allowed magic validation
-- [x] Strict per-network magic selection instead of accepting all known magic values
-- [x] Unknown-command handling and peer misbehavior response
-- [x] Maximum payload size enforcement
 
 ---
 
@@ -304,11 +33,10 @@ so that my peer address book grows organically over time.
 - [ ] Relay `addr` messages to a subset of connected peers
 
 **Story 2.3 — Peer Manager**
-As a node, I want a peer manager that maintains a target number of outbound connections,
-evicts misbehaving or stale peers, and reconnects on disconnect.
+As a node, I want a peer manager that maintains a target number of outbound connections
+and reconnects on disconnect.
 
 - [ ] Target outbound slot count (8 by default)
-- [ ] Ban list for peers that send invalid data
 - [ ] Reconnect backoff with jitter
 
 ---
@@ -323,8 +51,7 @@ Each item should be handled as a separate ticket with sufficient tests.
 As a node, I want to announce and request inventory items (blocks and transactions)
 using `inv` and `getdata` so that I can discover and fetch new data from peers.
 
-- [x] `inv`, `getdata`, `notfound`, block, and tx message serialization/deserialization
-- [ ] Send `inv` when a new block or tx enters the mempool
+- [ ] Send `inv` when a new block or transaction enters the mempool or active chain
 - [ ] Handle incoming `inv` and issue `getdata` for unknown items
 - [ ] Deduplicate in-flight requests
 
@@ -332,18 +59,8 @@ using `inv` and `getdata` so that I can discover and fetch new data from peers.
 As a node, I want to receive `tx` messages from peers, validate the transaction,
 and add it to the mempool so that unconfirmed transactions propagate across the network.
 
-- [x] Deserialise `tx` message into `Tx` object
 - [ ] Run script validation and fee checks
 - [ ] Add to mempool on success; log and ignore on failure
-
-**Story 3.3 — `block` Message Handling**
-As a node, I want to receive `block` messages, validate the full block,
-and extend the chain so that I stay in sync with the network tip.
-
-- [x] Deserialise `block` message
-- [x] Run append-only block validation (PoW, Merkle, scripts, coinbase)
-- [x] Update UTXO set and chain height on successful append-only active-chain block
-- [ ] Trigger reorg logic if needed
 
 ---
 
@@ -357,10 +74,13 @@ Each item should be handled as a separate ticket with sufficient tests.
 As a node starting from genesis, I want to download all block headers first
 so that I can verify proof-of-work on the full chain before downloading block data.
 
-- [ ] Send `getheaders` with known tip locator
-- [x] Parse `headers` response (up to 2000 headers per message)
-- [ ] Validate each header's PoW and chain linkage
-- [ ] Loop until peer returns fewer than 2000 headers
+- [ ] Generate block locators for `getheaders` / `getblocks`
+- [ ] Send `getheaders` with the known tip locator
+- [ ] Implement a header-first chain-sync state machine
+- [ ] Validate each header's proof of work and chain linkage
+- [ ] Track the best header separately from the best active block
+- [ ] Loop until the peer returns fewer than 2,000 headers
+- [ ] Add header-sync tests using synthetic chains
 
 **Story 4.2 — Parallel Block Download**
 As a node, I want to download full blocks from multiple peers in parallel during IBD
@@ -368,36 +88,227 @@ so that I saturate available bandwidth and sync as fast as possible.
 
 - [ ] Assign block ranges to peers
 - [ ] Re-request blocks from alternate peers on timeout
-- [ ] Apply blocks in order once downloaded out-of-order
+- [ ] Apply blocks in order once downloaded out of order
+- [ ] Add block-download tests with out-of-order delivery
 
 **Story 4.3 — IBD State & Progress Reporting**
-As a node operator, I want to see IBD progress (height, % complete, estimated time remaining, blocks/sec)
+As a node operator, I want to see IBD progress (height, percentage complete, estimated time remaining, blocks/sec)
 in the logs so that I know the sync is healthy.
 
 - [ ] Track sync start time and current height
 - [ ] Log progress every N blocks or every M seconds
-- [ ] Set `is_in_ibd` flag — suppress mempool relay until caught up
+- [ ] Set an `is_in_ibd` flag and suppress mempool relay until caught up
 
 ---
 
-### Sprint 5 — Hardening & Testing
+### Sprint 5 — Network Hardening & Integration Testing
 
 **Story 0 — Cleanup and Maintenance**
 Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 5.
 Each item should be handled as a separate ticket with sufficient tests.
 
 **Story 5.1 — Network Integration Tests**
-As a developer, I want automated tests that spin up two in-process nodes in regtest mode,
-perform a handshake, and propagate a block between them
-so that the full P2P path is covered without hitting the live network.
+As a developer, I want automated tests that exercise the full P2P path without hitting the live network.
+
+- [ ] Spin up two in-process nodes in regtest mode, complete a handshake, and propagate a block
+- [ ] Add P2P handshake tests using in-process sockets
+- [ ] Add an IBD simulation against a local regtest peer
 
 **Story 5.2 — Peer Misbehaviour Scoring**
-As a node, I want to assign misbehaviour scores to peers and disconnect/ban those that exceed a threshold
+As a node, I want to assign misbehaviour scores to peers and disconnect or ban those that exceed a threshold
 so that the node is resilient to malformed or malicious messages.
+
+- [ ] Define peer misbehaviour scores and a disconnect threshold
+- [ ] Maintain a ban list for peers that send invalid data
+- [ ] Add malformed-message and ban-expiry tests
 
 **Story 5.3 — `ping` / `pong` Keepalive**
 As a node, I want to send periodic `ping` messages and disconnect peers that do not respond with `pong`
 within a timeout so that stale connections are cleaned up automatically.
+
+- [ ] Schedule periodic `ping` messages for ready peers
+- [ ] Match `pong` nonces to outstanding pings
+- [ ] Disconnect peers after the keepalive timeout
+
+---
+
+### Sprint 6 — Consensus & Script Compliance
+
+**Story 0 — Cleanup and Maintenance**
+Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 6.
+Each item should be handled as a separate ticket with sufficient tests.
+
+**Story 6.1 — Network-Aware Consensus Rules**
+
+- [ ] Add explicit mainnet, testnet, regtest, and signet chain-parameter objects
+- [ ] Add exact historical activation handling for BIP16, BIP34, BIP65, BIP66, SegWit, and Taproot
+- [ ] Add BIP30 duplicate-transaction edge-case handling
+- [ ] Enforce standard and consensus script flags by network and height
+
+**Story 6.2 — Script Engine Hardening**
+
+- [ ] Remove or replace `ExecutionContext` with clearer validation inputs
+- [ ] Improve nested-signature handling for P2SH and related script types
+- [ ] Harden sigop counting for P2SH, P2WSH, and tapscript paths
+
+**Story 6.3 — Bitcoin Core Validation Vectors**
+
+- [ ] Add Bitcoin Core vectors for blocks, scripts, and transactions where practical
+- [ ] Expand block-validation tests for Merkle roots, proof of work, coinbase rewards, and witness commitments
+
+---
+
+### Sprint 7 — Chain Reorganisation & Storage Integrity
+
+**Story 0 — Cleanup and Maintenance**
+Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 7.
+Each item should be handled as a separate ticket with sufficient tests.
+
+**Story 7.1 — Fork Detection and Reorganisation**
+
+- [ ] Track competing chain tips by cumulative work during normal block and header processing
+- [ ] Store undo data for every connected block
+- [ ] Roll back UTXOs and apply the winning chain during a reorganisation
+- [ ] Mark active and inactive block-index entries during a reorganisation
+- [ ] Add reorganisation and fork-simulation tests
+
+**Story 7.2 — Atomic Chain Updates and Orphans**
+
+- [ ] Atomically update block files, block index, chain tip, and UTXO set
+- [ ] Add an orphan-block pool for blocks whose parents are not known
+- [ ] Add a checkpoint map of hard-coded known-good hashes at key heights
+
+**Story 7.3 — Pruning Design**
+
+- [ ] Design optional pruning mode while retaining archival-node mode as the default
+
+---
+
+### Sprint 8 — Mempool Policy & Package Handling
+
+**Story 0 — Cleanup and Maintenance**
+Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 8.
+Each item should be handled as a separate ticket with sufficient tests.
+
+**Story 8.1 — Active-Chain Admission and Dependencies**
+
+- [ ] Use the node's active-chain UTXO view for mempool admission
+- [ ] Finish dependency-aware block-template transaction selection
+- [ ] Enforce ancestor and descendant count and size limits
+- [ ] Add an orphan-transaction pool for spends whose parents are not known
+
+**Story 8.2 — Replacement, Eviction, and Relay Policy**
+
+- [ ] Implement Replace-by-Fee rules from BIP125
+- [ ] Evict low-fee transactions under memory pressure
+- [ ] Maintain a rolling minimum relay fee after eviction
+- [ ] Reject non-standard transactions separately from consensus-invalid transactions
+
+**Story 8.3 — Packages and Persistence**
+
+- [ ] Add package-validation and package-relay groundwork
+- [ ] Add optional mempool persistence across restarts
+- [ ] Add mempool eviction and RBF tests
+
+---
+
+### Sprint 9 — Mining & Regtest Development
+
+**Story 0 — Cleanup and Maintenance**
+Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 9.
+Each item should be handled as a separate ticket with sufficient tests.
+
+**Story 9.1 — Consensus-Correct Mining**
+
+- [ ] Fix mining proof-of-work integer byte order to match consensus validation
+- [ ] Wire `Miner` fully into the `Node` lifecycle
+- [ ] Build block templates from `MemPool.get_block_template()`
+- [ ] Add the correct SegWit witness commitment to mined blocks when needed
+- [ ] Use chain-derived `bits` and target values instead of node-local default difficulty
+- [ ] Stop and rebuild mining work when the chain tip or mempool changes
+- [ ] Add tests proving mined blocks pass `Blockchain.add_block()`
+
+**Story 9.2 — Regtest and Development Commands**
+
+- [ ] Add regtest-only easy-mining mode
+- [ ] Add CLI commands for `generateblock`, `wipe-chain`, and `loadblock`
+- [ ] Support mining blocks on demand in regtest mode
+
+---
+
+### Sprint 10 — Wallet Completion
+
+**Story 0 — Cleanup and Maintenance**
+Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 10.
+Each item should be handled as a separate ticket with sufficient tests.
+
+**Story 10.1 — Accounts, Storage, and Scanning**
+
+- [ ] Complete HD-wallet account scanning and gap-limit handling
+- [ ] Encrypt key storage on disk
+- [ ] Track UTXOs per address and key
+- [ ] Add watch-only wallet mode
+- [ ] Persist wallet metadata independently from chainstate
+
+**Story 10.2 — Transaction Construction and Signing**
+
+- [ ] Select UTXOs, construct outputs, and compute change
+- [ ] Estimate fees using a mempool fee-rate histogram
+- [ ] Sign ECDSA P2PKH/P2WPKH and Schnorr P2TR transactions
+- [ ] Add wallet signing and UTXO-selection tests
+
+**Story 10.3 — Wallet Runtime Boundary**
+
+- [ ] Separate the wallet runtime from full-node consensus and node orchestration
+
+---
+
+### Sprint 11 — CLI, RPC & API
+
+**Story 0 — Cleanup and Maintenance**
+Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 11.
+Each item should be handled as a separate ticket with sufficient tests.
+
+**Story 11.1 — CLI Completion**
+
+- [ ] Add CLI configuration inspection
+- [ ] Add peer commands: `addnode`, `disconnect`, and `peers`
+- [ ] Add CLI command-integration tests
+
+**Story 11.2 — Local JSON-RPC Server**
+
+- [ ] Implement a local JSON-RPC server compatible with standard Bitcoin RPC where practical
+- [ ] Add `getblockchaininfo`
+- [ ] Expose `getrawmempool`
+- [ ] Add `getrawtransaction` and `decoderawtransaction`
+- [ ] Add `sendrawtransaction` with mempool submission and broadcast
+- [ ] Add `getutxo` / `gettxout`
+- [ ] Expose regtest `generateblock`
+- [ ] Add RPC endpoint integration tests
+
+---
+
+### Sprint 12 — Configuration, Operations & Architecture
+
+**Story 0 — Cleanup and Maintenance**
+Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 12.
+Each item should be handled as a separate ticket with sufficient tests.
+
+**Story 12.1 — Configuration and Logging**
+
+- [ ] Load configuration for data directories, ports, network selection, and fixed peers
+- [ ] Add configurable logging levels and log rotation
+- [ ] Add structured progress output for CLI-first operation
+
+**Story 12.2 — Lifecycle and Recovery**
+
+- [ ] Add clean shutdown for database connections, peer connections, miner threads, and background tasks
+- [ ] Add startup recovery checks for interrupted block and UTXO writes
+- [ ] Add node lifecycle startup and shutdown tests
+
+**Story 12.3 — Runtime Boundaries**
+
+- [ ] Split consensus logic, policy logic, node orchestration, and wallet concerns into clearer module boundaries
 
 ---
 
