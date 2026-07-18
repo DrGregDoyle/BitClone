@@ -8,6 +8,7 @@ from src.network.datatypes.network_data import NetAddr
 from src.network.datatypes.network_types import PeerState, Services
 from src.network.messages.ctrl_msg import Ping, SendAddrV2, VerAck, Version, WtxidRelay
 from src.network.messages.message import UnknownMessage
+from src.network.peer_address_book import PeerSource
 from src.node.node import Node
 from src.tx.tx import Tx, TxIn, TxOut
 
@@ -184,6 +185,13 @@ def test_connect_peer_sends_version_first_with_node_state(monkeypatch, tmp_path)
         assert version.nonce == peer.local_nonce
         assert version.user_agent == NETWORK.USER_AGENT
         assert version.last_block == node.blockchain.height
+        address = node.address_book.get(KNOWN_TEST_ENDPOINT, NETWORK.REGTEST_PORT)
+        assert address is not None
+        assert address.sources == {PeerSource.MANUAL}
+        assert address.success_count == 1
+        assert address.protocol_version == NETWORK.PROTOCOL_VERSION
+        assert address.user_agent == PEER_USER_AGENT
+        assert address.last_block == PEER_BLOCK_HEIGHT
     finally:
         node.close()
 

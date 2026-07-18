@@ -17,13 +17,6 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 2.
 Each item should be handled as a separate ticket with sufficient tests.
 
-**Story 2.1 — DNS Seed Bootstrap**
-As a node, I want to resolve Bitcoin DNS seeds on first startup
-so that I can find an initial set of peers without any configuration.
-
-- [ ] Query hardcoded DNS seeds (`seed.bitcoin.sipa.be`, etc.)
-- [ ] Store resolved IPs in a peer address book
-
 **Story 2.2 — `addr` / `getaddr` Exchange**
 As a node, I want to send `getaddr` to peers and handle incoming `addr` messages
 so that my peer address book grows organically over time.

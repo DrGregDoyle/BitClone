@@ -16,8 +16,10 @@ from src.mempool.mempool import MemPool
 from src.mining.miner import Miner
 from src.network.datatypes.network_data import NetAddr
 from src.network.datatypes.network_types import PeerState, Services
+from src.network.dns_seeds import DNSResolver, DNSSeedBootstrap, DNSSeedResult
 from src.network.messages.ctrl_msg import SendAddrV2, VerAck, Version, WtxidRelay
 from src.network.peer import Peer
+from src.network.peer_address_book import PeerAddressBook, PeerSource
 from src.network.transport import Transport
 from src.tx.tx import Tx, TxIn, TxOut
 from src.wallet.wallet import Wallet
@@ -42,6 +44,7 @@ class Node:
             wallet: Wallet | None = None,
             miner: Miner | None = None,
             transport: Transport | None = None,
+            address_book: PeerAddressBook | None = None,
     ):
         self.config = config or BitCloneConfig.from_options(data_dir=data_dir, network=network, db_path=db_path)
         self.db_path = self.config.db_path
@@ -52,6 +55,7 @@ class Node:
         self.wallet = wallet
         self.miner = miner or Miner()
         self.transport = transport or Transport(magic_bytes=self.config.magic_bytes)
+        self.address_book = address_book if address_book is not None else PeerAddressBook(self.config.p2p_port)
         self.started = False
 
     # --- Lifecycle ----------------------------------------------------- #
@@ -88,10 +92,24 @@ class Node:
 
     # --- Peer networking ---------------------------------------------- #
 
+    def bootstrap_dns(self, resolver: DNSResolver | None = None) -> DNSSeedResult:
+        """Resolve this network's DNS seeds into the shared peer address book."""
+        return DNSSeedBootstrap(
+            network=self.config.network,
+            address_book=self.address_book,
+            port=self.config.p2p_port,
+            resolver=resolver,
+        ).resolve()
+
     def connect_peer(self, host: str, port: int | None = None) -> Peer:
         """Connect to a fixed peer and initiate the Bitcoin version handshake."""
         peer = Peer(host, self.config.p2p_port if port is None else port)
-        self.transport.connect(peer)
+        self.address_book.add_peer(peer, source=PeerSource.MANUAL)
+        try:
+            self.transport.connect(peer)
+        except Exception:
+            self.address_book.record_failure(peer.host, peer.port, failed_at=time.time())
+            raise
         peer.state = PeerState.HANDSHAKING
 
         try:
@@ -139,9 +157,11 @@ class Node:
         except Exception:
             peer.fail_count += 1
             peer.last_fail = time.time()
+            self.address_book.record_failure(peer.host, peer.port, failed_at=peer.last_fail)
             self.transport.disconnect(peer)
             raise
 
+        self.address_book.record_success(peer, succeeded_at=time.time())
         return peer
 
     # --- Block construction / mining ---------------------------------- #

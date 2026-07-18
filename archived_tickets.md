@@ -187,6 +187,15 @@ As a node, I want to parse and serialise the Bitcoin P2P message envelope
 
 ## Completed Groundwork for Upcoming Sprints
 
+### Sprint 2 — Peer Discovery
+
+#### Story 2.1 — DNS Seed Bootstrap
+As a node, I want to resolve Bitcoin DNS seeds on first startup
+so that I can find an initial set of peers without any configuration.
+
+- [x] Store resolved IPs in a peer address book
+- [x] Query hardcoded DNS seeds (`seed.bitcoin.sipa.be`, etc.)
+
 ### Sprint 3 — Propagation Groundwork
 
 - [x] `inv`, `getdata`, `notfound`, block, and tx message serialization/deserialization

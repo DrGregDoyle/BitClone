@@ -69,6 +69,31 @@ class NETWORK:
     REGTEST_PORT: Final[int] = 18444
     SIGNET_PORT: Final[int] = 38333
 
+    # Reviewed against Bitcoin Core v31.0 src/kernel/chainparams.cpp. The final
+    # dot makes each seed an absolute DNS name and matches Bitcoin Core.
+    MAINNET_DNS_SEEDS: Final[tuple[str, ...]] = (
+        "seed.bitcoin.sipa.be.",
+        "dnsseed.bluematt.me.",
+        "seed.bitcoin.jonasschnelli.ch.",
+        "seed.btc.petertodd.net.",
+        "seed.bitcoin.sprovoost.nl.",
+        "dnsseed.emzy.de.",
+        "seed.bitcoin.wiz.biz.",
+        "seed.mainnet.achownodes.xyz.",
+    )
+    TESTNET_DNS_SEEDS: Final[tuple[str, ...]] = (
+        "testnet-seed.bitcoin.jonasschnelli.ch.",
+        "seed.tbtc.petertodd.net.",
+        "seed.testnet.bitcoin.sprovoost.nl.",
+        "testnet-seed.bluematt.me.",
+        "seed.testnet.achownodes.xyz.",
+    )
+    SIGNET_DNS_SEEDS: Final[tuple[str, ...]] = (
+        "seed.signet.bitcoin.sprovoost.nl.",
+        "seed.signet.achownodes.xyz.",
+    )
+    REGTEST_DNS_SEEDS: Final[tuple[str, ...]] = ()
+
     MAGIC_LENGTH: Final[int] = 4
     COMMAND_LENGTH: Final[int] = 12
     PAYLOAD_SIZE_LENGTH: Final[int] = 4
