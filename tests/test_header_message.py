@@ -90,6 +90,25 @@ def test_header_allows_payloads_over_64kb():
     )
 
 
+def test_header_accepts_maximum_protocol_payload_size():
+    Header(
+        command="block",
+        size=NETWORK.MAX_PAYLOAD_SIZE,
+        checksum=b"\x00" * NETWORK.CHECKSUM_LENGTH,
+        magic_bytes=MAGICBYTES.MAINNET,
+    )
+
+
+def test_header_rejects_payload_over_protocol_limit():
+    with pytest.raises(NetworkError, match="Invalid size value"):
+        Header(
+            command="block",
+            size=NETWORK.MAX_PAYLOAD_SIZE + 1,
+            checksum=b"\x00" * NETWORK.CHECKSUM_LENGTH,
+            magic_bytes=MAGICBYTES.MAINNET,
+        )
+
+
 def test_verack_serializes_to_header_only():
     msg = VerAck()
     raw = msg.to_bytes()

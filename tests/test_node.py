@@ -6,7 +6,7 @@ from src.block.block import Block
 from src.core import MAGICBYTES, NETWORK, NetworkError
 from src.network.datatypes.network_data import NetAddr
 from src.network.datatypes.network_types import PeerState, Services
-from src.network.messages.ctrl_msg import Ping, Version
+from src.network.messages.ctrl_msg import Ping, SendAddrV2, VerAck, Version, WtxidRelay
 from src.node.node import Node
 from src.tx.tx import Tx, TxIn, TxOut
 
@@ -22,6 +22,7 @@ PEER_NONCE = 987654321
 PEER_USER_AGENT = "/Satoshi:test/"
 PEER_BLOCK_HEIGHT = 850_000
 PEER_SERVICES = Services.NODE_NETWORK | Services.NODE_WITNESS
+BELOW_MIN_PROTOCOL_VERSION = NETWORK.MIN_PROTOCOL_VERSION - 1
 
 
 class _RecordingSocket:
@@ -58,9 +59,12 @@ class _RecordingSocket:
         self.closed = True
 
 
-def _peer_version_bytes(magic_bytes=MAGICBYTES.MAINNET):
+def _peer_version_bytes(
+        magic_bytes=MAGICBYTES.MAINNET,
+        protocol_version=NETWORK.PROTOCOL_VERSION,
+):
     version = Version(
-        version=NETWORK.PROTOCOL_VERSION,
+        version=protocol_version,
         services=PEER_SERVICES,
         timestamp=FIXED_TIMESTAMP,
         remote_addr=NetAddr(FAKE_ENDPOINT, EPHEMERAL_PORT, Services.UNNAMED),
@@ -71,6 +75,28 @@ def _peer_version_bytes(magic_bytes=MAGICBYTES.MAINNET):
     )
     version.magic_bytes = magic_bytes
     return version.to_bytes()
+
+
+def _peer_handshake_bytes(
+        magic_bytes=MAGICBYTES.MAINNET,
+        protocol_version=NETWORK.PROTOCOL_VERSION,
+        pre_verack_messages=(),
+):
+    messages = [_peer_version_bytes(magic_bytes, protocol_version)]
+    for message_type in (*pre_verack_messages, VerAck):
+        message = message_type()
+        message.magic_bytes = magic_bytes
+        messages.append(message.to_bytes())
+    return b"".join(messages)
+
+
+def _oversized_message_header() -> bytes:
+    return b"".join([
+        MAGICBYTES.MAINNET,
+        b"block".ljust(NETWORK.COMMAND_LENGTH, b"\x00"),
+        (NETWORK.MAX_PAYLOAD_SIZE + 1).to_bytes(NETWORK.PAYLOAD_SIZE_LENGTH, "little"),
+        b"\x00" * NETWORK.CHECKSUM_LENGTH,
+    ])
 
 
 def _coinbase_tx() -> Tx:
@@ -125,7 +151,7 @@ def test_node_uses_configured_network_magic(tmp_path):
 
 
 def test_connect_peer_sends_version_first_with_node_state(monkeypatch, tmp_path):
-    fake_socket = _RecordingSocket(incoming=_peer_version_bytes(MAGICBYTES.REGTEST))
+    fake_socket = _RecordingSocket(incoming=_peer_handshake_bytes(MAGICBYTES.REGTEST))
     monkeypatch.setattr("src.network.transport.socket.socket", lambda *args, **kwargs: fake_socket)
     monkeypatch.setattr("src.node.node.time.time", lambda: FIXED_TIMESTAMP)
     monkeypatch.setattr("src.node.node.secrets.randbits", lambda bits: FIXED_NONCE)
@@ -134,10 +160,13 @@ def test_connect_peer_sends_version_first_with_node_state(monkeypatch, tmp_path)
     try:
         peer = node.connect_peer(KNOWN_TEST_ENDPOINT, NETWORK.REGTEST_PORT)
         version = Version.from_bytes(fake_socket.sent[0])
+        verack = VerAck.from_bytes(fake_socket.sent[1])
 
-        assert len(fake_socket.sent) == 1
+        assert len(fake_socket.sent) == 2
         assert fake_socket.sent[0][:4] == MAGICBYTES.REGTEST
-        assert peer.state is PeerState.HANDSHAKING
+        assert fake_socket.sent[1][:4] == MAGICBYTES.REGTEST
+        assert isinstance(verack, VerAck)
+        assert peer.state is PeerState.READY
         assert peer.local_nonce == FIXED_NONCE
         assert peer.protocol_version == NETWORK.PROTOCOL_VERSION
         assert peer.services == PEER_SERVICES
@@ -160,8 +189,8 @@ def test_connect_peer_sends_version_first_with_node_state(monkeypatch, tmp_path)
 
 def test_connect_peer_uses_fresh_nonce_for_each_handshake(monkeypatch, tmp_path):
     sockets = [
-        _RecordingSocket(incoming=_peer_version_bytes()),
-        _RecordingSocket(incoming=_peer_version_bytes()),
+        _RecordingSocket(incoming=_peer_handshake_bytes()),
+        _RecordingSocket(incoming=_peer_handshake_bytes()),
     ]
     nonces = iter([FIRST_NONCE, SECOND_NONCE])
     monkeypatch.setattr("src.network.transport.socket.socket", lambda *args, **kwargs: sockets.pop(0))
@@ -190,7 +219,7 @@ def test_connect_peer_uses_fresh_nonce_for_each_handshake(monkeypatch, tmp_path)
 def test_connect_peer_receives_version_on_supported_network(
         monkeypatch, tmp_path, network, magic_bytes, port,
 ):
-    fake_socket = _RecordingSocket(incoming=_peer_version_bytes(magic_bytes))
+    fake_socket = _RecordingSocket(incoming=_peer_handshake_bytes(magic_bytes))
     monkeypatch.setattr("src.network.transport.socket.socket", lambda *args, **kwargs: fake_socket)
     node = Node(data_dir=tmp_path, network=network)
 
@@ -199,7 +228,196 @@ def test_connect_peer_receives_version_on_supported_network(
 
         assert peer.protocol_version == NETWORK.PROTOCOL_VERSION
         assert peer.user_agent == PEER_USER_AGENT
-        assert peer.state is PeerState.HANDSHAKING
+        assert peer.state is PeerState.READY
+    finally:
+        node.close()
+
+
+@pytest.mark.parametrize(
+    "protocol_version",
+    [NETWORK.MIN_PROTOCOL_VERSION, NETWORK.PROTOCOL_VERSION],
+    ids=["minimum", "current"],
+)
+def test_connect_peer_accepts_compatible_protocol_versions(
+        monkeypatch, tmp_path, protocol_version,
+):
+    fake_socket = _RecordingSocket(
+        incoming=_peer_handshake_bytes(protocol_version=protocol_version),
+    )
+    monkeypatch.setattr("src.network.transport.socket.socket", lambda *args, **kwargs: fake_socket)
+    node = Node(data_dir=tmp_path)
+
+    try:
+        peer = node.connect_peer(KNOWN_TEST_ENDPOINT, NETWORK.MAINNET_PORT)
+
+        assert peer.protocol_version == protocol_version
+        assert peer.state is PeerState.READY
+        assert peer.fail_count == 0
+    finally:
+        node.close()
+
+
+def test_connect_peer_allows_standard_messages_before_verack(monkeypatch, tmp_path):
+    incoming = _peer_handshake_bytes(
+        pre_verack_messages=(WtxidRelay, SendAddrV2),
+    )
+    fake_socket = _RecordingSocket(incoming=incoming)
+    monkeypatch.setattr("src.network.transport.socket.socket", lambda *args, **kwargs: fake_socket)
+    node = Node(data_dir=tmp_path)
+
+    try:
+        peer = node.connect_peer(KNOWN_TEST_ENDPOINT, NETWORK.MAINNET_PORT)
+
+        assert peer.state is PeerState.READY
+        assert len(fake_socket.sent) == 2
+        assert isinstance(VerAck.from_bytes(fake_socket.sent[1]), VerAck)
+    finally:
+        node.close()
+
+
+def test_connect_peer_rejects_unexpected_message_before_verack(monkeypatch, tmp_path):
+    version = _peer_version_bytes()
+    ping = Ping(PEER_NONCE)
+    incoming = version + ping.to_bytes()
+    fake_socket = _RecordingSocket(incoming=incoming)
+    monkeypatch.setattr("src.network.transport.socket.socket", lambda *args, **kwargs: fake_socket)
+    node = Node(data_dir=tmp_path)
+    captured_peer = None
+    original_connect = node.transport.connect
+
+    def capture_connect(peer):
+        nonlocal captured_peer
+        captured_peer = peer
+        original_connect(peer)
+
+    monkeypatch.setattr(node.transport, "connect", capture_connect)
+
+    try:
+        with pytest.raises(NetworkError, match="Unexpected command before verack"):
+            node.connect_peer(KNOWN_TEST_ENDPOINT, NETWORK.MAINNET_PORT)
+
+        assert captured_peer.state is PeerState.DISCONNECTED
+        assert captured_peer.fail_count == 1
+        assert len(fake_socket.sent) == 2
+        assert fake_socket.closed
+    finally:
+        node.close()
+
+
+def test_connect_peer_disconnects_if_peer_closes_before_verack(monkeypatch, tmp_path):
+    fake_socket = _RecordingSocket(incoming=_peer_version_bytes())
+    monkeypatch.setattr("src.network.transport.socket.socket", lambda *args, **kwargs: fake_socket)
+    node = Node(data_dir=tmp_path)
+    captured_peer = None
+    original_connect = node.transport.connect
+
+    def capture_connect(peer):
+        nonlocal captured_peer
+        captured_peer = peer
+        original_connect(peer)
+
+    monkeypatch.setattr(node.transport, "connect", capture_connect)
+
+    try:
+        with pytest.raises(ConnectionError, match="closed while receiving"):
+            node.connect_peer(KNOWN_TEST_ENDPOINT, NETWORK.MAINNET_PORT)
+
+        assert captured_peer.state is PeerState.DISCONNECTED
+        assert captured_peer.fail_count == 1
+        assert len(fake_socket.sent) == 2
+        assert fake_socket.closed
+    finally:
+        node.close()
+
+
+def test_connect_peer_limits_messages_before_verack(monkeypatch, tmp_path):
+    negotiation_messages = (WtxidRelay,) * (NETWORK.MAX_PRE_VERACK_MESSAGES + 1)
+    incoming = _peer_version_bytes()
+    for message_type in negotiation_messages:
+        incoming += message_type().to_bytes()
+    fake_socket = _RecordingSocket(incoming=incoming)
+    monkeypatch.setattr("src.network.transport.socket.socket", lambda *args, **kwargs: fake_socket)
+    node = Node(data_dir=tmp_path)
+    captured_peer = None
+    original_connect = node.transport.connect
+
+    def capture_connect(peer):
+        nonlocal captured_peer
+        captured_peer = peer
+        original_connect(peer)
+
+    monkeypatch.setattr(node.transport, "connect", capture_connect)
+
+    try:
+        with pytest.raises(NetworkError, match="exceeded limit"):
+            node.connect_peer(KNOWN_TEST_ENDPOINT, NETWORK.MAINNET_PORT)
+
+        assert captured_peer.state is PeerState.DISCONNECTED
+        assert captured_peer.fail_count == 1
+        assert fake_socket.closed
+    finally:
+        node.close()
+
+
+def test_connect_peer_disconnects_on_oversized_pre_verack_message(monkeypatch, tmp_path):
+    incoming = _peer_version_bytes() + _oversized_message_header()
+    fake_socket = _RecordingSocket(incoming=incoming)
+    monkeypatch.setattr("src.network.transport.socket.socket", lambda *args, **kwargs: fake_socket)
+    node = Node(data_dir=tmp_path)
+    captured_peer = None
+    original_connect = node.transport.connect
+
+    def capture_connect(peer):
+        nonlocal captured_peer
+        captured_peer = peer
+        original_connect(peer)
+
+    monkeypatch.setattr(node.transport, "connect", capture_connect)
+
+    try:
+        with pytest.raises(NetworkError, match="Invalid size value"):
+            node.connect_peer(KNOWN_TEST_ENDPOINT, NETWORK.MAINNET_PORT)
+
+        assert captured_peer.state is PeerState.DISCONNECTED
+        assert captured_peer.fail_count == 1
+        assert captured_peer.last_fail is not None
+        assert fake_socket.incoming == b""
+        assert fake_socket.closed
+    finally:
+        node.close()
+
+
+def test_connect_peer_rejects_protocol_version_below_minimum(monkeypatch, tmp_path):
+    fake_socket = _RecordingSocket(
+        incoming=_peer_version_bytes(protocol_version=BELOW_MIN_PROTOCOL_VERSION),
+    )
+    monkeypatch.setattr("src.network.transport.socket.socket", lambda *args, **kwargs: fake_socket)
+    node = Node(data_dir=tmp_path)
+    captured_peer = None
+    original_connect = node.transport.connect
+
+    def capture_connect(peer):
+        nonlocal captured_peer
+        captured_peer = peer
+        original_connect(peer)
+
+    monkeypatch.setattr(node.transport, "connect", capture_connect)
+
+    expected_error = (
+        f"Peer protocol version {BELOW_MIN_PROTOCOL_VERSION} is below minimum supported version "
+        f"{NETWORK.MIN_PROTOCOL_VERSION}"
+    )
+
+    try:
+        with pytest.raises(NetworkError, match=expected_error):
+            node.connect_peer(KNOWN_TEST_ENDPOINT, NETWORK.MAINNET_PORT)
+
+        assert captured_peer.protocol_version == BELOW_MIN_PROTOCOL_VERSION
+        assert captured_peer.state is PeerState.DISCONNECTED
+        assert captured_peer.fail_count == 1
+        assert captured_peer.last_fail is not None
+        assert len(fake_socket.sent) == 1
+        assert fake_socket.closed
     finally:
         node.close()
 

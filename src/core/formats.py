@@ -73,12 +73,15 @@ class NETWORK:
     PAYLOAD_SIZE_LENGTH: Final[int] = 4
     CHECKSUM_LENGTH: Final[int] = 4
     HEADER_LENGTH: Final[int] = MAGIC_LENGTH + COMMAND_LENGTH + PAYLOAD_SIZE_LENGTH + CHECKSUM_LENGTH
+    MAX_PAYLOAD_SIZE: Final[int] = 4_000_000
+    MAX_PRE_VERACK_MESSAGES: Final[int] = 10
 
     ALLOWED_COMMANDS: Final[frozenset] = frozenset([
         "version", "verack", "addr", "inv", "getdata", "getblocks", "getheaders",
         "tx", "block", "headers", "getaddr", "ping", "pong", "notfound", "mempool",
         "reject", "filterload", "filteradd", "filterclear", "merkleblock",
-        "sendheaders", "feefilter", "sendcmpct", "cmpctblock", "getblocktxn", "blocktxn", "testing"
+        "sendheaders", "sendaddrv2", "wtxidrelay", "feefilter", "sendcmpct", "cmpctblock", "getblocktxn",
+        "blocktxn", "testing"
     ])
 
     DEPRECATED_COMMANDS: Final[frozenset] = frozenset([

@@ -244,7 +244,7 @@ so that I can communicate with Bitcoin peers.
 - [x] Connection state tracking for basic outbound connections
 - [ ] Async TCP listener (asyncio)
 - [ ] Outbound connection to a hardcoded seed peer
-- [ ] Connection state tracking (CONNECTING → CONNECTED → READY)
+- [x] Connection state tracking (CONNECTING → CONNECTED → READY)
 
 **Story 1.2 — Version Handshake**
 As a node, I want to complete the `version` / `verack` handshake with a peer
@@ -253,8 +253,8 @@ so that both sides agree on protocol version and capabilities before exchanging 
 - [x] `version` and `verack` message serialization/deserialization
 - [x] Send `version` message on connect
 - [x] Receive and validate peer `version`
-- [ ] Send and receive `verack`
-- [ ] Reject peers below minimum protocol version (70001)
+- [x] Send and receive `verack`
+- [x] Reject peers below minimum protocol version (70001)
 
 **Story 1.3 — Message Framing**
 As a node, I want to parse and serialise the Bitcoin P2P message envelope
@@ -265,7 +265,7 @@ As a node, I want to parse and serialise the Bitcoin P2P message envelope
 - [x] Network magic constants and allowed magic validation
 - [x] Strict per-network magic selection instead of accepting all known magic values
 - [ ] Unknown-command handling and peer misbehavior response
-- [ ] Maximum payload size enforcement
+- [x] Maximum payload size enforcement
 
 ---
 

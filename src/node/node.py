@@ -16,7 +16,7 @@ from src.mempool.mempool import MemPool
 from src.mining.miner import Miner
 from src.network.datatypes.network_data import NetAddr
 from src.network.datatypes.network_types import PeerState, Services
-from src.network.messages.ctrl_msg import Version
+from src.network.messages.ctrl_msg import SendAddrV2, VerAck, Version, WtxidRelay
 from src.network.peer import Peer
 from src.network.transport import Transport
 from src.tx.tx import Tx, TxIn, TxOut
@@ -117,6 +117,24 @@ class Node:
             peer.user_agent = peer_version.user_agent
             peer.nonce = peer_version.nonce
             peer.last_block = peer_version.last_block
+            if peer.protocol_version < NETWORK.MIN_PROTOCOL_VERSION:
+                raise NetworkError(
+                    f"Peer protocol version {peer.protocol_version} is below minimum supported version "
+                    f"{NETWORK.MIN_PROTOCOL_VERSION}"
+                )
+
+            self.transport.send(peer, VerAck())
+            for _ in range(NETWORK.MAX_PRE_VERACK_MESSAGES + 1):
+                response = self.transport.recv_one(peer)
+                if isinstance(response, VerAck):
+                    peer.state = PeerState.READY
+                    break
+                if not isinstance(response, (SendAddrV2, WtxidRelay)):
+                    raise NetworkError(f"Unexpected command before verack: {response.COMMAND!r}")
+            else:
+                raise NetworkError(
+                    f"Peer exceeded limit of {NETWORK.MAX_PRE_VERACK_MESSAGES} messages before verack"
+                )
         except Exception:
             peer.fail_count += 1
             peer.last_fail = time.time()

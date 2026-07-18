@@ -11,7 +11,7 @@ from src.network.datatypes.network_types import Services, RejectType, BloomFlags
 from src.network.messages.message import EmptyMessage, Message
 
 __all__ = ["Addr", "FeeFilter", "FilterAdd", "FilterClear", "FilterLoad", "GetAddr", "Ping", "Pong", "Reject",
-           "SendHeaders", "VerAck", "Version", ]
+           "SendAddrV2", "SendHeaders", "VerAck", "Version", "WtxidRelay"]
 
 
 # === PARENT CLASSES === #
@@ -350,8 +350,16 @@ class SendHeaders(EmptyMessage):
     COMMAND = "sendheaders"
 
 
+class SendAddrV2(EmptyMessage):
+    COMMAND = "sendaddrv2"
+
+
 class VerAck(EmptyMessage):
     COMMAND = "verack"
+
+
+class WtxidRelay(EmptyMessage):
+    COMMAND = "wtxidrelay"
 
 
 class Version(Message):

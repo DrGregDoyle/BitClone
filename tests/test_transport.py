@@ -8,6 +8,17 @@ from src.network.messages.ctrl_msg import Ping, Version
 from src.network.peer import Peer
 from src.network.transport import Connection, Transport
 
+OVERSIZED_PAYLOAD_SIZE = NETWORK.MAX_PAYLOAD_SIZE + 1
+
+
+def _raw_header(command: str, payload_size: int, magic_bytes: bytes = MAGICBYTES.MAINNET) -> bytes:
+    return b"".join([
+        magic_bytes,
+        command.encode("ascii").ljust(NETWORK.COMMAND_LENGTH, b"\x00"),
+        payload_size.to_bytes(NETWORK.PAYLOAD_SIZE_LENGTH, "little"),
+        b"\x00" * NETWORK.CHECKSUM_LENGTH,
+    ])
+
 
 def _connected_transport_pair(magic_bytes: bytes = MAGICBYTES.MAINNET):
     left_sock, right_sock = socket.socketpair()
@@ -82,3 +93,16 @@ def test_transport_get_local_address_returns_connected_socket_endpoint():
     transport._conns[peer.key] = Connection(fake_socket, peer.key)
 
     assert transport.get_local_address(peer) == ("127.0.0.1", 49152)
+
+
+def test_transport_rejects_oversized_header_without_reading_payload():
+    peer = Peer("127.0.0.1", NETWORK.MAINNET_PORT)
+    fake_socket = MagicMock()
+    fake_socket.recv.return_value = _raw_header("block", OVERSIZED_PAYLOAD_SIZE)
+    transport = Transport()
+    transport._conns[peer.key] = Connection(fake_socket, peer.key)
+
+    with pytest.raises(NetworkError, match="Invalid size value"):
+        transport.recv_one(peer)
+
+    fake_socket.recv.assert_called_once_with(NETWORK.HEADER_LENGTH)
