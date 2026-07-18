@@ -1,8 +1,9 @@
 import socket
+from unittest.mock import MagicMock
 
 import pytest
 
-from src.core import MAGICBYTES, NetworkError
+from src.core import MAGICBYTES, NETWORK, NetworkError
 from src.network.messages.ctrl_msg import Ping
 from src.network.peer import Peer
 from src.network.transport import Connection, Transport
@@ -10,7 +11,7 @@ from src.network.transport import Connection, Transport
 
 def _connected_transport_pair(magic_bytes: bytes = MAGICBYTES.MAINNET):
     left_sock, right_sock = socket.socketpair()
-    peer = Peer("127.0.0.1", 8333)
+    peer = Peer("127.0.0.1", NETWORK.MAINNET_PORT)
     transport = Transport(magic_bytes=magic_bytes)
     transport._conns[peer.key] = Connection(left_sock, peer.key)
     return transport, peer, left_sock, right_sock
@@ -58,3 +59,13 @@ def test_transport_recv_rejects_wrong_network_magic_bytes():
     finally:
         left_sock.close()
         right_sock.close()
+
+
+def test_transport_get_local_address_returns_connected_socket_endpoint():
+    peer = Peer("127.0.0.1", NETWORK.MAINNET_PORT)
+    fake_socket = MagicMock()
+    fake_socket.getsockname.return_value = ("127.0.0.1", 49152)
+    transport = Transport()
+    transport._conns[peer.key] = Connection(fake_socket, peer.key)
+
+    assert transport.get_local_address(peer) == ("127.0.0.1", 49152)

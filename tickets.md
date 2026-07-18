@@ -214,6 +214,28 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 
 ### Sprint 1 — Connection & Handshake
 
+**Story 0 — Cleanup and Maintenance**
+As a developer, I want to address focused refactors, maintenance, and bug fixes discovered during Sprint 1
+so that the networking foundation remains consistent as new capabilities are added.
+
+- [ ] Remove module-level aliases of format constants such as `DEFAULT_MAGIC = MAGICBYTES.MAINNET`; use the format
+  class attributes directly
+- [ ] Remove the local `ALLOWED_MAGIC` list and stale alias comments from `network/messages/header.py`
+- [ ] Define shared P2P envelope sizes in `NETWORK` (`MAGIC_LENGTH`, `PAYLOAD_SIZE_LENGTH`, `CHECKSUM_LENGTH`, and
+  `HEADER_LENGTH`) and replace duplicated literals in header, message, and transport code
+- [ ] Use the existing `NETWORK.COMMAND_LENGTH` throughout message-header serialization and validation
+- [ ] Reconcile supported Bitcoin network magic values: support mainnet, testnet, and regtest now; reserve signet for
+  explicit future support; remove Namecoin from Bitcoin transport validation
+- [ ] Centralize protocol-wide limits such as inventory entries, `getblocks` results, `headers` results, and maximum
+  payload size in `NETWORK`
+- [ ] Replace duplicated network wire-field sizes in control messages, data messages, compact-filter messages, and
+  network datatypes with shared format constants where doing so improves clarity
+- [ ] Replace hard-coded values where a matching format constant already exists, such as using `TX.TXID` instead of
+  the literal `32` for transaction IDs
+- [ ] Remove remaining module-level format aliases outside networking, such as `BYTE_LEN = ECC.COORD_BYTES` in
+  `cryptography/schnorr.py`
+- [ ] Add or update focused tests for every cleanup or bug-fix ticket
+
 **Story 1.1 — TCP Peer Connection**
 As a node, I want to open and accept TCP connections on port 8333 (mainnet)
 so that I can communicate with Bitcoin peers.
@@ -229,7 +251,7 @@ As a node, I want to complete the `version` / `verack` handshake with a peer
 so that both sides agree on protocol version and capabilities before exchanging data.
 
 - [x] `version` and `verack` message serialization/deserialization
-- [ ] Send `version` message on connect
+- [x] Send `version` message on connect
 - [ ] Receive and validate peer `version`
 - [ ] Send and receive `verack`
 - [ ] Reject peers below minimum protocol version (70001)
@@ -248,6 +270,10 @@ As a node, I want to parse and serialise the Bitcoin P2P message envelope
 ---
 
 ### Sprint 2 — Peer Discovery
+
+**Story 0 — Cleanup and Maintenance**
+Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 2.
+Each item should be handled as a separate ticket with sufficient tests.
 
 **Story 2.1 — DNS Seed Bootstrap**
 As a node, I want to resolve Bitcoin DNS seeds on first startup
@@ -275,6 +301,10 @@ evicts misbehaving or stale peers, and reconnects on disconnect.
 ---
 
 ### Sprint 3 — Block & Transaction Propagation
+
+**Story 0 — Cleanup and Maintenance**
+Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 3.
+Each item should be handled as a separate ticket with sufficient tests.
 
 **Story 3.1 — `inv` / `getdata` Round-Trip**
 As a node, I want to announce and request inventory items (blocks and transactions)
@@ -306,6 +336,10 @@ and extend the chain so that I stay in sync with the network tip.
 
 ### Sprint 4 — Initial Block Download (IBD)
 
+**Story 0 — Cleanup and Maintenance**
+Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 4.
+Each item should be handled as a separate ticket with sufficient tests.
+
 **Story 4.1 — `getheaders` / `headers` Sync**
 As a node starting from genesis, I want to download all block headers first
 so that I can verify proof-of-work on the full chain before downloading block data.
@@ -334,6 +368,10 @@ in the logs so that I know the sync is healthy.
 ---
 
 ### Sprint 5 — Hardening & Testing
+
+**Story 0 — Cleanup and Maintenance**
+Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 5.
+Each item should be handled as a separate ticket with sufficient tests.
 
 **Story 5.1 — Network Integration Tests**
 As a developer, I want automated tests that spin up two in-process nodes in regtest mode,

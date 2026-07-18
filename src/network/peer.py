@@ -26,6 +26,7 @@ class Peer:
     services: Optional[Services] = None
     user_agent: Optional[str] = None
     nonce: Optional[int] = None
+    local_nonce: Optional[int] = None
     last_block: Optional[int] = None
 
     # --- Bookkeeping

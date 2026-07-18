@@ -73,6 +73,12 @@ class Transport:
         conn.last_tx = time.time()
         peer.last_seen = time.time()
 
+    def get_local_address(self, peer: Peer) -> tuple[str, int]:
+        """Return the local endpoint used by an established peer connection."""
+        conn = self._require_conn(peer)
+        host, port = conn.sock.getsockname()[:2]
+        return str(host), int(port)
+
     def recv_one(self, peer: Peer, expected_command: Optional[str] = None) -> Message:
         conn = self._require_conn(peer)
 

@@ -61,6 +61,14 @@ class NETWORK:
     """
     Network protocol constants
     """
+    PROTOCOL_VERSION: Final[int] = 70016
+    MIN_PROTOCOL_VERSION: Final[int] = 70001
+    USER_AGENT: Final[str] = "/BitClone:0.1.0/"
+    MAINNET_PORT: Final[int] = 8333
+    TESTNET_PORT: Final[int] = 18333
+    REGTEST_PORT: Final[int] = 18444
+    SIGNET_PORT: Final[int] = 38333
+
     ALLOWED_COMMANDS: Final[frozenset] = frozenset([
         "version", "verack", "addr", "inv", "getdata", "getblocks", "getheaders",
         "tx", "block", "headers", "getaddr", "ping", "pong", "notfound", "mempool",

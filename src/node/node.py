@@ -3,6 +3,7 @@ The Node class - main runtime coordinator for BitClone.
 """
 from __future__ import annotations
 
+import secrets
 import time
 from pathlib import Path
 from typing import Any
@@ -10,8 +11,13 @@ from typing import Any
 from src.block.block import Block
 from src.blockchain.blockchain import Blockchain
 from src.config import BitCloneConfig, NetworkName
+from src.core import NETWORK
 from src.mempool.mempool import MemPool
 from src.mining.miner import Miner
+from src.network.datatypes.network_data import NetAddr
+from src.network.datatypes.network_types import PeerState, Services
+from src.network.messages.ctrl_msg import Version
+from src.network.peer import Peer
 from src.network.transport import Transport
 from src.tx.tx import Tx, TxIn, TxOut
 from src.wallet.wallet import Wallet
@@ -79,6 +85,36 @@ class Node:
         Alias for close(), for CLI/RPC lifecycle readability.
         """
         self.close()
+
+    # --- Peer networking ---------------------------------------------- #
+
+    def connect_peer(self, host: str, port: int) -> Peer:
+        """Connect to a peer and initiate the Bitcoin version handshake."""
+        peer = Peer(host, port)
+        self.transport.connect(peer)
+        peer.state = PeerState.HANDSHAKING
+
+        try:
+            local_host, local_port = self.transport.get_local_address(peer)
+            peer.local_nonce = secrets.randbits(64)
+            version = Version(
+                version=NETWORK.PROTOCOL_VERSION,
+                services=Services.UNNAMED,
+                timestamp=int(time.time()),
+                remote_addr=NetAddr(peer.host, peer.port, Services.UNNAMED),
+                local_addr=NetAddr(local_host, local_port, Services.UNNAMED),
+                nonce=peer.local_nonce,
+                user_agent=NETWORK.USER_AGENT,
+                last_block=self.blockchain.height,
+            )
+            self.transport.send(peer, version)
+        except Exception:
+            peer.fail_count += 1
+            peer.last_fail = time.time()
+            self.transport.disconnect(peer)
+            raise
+
+        return peer
 
     # --- Block construction / mining ---------------------------------- #
 
