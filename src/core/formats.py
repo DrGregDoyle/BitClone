@@ -21,6 +21,7 @@ class BLOCK:
     NONCE: Final[int] = VERSION
     BITS: Final[int] = VERSION
     MERKLE_ROOT: Final[int] = PREV_BLOCK
+    HEADER_LENGTH: Final[int] = VERSION + PREV_BLOCK + MERKLE_ROOT + TIME + BITS + NONCE
     TIMESTAMP_FORMAT: Final[str] = "%A, %d %B %Y %H:%M:%S"  # Display
     GENESIS_BLOCK_BITS: Final[bytes] = b'\x1d\x00\xff\xff'
 
@@ -76,20 +77,39 @@ class NETWORK:
     MAX_PAYLOAD_SIZE: Final[int] = 4_000_000
     MAX_PRE_VERACK_MESSAGES: Final[int] = 10
 
-    ALLOWED_COMMANDS: Final[frozenset] = frozenset([
-        "version", "verack", "addr", "inv", "getdata", "getblocks", "getheaders",
-        "tx", "block", "headers", "getaddr", "ping", "pong", "notfound", "mempool",
-        "reject", "filterload", "filteradd", "filterclear", "merkleblock",
-        "sendheaders", "sendaddrv2", "wtxidrelay", "feefilter", "sendcmpct", "cmpctblock", "getblocktxn",
-        "blocktxn", "testing"
-    ])
+    PROTOCOL_VERSION_LENGTH: Final[int] = 4
+    SERVICES_LENGTH: Final[int] = 8
+    TIMESTAMP_LENGTH: Final[int] = 8
+    NET_ADDR_TIMESTAMP_LENGTH: Final[int] = 4
+    IP_ADDRESS_LENGTH: Final[int] = 16
+    PORT_LENGTH: Final[int] = 2
+    NONCE_LENGTH: Final[int] = 8
+    BLOCK_HEIGHT_LENGTH: Final[int] = 4
+    HASH_LENGTH: Final[int] = 32
+    INVENTORY_TYPE_LENGTH: Final[int] = 4
+    FEE_RATE_LENGTH: Final[int] = 8
+    BLOOM_HASH_FUNCTIONS_LENGTH: Final[int] = 4
+    BLOOM_TWEAK_LENGTH: Final[int] = 4
+    BLOOM_FLAGS_LENGTH: Final[int] = 1
+    REJECT_CODE_LENGTH: Final[int] = 1
+    FILTER_TYPE_LENGTH: Final[int] = 1
+    FILTER_START_HEIGHT_LENGTH: Final[int] = 4
+    MERKLE_TX_COUNT_LENGTH: Final[int] = 4
+    HEADERS_TX_COUNT_LENGTH: Final[int] = 1
+    COMPACT_BLOCK_ANNOUNCE_LENGTH: Final[int] = 1
+    COMPACT_BLOCK_VERSION_LENGTH: Final[int] = 8
+    SHORT_ID_LENGTH: Final[int] = 6
+    SHORT_ID_KEY_LENGTH: Final[int] = 16
+    SHORT_ID_HASH_LENGTH: Final[int] = 8
+    NET_ADDR_LENGTH: Final[int] = SERVICES_LENGTH + IP_ADDRESS_LENGTH + PORT_LENGTH
 
-    DEPRECATED_COMMANDS: Final[frozenset] = frozenset([
-        "submitorder", "checkorder", "reply", "alert"
-    ])
+    MAX_INVENTORY_ENTRIES: Final[int] = 50_000
+    MAX_GETBLOCKS_RESULTS: Final[int] = 500
+    MAX_HEADERS_RESULTS: Final[int] = 2_000
+    MAX_COMPACT_FILTERS_PER_REQUEST: Final[int] = 1_000
 
     MAX_SHORTID_NONCE: Final[int] = 0xffffffffffffffff
-    INV_HASH_SIZE: Final[int] = 32
+    INV_HASH_SIZE: Final[int] = HASH_LENGTH
 
 
 class SCRIPT:

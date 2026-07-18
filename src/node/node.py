@@ -11,7 +11,7 @@ from typing import Any
 from src.block.block import Block
 from src.blockchain.blockchain import Blockchain
 from src.config import BitCloneConfig, NetworkName
-from src.core import NETWORK, NetworkError
+from src.core import BLOCK, NETWORK, TX, NetworkError
 from src.mempool.mempool import MemPool
 from src.mining.miner import Miner
 from src.network.datatypes.network_data import NetAddr
@@ -88,9 +88,9 @@ class Node:
 
     # --- Peer networking ---------------------------------------------- #
 
-    def connect_peer(self, host: str, port: int) -> Peer:
-        """Connect to a peer and initiate the Bitcoin version handshake."""
-        peer = Peer(host, port)
+    def connect_peer(self, host: str, port: int | None = None) -> Peer:
+        """Connect to a fixed peer and initiate the Bitcoin version handshake."""
+        peer = Peer(host, self.config.p2p_port if port is None else port)
         self.transport.connect(peer)
         peer.state = PeerState.HANDSHAKING
 
@@ -130,7 +130,8 @@ class Node:
                     peer.state = PeerState.READY
                     break
                 if not isinstance(response, (SendAddrV2, WtxidRelay)):
-                    raise NetworkError(f"Unexpected command before verack: {response.COMMAND!r}")
+                    response_command = getattr(response, "command", response.__class__.COMMAND)
+                    raise NetworkError(f"Unexpected command before verack: {response_command!r}")
             else:
                 raise NetworkError(
                     f"Peer exceeded limit of {NETWORK.MAX_PRE_VERACK_MESSAGES} messages before verack"
@@ -153,7 +154,7 @@ class Node:
         height = self.blockchain.height + 1
         fees = self._calculate_mempool_fees(txs)
         coinbase = self._create_coinbase_tx(height, fees)
-        prev_block = self.blockchain.tip.block_id if self.blockchain.tip else b"\x00" * 32
+        prev_block = self.blockchain.tip.block_id if self.blockchain.tip else b"\x00" * BLOCK.PREV_BLOCK
 
         return Block(
             version=2,
@@ -187,7 +188,7 @@ class Node:
     def _create_coinbase_tx(self, height: int, fees: int) -> Tx:
         block_reward = self.blockchain.calc_subsidy(height)
         coinbase_input = TxIn(
-            txid=b"\x00" * 32,
+            txid=b"\x00" * TX.TXID,
             vout=0xffffffff,
             scriptsig=self._create_coinbase_script(height),
             sequence=0xffffffff,

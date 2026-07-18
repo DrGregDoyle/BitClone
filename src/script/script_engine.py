@@ -5,7 +5,7 @@ import json
 from dataclasses import replace, dataclass
 from io import BytesIO
 
-from src.core import serialize_data
+from src.core import ECC, serialize_data
 from src.core.byte_stream import get_stream, read_stream, read_little_int
 from src.core.exceptions import ScriptEngineError
 from src.core.logging import get_logger
@@ -426,8 +426,8 @@ class ScriptEngine:
         block_stream = get_stream(control_block)
 
         control_byte = read_stream(block_stream, 1)
-        xonly_pubkey = read_stream(block_stream, 32)
-        merkle_proof = read_stream(block_stream, len(control_block) - 33)
+        xonly_pubkey = read_stream(block_stream, ECC.COORD_BYTES)
+        merkle_proof = read_stream(block_stream, len(control_block) - (1 + ECC.COORD_BYTES))
 
         # --- LOGGING
         print(f"CONTROL BYTE: {control_byte.hex()}")

@@ -8,7 +8,7 @@ from io import BytesIO
 
 from src.core.byte_stream import get_stream, read_stream
 from src.core.exceptions import ExtendedKeyError
-from src.core.formats import XKEYS
+from src.core.formats import ECC, XKEYS
 from src.cryptography import SECP256K1, hash160, hmac_sha512, hash256
 from src.data import encode_base58, decode_base58
 from src.data.ecc_keys import PubKey
@@ -45,8 +45,8 @@ class ExtendedKey:
         # --- Validation --- #
         if len(parent_fingerprint) != 4:
             raise ExtendedKeyError("Parent fingerprint must be 4 bytes")
-        if len(chain_code) != 32:
-            raise ExtendedKeyError("Chain code must be 32 bytes")
+        if len(chain_code) != XKEYS.CHAIN_LENGTH:
+            raise ExtendedKeyError(f"Chain code must be {XKEYS.CHAIN_LENGTH} bytes")
 
         # --- Get Keys
 
@@ -82,7 +82,8 @@ class ExtendedKey:
         seed_hash = hmac_sha512(key=XKEYS.SEED_KEY, message=seed)
 
         # 2. Get private_key in bytes and blockchain code
-        privkey, chain_code = seed_hash[:32], seed_hash[32:]
+        privkey = seed_hash[:ECC.COORD_BYTES]
+        chain_code = seed_hash[ECC.COORD_BYTES:]
 
         # 3. Use 0 values for remaining params
         return cls(privkey, chain_code, depth=0, parent_fingerprint=b'\x00' * 4, child_number=0, version=version)
@@ -108,8 +109,8 @@ class ExtendedKey:
         depth = read_stream(stream, 1, "depth")
         parent_fingerprint = read_stream(stream, 4, "parent_fingerprint")
         child_number = read_stream(stream, 4, "index")
-        chain_code = read_stream(stream, 32, "chain_code")
-        key_data = read_stream(stream, 33, "key_data")
+        chain_code = read_stream(stream, XKEYS.CHAIN_LENGTH, "chain_code")
+        key_data = read_stream(stream, ECC.COORD_BYTES + 1, "key_data")
         checksum = read_stream(stream, 4, "checksum")
 
         # Verify checksum
@@ -128,11 +129,11 @@ class ExtendedKey:
     # --- PROPERTIES --- #
     @property
     def is_private(self):
-        return len(self.key_data) == 32
+        return len(self.key_data) == ECC.COORD_BYTES
 
     @property
     def is_public(self):
-        return len(self.key_data) == 33
+        return len(self.key_data) == ECC.COORD_BYTES + 1
 
     @property
     def is_mainnet(self):
@@ -209,8 +210,8 @@ class ExtendedKey:
 
         # --- HMAC SHA512 --- #
         key_hash = hmac_sha512(key=self.chain_code, message=data)
-        child_chain_code = key_hash[32:]
-        tweak = key_hash[:32]
+        child_chain_code = key_hash[XKEYS.CHAIN_LENGTH:]
+        tweak = key_hash[:XKEYS.CHAIN_LENGTH]
 
         # Get tweak_int modulo the order
         tweak_int = int.from_bytes(tweak, 'big') % SECP256K1.order
@@ -222,7 +223,7 @@ class ExtendedKey:
         # Calculate keys
         if self.is_private:
             child_priv_key = (int.from_bytes(self.key_data, "big") + tweak_int) % SECP256K1.order
-            child_key_data = child_priv_key.to_bytes(32, "big")
+            child_key_data = child_priv_key.to_bytes(ECC.COORD_BYTES, "big")
         else:
             pubkey_pt = PubKey.from_compressed(self.key_data).to_point()
             tweak_pt = SECP256K1.multiply_generator(tweak_int)

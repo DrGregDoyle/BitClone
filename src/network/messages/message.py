@@ -5,9 +5,9 @@ from abc import ABC, abstractmethod
 
 from src.core import Serializable, MAGICBYTES, SERIALIZED, get_stream, read_stream, get_logger, NETWORK
 from src.cryptography import hash256
-from src.network import Header
+from src.network.messages.header import Header
 
-__all__ = ["Message", "validate_package", "EmptyMessage"]
+__all__ = ["Message", "validate_package", "EmptyMessage", "UnknownMessage"]
 
 logger = get_logger(__name__)
 
@@ -30,10 +30,6 @@ def validate_package(header: Header, payload: bytes) -> bool:
     # magic_bytes
     if header.magic_bytes not in MAGICBYTES.ALLOWED_MAGIC:
         logger.error("Message magic bytes mismatch")
-        return False
-    # command
-    if header.command not in NETWORK.ALLOWED_COMMANDS:
-        logger.error("Message command mismatch")
         return False
     return True
 
@@ -89,6 +85,11 @@ class Message(Serializable, ABC):
     @classmethod
     def get_registered(cls, command: str):
         return cls._registry.get(command)
+
+    @classmethod
+    def registered_commands(cls) -> frozenset[str]:
+        """Return an immutable snapshot of the currently registered commands."""
+        return frozenset(cls._registry)
 
     # --- Header
     def _get_header(self, payload: bytes):
@@ -174,6 +175,44 @@ class EmptyMessage(Message):
 
     def payload_data(self) -> dict:
         return {}
+
+
+class UnknownMessage(Message):
+    """A validly framed message whose command BitClone does not implement."""
+    COMMAND = None
+    __slots__ = ("command", "raw_payload")
+
+    def __init__(self, command: str, payload: bytes, magic_bytes: bytes):
+        super().__init__(magic_bytes=magic_bytes)
+        self.command = command
+        self.raw_payload = payload
+
+    @classmethod
+    def from_bytes(cls, byte_stream: SERIALIZED):
+        stream = get_stream(byte_stream)
+        header_bytes = read_stream(stream, NETWORK.HEADER_LENGTH)
+        header = Header.from_bytes(header_bytes)
+        payload = read_stream(stream, header.size)
+        if not validate_package(header, payload):
+            raise ValueError("Package fails validation")
+        return cls(header.command, payload, header.magic_bytes)
+
+    @classmethod
+    def from_payload(cls, byte_stream: SERIALIZED):
+        raise TypeError("UnknownMessage requires command and network-magic context")
+
+    def _get_header(self, payload: bytes):
+        checksum = hash256(payload)[:NETWORK.CHECKSUM_LENGTH]
+        return Header(self.command, len(payload), checksum, self.magic_bytes)
+
+    def to_payload(self) -> bytes:
+        return self.raw_payload
+
+    def payload_dict(self) -> dict:
+        return {"raw_payload": self.raw_payload.hex()}
+
+    def payload_data(self) -> dict:
+        return {"command": self.command, "raw_payload": self.raw_payload.hex()}
 
 
 # --- TESTING

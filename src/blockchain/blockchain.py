@@ -7,7 +7,7 @@ import time
 
 from src.block.block import Block
 from src.blockchain.genesis_block import genesis_block
-from src.core import get_logger, TransactionError, TX
+from src.core import BLOCK, TX, get_logger, TransactionError
 from src.cryptography import hash256
 from src.data import bits_to_target, target_to_bits, MerkleTree
 from src.database.database import BitCloneDatabase, DB_PATH
@@ -276,7 +276,7 @@ class Blockchain:
 
         # --- Genesis block: check prev_block is all 0's
         if self.tip is None:
-            if block.prev_block != b'\x00' * 32:
+            if block.prev_block != b'\x00' * BLOCK.PREV_BLOCK:
                 logger.error("Genesis block txin has incorrect value")
                 return False
         else:
@@ -597,7 +597,7 @@ class Blockchain:
 
     @staticmethod
     def _witness_merkle_root(block: Block) -> bytes:
-        wtxids = [b"\x00" * 32]
+        wtxids = [b"\x00" * TX.TXID]
         wtxids.extend(tx.wtxid for tx in block.txs[1:])
         return MerkleTree(wtxids).merkle_root
 

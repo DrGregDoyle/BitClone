@@ -4,7 +4,7 @@ Tests for extended keys
 from random import randint, choice
 from secrets import token_bytes, randbelow
 
-from src.core import XKEYS
+from src.core import ECC, XKEYS
 from src.data.ecc_keys import PubKey
 from src.wallet import ExtendedKey
 
@@ -22,7 +22,7 @@ def random_version():
 
 
 def get_random_xkey(key_data: bytes, hardened: bool = False) -> ExtendedKey:
-    chain_code = token_bytes(32)
+    chain_code = token_bytes(XKEYS.CHAIN_LENGTH)
     depth = randbelow(XKEYS.MAX_DEPTH)  # Max depth = 255
     parent_fingerprint = token_bytes(4)
     child_number = randbelow(XKEYS.HARDENED_OFFSET) if not hardened else randint(XKEYS.HARDENED_OFFSET + 1,
@@ -32,7 +32,7 @@ def get_random_xkey(key_data: bytes, hardened: bool = False) -> ExtendedKey:
 
 
 def get_random_xpub():
-    random_privkey = int.from_bytes(token_bytes(32), "big")
+    random_privkey = int.from_bytes(token_bytes(ECC.COORD_BYTES), "big")
     key_data = PubKey(random_privkey).compressed()
     return get_random_xkey(key_data, hardened=False)  # Cannot have hardened public keys
 
@@ -41,7 +41,7 @@ def get_random_xprv(hardened: bool = False):
     """
     We return a random XPRV key. The index will depend on the hardened boolean.
     """
-    key_data = token_bytes(32)
+    key_data = token_bytes(ECC.COORD_BYTES)
     return get_random_xkey(key_data, hardened)
 
 

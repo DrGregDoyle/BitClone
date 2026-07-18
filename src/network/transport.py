@@ -8,12 +8,14 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from src.core import NETWORK, NetworkError
+from src.core import NETWORK, NetworkError, get_logger
 from src.network.datatypes.network_types import PeerState
 from src.core import MAGICBYTES
 from src.network.messages.header import Header
-from src.network.messages.message import Message, validate_package
+from src.network.messages.message import Message, UnknownMessage, validate_package
 from src.network.peer import Peer
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -107,7 +109,8 @@ class Transport:
         # Rebuild full message for existing Message.from_bytes() API
         msg_cls = Message.get_registered(header.command)
         if msg_cls is None:
-            raise NetworkError(f"Unsupported command: {header.command!r}")
+            logger.info(f"Received unsupported command {header.command!r} from {peer.host}:{peer.port}")
+            return UnknownMessage(header.command, payload_bytes, header.magic_bytes)
         return msg_cls.from_bytes(header_bytes + payload_bytes)
 
     def _require_conn(self, peer: Peer) -> Connection:

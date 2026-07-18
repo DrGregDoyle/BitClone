@@ -11,7 +11,7 @@ from src.network.datatypes.network_types import *
 from src.network.messages.ctrl_msg import *
 from src.network.messages.data_msg import *
 from src.network.messages.message import EmptyMessage
-from src.core import MAGICBYTES
+from src.core import MAGICBYTES, NETWORK
 
 
 @pytest.mark.parametrize("msg_class, expected_command", [
@@ -51,6 +51,7 @@ def test_ping_pong():
     assert test_ping_msg.header.size == test_pong_msg.header.size, "Ping/Pong size mismatch"
     assert test_ping_msg.header.magic_bytes == test_pong_msg.header.magic_bytes, "Ping/Pong magic_bytes mismatch"
     assert test_ping_msg.payload == test_pong_msg.payload, "Ping/Pong payload mismatch"
+    assert len(test_ping_msg.payload) == NETWORK.NONCE_LENGTH
 
 
 def test_message_constructor_accepts_configured_magic_bytes():
@@ -77,6 +78,7 @@ def test_feefilter():
     constructed_feefilter = FeeFilter.from_bytes(feefilter_msg.to_bytes())
     assert constructed_feefilter == feefilter_msg, "FeeFilter message failed to_bytes -> from_bytes construction"
     payload_feefilter = FeeFilter.from_payload(feefilter_msg.to_payload())
+    assert len(feefilter_msg.payload) == NETWORK.FEE_RATE_LENGTH
     assert payload_feefilter == feefilter_msg, "FeeFilter message failed to_payload -> from_payload construction"
 
 
@@ -368,6 +370,9 @@ def test_sendcmpct(announce, version):
     assert from_payload_sendcmpct == sendcmpct_msg, "SendCmpct message failed to_payload -> from_payload construction"
     assert from_bytes_sendcmpct.announce == announce, "SendCmpct announce field mismatch"
     assert from_bytes_sendcmpct.version == version, "SendCmpct version field mismatch"
+    assert len(sendcmpct_payload) == (
+        NETWORK.COMPACT_BLOCK_ANNOUNCE_LENGTH + NETWORK.COMPACT_BLOCK_VERSION_LENGTH
+    )
 
 
 def test_txmessage(getrand_tx):

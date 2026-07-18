@@ -6,7 +6,7 @@ from src.core import MAGICBYTES, NETWORK, NetworkError
 from src.cryptography import hash256
 from src.network.messages.ctrl_msg import VerAck
 from src.network.messages.header import Header
-from src.network.messages.message import Message
+from src.network.messages.message import Message, UnknownMessage
 
 UNSUPPORTED_NAMECOIN_MAGIC = b"\xf9\xbe\xb4\xfe"
 
@@ -67,12 +67,52 @@ def test_header_rejects_namecoin_magic_bytes():
         Header(command="version", size=len(payload), checksum=checksum, magic_bytes=UNSUPPORTED_NAMECOIN_MAGIC)
 
 
-def test_header_rejects_unknown_command():
+def test_header_accepts_structurally_valid_unknown_command():
     payload = b"abc"
     checksum = hash256(payload)[:NETWORK.CHECKSUM_LENGTH]
 
-    with pytest.raises(NetworkError):
-        Header(command="not_a_real_command", size=len(payload), checksum=checksum, magic_bytes=MAGICBYTES.MAINNET)
+    header = Header(
+        command="futuremsg",
+        size=len(payload),
+        checksum=checksum,
+        magic_bytes=MAGICBYTES.MAINNET,
+    )
+
+    assert Header.from_bytes(header.to_bytes()).command == "futuremsg"
+
+
+def test_header_rejects_noncanonical_command_padding():
+    raw_header = b"".join([
+        MAGICBYTES.MAINNET,
+        b"ping\x00evil".ljust(NETWORK.COMMAND_LENGTH, b"\x00"),
+        (0).to_bytes(NETWORK.PAYLOAD_SIZE_LENGTH, "little"),
+        hash256(b"")[:NETWORK.CHECKSUM_LENGTH],
+    ])
+
+    with pytest.raises(NetworkError, match="non-zero bytes after padding"):
+        Header.from_bytes(raw_header)
+
+
+def test_header_rejects_non_ascii_command():
+    raw_header = b"".join([
+        MAGICBYTES.MAINNET,
+        b"\xff".ljust(NETWORK.COMMAND_LENGTH, b"\x00"),
+        (0).to_bytes(NETWORK.PAYLOAD_SIZE_LENGTH, "little"),
+        hash256(b"")[:NETWORK.CHECKSUM_LENGTH],
+    ])
+
+    with pytest.raises(NetworkError, match="not ASCII"):
+        Header.from_bytes(raw_header)
+
+
+def test_header_rejects_command_longer_than_field():
+    with pytest.raises(NetworkError, match="Invalid command length"):
+        Header(
+            command="commandtoolong",
+            size=0,
+            checksum=hash256(b"")[:NETWORK.CHECKSUM_LENGTH],
+            magic_bytes=MAGICBYTES.MAINNET,
+        )
 
 
 def test_header_rejects_bad_checksum_length():
@@ -120,6 +160,16 @@ def test_verack_serializes_to_header_only():
 
 def test_message_registry_contains_verack():
     assert Message.get_registered("verack") is VerAck
+
+
+def test_unknown_message_display_preserves_command_and_payload():
+    message = UnknownMessage("futuremsg", b"payload", MAGICBYTES.SIGNET)
+
+    assert message.to_data()["header"]["command"] == "futuremsg"
+    assert message.to_data()["payload"] == {
+        "command": "futuremsg",
+        "raw_payload": b"payload".hex(),
+    }
 
 
 def test_to_dict_formatted_is_json_safe():

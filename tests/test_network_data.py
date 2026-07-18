@@ -8,7 +8,7 @@ from secrets import randbelow
 import pytest
 
 from src.block.block import Block
-from src.core import NetworkDataError
+from src.core import BLOCK, NETWORK, NetworkDataError
 from src.data import encode_differential, decode_differential
 from src.network.datatypes.network_data import *
 from src.network.datatypes.network_types import InvType
@@ -25,18 +25,18 @@ def test_invvectors(inv_type, getrand_invvector):
 
 def test_invvector_invalid_hash_size():
     with pytest.raises(NetworkDataError):
-        InvVector(inv_type=InvType.MSG_TX, obj_hash=b'\x00' * 10)
+        InvVector(inv_type=InvType.MSG_TX, obj_hash=b'\x00' * (NETWORK.INV_HASH_SIZE - 1))
 
 
 def test_invvector_invalid_int_type():
     with pytest.raises(NetworkDataError):
-        InvVector(inv_type=9999, obj_hash=b'\x00' * 32)
+        InvVector(inv_type=9999, obj_hash=b'\x00' * NETWORK.INV_HASH_SIZE)
 
 
 def test_invvector_invalid_type_wrong_class():
     with pytest.raises(NetworkDataError):
         # noinspection PyTypeChecker
-        InvVector(inv_type="MSG_TX", obj_hash=b'\x00' * 32)
+        InvVector(inv_type="MSG_TX", obj_hash=b'\x00' * NETWORK.INV_HASH_SIZE)
 
 
 def test_netaddr(getrand_netaddr):
@@ -45,6 +45,8 @@ def test_netaddr(getrand_netaddr):
     netaddr_version_bytes = netaddr.to_version_bytes()
     from_bytes_netaddr = NetAddr.from_bytes(netaddr_bytes)
     from_version_bytes_netaddr = NetAddr.from_version_bytes(netaddr_version_bytes)
+    assert len(netaddr_version_bytes) == NETWORK.NET_ADDR_LENGTH
+    assert len(netaddr_bytes) == NETWORK.NET_ADDR_TIMESTAMP_LENGTH + NETWORK.NET_ADDR_LENGTH
     assert from_bytes_netaddr == netaddr, f"NetAddr failed to_bytes -> from_bytes construction"
     assert from_version_bytes_netaddr.services == netaddr.services, ("NetAddr failed to_version_bytes -> "
                                                                      "from_version_bytes construction for services")
@@ -140,6 +142,8 @@ def test_header_and_shortids_knownblock():
 def test_headerandshortids(getrand_headerandshortids):
     random_headerandshortids = getrand_headerandshortids()
     from_bytes_hashids = HeaderAndShortIDs.from_bytes(random_headerandshortids.to_bytes())
+    assert len(random_headerandshortids.header) == BLOCK.HEADER_LENGTH
+    assert all(len(short_id.to_bytes()) == NETWORK.SHORT_ID_LENGTH for short_id in random_headerandshortids.short_ids)
     assert from_bytes_hashids == random_headerandshortids, \
         "Failed to_bytes -> from_bytes construction of HeaderAndShortIDs"
 

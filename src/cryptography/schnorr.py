@@ -6,7 +6,6 @@ from src.cryptography.ecc import SECP256K1, Point
 from src.cryptography.hash_functions import schnorr_aux_hash, schnorr_challenge_hash, schnorr_nonce_hash
 
 #  --- CONSTANTS
-BYTE_LEN = ECC.COORD_BYTES
 ORDER = SECP256K1.order
 PRIME = SECP256K1.p
 
@@ -66,18 +65,18 @@ def schnorr_sig(priv_key: int, msg: bytes, aux_bytes: bytes = None) -> bytes:
     # Setup
     n = ORDER
     curve = SECP256K1
-    aux_bytes = b'\x00' * BYTE_LEN if aux_bytes is None else aux_bytes  # Default BIP340 Array
+    aux_bytes = b'\x00' * ECC.COORD_BYTES if aux_bytes is None else aux_bytes  # Default BIP340 Array
 
     # --- Input validation -- #
     # Private key
     if not (1 <= priv_key < n):
         raise SchnorrError(f"Private key must be in range [1, {n})")
     # Message length
-    if len(msg) != BYTE_LEN:
-        raise SchnorrError(f"Message to sign must be exactly {BYTE_LEN} bytes")
+    if len(msg) != ECC.COORD_BYTES:
+        raise SchnorrError(f"Message to sign must be exactly {ECC.COORD_BYTES} bytes")
     # Auxiliary bytes length
-    if len(aux_bytes) != BYTE_LEN:
-        raise SchnorrError(f"Auxiliary bytes must be exactly {BYTE_LEN} bytes")
+    if len(aux_bytes) != ECC.COORD_BYTES:
+        raise SchnorrError(f"Auxiliary bytes must be exactly {ECC.COORD_BYTES} bytes")
 
     # --- Main algorithm --- #
 
@@ -86,12 +85,12 @@ def schnorr_sig(priv_key: int, msg: bytes, aux_bytes: bytes = None) -> bytes:
     if schnorr_point.y % 2 != 0:
         # If private key yields odd y, we negate the private key for use in the algorithm
         priv_key = n - priv_key
-    schnorr_xbytes = schnorr_point.x.to_bytes(BYTE_LEN, "big")
+    schnorr_xbytes = schnorr_point.x.to_bytes(ECC.COORD_BYTES, "big")
 
     # 2. Compute deterministic (private) nonce
     aux_rand_hash = schnorr_aux_hash(aux_bytes)
     temp_entropy = priv_key ^ int.from_bytes(aux_rand_hash, "big")  # XOR
-    hash_data = temp_entropy.to_bytes(BYTE_LEN, "big") + schnorr_xbytes + msg
+    hash_data = temp_entropy.to_bytes(ECC.COORD_BYTES, "big") + schnorr_xbytes + msg
     k_prime = int.from_bytes(schnorr_nonce_hash(hash_data), "big") % n
 
     # Check k_prime isn't zero
@@ -102,7 +101,7 @@ def schnorr_sig(priv_key: int, msg: bytes, aux_bytes: bytes = None) -> bytes:
     nonce_point = curve.multiply_generator(k_prime)
     if nonce_point.y % 2 != 0:
         k_prime = n - k_prime
-    nonce_xbytes = nonce_point.x.to_bytes(BYTE_LEN, "big")
+    nonce_xbytes = nonce_point.x.to_bytes(ECC.COORD_BYTES, "big")
 
     # 4. Calculate challenge
     challenge_hash = schnorr_challenge_hash(nonce_xbytes + schnorr_xbytes + msg)
@@ -113,7 +112,7 @@ def schnorr_sig(priv_key: int, msg: bytes, aux_bytes: bytes = None) -> bytes:
     s = (k_prime + challenge * priv_key) % n
 
     # 6. Validate and return 64 byte signature
-    sig = r.to_bytes(BYTE_LEN, "big") + s.to_bytes(BYTE_LEN, "big")
+    sig = r.to_bytes(ECC.COORD_BYTES, "big") + s.to_bytes(ECC.COORD_BYTES, "big")
     valid = schnorr_verify(schnorr_point.x, msg, sig)
     if not valid:
         raise SchnorrError("Generated invalid signature.")
@@ -184,16 +183,16 @@ def schnorr_verify(xonly_pubkey: int | bytes, msg: bytes, sig: bytes) -> bool:
 
     # --- INPUT VALIDATION --- #
     # Signature length
-    if len(sig) != 2 * BYTE_LEN:
-        raise SchnorrError(f"Attached signature not {2 * BYTE_LEN} bytes.")
+    if len(sig) != 2 * ECC.COORD_BYTES:
+        raise SchnorrError(f"Attached signature not {2 * ECC.COORD_BYTES} bytes.")
     # Signature values
-    r_bytes, s_bytes = sig[:32], sig[32:]
+    r_bytes, s_bytes = sig[:ECC.COORD_BYTES], sig[ECC.COORD_BYTES:]
     r, s = int.from_bytes(r_bytes, "big"), int.from_bytes(s_bytes, "big")
     if r > p or s > n or r < 0 or s < 0:
         raise SchnorrError("Signature coordinates out of bounds")
     # Message length
-    if len(msg) != BYTE_LEN:
-        raise SchnorrError(f"Message to sign must be exactly {BYTE_LEN} bytes")
+    if len(msg) != ECC.COORD_BYTES:
+        raise SchnorrError(f"Message to sign must be exactly {ECC.COORD_BYTES} bytes")
     # X coord on curve
     if not curve.is_x_on_curve(pubkey_x):
         raise SchnorrError("Given public key x coordinate not on curve")
@@ -206,7 +205,7 @@ def schnorr_verify(xonly_pubkey: int | bytes, msg: bytes, sig: bytes) -> bool:
     pubkey = Point(pubkey_x, y)
 
     # 2. Calculate the challenge
-    challenge_hash = schnorr_challenge_hash(r_bytes + pubkey.x.to_bytes(BYTE_LEN, "big") + msg)
+    challenge_hash = schnorr_challenge_hash(r_bytes + pubkey.x.to_bytes(ECC.COORD_BYTES, "big") + msg)
     challenge = int.from_bytes(challenge_hash, "big") % n
 
     # 3. Verify signature

@@ -16,7 +16,7 @@ Filter type 0x00 = Basic block filter (BIP 158): commits to all input outpoints
 and output scripts in a block.
 """
 
-from src.core import SERIALIZED, get_stream, read_compact_size, read_little_int, read_stream
+from src.core import NETWORK, SERIALIZED, get_stream, read_compact_size, read_little_int, read_stream
 from src.core.byte_stream import write_compact_size
 from src.network.messages.message import Message
 
@@ -48,8 +48,6 @@ class GetCFRangeParent(Message):
     * Nodes will not serve more than 1000 filters per request.
     """
 
-    MAX_FILTERS = 1000
-
     def __init__(self, filter_type: int, start_height: int, stop_hash: bytes):
         super().__init__()
         self.filter_type = filter_type
@@ -61,27 +59,27 @@ class GetCFRangeParent(Message):
         stream = get_stream(byte_stream)
 
         # filter_type — 1 byte
-        filter_type = read_little_int(stream, 1)
+        filter_type = read_little_int(stream, NETWORK.FILTER_TYPE_LENGTH)
 
         # start_height — 4 bytes little-endian
-        start_height = read_little_int(stream, 4)
+        start_height = read_little_int(stream, NETWORK.FILTER_START_HEIGHT_LENGTH)
 
         # stop_hash — 32 bytes internal byte order
-        stop_hash = read_stream(stream, 32)
+        stop_hash = read_stream(stream, NETWORK.HASH_LENGTH)
 
         return cls(filter_type, start_height, stop_hash)
 
     def to_payload(self) -> bytes:
         return (
-                self.filter_type.to_bytes(1, "little")
-                + self.start_height.to_bytes(4, "little")
+                self.filter_type.to_bytes(NETWORK.FILTER_TYPE_LENGTH, "little")
+                + self.start_height.to_bytes(NETWORK.FILTER_START_HEIGHT_LENGTH, "little")
                 + self.stop_hash
         )
 
     def payload_dict(self) -> dict:
         return {
-            "filter_type": self.filter_type.to_bytes(1, "little").hex(),
-            "start_height": self.start_height.to_bytes(4, "little").hex(),
+            "filter_type": self.filter_type.to_bytes(NETWORK.FILTER_TYPE_LENGTH, "little").hex(),
+            "start_height": self.start_height.to_bytes(NETWORK.FILTER_START_HEIGHT_LENGTH, "little").hex(),
             "stop_hash": self.stop_hash.hex(),
         }
 
@@ -136,10 +134,10 @@ class CFilter(Message):
         stream = get_stream(byte_stream)
 
         # filter_type — 1 byte
-        filter_type = read_little_int(stream, 1)
+        filter_type = read_little_int(stream, NETWORK.FILTER_TYPE_LENGTH)
 
         # block_hash — 32 bytes
-        block_hash = read_stream(stream, 32)
+        block_hash = read_stream(stream, NETWORK.HASH_LENGTH)
 
         # filter_data — prefixed by CompactSize length
         num_filter_bytes = read_compact_size(stream)
@@ -149,7 +147,7 @@ class CFilter(Message):
 
     def to_payload(self) -> bytes:
         return (
-                self.filter_type.to_bytes(1, "little")
+                self.filter_type.to_bytes(NETWORK.FILTER_TYPE_LENGTH, "little")
                 + self.block_hash
                 + write_compact_size(len(self.filter_data))
                 + self.filter_data
@@ -157,7 +155,7 @@ class CFilter(Message):
 
     def payload_dict(self) -> dict:
         return {
-            "filter_type": self.filter_type.to_bytes(1, "little").hex(),
+            "filter_type": self.filter_type.to_bytes(NETWORK.FILTER_TYPE_LENGTH, "little").hex(),
             "block_hash": self.block_hash.hex(),
             "num_filter_bytes": write_compact_size(len(self.filter_data)).hex(),
             "filter_data": self.filter_data.hex(),
@@ -226,23 +224,23 @@ class CFHeaders(Message):
         stream = get_stream(byte_stream)
 
         # filter_type — 1 byte
-        filter_type = read_little_int(stream, 1)
+        filter_type = read_little_int(stream, NETWORK.FILTER_TYPE_LENGTH)
 
         # stop_hash — 32 bytes
-        stop_hash = read_stream(stream, 32)
+        stop_hash = read_stream(stream, NETWORK.HASH_LENGTH)
 
         # previous_filter_header — 32 bytes
-        previous_filter_header = read_stream(stream, 32)
+        previous_filter_header = read_stream(stream, NETWORK.HASH_LENGTH)
 
         # filter_hashes — CompactSize count followed by 32-byte hashes
         filter_hashes_length = read_compact_size(stream)
-        filter_hashes = [read_stream(stream, 32) for _ in range(filter_hashes_length)]
+        filter_hashes = [read_stream(stream, NETWORK.HASH_LENGTH) for _ in range(filter_hashes_length)]
 
         return cls(filter_type, stop_hash, previous_filter_header, filter_hashes)
 
     def to_payload(self) -> bytes:
         parts = [
-            self.filter_type.to_bytes(1, "little"),
+            self.filter_type.to_bytes(NETWORK.FILTER_TYPE_LENGTH, "little"),
             self.stop_hash,
             self.previous_filter_header,
             write_compact_size(len(self.filter_hashes)),
@@ -253,7 +251,7 @@ class CFHeaders(Message):
     def payload_dict(self) -> dict:
         count = len(self.filter_hashes)
         return {
-            "filter_type": self.filter_type.to_bytes(1, "little").hex(),
+            "filter_type": self.filter_type.to_bytes(NETWORK.FILTER_TYPE_LENGTH, "little").hex(),
             "stop_hash": self.stop_hash.hex(),
             "previous_filter_header": self.previous_filter_header.hex(),
             "filter_hashes_length": write_compact_size(count).hex(),
@@ -299,19 +297,19 @@ class GetCFCheckpt(Message):
         stream = get_stream(byte_stream)
 
         # filter_type — 1 byte
-        filter_type = read_little_int(stream, 1)
+        filter_type = read_little_int(stream, NETWORK.FILTER_TYPE_LENGTH)
 
         # stop_hash — 32 bytes
-        stop_hash = read_stream(stream, 32)
+        stop_hash = read_stream(stream, NETWORK.HASH_LENGTH)
 
         return cls(filter_type, stop_hash)
 
     def to_payload(self) -> bytes:
-        return self.filter_type.to_bytes(1, "little") + self.stop_hash
+        return self.filter_type.to_bytes(NETWORK.FILTER_TYPE_LENGTH, "little") + self.stop_hash
 
     def payload_dict(self) -> dict:
         return {
-            "filter_type": self.filter_type.to_bytes(1, "little").hex(),
+            "filter_type": self.filter_type.to_bytes(NETWORK.FILTER_TYPE_LENGTH, "little").hex(),
             "stop_hash": self.stop_hash.hex(),
         }
 
@@ -351,20 +349,20 @@ class CFCheckpt(Message):
         stream = get_stream(byte_stream)
 
         # filter_type — 1 byte
-        filter_type = read_little_int(stream, 1)
+        filter_type = read_little_int(stream, NETWORK.FILTER_TYPE_LENGTH)
 
         # stop_hash — 32 bytes
-        stop_hash = read_stream(stream, 32)
+        stop_hash = read_stream(stream, NETWORK.HASH_LENGTH)
 
         # filter_headers — CompactSize count followed by 32-byte headers
         filter_headers_length = read_compact_size(stream)
-        filter_headers = [read_stream(stream, 32) for _ in range(filter_headers_length)]
+        filter_headers = [read_stream(stream, NETWORK.HASH_LENGTH) for _ in range(filter_headers_length)]
 
         return cls(filter_type, stop_hash, filter_headers)
 
     def to_payload(self) -> bytes:
         parts = [
-            self.filter_type.to_bytes(1, "little"),
+            self.filter_type.to_bytes(NETWORK.FILTER_TYPE_LENGTH, "little"),
             self.stop_hash,
             write_compact_size(len(self.filter_headers)),
             b''.join(self.filter_headers),
@@ -374,7 +372,7 @@ class CFCheckpt(Message):
     def payload_dict(self) -> dict:
         count = len(self.filter_headers)
         return {
-            "filter_type": self.filter_type.to_bytes(1, "little").hex(),
+            "filter_type": self.filter_type.to_bytes(NETWORK.FILTER_TYPE_LENGTH, "little").hex(),
             "stop_hash": self.stop_hash.hex(),
             "filter_headers_length": write_compact_size(count).hex(),
             "filter_headers": {

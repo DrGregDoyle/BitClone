@@ -4,11 +4,12 @@ Tests and verifies Schnorr signatures
 
 from secrets import token_bytes, randbits, randbelow
 
+import src.cryptography.schnorr as schnorr_module
+
 from src.core import ECC
 from src.cryptography import SECP256K1, schnorr_sig, schnorr_verify
 
 # --- CONSTANTS --- #
-BYTE_LEN = ECC.COORD_BYTES
 ORDER = SECP256K1.order
 PRIME = SECP256K1.p
 
@@ -34,24 +35,29 @@ def _flip_one_bit(b: bytes) -> bytes:
 
 def test_schnorr_sig():
     # Generate random message
-    random_msg = token_bytes(BYTE_LEN)
+    random_msg = token_bytes(ECC.COORD_BYTES)
 
     # Generate nonzero random priv_key
     priv_key = 0
     while priv_key == 0:
-        priv_key = randbits(BYTE_LEN * 8) % ORDER
+        priv_key = randbits(ECC.COORD_BYTES * 8) % ORDER
 
     # Get corresponding pubkey for verification
     pubkey = SECP256K1.multiply_generator(priv_key)
 
     # Generate random auxiliary bytes
-    aux_rand = token_bytes(BYTE_LEN)
+    aux_rand = token_bytes(ECC.COORD_BYTES)
 
     # Generate Schnorr sig
     ssig = schnorr_sig(priv_key, random_msg, aux_rand)
 
     # Verify
     assert schnorr_verify(pubkey.x, random_msg, ssig), "Failed to verify Schnorr Signature for random data"
+
+
+def test_schnorr_uses_shared_coordinate_size_without_module_alias():
+    assert not hasattr(schnorr_module, "BYTE_LEN")
+    assert len(schnorr_sig(1, bytes(ECC.COORD_BYTES))) == 2 * ECC.COORD_BYTES
 
 
 def test_deterministic_given_same_aux():

@@ -14,8 +14,8 @@ from typing import Union
 import siphash
 
 from src.block.block import BlockHeader
-from src.core import Serializable, SERIALIZED, get_stream, read_little_int, read_stream, read_big_int, \
-    read_compact_size, NetworkDataError, get_logger, NETWORK
+from src.core import BLOCK, NETWORK, TX, Serializable, SERIALIZED, get_stream, read_little_int, read_stream, \
+    read_big_int, read_compact_size, NetworkDataError, get_logger
 from src.core.byte_stream import write_compact_size
 from src.cryptography.hash_functions import sha256
 from src.data import IP_ADDRESS, BitIP, decode_differential, encode_differential
@@ -51,15 +51,15 @@ class NetAddr(Serializable):
     @staticmethod
     def _read_stream(stream) -> tuple:
         """Read the common services/ip/port fields from a stream"""
-        services = Services(read_little_int(stream, 8))
-        ip_addr = BitIP.from_bytes(read_stream(stream, 16))
-        port = read_big_int(stream, 2)
+        services = Services(read_little_int(stream, NETWORK.SERVICES_LENGTH))
+        ip_addr = BitIP.from_bytes(read_stream(stream, NETWORK.IP_ADDRESS_LENGTH))
+        port = read_big_int(stream, NETWORK.PORT_LENGTH)
         return services, ip_addr, port
 
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):
         stream = get_stream(byte_stream)
-        timestamp = read_little_int(stream, 4)
+        timestamp = read_little_int(stream, NETWORK.NET_ADDR_TIMESTAMP_LENGTH)
         services, ip_addr, port = cls._read_stream(stream)
         return cls(ip_addr, port, services, timestamp)
 
@@ -71,21 +71,21 @@ class NetAddr(Serializable):
         return cls(ip_addr, port, services)
 
     def to_bytes(self) -> bytes:
-        return self.timestamp.to_bytes(4, "little") + self.to_version_bytes()
+        return self.timestamp.to_bytes(NETWORK.NET_ADDR_TIMESTAMP_LENGTH, "little") + self.to_version_bytes()
 
     def to_version_bytes(self) -> bytes:
         return b''.join([
-            self.services.to_bytes(8, "little"),
+            self.services.to_bytes(NETWORK.SERVICES_LENGTH, "little"),
             self.ip_addr.to_bytes(),
-            self.port.to_bytes(2, "big")
+            self.port.to_bytes(NETWORK.PORT_LENGTH, "big")
         ])
 
     def to_dict(self):
         return {
-            "time": self.timestamp.to_bytes(4, "little").hex(),
+            "time": self.timestamp.to_bytes(NETWORK.NET_ADDR_TIMESTAMP_LENGTH, "little").hex(),
             "services": self.services.name,
             "ip_addr": self.ip_addr.to_bytes().hex(),
-            "port": self.port.to_bytes(2, "big").hex()
+            "port": self.port.to_bytes(NETWORK.PORT_LENGTH, "big").hex()
         }
 
     def to_data(self) -> dict:
@@ -124,10 +124,10 @@ class InvVector(Serializable):
         stream = get_stream(byte_stream)
 
         # inv_type = 4 byte little-endian int
-        int_type = read_little_int(stream, 4)
+        int_type = read_little_int(stream, NETWORK.INVENTORY_TYPE_LENGTH)
 
         # hash = 32 bytes
-        obj_hash = read_stream(stream, 32)
+        obj_hash = read_stream(stream, NETWORK.INV_HASH_SIZE)
 
         return cls(int_type, obj_hash)
 
@@ -260,7 +260,7 @@ class ShortID(Serializable):
         Note: This doesn't recalculate, just reads the stored value
         """
         stream = get_stream(byte_stream)
-        short_id_bytes = read_stream(stream, 6)
+        short_id_bytes = read_stream(stream, NETWORK.SHORT_ID_LENGTH)
 
         # Create a dummy instance (we can't recalculate without header/nonce/txid)
         instance = object.__new__(cls)
@@ -281,14 +281,14 @@ class ShortID(Serializable):
     def validate_shortid(block_header: bytes, nonce: int, txid: bytes) -> bool:
         """Validate the ShortID elements"""
         # --- Validation --- #
-        if len(block_header) != 80:
-            logger.error(f"block_header must be 80 bytes, got {len(block_header)}")
+        if len(block_header) != BLOCK.HEADER_LENGTH:
+            logger.error(f"block_header must be {BLOCK.HEADER_LENGTH} bytes, got {len(block_header)}")
             return False
         if nonce > NETWORK.MAX_SHORTID_NONCE:
             logger.error(f"Nonce must be less than {NETWORK.MAX_SHORTID_NONCE}")
             return False
-        if len(txid) != 32:
-            logger.error(f"txid must be 32 bytes, got {len(txid)}")
+        if len(txid) != TX.TXID:
+            logger.error(f"txid must be {TX.TXID} bytes, got {len(txid)}")
             return False
         return True
 
@@ -296,18 +296,18 @@ class ShortID(Serializable):
     def calc_shortid(block_header: bytes, nonce: int, txid: bytes):
         """Calculate shortid. Assumed to be validated ahead of time"""
         # Step 1: Create the SHA256 hash of the block_header + nonce
-        hash_data = block_header + nonce.to_bytes(8, "little")
+        hash_data = block_header + nonce.to_bytes(NETWORK.NONCE_LENGTH, "little")
         hash_value = sha256(hash_data)
 
         # Step 2: Extract k0 and k1 as the SipHash key (first 16 bytes)
         # SipHash_2_4 expects a 16-byte secret key
-        siphash_key = hash_value[:16]
+        siphash_key = hash_value[:NETWORK.SHORT_ID_KEY_LENGTH]
 
         # Step 3: Run SipHash-2-4 with input being txid and k0/k1
         siphash_result = siphash.SipHash_2_4(siphash_key, txid).hash()
 
         # Step 4: Create shortId from lower 6 bytes
-        return siphash_result.to_bytes(8, "little")[:6]
+        return siphash_result.to_bytes(NETWORK.SHORT_ID_HASH_LENGTH, "little")[:NETWORK.SHORT_ID_LENGTH]
 
 
 class HeaderAndShortIDs(Serializable):
@@ -327,7 +327,7 @@ class HeaderAndShortIDs(Serializable):
     def __init__(self, header: bytes | BlockHeader, nonce: int, short_ids: list[ShortID],
                  prefilled_txs: list[PrefilledTx]):
         # ---  Validation --- #
-        if isinstance(header, bytes) and len(header) != 80:
+        if isinstance(header, bytes) and len(header) != BLOCK.HEADER_LENGTH:
             raise NetworkDataError("Serialized BlockHeader of incorrect length")
 
         self.header = header if isinstance(header, bytes) else header.to_bytes()
@@ -340,10 +340,10 @@ class HeaderAndShortIDs(Serializable):
         stream = get_stream(byte_stream)
 
         # header
-        header = read_stream(stream, 80)
+        header = read_stream(stream, BLOCK.HEADER_LENGTH)
 
         # nonce
-        nonce = read_little_int(stream, 8)
+        nonce = read_little_int(stream, NETWORK.NONCE_LENGTH)
 
         # short_ids
         short_id_len = read_compact_size(stream)
@@ -368,7 +368,7 @@ class HeaderAndShortIDs(Serializable):
         # Serialize header, nonce, and short_ids
         parts = [
             self.header,
-            self.nonce.to_bytes(8, "little"),
+            self.nonce.to_bytes(NETWORK.NONCE_LENGTH, "little"),
             write_compact_size(short_id_len),
             b''.join(s.to_bytes() for s in self.short_ids),
             write_compact_size(prefilled_tx_len)
@@ -435,7 +435,7 @@ class BlockTxns(Serializable):
         stream = get_stream(byte_stream)
 
         # block hash
-        block_hash = read_stream(stream, 32)
+        block_hash = read_stream(stream, NETWORK.HASH_LENGTH)
 
         # txs
         tx_len = read_compact_size(stream)
@@ -492,7 +492,7 @@ class BlockTxnsRequest(Serializable):
         stream = get_stream(byte_stream)
 
         # block_hash
-        block_hash = read_stream(stream, 32)
+        block_hash = read_stream(stream, NETWORK.HASH_LENGTH)
 
         # indices
         indices_len = read_compact_size(stream)

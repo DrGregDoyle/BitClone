@@ -4,7 +4,7 @@ Control messages
 """
 import secrets
 
-from src.core import SERIALIZED, get_stream, read_little_int, read_stream
+from src.core import NETWORK, SERIALIZED, TX, get_stream, read_little_int, read_stream
 from src.core.byte_stream import read_compact_size, write_compact_size
 from src.network.datatypes.network_data import NetAddr
 from src.network.datatypes.network_types import Services, RejectType, BloomFlags
@@ -25,12 +25,12 @@ class PingPongParent(Message):
         self.nonce = nonce  # Unformatted nonce
 
     def _format_nonce(self):
-        return self.nonce.to_bytes(8, "little")
+        return self.nonce.to_bytes(NETWORK.NONCE_LENGTH, "little")
 
     @classmethod
     def from_payload(cls, byte_stream: SERIALIZED):
         stream = get_stream(byte_stream)
-        nonce = read_little_int(stream, 8)
+        nonce = read_little_int(stream, NETWORK.NONCE_LENGTH)
         return cls(nonce)
 
     def to_payload(self) -> bytes:
@@ -126,14 +126,14 @@ class FeeFilter(Message):
         stream = get_stream(byte_stream)
 
         # feerate
-        feerate = read_little_int(stream, 8)
+        feerate = read_little_int(stream, NETWORK.FEE_RATE_LENGTH)
         return cls(feerate)
 
     def to_payload(self) -> bytes:
-        return self.feerate.to_bytes(8, "little")
+        return self.feerate.to_bytes(NETWORK.FEE_RATE_LENGTH, "little")
 
     def payload_dict(self) -> dict:
-        return {"feerate": self.feerate.to_bytes(8, "little").hex()}
+        return {"feerate": self.feerate.to_bytes(NETWORK.FEE_RATE_LENGTH, "little").hex()}
 
     def payload_data(self) -> dict:
         return {"feerate": self.feerate}
@@ -221,21 +221,22 @@ class FilterLoad(Message):
         bitfilter = read_stream(stream, filter_bytes)
 
         # hash_num
-        hash_num = read_little_int(stream, 4)
+        hash_num = read_little_int(stream, NETWORK.BLOOM_HASH_FUNCTIONS_LENGTH)
 
         # tweak
-        tweak = read_little_int(stream, 4)
+        tweak = read_little_int(stream, NETWORK.BLOOM_TWEAK_LENGTH)
 
         # flags
-        flags = read_little_int(stream, 1)
+        flags = read_little_int(stream, NETWORK.BLOOM_FLAGS_LENGTH)
         return cls(bitfilter, hash_num, tweak, flags)
 
     def to_payload(self) -> bytes:
         filter_bytes = len(self.bitfilter)
         parts = [
             write_compact_size(filter_bytes),
-            self.bitfilter, self.hash_num.to_bytes(4, "little"),
-            self.tweak.to_bytes(4, "little"), self.flags.value.to_bytes(1, "little")
+            self.bitfilter, self.hash_num.to_bytes(NETWORK.BLOOM_HASH_FUNCTIONS_LENGTH, "little"),
+            self.tweak.to_bytes(NETWORK.BLOOM_TWEAK_LENGTH, "little"),
+            self.flags.value.to_bytes(NETWORK.BLOOM_FLAGS_LENGTH, "little")
         ]
         return b"".join(parts)
 
@@ -244,8 +245,8 @@ class FilterLoad(Message):
         return {
             "filter_bytes": write_compact_size(filter_bytes).hex(),
             "bitfilter": self.bitfilter.hex(),
-            "hash_num": self.hash_num.to_bytes(4, "little"),
-            "tweak": self.tweak.to_bytes(4, "little"),
+            "hash_num": self.hash_num.to_bytes(NETWORK.BLOOM_HASH_FUNCTIONS_LENGTH, "little"),
+            "tweak": self.tweak.to_bytes(NETWORK.BLOOM_TWEAK_LENGTH, "little"),
             "flags": self.flags.value
         }
 
@@ -307,14 +308,14 @@ class Reject(Message):
         message_type = msg_bytes.decode("ascii")
 
         # reject_type
-        reject_num = read_little_int(stream, 1)
+        reject_num = read_little_int(stream, NETWORK.REJECT_CODE_LENGTH)
         reject_byte_len = read_compact_size(stream)
         reject_bytes = read_stream(stream, reject_byte_len)
         reject_text = reject_bytes.decode("ascii")
 
         # use message_type to determine extra bytes
         if message_type in ["block", "tx"]:
-            extra_data = read_stream(stream, 32)
+            extra_data = read_stream(stream, TX.TXID)
         else:
             extra_data = b''
 
@@ -324,7 +325,8 @@ class Reject(Message):
         msg_bytes = self.message_type.encode("ascii")
         reason_bytes = self.reject_reason.encode("ascii")
         parts = [
-            write_compact_size(len(msg_bytes)), msg_bytes, self.reject_type.value.to_bytes(1, "little"),
+            write_compact_size(len(msg_bytes)), msg_bytes,
+            self.reject_type.value.to_bytes(NETWORK.REJECT_CODE_LENGTH, "little"),
             write_compact_size(len(reason_bytes)), reason_bytes, self.extra_data
         ]
         return b''.join(parts)
@@ -407,33 +409,33 @@ class Version(Message):
         stream = get_stream(byte_stream)
 
         # Read version, services and timestamp
-        version = read_little_int(stream, 4, "protocol_version")
-        services = read_little_int(stream, 8, "services")
-        timestamp = read_little_int(stream, 8, "time")
+        version = read_little_int(stream, NETWORK.PROTOCOL_VERSION_LENGTH, "protocol_version")
+        services = read_little_int(stream, NETWORK.SERVICES_LENGTH, "services")
+        timestamp = read_little_int(stream, NETWORK.TIMESTAMP_LENGTH, "time")
 
         # Read in remote and local NetAddr
         remote_netaddr = NetAddr.from_version_bytes(stream)
         local_netaddr = NetAddr.from_version_bytes(stream)
 
         # Read in nonce, user agent and last block
-        nonce = read_little_int(stream, 8, "nonce")
+        nonce = read_little_int(stream, NETWORK.NONCE_LENGTH, "nonce")
         user_agent_size = read_compact_size(stream)
         user_agent = read_stream(stream, user_agent_size, "user_agent").rstrip(b'\x00').decode("ascii")
-        last_block = read_little_int(stream, 4, "last_block")
+        last_block = read_little_int(stream, NETWORK.BLOCK_HEIGHT_LENGTH, "last_block")
 
         return cls(version, services, timestamp, remote_netaddr, local_netaddr, nonce, user_agent, last_block)
 
     def to_payload(self) -> bytes:
         encoded_agent = self.user_agent.encode("ascii")
         parts = [
-            self.protocol_version.to_bytes(4, "little"),
-            self.services.to_bytes(8, "little"),
-            self.timestamp.to_bytes(8, "little"),
+            self.protocol_version.to_bytes(NETWORK.PROTOCOL_VERSION_LENGTH, "little"),
+            self.services.to_bytes(NETWORK.SERVICES_LENGTH, "little"),
+            self.timestamp.to_bytes(NETWORK.TIMESTAMP_LENGTH, "little"),
             self.remote_net_addr.to_version_bytes(),
             self.local_net_addr.to_version_bytes(),
-            self.nonce.to_bytes(8, "little"),
+            self.nonce.to_bytes(NETWORK.NONCE_LENGTH, "little"),
             write_compact_size(len(encoded_agent)) + encoded_agent,
-            self.last_block.to_bytes(4, "little")
+            self.last_block.to_bytes(NETWORK.BLOCK_HEIGHT_LENGTH, "little")
         ]
         return b''.join(parts)
 

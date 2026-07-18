@@ -214,6 +214,8 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 
 ### Sprint 1 — Connection & Handshake
 
+**Status: Complete**
+
 **Story 0 — Cleanup and Maintenance**
 As a developer, I want to address focused refactors, maintenance, and bug fixes discovered during Sprint 1
 so that the networking foundation remains consistent as new capabilities are added.
@@ -226,15 +228,26 @@ so that the networking foundation remains consistent as new capabilities are add
 - [x] Use the existing `NETWORK.COMMAND_LENGTH` throughout message-header serialization and validation
 - [x] Reconcile supported Bitcoin network magic values: support mainnet, testnet, regtest, and signet; remove Namecoin
   from Bitcoin transport validation
-- [ ] Centralize protocol-wide limits such as inventory entries, `getblocks` results, `headers` results, and maximum
+- [x] Centralize protocol-wide limits such as inventory entries, `getblocks` results, `headers` results, and maximum
   payload size in `NETWORK`
-- [ ] Replace duplicated network wire-field sizes in control messages, data messages, compact-filter messages, and
+- [x] Replace duplicated network wire-field sizes in control messages, data messages, compact-filter messages, and
   network datatypes with shared format constants where doing so improves clarity
-- [ ] Replace hard-coded values where a matching format constant already exists, such as using `TX.TXID` instead of
+- [x] Replace hard-coded values where a matching format constant already exists, such as using `TX.TXID` instead of
   the literal `32` for transaction IDs
-- [ ] Remove remaining module-level format aliases outside networking, such as `BYTE_LEN = ECC.COORD_BYTES` in
+- [x] Remove remaining module-level format aliases outside networking, such as `BYTE_LEN = ECC.COORD_BYTES` in
   `cryptography/schnorr.py`
-- [ ] Add or update focused tests for every cleanup or bug-fix ticket
+- [x] Add a Bitcoin Core P2P command-coverage audit without using the upstream command list as a framing allowlist
+    - [x] Add a public `Message.registered_commands()` method returning an immutable set of imported/registered commands
+    - [x] Maintain a reviewed snapshot of Bitcoin Core's `ALL_NET_MESSAGE_TYPES`, including the upstream version or
+      commit used to produce it
+    - [x] Report commands implemented by BitClone, known upstream but not implemented, and implemented locally but
+      absent or deprecated upstream
+    - [x] For the Bitcoin Core v31.0 target, report `addrv2` and `sendtxrcncl` as unimplemented and `reject` as a
+      deprecated command still implemented by BitClone; track post-v31.0 `feature` separately
+    - [x] Add tests that detect command-coverage drift while continuing to deserialize valid unsupported commands as
+      `UnknownMessage`
+    - [x] Review the snapshot whenever BitClone changes its target Bitcoin Core version
+- [x] Add or update focused tests for every cleanup or bug-fix ticket
 
 **Story 1.1 — TCP Peer Connection**
 As a node, I want to open and accept TCP connections on port 8333 (mainnet)
@@ -242,8 +255,8 @@ so that I can communicate with Bitcoin peers.
 
 - [x] Synchronous outbound TCP connection helper
 - [x] Connection state tracking for basic outbound connections
-- [ ] Async TCP listener (asyncio)
-- [ ] Outbound connection to a hardcoded seed peer
+- [x] Async TCP listener (asyncio)
+- [x] Outbound connection to an explicitly supplied fixed peer using the selected network's default P2P port
 - [x] Connection state tracking (CONNECTING → CONNECTED → READY)
 
 **Story 1.2 — Version Handshake**
@@ -264,7 +277,7 @@ As a node, I want to parse and serialise the Bitcoin P2P message envelope
 - [x] Checksum validation (double-SHA256)
 - [x] Network magic constants and allowed magic validation
 - [x] Strict per-network magic selection instead of accepting all known magic values
-- [ ] Unknown-command handling and peer misbehavior response
+- [x] Unknown-command handling and peer misbehavior response
 - [x] Maximum payload size enforcement
 
 ---

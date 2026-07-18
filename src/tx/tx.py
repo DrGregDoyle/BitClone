@@ -277,8 +277,8 @@ class UTXO(Serializable):
         return b''.join(parts)
 
     def to_dict(self) -> dict:
-        txid = self.outpoint[:32]
-        vout = self.outpoint[32:]
+        txid = self.outpoint[:TX.TXID]
+        vout = self.outpoint[TX.TXID:]
         return {
             "outpoint": self.outpoint.hex(),
             "txid": txid.hex(),  # little-endian (natural byte order)
@@ -290,8 +290,8 @@ class UTXO(Serializable):
         }
 
     def to_data(self) -> dict:
-        txid = self.outpoint[:32]
-        vout = self.outpoint[32:]
+        txid = self.outpoint[:TX.TXID]
+        vout = self.outpoint[TX.TXID:]
         return {
             "outpoint": self.outpoint.hex(),
             "txid": txid[::-1].hex(),  # big-endian for display
@@ -417,7 +417,7 @@ class Tx(Serializable):
         if COINBASE_KEY not in self._cache:
             truth_list = [
                 len(self.inputs) == 1,
-                self.inputs[0].txid == b'\x00' * 32,
+                self.inputs[0].txid == b'\x00' * TX.TXID,
                 self.inputs[0].vout == 0xffffffff
             ]
             self._cache[COINBASE_KEY] = all(truth_list)

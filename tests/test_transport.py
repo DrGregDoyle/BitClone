@@ -4,7 +4,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.core import MAGICBYTES, NETWORK, NetworkError
+from src.network.datatypes.network_types import PeerState
 from src.network.messages.ctrl_msg import Ping, Version
+from src.network.messages.message import UnknownMessage
 from src.network.peer import Peer
 from src.network.transport import Connection, Transport
 
@@ -58,6 +60,40 @@ def test_transport_recv_accepts_configured_magic_bytes():
         right_sock.close()
 
 
+def test_transport_returns_unknown_message_for_ready_peer():
+    transport, peer, left_sock, right_sock = _connected_transport_pair(MAGICBYTES.SIGNET)
+    peer.state = PeerState.READY
+    try:
+        message = UnknownMessage("futuremsg", b"payload", MAGICBYTES.SIGNET)
+        right_sock.sendall(message.to_bytes())
+
+        parsed = transport.recv_one(peer)
+
+        assert isinstance(parsed, UnknownMessage)
+        assert parsed.command == "futuremsg"
+        assert parsed.raw_payload == b"payload"
+        assert parsed.magic_bytes == MAGICBYTES.SIGNET
+        assert peer.state is PeerState.READY
+    finally:
+        left_sock.close()
+        right_sock.close()
+
+
+def test_transport_rejects_unknown_message_with_corrupt_checksum():
+    transport, peer, left_sock, right_sock = _connected_transport_pair()
+    try:
+        raw = bytearray(UnknownMessage("futuremsg", b"payload", MAGICBYTES.MAINNET).to_bytes())
+        checksum_start = NETWORK.HEADER_LENGTH - NETWORK.CHECKSUM_LENGTH
+        raw[checksum_start] ^= 0x01
+        right_sock.sendall(raw)
+
+        with pytest.raises(NetworkError, match="Failed to validate"):
+            transport.recv_one(peer)
+    finally:
+        left_sock.close()
+        right_sock.close()
+
+
 def test_transport_recv_rejects_wrong_network_magic_bytes():
     transport, peer, left_sock, right_sock = _connected_transport_pair(MAGICBYTES.MAINNET)
     try:
@@ -98,7 +134,7 @@ def test_transport_get_local_address_returns_connected_socket_endpoint():
 def test_transport_rejects_oversized_header_without_reading_payload():
     peer = Peer("127.0.0.1", NETWORK.MAINNET_PORT)
     fake_socket = MagicMock()
-    fake_socket.recv.return_value = _raw_header("block", OVERSIZED_PAYLOAD_SIZE)
+    fake_socket.recv.return_value = _raw_header("futuremsg", OVERSIZED_PAYLOAD_SIZE)
     transport = Transport()
     transport._conns[peer.key] = Connection(fake_socket, peer.key)
 

@@ -2,7 +2,7 @@
 Data messages for P2P networking
 """
 from src.block.block import Block, BlockHeader
-from src.core import SERIALIZED, get_bytes, get_stream, read_compact_size, NetworkDataError, read_little_int, \
+from src.core import NETWORK, SERIALIZED, get_bytes, get_stream, read_compact_size, NetworkDataError, read_little_int, \
     read_stream
 from src.core.byte_stream import write_compact_size
 from src.network.datatypes.network_data import InvVector, BlockTxns, BlockTxnsRequest, HeaderAndShortIDs
@@ -34,27 +34,27 @@ class GetBlockParent(Message):
         super().__init__()
         self.version = version
         self.locator_hashes = locator_hashes
-        self.hash_stop = hash_stop if hash_stop else bytes(32)
+        self.hash_stop = hash_stop if hash_stop else bytes(NETWORK.HASH_LENGTH)
 
     @classmethod
     def from_payload(cls, byte_stream: SERIALIZED):
         stream = get_stream(byte_stream)
 
         # version
-        version = read_little_int(stream, 4)
+        version = read_little_int(stream, NETWORK.PROTOCOL_VERSION_LENGTH)
 
         # locator hashes
         hash_count = read_compact_size(stream)
-        locator_hashes = [read_stream(stream, 32) for _ in range(hash_count)]
+        locator_hashes = [read_stream(stream, NETWORK.HASH_LENGTH) for _ in range(hash_count)]
 
         # hash stop
-        hash_stop = read_stream(stream, 32)
+        hash_stop = read_stream(stream, NETWORK.HASH_LENGTH)
 
         return cls(version, locator_hashes, hash_stop)
 
     def to_payload(self) -> bytes:
         parts = [
-            self.version.to_bytes(4, "little"),
+            self.version.to_bytes(NETWORK.PROTOCOL_VERSION_LENGTH, "little"),
             write_compact_size(len(self.locator_hashes)), b''.join(self.locator_hashes), self.hash_stop
         ]
         return b''.join(parts)
@@ -65,7 +65,7 @@ class GetBlockParent(Message):
             f"locator_hash_{x}": self.locator_hashes[x].hex() for x in range(hash_count)
         }
         return {
-            "version": self.version.to_bytes(4, "little").hex(),
+            "version": self.version.to_bytes(NETWORK.PROTOCOL_VERSION_LENGTH, "little").hex(),
             "hash_count": write_compact_size(hash_count).hex(),
             "locator_hashes": locator_dict,
             "hash_stop": self.hash_stop.hex()
@@ -95,11 +95,9 @@ class InvParent(Message):
     =========================================================================
     """
 
-    MAX_ENTRIES = 50000
-
     def __init__(self, items: list[InvVector]):
         # Validation
-        if len(items) > self.MAX_ENTRIES:
+        if len(items) > NETWORK.MAX_INVENTORY_ENTRIES:
             raise NetworkDataError("Inventory list exceeds maximum entries")
         super().__init__()
         self.items = items
@@ -110,6 +108,8 @@ class InvParent(Message):
 
         # count
         count = read_compact_size(stream)
+        if count > NETWORK.MAX_INVENTORY_ENTRIES:
+            raise NetworkDataError("Inventory list exceeds maximum entries")
 
         # items
         items = [InvVector.from_bytes(stream) for _ in range(count)]
@@ -285,7 +285,6 @@ class GetBlocks(GetBlockParent):
         object, up to hash_stop or 500 blocks, whichever comes first
     """
     COMMAND = "getblocks"
-    MAX = 500
 
 
 class GetData(InvParent):
@@ -294,7 +293,6 @@ class GetData(InvParent):
 
 class GetHeaders(GetBlockParent):
     COMMAND = "getheaders"
-    MAX = 2000
 
 
 class Headers(Message):
@@ -310,6 +308,8 @@ class Headers(Message):
     COMMAND = "headers"
 
     def __init__(self, headers: list[BlockHeader]):
+        if len(headers) > NETWORK.MAX_HEADERS_RESULTS:
+            raise NetworkDataError("Headers list exceeds maximum entries")
         super().__init__()
         self.headers = headers
 
@@ -319,12 +319,14 @@ class Headers(Message):
 
         # header count
         count = read_compact_size(stream)
+        if count > NETWORK.MAX_HEADERS_RESULTS:
+            raise NetworkDataError("Headers list exceeds maximum entries")
 
         # headers
         headers = []
         for _ in range(count):
             temp_header = BlockHeader.from_bytes(stream)
-            tx_count = read_little_int(stream, 1)
+            tx_count = read_little_int(stream, NETWORK.HEADERS_TX_COUNT_LENGTH)
             # Validate
             if tx_count != 0:
                 raise NetworkDataError("Headers Payload must contain 0 tx_count value appended to each header")
@@ -394,11 +396,11 @@ class MerkleBlock(Message):
         header = BlockHeader.from_bytes(stream)
 
         # tx_num
-        tx_num = read_little_int(stream, 4)
+        tx_num = read_little_int(stream, NETWORK.MERKLE_TX_COUNT_LENGTH)
 
         # hashes
         hash_num = read_compact_size(stream)
-        hashes = [read_stream(stream, 32) for _ in range(hash_num)]
+        hashes = [read_stream(stream, NETWORK.HASH_LENGTH) for _ in range(hash_num)]
 
         # flags
         flag_bytes = read_compact_size(stream)
@@ -410,7 +412,7 @@ class MerkleBlock(Message):
         hash_num = len(self.hashes)
         flag_bytes = len(self.flags)
         parts = [
-            self.tx_num.to_bytes(4, "little"),
+            self.tx_num.to_bytes(NETWORK.MERKLE_TX_COUNT_LENGTH, "little"),
             write_compact_size(hash_num),
             b''.join(self.hashes),
             write_compact_size(flag_bytes),
@@ -428,7 +430,7 @@ class MerkleBlock(Message):
 
         return {
             "block_header": self.blockheader.to_dict(),
-            "tx_count": self.tx_num.to_bytes(4, "little").hex(),
+            "tx_count": self.tx_num.to_bytes(NETWORK.MERKLE_TX_COUNT_LENGTH, "little").hex(),
             "hash_count": write_compact_size(hash_num).hex(),
             "hashes": hash_dict,
             "flag_byte_count": write_compact_size(flag_bytes).hex(),
@@ -479,20 +481,23 @@ class SendCmpct(Message):
         stream = get_stream(byte_stream)
 
         # announce
-        boolint = read_little_int(stream, 1)
+        boolint = read_little_int(stream, NETWORK.COMPACT_BLOCK_ANNOUNCE_LENGTH)
 
         # version
-        version = read_little_int(stream, 8)
+        version = read_little_int(stream, NETWORK.COMPACT_BLOCK_VERSION_LENGTH)
         return cls(bool(boolint), version)
 
     def to_payload(self) -> bytes:
         boolint = int(self.announce)
-        return boolint.to_bytes(1, "little") + self.version.to_bytes(8, "little")
+        return (
+            boolint.to_bytes(NETWORK.COMPACT_BLOCK_ANNOUNCE_LENGTH, "little")
+            + self.version.to_bytes(NETWORK.COMPACT_BLOCK_VERSION_LENGTH, "little")
+        )
 
     def payload_dict(self) -> dict:
         return {
-            "announce": int(self.announce).to_bytes(1, "little").hex(),
-            "version": self.version.to_bytes(8, "little").hex()
+            "announce": int(self.announce).to_bytes(NETWORK.COMPACT_BLOCK_ANNOUNCE_LENGTH, "little").hex(),
+            "version": self.version.to_bytes(NETWORK.COMPACT_BLOCK_VERSION_LENGTH, "little").hex()
         }
 
     def payload_data(self) -> dict:

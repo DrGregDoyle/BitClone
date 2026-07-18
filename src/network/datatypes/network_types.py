@@ -3,6 +3,8 @@ Various Network type Enum classes
 """
 from enum import IntFlag, Enum
 
+from src.core import NETWORK
+
 __all__ = ["BloomFlags", "InvType", "PeerState", "RejectType", "Services"]
 
 
@@ -28,7 +30,7 @@ class InvType(IntFlag):
 
     @property
     def serialized(self) -> bytes:
-        return self.value.to_bytes(4, "little")
+        return self.value.to_bytes(NETWORK.INVENTORY_TYPE_LENGTH, "little")
 
 
 class RejectType(IntFlag):

@@ -1,5 +1,5 @@
 from src.config import BitCloneConfig, NetworkName
-from src.core import MAGICBYTES
+from src.core import MAGICBYTES, NETWORK
 
 
 def test_config_builds_network_scoped_paths(tmp_path):
@@ -15,6 +15,7 @@ def test_config_builds_network_scoped_paths(tmp_path):
     assert config.wallet_dir == tmp_path / "regtest" / "wallet"
     assert config.db_path == tmp_path / "regtest" / "chainstate" / "bitclone.db"
     assert config.magic_bytes == MAGICBYTES.REGTEST
+    assert config.p2p_port == NETWORK.REGTEST_PORT
 
 
 def test_config_db_path_override_keeps_network_layout(tmp_path):
@@ -32,7 +33,23 @@ def test_config_supports_signet(tmp_path):
 
     assert config.network == NetworkName.SIGNET
     assert config.magic_bytes == MAGICBYTES.SIGNET
+    assert config.p2p_port == NETWORK.SIGNET_PORT
     assert config.network_dir == tmp_path / "signet"
+
+
+def test_config_uses_network_specific_p2p_ports(tmp_path):
+    expected_ports = {
+        "mainnet": NETWORK.MAINNET_PORT,
+        "testnet": NETWORK.TESTNET_PORT,
+        "regtest": NETWORK.REGTEST_PORT,
+        "signet": NETWORK.SIGNET_PORT,
+    }
+
+    for network, expected_port in expected_ports.items():
+        config = BitCloneConfig.from_options(data_dir=tmp_path, network=network)
+
+        assert config.p2p_port == expected_port
+        assert config.to_data()["p2p_port"] == expected_port
 
 
 def test_initialize_creates_data_directory_layout(tmp_path):

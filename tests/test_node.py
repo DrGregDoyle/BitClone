@@ -7,6 +7,7 @@ from src.core import MAGICBYTES, NETWORK, NetworkError
 from src.network.datatypes.network_data import NetAddr
 from src.network.datatypes.network_types import PeerState, Services
 from src.network.messages.ctrl_msg import Ping, SendAddrV2, VerAck, Version, WtxidRelay
+from src.network.messages.message import UnknownMessage
 from src.node.node import Node
 from src.tx.tx import Tx, TxIn, TxOut
 
@@ -224,11 +225,13 @@ def test_connect_peer_receives_version_on_supported_network(
     node = Node(data_dir=tmp_path, network=network)
 
     try:
-        peer = node.connect_peer(KNOWN_TEST_ENDPOINT, port)
+        peer = node.connect_peer(KNOWN_TEST_ENDPOINT)
 
         assert peer.protocol_version == NETWORK.PROTOCOL_VERSION
         assert peer.user_agent == PEER_USER_AGENT
         assert peer.state is PeerState.READY
+        assert peer.port == port
+        assert fake_socket.connected_to == (KNOWN_TEST_ENDPOINT, port)
     finally:
         node.close()
 
@@ -299,6 +302,33 @@ def test_connect_peer_rejects_unexpected_message_before_verack(monkeypatch, tmp_
         assert captured_peer.state is PeerState.DISCONNECTED
         assert captured_peer.fail_count == 1
         assert len(fake_socket.sent) == 2
+        assert fake_socket.closed
+    finally:
+        node.close()
+
+
+def test_connect_peer_rejects_unknown_command_before_verack(monkeypatch, tmp_path):
+    unknown = UnknownMessage("futuremsg", b"payload", MAGICBYTES.MAINNET)
+    incoming = _peer_version_bytes() + unknown.to_bytes()
+    fake_socket = _RecordingSocket(incoming=incoming)
+    monkeypatch.setattr("src.network.transport.socket.socket", lambda *args, **kwargs: fake_socket)
+    node = Node(data_dir=tmp_path)
+    captured_peer = None
+    original_connect = node.transport.connect
+
+    def capture_connect(peer):
+        nonlocal captured_peer
+        captured_peer = peer
+        original_connect(peer)
+
+    monkeypatch.setattr(node.transport, "connect", capture_connect)
+
+    try:
+        with pytest.raises(NetworkError, match="Unexpected command before verack: 'futuremsg'"):
+            node.connect_peer(KNOWN_TEST_ENDPOINT, NETWORK.MAINNET_PORT)
+
+        assert captured_peer.state is PeerState.DISCONNECTED
+        assert captured_peer.fail_count == 1
         assert fake_socket.closed
     finally:
         node.close()

@@ -4,7 +4,7 @@ The MemPool class
 import time
 from pathlib import Path
 
-from src.core import ReadError, get_logger, TransactionError
+from src.core import TX, ReadError, get_logger, TransactionError
 from src.database.database import BitCloneDatabase
 from src.script import ScriptEngine
 from src.tx import LoadedTx, Tx
@@ -98,7 +98,7 @@ class MemPool:
         # each input, we want to strip away the txid from its outpoint and look for that tx in the mempool
         ancestors: list[MemPoolTx] = []
         for txin in tx.inputs:
-            temp_id = txin.outpoint[:32]  # outpoint = txid (32 bytes) + vout (4 bytes)
+            temp_id = txin.outpoint[:TX.TXID]
             if temp_id in self.mempool.keys():
                 ancestors.append(self.mempool[temp_id])
 

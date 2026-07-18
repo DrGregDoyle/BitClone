@@ -34,7 +34,7 @@ class Header(Serializable):
         magic_bytes = read_stream(stream, NETWORK.MAGIC_LENGTH)
 
         # Command = 12 encoded ascii bytes, padded with zero bytes
-        command = read_stream(stream, NETWORK.COMMAND_LENGTH).strip(b'\x00').decode("ascii")
+        command = cls._decode_command(read_stream(stream, NETWORK.COMMAND_LENGTH))
 
         # size = 4 byte little-endian
         size = read_little_int(stream, NETWORK.PAYLOAD_SIZE_LENGTH)
@@ -84,11 +84,28 @@ class Header(Serializable):
         self._validate_checksum(checksum)
 
     def _validate_command(self, command: str):
-        """Verify the command is in the list of allowed commands."""
-        if command in NETWORK.DEPRECATED_COMMANDS:
-            raise NetworkError(f"Command '{command}' has been deprecated")
-        if command not in NETWORK.ALLOWED_COMMANDS:
-            raise NetworkError(f"Unknown command: '{command}'")
+        """Verify the command can be represented in a Bitcoin message header."""
+        try:
+            encoded = command.encode("ascii")
+        except UnicodeEncodeError as exc:
+            raise NetworkError(f"Command is not ASCII: {command!r}") from exc
+        if not 1 <= len(encoded) <= NETWORK.COMMAND_LENGTH:
+            raise NetworkError(f"Invalid command length: {len(encoded)}")
+        if any(byte < 0x20 or byte > 0x7e for byte in encoded):
+            raise NetworkError(f"Command contains non-printable bytes: {command!r}")
+
+    @staticmethod
+    def _decode_command(raw_command: bytes) -> str:
+        """Decode an ASCII command and enforce canonical zero padding."""
+        padding_start = raw_command.find(b'\x00')
+        if padding_start >= 0:
+            if any(raw_command[padding_start:]):
+                raise NetworkError("Command field has non-zero bytes after padding")
+            raw_command = raw_command[:padding_start]
+        try:
+            return raw_command.decode("ascii")
+        except UnicodeDecodeError as exc:
+            raise NetworkError("Command field is not ASCII") from exc
 
     def _validate_magic_bytes(self, magic_bytes: bytes):
         """Verify the magic bytes is in the list of allowed magic bytes"""
