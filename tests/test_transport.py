@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.core import MAGICBYTES, NETWORK, NetworkError
-from src.network.messages.ctrl_msg import Ping
+from src.network.messages.ctrl_msg import Ping, Version
 from src.network.peer import Peer
 from src.network.transport import Connection, Transport
 
@@ -56,6 +56,19 @@ def test_transport_recv_rejects_wrong_network_magic_bytes():
 
         with pytest.raises(NetworkError, match="Unexpected network magic bytes"):
             transport.recv_one(peer)
+    finally:
+        left_sock.close()
+        right_sock.close()
+
+
+def test_transport_recv_rejects_unexpected_command():
+    transport, peer, left_sock, right_sock = _connected_transport_pair()
+    try:
+        msg = Ping(123)
+        right_sock.sendall(msg.to_bytes())
+
+        with pytest.raises(NetworkError, match="Unexpected command"):
+            transport.recv_one(peer, expected_command=Version.COMMAND)
     finally:
         left_sock.close()
         right_sock.close()

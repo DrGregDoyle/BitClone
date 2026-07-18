@@ -3,9 +3,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.block.block import Block
-from src.core import MAGICBYTES, NETWORK
+from src.core import MAGICBYTES, NETWORK, NetworkError
+from src.network.datatypes.network_data import NetAddr
 from src.network.datatypes.network_types import PeerState, Services
-from src.network.messages.ctrl_msg import Version
+from src.network.messages.ctrl_msg import Ping, Version
 from src.node.node import Node
 from src.tx.tx import Tx, TxIn, TxOut
 
@@ -17,10 +18,15 @@ FIXED_TIMESTAMP = 1_700_000_000
 FIXED_NONCE = 123456789
 FIRST_NONCE = 11
 SECOND_NONCE = 22
+PEER_NONCE = 987654321
+PEER_USER_AGENT = "/Satoshi:test/"
+PEER_BLOCK_HEIGHT = 850_000
+PEER_SERVICES = Services.NODE_NETWORK | Services.NODE_WITNESS
 
 
 class _RecordingSocket:
-    def __init__(self, *, connect_error=None, send_error=None):
+    def __init__(self, *, incoming=b"", connect_error=None, send_error=None):
+        self.incoming = incoming
         self.connect_error = connect_error
         self.send_error = send_error
         self.connected_to = None
@@ -43,8 +49,28 @@ class _RecordingSocket:
             raise self.send_error
         self.sent.append(data)
 
+    def recv(self, size):
+        chunk = self.incoming[:size]
+        self.incoming = self.incoming[size:]
+        return chunk
+
     def close(self):
         self.closed = True
+
+
+def _peer_version_bytes(magic_bytes=MAGICBYTES.MAINNET):
+    version = Version(
+        version=NETWORK.PROTOCOL_VERSION,
+        services=PEER_SERVICES,
+        timestamp=FIXED_TIMESTAMP,
+        remote_addr=NetAddr(FAKE_ENDPOINT, EPHEMERAL_PORT, Services.UNNAMED),
+        local_addr=NetAddr(KNOWN_TEST_ENDPOINT, NETWORK.MAINNET_PORT, PEER_SERVICES),
+        nonce=PEER_NONCE,
+        user_agent=PEER_USER_AGENT,
+        last_block=PEER_BLOCK_HEIGHT,
+    )
+    version.magic_bytes = magic_bytes
+    return version.to_bytes()
 
 
 def _coinbase_tx() -> Tx:
@@ -99,7 +125,7 @@ def test_node_uses_configured_network_magic(tmp_path):
 
 
 def test_connect_peer_sends_version_first_with_node_state(monkeypatch, tmp_path):
-    fake_socket = _RecordingSocket()
+    fake_socket = _RecordingSocket(incoming=_peer_version_bytes(MAGICBYTES.REGTEST))
     monkeypatch.setattr("src.network.transport.socket.socket", lambda *args, **kwargs: fake_socket)
     monkeypatch.setattr("src.node.node.time.time", lambda: FIXED_TIMESTAMP)
     monkeypatch.setattr("src.node.node.secrets.randbits", lambda bits: FIXED_NONCE)
@@ -113,6 +139,11 @@ def test_connect_peer_sends_version_first_with_node_state(monkeypatch, tmp_path)
         assert fake_socket.sent[0][:4] == MAGICBYTES.REGTEST
         assert peer.state is PeerState.HANDSHAKING
         assert peer.local_nonce == FIXED_NONCE
+        assert peer.protocol_version == NETWORK.PROTOCOL_VERSION
+        assert peer.services == PEER_SERVICES
+        assert peer.user_agent == PEER_USER_AGENT
+        assert peer.nonce == PEER_NONCE
+        assert peer.last_block == PEER_BLOCK_HEIGHT
         assert version.protocol_version == NETWORK.PROTOCOL_VERSION
         assert version.services is Services.UNNAMED
         assert version.timestamp == FIXED_TIMESTAMP
@@ -128,7 +159,10 @@ def test_connect_peer_sends_version_first_with_node_state(monkeypatch, tmp_path)
 
 
 def test_connect_peer_uses_fresh_nonce_for_each_handshake(monkeypatch, tmp_path):
-    sockets = [_RecordingSocket(), _RecordingSocket()]
+    sockets = [
+        _RecordingSocket(incoming=_peer_version_bytes()),
+        _RecordingSocket(incoming=_peer_version_bytes()),
+    ]
     nonces = iter([FIRST_NONCE, SECOND_NONCE])
     monkeypatch.setattr("src.network.transport.socket.socket", lambda *args, **kwargs: sockets.pop(0))
     monkeypatch.setattr("src.node.node.secrets.randbits", lambda bits: next(nonces))
@@ -140,6 +174,120 @@ def test_connect_peer_uses_fresh_nonce_for_each_handshake(monkeypatch, tmp_path)
 
         assert first_peer.local_nonce == FIRST_NONCE
         assert second_peer.local_nonce == SECOND_NONCE
+    finally:
+        node.close()
+
+
+@pytest.mark.parametrize(
+    ("network", "magic_bytes", "port"),
+    [
+        ("mainnet", MAGICBYTES.MAINNET, NETWORK.MAINNET_PORT),
+        ("testnet", MAGICBYTES.TESTNET, NETWORK.TESTNET_PORT),
+        ("regtest", MAGICBYTES.REGTEST, NETWORK.REGTEST_PORT),
+        ("signet", MAGICBYTES.SIGNET, NETWORK.SIGNET_PORT),
+    ],
+)
+def test_connect_peer_receives_version_on_supported_network(
+        monkeypatch, tmp_path, network, magic_bytes, port,
+):
+    fake_socket = _RecordingSocket(incoming=_peer_version_bytes(magic_bytes))
+    monkeypatch.setattr("src.network.transport.socket.socket", lambda *args, **kwargs: fake_socket)
+    node = Node(data_dir=tmp_path, network=network)
+
+    try:
+        peer = node.connect_peer(KNOWN_TEST_ENDPOINT, port)
+
+        assert peer.protocol_version == NETWORK.PROTOCOL_VERSION
+        assert peer.user_agent == PEER_USER_AGENT
+        assert peer.state is PeerState.HANDSHAKING
+    finally:
+        node.close()
+
+
+def test_connect_peer_rejects_unexpected_first_command(monkeypatch, tmp_path):
+    ping = Ping(PEER_NONCE)
+    ping.magic_bytes = MAGICBYTES.MAINNET
+    fake_socket = _RecordingSocket(incoming=ping.to_bytes())
+    monkeypatch.setattr("src.network.transport.socket.socket", lambda *args, **kwargs: fake_socket)
+    node = Node(data_dir=tmp_path)
+    captured_peer = None
+    original_connect = node.transport.connect
+
+    def capture_connect(peer):
+        nonlocal captured_peer
+        captured_peer = peer
+        original_connect(peer)
+
+    monkeypatch.setattr(node.transport, "connect", capture_connect)
+
+    try:
+        with pytest.raises(NetworkError, match="Unexpected command"):
+            node.connect_peer(KNOWN_TEST_ENDPOINT, NETWORK.MAINNET_PORT)
+
+        assert captured_peer.state is PeerState.DISCONNECTED
+        assert captured_peer.fail_count == 1
+        assert fake_socket.closed
+    finally:
+        node.close()
+
+
+@pytest.mark.parametrize(
+    "incoming",
+    [
+        _peer_version_bytes(MAGICBYTES.TESTNET),
+        _peer_version_bytes()[:NETWORK.HEADER_LENGTH + 5],
+    ],
+    ids=["wrong-network-magic", "truncated-payload"],
+)
+def test_connect_peer_disconnects_on_invalid_version_frame(monkeypatch, tmp_path, incoming):
+    fake_socket = _RecordingSocket(incoming=incoming)
+    monkeypatch.setattr("src.network.transport.socket.socket", lambda *args, **kwargs: fake_socket)
+    node = Node(data_dir=tmp_path)
+    captured_peer = None
+    original_connect = node.transport.connect
+
+    def capture_connect(peer):
+        nonlocal captured_peer
+        captured_peer = peer
+        original_connect(peer)
+
+    monkeypatch.setattr(node.transport, "connect", capture_connect)
+
+    try:
+        with pytest.raises((ConnectionError, NetworkError)):
+            node.connect_peer(KNOWN_TEST_ENDPOINT, NETWORK.MAINNET_PORT)
+
+        assert captured_peer.state is PeerState.DISCONNECTED
+        assert captured_peer.fail_count == 1
+        assert fake_socket.closed
+    finally:
+        node.close()
+
+
+def test_connect_peer_disconnects_on_corrupt_version_checksum(monkeypatch, tmp_path):
+    incoming = bytearray(_peer_version_bytes())
+    checksum_start = NETWORK.HEADER_LENGTH - NETWORK.CHECKSUM_LENGTH
+    incoming[checksum_start] ^= 0x01
+    fake_socket = _RecordingSocket(incoming=bytes(incoming))
+    monkeypatch.setattr("src.network.transport.socket.socket", lambda *args, **kwargs: fake_socket)
+    node = Node(data_dir=tmp_path)
+    captured_peer = None
+    original_connect = node.transport.connect
+
+    def capture_connect(peer):
+        nonlocal captured_peer
+        captured_peer = peer
+        original_connect(peer)
+
+    monkeypatch.setattr(node.transport, "connect", capture_connect)
+
+    try:
+        with pytest.raises(NetworkError, match="Failed to validate"):
+            node.connect_peer(KNOWN_TEST_ENDPOINT, NETWORK.MAINNET_PORT)
+
+        assert captured_peer.state is PeerState.DISCONNECTED
+        assert captured_peer.fail_count == 1
+        assert fake_socket.closed
     finally:
         node.close()
 

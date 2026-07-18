@@ -252,7 +252,7 @@ so that both sides agree on protocol version and capabilities before exchanging 
 
 - [x] `version` and `verack` message serialization/deserialization
 - [x] Send `version` message on connect
-- [ ] Receive and validate peer `version`
+- [x] Receive and validate peer `version`
 - [ ] Send and receive `verack`
 - [ ] Reject peers below minimum protocol version (70001)
 

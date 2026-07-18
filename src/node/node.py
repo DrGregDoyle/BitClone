@@ -11,7 +11,7 @@ from typing import Any
 from src.block.block import Block
 from src.blockchain.blockchain import Blockchain
 from src.config import BitCloneConfig, NetworkName
-from src.core import NETWORK
+from src.core import NETWORK, NetworkError
 from src.mempool.mempool import MemPool
 from src.mining.miner import Miner
 from src.network.datatypes.network_data import NetAddr
@@ -108,6 +108,15 @@ class Node:
                 last_block=self.blockchain.height,
             )
             self.transport.send(peer, version)
+            peer_version = self.transport.recv_one(peer, expected_command=Version.COMMAND)
+            if not isinstance(peer_version, Version):
+                raise NetworkError(f"Expected Version, received {type(peer_version).__name__}")
+
+            peer.protocol_version = peer_version.protocol_version
+            peer.services = peer_version.services
+            peer.user_agent = peer_version.user_agent
+            peer.nonce = peer_version.nonce
+            peer.last_block = peer_version.last_block
         except Exception:
             peer.fail_count += 1
             peer.last_fail = time.time()

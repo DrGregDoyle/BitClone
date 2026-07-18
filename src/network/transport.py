@@ -90,6 +90,10 @@ class Transport:
                 f"Unexpected network magic bytes: {header.magic_bytes.hex()} "
                 f"(expected {self.magic_bytes.hex()})"
             )
+        if expected_command is not None and header.command != expected_command:
+            raise NetworkError(
+                f"Unexpected command: {header.command!r} (expected {expected_command!r})"
+            )
 
         payload_bytes = self._recv_exact(conn.sock, header.size)
 
@@ -102,6 +106,8 @@ class Transport:
 
         # Rebuild full message for existing Message.from_bytes() API
         msg_cls = Message.get_registered(header.command)
+        if msg_cls is None:
+            raise NetworkError(f"Unsupported command: {header.command!r}")
         return msg_cls.from_bytes(header_bytes + payload_bytes)
 
     def _require_conn(self, peer: Peer) -> Connection:
