@@ -5,17 +5,25 @@ from __future__ import annotations
 
 import socket
 import time
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any
 
-from src.core import NETWORK, NetworkError, get_logger
+from src.core import MAGICBYTES, NETWORK, NetworkError, get_logger
 from src.network.datatypes.network_types import PeerState
-from src.core import MAGICBYTES
 from src.network.messages.header import Header
 from src.network.messages.message import Message, UnknownMessage, validate_package
 from src.network.peer import Peer
 
 logger = get_logger(__name__)
+
+AddressInfo = tuple[int, int, int, str, tuple[Any, ...]]
+AddressResolver = Callable[[str, int], Iterable[AddressInfo]]
+SocketFactory = Callable[[int, int, int], socket.socket]
+
+
+def _system_resolver(host: str, port: int) -> Iterable[AddressInfo]:
+    return socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
 
 
 @dataclass
@@ -31,32 +39,57 @@ class Connection:
 class Transport:
     """Manages connections and sending/receiving messages."""
 
-    def __init__(self, timeout: int = 120, magic_bytes: bytes = MAGICBYTES.MAINNET):
+    def __init__(
+            self,
+            timeout: int = 120,
+            magic_bytes: bytes = MAGICBYTES.MAINNET,
+            resolver: AddressResolver | None = None,
+            socket_factory: SocketFactory | None = None,
+    ):
         self._timeout = timeout
         self._conns: dict[tuple[str, int], Connection] = {}
         self.magic_bytes = magic_bytes
+        self._resolver = _system_resolver if resolver is None else resolver
+        self._socket_factory = socket_factory
 
     def connect(self, peer: Peer) -> None:
         if peer.key in self._conns:
             return
 
         peer.state = PeerState.CONNECTING
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(self._timeout)
-
+        last_error: OSError | None = None
         try:
-            sock.connect((str(peer.host), peer.port))
-        except OSError as e:
-            sock.close()
+            for family, socktype, protocol, _canonical_name, socket_address in self._resolver(
+                    str(peer.host), peer.port
+            ):
+                sock = self._create_socket(family, socktype, protocol)
+                sock.settimeout(self._timeout)
+                try:
+                    sock.connect(socket_address)
+                except OSError as error:
+                    last_error = error
+                    sock.close()
+                    continue
+                self._conns[peer.key] = Connection(sock=sock, peer_key=peer.key)
+                break
+        except OSError as error:
+            last_error = error
+
+        if peer.key not in self._conns:
+            detail = last_error or OSError("address resolution returned no endpoints")
             peer.state = PeerState.DISCONNECTED
             peer.fail_count += 1
             peer.last_fail = time.time()
-            raise ConnectionError(f"Failed to connect to {peer.host}:{peer.port}: {e}") from e
+            raise ConnectionError(f"Failed to connect to {peer.host}:{peer.port}: {detail}") from detail
 
-        self._conns[peer.key] = Connection(sock=sock, peer_key=peer.key)
         peer.state = PeerState.CONNECTED
         peer.last_success = time.time()
         peer.last_seen = time.time()
+
+    def _create_socket(self, family: int, socktype: int, protocol: int) -> socket.socket:
+        if self._socket_factory is not None:
+            return self._socket_factory(family, socktype, protocol)
+        return socket.socket(family, socktype, protocol)
 
     def disconnect(self, peer: Peer) -> None:
         conn = self._conns.pop(peer.key, None)
@@ -81,7 +114,7 @@ class Transport:
         host, port = conn.sock.getsockname()[:2]
         return str(host), int(port)
 
-    def recv_one(self, peer: Peer, expected_command: Optional[str] = None) -> Message:
+    def recv_one(self, peer: Peer, expected_command: str | None = None) -> Message:
         conn = self._require_conn(peer)
 
         header_bytes = self._recv_exact(conn.sock, NETWORK.HEADER_LENGTH)

@@ -17,6 +17,12 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 2.
 Each item should be handled as a separate ticket with sufficient tests.
 
+- [ ] Make network message encoding and decoding single-pass
+- [ ] Query independent DNS seeds concurrently with bounded parallelism
+- [ ] Centralize peer session state and address-book connection bookkeeping
+- [ ] Consolidate magic bytes, ports, and DNS seeds into immutable network profiles
+- [ ] Remove duplicated `Addr` display construction and use a natural address-list representation
+
 **Story 2.2 — `addr` / `getaddr` Exchange**
 As a node, I want to send `getaddr` to peers and handle incoming `addr` messages
 so that my peer address book grows organically over time.

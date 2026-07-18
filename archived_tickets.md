@@ -189,6 +189,10 @@ As a node, I want to parse and serialise the Bitcoin P2P message envelope
 
 ### Sprint 2 — Peer Discovery
 
+#### Story 0 — Cleanup and Maintenance
+
+- [x] Support address-family-neutral IPv4 and IPv6 outbound connections
+
 #### Story 2.1 — DNS Seed Bootstrap
 As a node, I want to resolve Bitcoin DNS seeds on first startup
 so that I can find an initial set of peers without any configuration.

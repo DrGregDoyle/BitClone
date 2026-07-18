@@ -11,6 +11,35 @@ from src.network.peer import Peer
 from src.network.transport import Connection, Transport
 
 OVERSIZED_PAYLOAD_SIZE = NETWORK.MAX_PAYLOAD_SIZE + 1
+IPV4_ENDPOINT = "192.0.2.10"
+IPV6_ENDPOINT = "2001:db8::10"
+
+
+class _ConnectSocket:
+    def __init__(self, connect_error=None):
+        self.connect_error = connect_error
+        self.timeout = None
+        self.connected_to = None
+        self.closed = False
+
+    def settimeout(self, timeout):
+        self.timeout = timeout
+
+    def connect(self, endpoint):
+        if self.connect_error is not None:
+            raise self.connect_error
+        self.connected_to = endpoint
+
+    def close(self):
+        self.closed = True
+
+
+def _address_info(family, host, port):
+    if family == socket.AF_INET6:
+        endpoint = (host, port, 0, 0)
+    else:
+        endpoint = (host, port)
+    return family, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", endpoint
 
 
 def _raw_header(command: str, payload_size: int, magic_bytes: bytes = MAGICBYTES.MAINNET) -> bytes:
@@ -28,6 +57,79 @@ def _connected_transport_pair(magic_bytes: bytes = MAGICBYTES.MAINNET):
     transport = Transport(magic_bytes=magic_bytes)
     transport._conns[peer.key] = Connection(left_sock, peer.key)
     return transport, peer, left_sock, right_sock
+
+
+@pytest.mark.parametrize(
+    ("family", "host"),
+    [(socket.AF_INET, IPV4_ENDPOINT), (socket.AF_INET6, IPV6_ENDPOINT)],
+)
+def test_transport_connect_uses_resolved_address_family(family, host):
+    created_with = []
+    fake_socket = _ConnectSocket()
+
+    def socket_factory(*socket_options):
+        created_with.append(socket_options)
+        return fake_socket
+
+    peer = Peer(host, NETWORK.MAINNET_PORT)
+    endpoint = _address_info(family, host, peer.port)
+    transport = Transport(
+        timeout=30,
+        resolver=lambda _host, _port: [endpoint],
+        socket_factory=socket_factory,
+    )
+
+    transport.connect(peer)
+
+    assert created_with == [(family, socket.SOCK_STREAM, socket.IPPROTO_TCP)]
+    assert fake_socket.connected_to == endpoint[4]
+    assert fake_socket.timeout == 30
+    assert peer.state is PeerState.CONNECTED
+    assert peer.fail_count == 0
+
+
+def test_transport_connect_falls_back_to_the_next_resolved_address():
+    failed_socket = _ConnectSocket(OSError("IPv6 unavailable"))
+    connected_socket = _ConnectSocket()
+    sockets = iter([failed_socket, connected_socket])
+    addresses = [
+        _address_info(socket.AF_INET6, IPV6_ENDPOINT, NETWORK.MAINNET_PORT),
+        _address_info(socket.AF_INET, IPV4_ENDPOINT, NETWORK.MAINNET_PORT),
+    ]
+    peer = Peer("seed.example", NETWORK.MAINNET_PORT)
+    transport = Transport(
+        resolver=lambda _host, _port: addresses,
+        socket_factory=lambda *_options: next(sockets),
+    )
+
+    transport.connect(peer)
+
+    assert failed_socket.closed
+    assert connected_socket.connected_to == (IPV4_ENDPOINT, NETWORK.MAINNET_PORT)
+    assert peer.state is PeerState.CONNECTED
+    assert peer.fail_count == 0
+
+
+def test_transport_records_one_failure_after_all_resolved_addresses_fail():
+    sockets = [_ConnectSocket(OSError("first failed")), _ConnectSocket(OSError("second failed"))]
+    socket_iter = iter(sockets)
+    addresses = [
+        _address_info(socket.AF_INET6, IPV6_ENDPOINT, NETWORK.MAINNET_PORT),
+        _address_info(socket.AF_INET, IPV4_ENDPOINT, NETWORK.MAINNET_PORT),
+    ]
+    peer = Peer("seed.example", NETWORK.MAINNET_PORT)
+    transport = Transport(
+        resolver=lambda _host, _port: addresses,
+        socket_factory=lambda *_options: next(socket_iter),
+    )
+
+    with pytest.raises(ConnectionError, match="second failed"):
+        transport.connect(peer)
+
+    assert all(sock.closed for sock in sockets)
+    assert peer.state is PeerState.DISCONNECTED
+    assert peer.fail_count == 1
+    assert peer.last_fail is not None
 
 
 def test_transport_send_stamps_configured_magic_bytes():
