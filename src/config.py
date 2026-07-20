@@ -4,18 +4,10 @@ Configuration and data-directory paths for BitClone.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from src.core import MAGICBYTES, NETWORK
-
-
-class NetworkName(str, Enum):
-    MAINNET = "mainnet"
-    TESTNET = "testnet"
-    REGTEST = "regtest"
-    SIGNET = "signet"
+from src.core.network_profiles import NetworkName, NetworkProfile, get_network_profile
 
 
 DEFAULT_DATA_DIR = Path.home() / ".bitclone"
@@ -36,10 +28,17 @@ class BitCloneConfig:
             db_path: str | Path | None = None,
     ) -> "BitCloneConfig":
         network_name = network if isinstance(network, NetworkName) else NetworkName(network)
+        db_path_override = Path(db_path).expanduser() if db_path is not None else None
+        if data_dir is not None:
+            resolved_data_dir = Path(data_dir).expanduser()
+        elif db_path_override is not None:
+            resolved_data_dir = db_path_override.parent
+        else:
+            resolved_data_dir = DEFAULT_DATA_DIR
         return cls(
-            data_dir=Path(data_dir).expanduser() if data_dir is not None else DEFAULT_DATA_DIR,
+            data_dir=resolved_data_dir,
             network=network_name,
-            db_path_override=Path(db_path).expanduser() if db_path is not None else None,
+            db_path_override=db_path_override,
         )
 
     @property
@@ -76,27 +75,15 @@ class BitCloneConfig:
 
     @property
     def magic_bytes(self) -> bytes:
-        match self.network:
-            case NetworkName.MAINNET:
-                return MAGICBYTES.MAINNET
-            case NetworkName.TESTNET:
-                return MAGICBYTES.TESTNET
-            case NetworkName.REGTEST:
-                return MAGICBYTES.REGTEST
-            case NetworkName.SIGNET:
-                return MAGICBYTES.SIGNET
+        return self.profile.magic_bytes
 
     @property
     def p2p_port(self) -> int:
-        match self.network:
-            case NetworkName.MAINNET:
-                return NETWORK.MAINNET_PORT
-            case NetworkName.TESTNET:
-                return NETWORK.TESTNET_PORT
-            case NetworkName.REGTEST:
-                return NETWORK.REGTEST_PORT
-            case NetworkName.SIGNET:
-                return NETWORK.SIGNET_PORT
+        return self.profile.p2p_port
+
+    @property
+    def profile(self) -> NetworkProfile:
+        return get_network_profile(self.network)
 
     def initialize(self) -> dict[str, str]:
         """

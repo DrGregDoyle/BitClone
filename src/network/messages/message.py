@@ -124,32 +124,44 @@ class Message(Serializable, ABC):
         header = Header.from_bytes(read_stream(stream, NETWORK.HEADER_LENGTH))
         payload_bytes = read_stream(stream, header.size)  # Get message payload
 
-        # --- Validate package
-        if not validate_package(header, payload=payload_bytes):
+        return cls.from_envelope(header, payload_bytes)
+
+    @classmethod
+    def from_envelope(cls, header: Header, payload: bytes):
+        """Decode an already-separated message envelope without reparsing it."""
+        if not validate_package(header, payload):
             raise ValueError("Package fails validation")
+        return cls._from_validated_envelope(header, payload)
 
-        # --- Check payload_bytes
-        if payload_bytes == b'':
-            # Check empty message checksum
-            empty_header = EmptyMessage()._get_header(b'')
-            if empty_header.checksum != header.checksum:
-                raise ValueError(f"Checksum mismatch for EmptyMessage type: {header.command}")
+    @classmethod
+    def _from_validated_envelope(cls, header: Header, payload: bytes):
+        """Decode an envelope that the caller has already validated."""
+        command = getattr(cls, "COMMAND", None)
+        if command is not None and header.command != command:
+            raise ValueError(
+                f"Header command {header.command!r} does not match {command!r}"
+            )
 
-        return cls.from_payload(payload_bytes)
+        message = cls.from_payload(payload)
+        message.magic_bytes = header.magic_bytes
+        return message
 
     def to_bytes(self) -> bytes:
         """Serialize the instance to full message"""
-        return self._get_header(self.payload).to_bytes() + self.to_payload()
+        payload = self.to_payload()
+        return self._get_header(payload).to_bytes() + payload
 
     def to_dict(self) -> dict:
+        payload = self.to_payload()
         return {
-            "header": self._get_header(self.payload).to_dict(),
+            "header": self._get_header(payload).to_dict(),
             "payload": self.payload_dict(),
         }
 
     def to_data(self) -> dict:
+        payload = self.to_payload()
         return {
-            "header": self._get_header(self.payload).to_data(),
+            "header": self._get_header(payload).to_data(),
             "payload": self.payload_data()
         }
 
@@ -188,13 +200,7 @@ class UnknownMessage(Message):
         self.raw_payload = payload
 
     @classmethod
-    def from_bytes(cls, byte_stream: SERIALIZED):
-        stream = get_stream(byte_stream)
-        header_bytes = read_stream(stream, NETWORK.HEADER_LENGTH)
-        header = Header.from_bytes(header_bytes)
-        payload = read_stream(stream, header.size)
-        if not validate_package(header, payload):
-            raise ValueError("Package fails validation")
+    def _from_validated_envelope(cls, header: Header, payload: bytes):
         return cls(header.command, payload, header.magic_bytes)
 
     @classmethod

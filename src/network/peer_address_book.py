@@ -145,6 +145,7 @@ class PeerAddressBook:
             succeeded_at: float | None = None,
     ) -> PeerAddress:
         timestamp = time.time() if succeeded_at is None else succeeded_at
+        peer.record_success(timestamp)
         entry = self.add_peer(peer, source=source, seen_at=timestamp)
         entry.last_success = timestamp
         entry.success_count += 1
@@ -152,13 +153,13 @@ class PeerAddressBook:
 
     def record_failure(
             self,
-            host: str | IPAddress,
-            port: int | None = None,
+            peer: Peer,
             source: PeerSource = PeerSource.MANUAL,
             failed_at: float | None = None,
     ) -> PeerAddress:
         timestamp = time.time() if failed_at is None else failed_at
-        entry = self.add(host, port, source=source, seen_at=timestamp)
+        peer.record_failure(timestamp)
+        entry = self.add_peer(peer, source=source, seen_at=timestamp)
         entry.last_failure = timestamp
         entry.fail_count += 1
         return entry

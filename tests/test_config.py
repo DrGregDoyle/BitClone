@@ -1,5 +1,10 @@
+from dataclasses import FrozenInstanceError
+
+import pytest
+
 from src.config import BitCloneConfig, NetworkName
 from src.core import MAGICBYTES, NETWORK
+from src.core.network_profiles import NETWORK_PROFILES, get_network_profile
 
 
 def test_config_builds_network_scoped_paths(tmp_path):
@@ -28,6 +33,16 @@ def test_config_db_path_override_keeps_network_layout(tmp_path):
     assert config.blocks_dir == tmp_path / "data" / "testnet" / "blocks"
 
 
+def test_config_db_path_sets_default_data_directory_to_its_parent(tmp_path):
+    db_path = tmp_path / "custom.db"
+
+    config = BitCloneConfig.from_options(db_path=db_path)
+
+    assert config.data_dir == tmp_path
+    assert config.db_path == db_path
+    assert config.blocks_dir == tmp_path / "mainnet" / "blocks"
+
+
 def test_config_supports_signet(tmp_path):
     config = BitCloneConfig.from_options(data_dir=tmp_path, network="signet")
 
@@ -50,6 +65,19 @@ def test_config_uses_network_specific_p2p_ports(tmp_path):
 
         assert config.p2p_port == expected_port
         assert config.to_data()["p2p_port"] == expected_port
+
+
+def test_config_uses_canonical_immutable_network_profile(tmp_path):
+    config = BitCloneConfig.from_options(data_dir=tmp_path, network="signet")
+
+    assert config.profile is NETWORK_PROFILES[NetworkName.SIGNET]
+    assert config.magic_bytes == config.profile.magic_bytes
+    assert config.p2p_port == config.profile.p2p_port
+
+    with pytest.raises(FrozenInstanceError):
+        config.profile.p2p_port = 1
+    with pytest.raises(TypeError):
+        NETWORK_PROFILES[NetworkName.SIGNET] = get_network_profile("mainnet")
 
 
 def test_initialize_creates_data_directory_layout(tmp_path):

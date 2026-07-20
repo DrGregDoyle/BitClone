@@ -4,6 +4,14 @@ The Bitcoin standard formats
 """
 from typing import Final
 
+from src.core.network_profiles import (
+    MAINNET_PROFILE,
+    NETWORK_PROFILES,
+    REGTEST_PROFILE,
+    SIGNET_PROFILE,
+    TESTNET_PROFILE,
+)
+
 __all__ = ["BECH32CODE", "BLOCK", "DATA", "ECC", "MAGICBYTES", "NETWORK", "SCRIPT", "TAPROOT",
            "TX", "WALLET", "UTXO_SERIAL", "XKEYS"]
 
@@ -40,11 +48,14 @@ class ECC:
 
 
 class MAGICBYTES:
-    MAINNET: Final[bytes] = b'\xf9\xbe\xb4\xd9'
-    TESTNET: Final[bytes] = b'\x0b\x11\x09\x07'
-    REGTEST: Final[bytes] = b'\xfa\xbf\xb5\xda'
-    SIGNET: Final[bytes] = b'\x0a\x03\xcf\x40'
-    ALLOWED_MAGIC: Final[tuple[bytes, ...]] = (MAINNET, TESTNET, REGTEST, SIGNET)
+    """Compatibility aliases for callers that only need network magic values."""
+    MAINNET: Final[bytes] = MAINNET_PROFILE.magic_bytes
+    TESTNET: Final[bytes] = TESTNET_PROFILE.magic_bytes
+    REGTEST: Final[bytes] = REGTEST_PROFILE.magic_bytes
+    SIGNET: Final[bytes] = SIGNET_PROFILE.magic_bytes
+    ALLOWED_MAGIC: Final[tuple[bytes, ...]] = tuple(
+        profile.magic_bytes for profile in NETWORK_PROFILES.values()
+    )
 
     @classmethod
     def __contains__(cls, item):
@@ -64,35 +75,17 @@ class NETWORK:
     PROTOCOL_VERSION: Final[int] = 70016
     MIN_PROTOCOL_VERSION: Final[int] = 70001
     USER_AGENT: Final[str] = "/BitClone:0.1.0/"
-    MAINNET_PORT: Final[int] = 8333
-    TESTNET_PORT: Final[int] = 18333
-    REGTEST_PORT: Final[int] = 18444
-    SIGNET_PORT: Final[int] = 38333
+    MAINNET_PORT: Final[int] = MAINNET_PROFILE.p2p_port
+    TESTNET_PORT: Final[int] = TESTNET_PROFILE.p2p_port
+    REGTEST_PORT: Final[int] = REGTEST_PROFILE.p2p_port
+    SIGNET_PORT: Final[int] = SIGNET_PROFILE.p2p_port
 
     # Reviewed against Bitcoin Core v31.0 src/kernel/chainparams.cpp. The final
     # dot makes each seed an absolute DNS name and matches Bitcoin Core.
-    MAINNET_DNS_SEEDS: Final[tuple[str, ...]] = (
-        "seed.bitcoin.sipa.be.",
-        "dnsseed.bluematt.me.",
-        "seed.bitcoin.jonasschnelli.ch.",
-        "seed.btc.petertodd.net.",
-        "seed.bitcoin.sprovoost.nl.",
-        "dnsseed.emzy.de.",
-        "seed.bitcoin.wiz.biz.",
-        "seed.mainnet.achownodes.xyz.",
-    )
-    TESTNET_DNS_SEEDS: Final[tuple[str, ...]] = (
-        "testnet-seed.bitcoin.jonasschnelli.ch.",
-        "seed.tbtc.petertodd.net.",
-        "seed.testnet.bitcoin.sprovoost.nl.",
-        "testnet-seed.bluematt.me.",
-        "seed.testnet.achownodes.xyz.",
-    )
-    SIGNET_DNS_SEEDS: Final[tuple[str, ...]] = (
-        "seed.signet.bitcoin.sprovoost.nl.",
-        "seed.signet.achownodes.xyz.",
-    )
-    REGTEST_DNS_SEEDS: Final[tuple[str, ...]] = ()
+    MAINNET_DNS_SEEDS: Final[tuple[str, ...]] = MAINNET_PROFILE.dns_seeds
+    TESTNET_DNS_SEEDS: Final[tuple[str, ...]] = TESTNET_PROFILE.dns_seeds
+    SIGNET_DNS_SEEDS: Final[tuple[str, ...]] = SIGNET_PROFILE.dns_seeds
+    REGTEST_DNS_SEEDS: Final[tuple[str, ...]] = REGTEST_PROFILE.dns_seeds
 
     MAGIC_LENGTH: Final[int] = 4
     COMMAND_LENGTH: Final[int] = 12

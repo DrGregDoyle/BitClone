@@ -70,6 +70,8 @@ def test_addr(getrand_netaddr):
     assert constructed_msg == addr_msg, "Addr message failed to_bytes -> from_bytes construction"
     payload_msg = Addr.from_payload(addr_msg.to_payload())
     assert payload_msg == addr_msg, "Addr message failed to_payload -> from_payload construction"
+    assert addr_msg.payload_data()["addresses"] == [address.to_data() for address in addr_list]
+    assert addr_msg.payload_dict()["addresses"] == [address.to_dict() for address in addr_list]
 
 
 def test_feefilter():

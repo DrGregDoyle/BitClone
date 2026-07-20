@@ -106,7 +106,7 @@ class AsyncPeerListener:
         except Exception:
             logger.exception(f"Inbound peer handler failed for {peer.host}:{peer.port}")
         finally:
-            peer.state = PeerState.DISCONNECTED
+            peer.transition(PeerState.DISCONNECTED)
             self._connections.pop(task, None)
             await self._close_writer(writer)
 

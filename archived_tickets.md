@@ -192,6 +192,12 @@ As a node, I want to parse and serialise the Bitcoin P2P message envelope
 #### Story 0 — Cleanup and Maintenance
 
 - [x] Support address-family-neutral IPv4 and IPv6 outbound connections
+- [x] Make network message encoding and decoding single-pass
+- [x] Query independent DNS seeds concurrently with bounded parallelism
+- [x] Centralize peer session state and address-book connection bookkeeping
+- [x] Consolidate magic bytes, ports, and DNS seeds into immutable network profiles
+- [x] Remove duplicated `Addr` display construction and use a natural address-list representation
+- [x] Keep node block storage beside an explicit database path unless a data directory is also configured
 
 #### Story 2.1 — DNS Seed Bootstrap
 As a node, I want to resolve Bitcoin DNS seeds on first startup

@@ -85,24 +85,16 @@ class Addr(Message):
 
     def payload_dict(self) -> dict:
         count = len(self.addr_list)
-        addr_dict = {}
-        for x in range(count):
-            temp_addr = self.addr_list[x]
-            addr_dict.update({f"addr_{x}": temp_addr.to_dict()})
         return {
             "count": write_compact_size(count).hex(),
-            "net_addrs": addr_dict
+            "addresses": [address.to_dict() for address in self.addr_list],
         }
 
     def payload_data(self) -> dict:
         count = len(self.addr_list)
-        addr_dict = {}
-        for x in range(count):
-            temp_addr = self.addr_list[x]
-            addr_dict.update({f"addr_{x}": temp_addr.to_data()})
         return {
             "count": count,
-            "net_addr": addr_dict
+            "addresses": [address.to_data() for address in self.addr_list],
         }
 
 

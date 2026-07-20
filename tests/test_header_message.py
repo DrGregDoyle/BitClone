@@ -11,6 +11,30 @@ from src.network.messages.message import Message, UnknownMessage
 UNSUPPORTED_NAMECOIN_MAGIC = b"\xf9\xbe\xb4\xfe"
 
 
+class CountingMessage(Message):
+    def __init__(self, payload=b"payload"):
+        super().__init__()
+        self.raw_payload = payload
+        self.encode_count = 0
+
+    def _get_header(self, payload):
+        return Header.from_payload(payload, "counting", self.magic_bytes)
+
+    @classmethod
+    def from_payload(cls, byte_stream):
+        return cls(byte_stream)
+
+    def to_payload(self):
+        self.encode_count += 1
+        return self.raw_payload
+
+    def payload_dict(self):
+        return {"payload": self.raw_payload.hex()}
+
+    def payload_data(self):
+        return {"payload": self.raw_payload.hex()}
+
+
 def test_header_roundtrip_from_payload():
     payload = b"hello"
     hdr = Header.from_payload(payload, command="version", magic_bytes=MAGICBYTES.MAINNET)
@@ -156,6 +180,25 @@ def test_verack_serializes_to_header_only():
 
     parsed = VerAck.from_bytes(raw)
     assert isinstance(parsed, VerAck)
+
+
+def test_message_serialization_encodes_payload_once():
+    message = CountingMessage()
+
+    raw = message.to_bytes()
+
+    assert raw[NETWORK.HEADER_LENGTH:] == b"payload"
+    assert message.encode_count == 1
+
+
+def test_message_deserialization_preserves_envelope_magic_bytes():
+    message = CountingMessage()
+    message.magic_bytes = MAGICBYTES.REGTEST
+
+    parsed = CountingMessage.from_bytes(message.to_bytes())
+
+    assert parsed.raw_payload == b"payload"
+    assert parsed.magic_bytes == MAGICBYTES.REGTEST
 
 
 def test_message_registry_contains_verack():

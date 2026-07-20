@@ -1,4 +1,7 @@
 import socket
+import threading
+
+import pytest
 
 from src.config import NetworkName
 from src.core import NETWORK
@@ -69,6 +72,47 @@ def test_dns_bootstrap_continues_after_an_individual_seed_failure():
     assert result.failures[0].seed == failed_seed
     assert DNS_FAILURE in result.failures[0].error
     assert address_book.get(IPV4_PEER).port == NETWORK.SIGNET_PORT
+
+
+def test_dns_bootstrap_queries_seeds_with_bounded_parallelism():
+    active_queries = 0
+    maximum_queries = 0
+    lock = threading.Lock()
+    workers = 2
+    rendezvous = threading.Barrier(workers)
+
+    def resolver(_seed, port):
+        nonlocal active_queries, maximum_queries
+        with lock:
+            active_queries += 1
+            maximum_queries = max(maximum_queries, active_queries)
+        try:
+            rendezvous.wait(timeout=2)
+            return [_ipv4_info(IPV4_PEER, port)]
+        finally:
+            with lock:
+                active_queries -= 1
+
+    result = DNSSeedBootstrap(
+        NetworkName.MAINNET,
+        PeerAddressBook(NETWORK.MAINNET_PORT),
+        resolver=resolver,
+        max_workers=workers,
+    ).resolve()
+
+    assert result.queried_seeds == DNS_SEEDS[NetworkName.MAINNET]
+    assert result.resolved_count == 1
+    assert maximum_queries == workers
+
+
+@pytest.mark.parametrize("max_workers", [0, -1, True])
+def test_dns_bootstrap_rejects_invalid_worker_count(max_workers):
+    with pytest.raises(ValueError, match="positive integer"):
+        DNSSeedBootstrap(
+            NetworkName.MAINNET,
+            PeerAddressBook(NETWORK.MAINNET_PORT),
+            max_workers=max_workers,
+        )
 
 
 def test_regtest_has_no_dns_bootstrap_queries():

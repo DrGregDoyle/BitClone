@@ -3,7 +3,7 @@ from ipaddress import IPv4Address
 import pytest
 
 from src.core import NETWORK
-from src.network.datatypes.network_types import Services
+from src.network.datatypes.network_types import PeerState, Services
 from src.network.peer import Peer
 from src.network.peer_address_book import PeerAddressBook, PeerSource
 
@@ -47,6 +47,7 @@ def test_peer_address_book_captures_negotiated_peer_metadata():
     assert entry.user_agent == "/Satoshi:test/"
     assert entry.last_block == 850_000
     assert entry.services == Services.NODE_NETWORK | Services.NODE_WITNESS
+    assert peer.last_success == 30
 
 
 def test_peer_address_book_preserves_learned_metadata_before_reconnect():
@@ -67,13 +68,17 @@ def test_peer_address_book_preserves_learned_metadata_before_reconnect():
 
 def test_peer_address_book_candidates_prefer_reliable_recent_peers():
     address_book = PeerAddressBook()
-    unreliable = address_book.record_failure(FIRST_PEER, failed_at=40)
+    failed_peer = Peer(FIRST_PEER, NETWORK.MAINNET_PORT)
+    unreliable = address_book.record_failure(failed_peer, failed_at=40)
     reliable_peer = Peer(SECOND_PEER, NETWORK.MAINNET_PORT)
     reliable = address_book.record_success(reliable_peer, succeeded_at=20)
 
     assert address_book.candidates() == (reliable, unreliable)
     assert address_book.candidates(limit=1) == (reliable,)
     assert address_book.candidates(exclude={reliable.key}) == (unreliable,)
+    assert failed_peer.state is PeerState.DISCONNECTED
+    assert failed_peer.fail_count == unreliable.fail_count == 1
+    assert failed_peer.last_fail == unreliable.last_failure == 40
 
 
 def test_peer_address_book_display_is_structured_and_sorted():

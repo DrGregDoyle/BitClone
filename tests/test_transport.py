@@ -6,6 +6,7 @@ import pytest
 from src.core import MAGICBYTES, NETWORK, NetworkError
 from src.network.datatypes.network_types import PeerState
 from src.network.messages.ctrl_msg import Ping, Version
+from src.network.messages.header import Header
 from src.network.messages.message import UnknownMessage
 from src.network.peer import Peer
 from src.network.transport import Connection, Transport
@@ -110,7 +111,7 @@ def test_transport_connect_falls_back_to_the_next_resolved_address():
     assert peer.fail_count == 0
 
 
-def test_transport_records_one_failure_after_all_resolved_addresses_fail():
+def test_transport_leaves_failure_counting_to_the_session_owner():
     sockets = [_ConnectSocket(OSError("first failed")), _ConnectSocket(OSError("second failed"))]
     socket_iter = iter(sockets)
     addresses = [
@@ -128,8 +129,8 @@ def test_transport_records_one_failure_after_all_resolved_addresses_fail():
 
     assert all(sock.closed for sock in sockets)
     assert peer.state is PeerState.DISCONNECTED
-    assert peer.fail_count == 1
-    assert peer.last_fail is not None
+    assert peer.fail_count == 0
+    assert peer.last_fail is None
 
 
 def test_transport_send_stamps_configured_magic_bytes():
@@ -157,6 +158,39 @@ def test_transport_recv_accepts_configured_magic_bytes():
 
         assert isinstance(parsed, Ping)
         assert parsed.nonce == 123
+    finally:
+        left_sock.close()
+        right_sock.close()
+
+
+def test_transport_recv_parses_header_and_payload_once(monkeypatch):
+    transport, peer, left_sock, right_sock = _connected_transport_pair()
+    header_parse_count = 0
+    payload_parse_count = 0
+    original_header_parser = Header.from_bytes.__func__
+    original_payload_parser = Ping.from_payload.__func__
+
+    def parse_header_once(cls, byte_stream):
+        nonlocal header_parse_count
+        header_parse_count += 1
+        return original_header_parser(cls, byte_stream)
+
+    def parse_payload_once(cls, byte_stream):
+        nonlocal payload_parse_count
+        payload_parse_count += 1
+        return original_payload_parser(cls, byte_stream)
+
+    monkeypatch.setattr(Header, "from_bytes", classmethod(parse_header_once))
+    monkeypatch.setattr(Ping, "from_payload", classmethod(parse_payload_once))
+
+    try:
+        right_sock.sendall(Ping(123).to_bytes())
+
+        parsed = transport.recv_one(peer)
+
+        assert parsed.nonce == 123
+        assert header_parse_count == 1
+        assert payload_parse_count == 1
     finally:
         left_sock.close()
         right_sock.close()

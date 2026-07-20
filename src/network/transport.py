@@ -56,7 +56,7 @@ class Transport:
         if peer.key in self._conns:
             return
 
-        peer.state = PeerState.CONNECTING
+        peer.transition(PeerState.CONNECTING)
         last_error: OSError | None = None
         try:
             for family, socktype, protocol, _canonical_name, socket_address in self._resolver(
@@ -77,14 +77,10 @@ class Transport:
 
         if peer.key not in self._conns:
             detail = last_error or OSError("address resolution returned no endpoints")
-            peer.state = PeerState.DISCONNECTED
-            peer.fail_count += 1
-            peer.last_fail = time.time()
+            peer.transition(PeerState.DISCONNECTED)
             raise ConnectionError(f"Failed to connect to {peer.host}:{peer.port}: {detail}") from detail
 
-        peer.state = PeerState.CONNECTED
-        peer.last_success = time.time()
-        peer.last_seen = time.time()
+        peer.transition(PeerState.CONNECTED, time.time())
 
     def _create_socket(self, family: int, socktype: int, protocol: int) -> socket.socket:
         if self._socket_factory is not None:
@@ -93,7 +89,7 @@ class Transport:
 
     def disconnect(self, peer: Peer) -> None:
         conn = self._conns.pop(peer.key, None)
-        peer.state = PeerState.DISCONNECTED
+        peer.transition(PeerState.DISCONNECTED)
         if conn:
             try:
                 conn.sock.close()
@@ -106,7 +102,7 @@ class Transport:
         data = message.to_bytes()
         conn.sock.sendall(data)
         conn.last_tx = time.time()
-        peer.last_seen = time.time()
+        peer.note_activity()
 
     def get_local_address(self, peer: Peer) -> tuple[str, int]:
         """Return the local endpoint used by an established peer connection."""
@@ -137,14 +133,13 @@ class Transport:
             raise NetworkError("Failed to validate header and payload")
 
         conn.last_rx = time.time()
-        peer.last_seen = time.time()
+        peer.note_activity()
 
-        # Rebuild full message for existing Message.from_bytes() API
         msg_cls = Message.get_registered(header.command)
         if msg_cls is None:
             logger.info(f"Received unsupported command {header.command!r} from {peer.host}:{peer.port}")
-            return UnknownMessage(header.command, payload_bytes, header.magic_bytes)
-        return msg_cls.from_bytes(header_bytes + payload_bytes)
+            msg_cls = UnknownMessage
+        return msg_cls._from_validated_envelope(header, payload_bytes)
 
     def _require_conn(self, peer: Peer) -> Connection:
         conn = self._conns.get(peer.key)

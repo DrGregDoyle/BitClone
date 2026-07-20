@@ -16,7 +16,12 @@ from src.mempool.mempool import MemPool
 from src.mining.miner import Miner
 from src.network.datatypes.network_data import NetAddr
 from src.network.datatypes.network_types import PeerState, Services
-from src.network.dns_seeds import DNSResolver, DNSSeedBootstrap, DNSSeedResult
+from src.network.dns_seeds import (
+    DEFAULT_DNS_SEED_WORKERS,
+    DNSResolver,
+    DNSSeedBootstrap,
+    DNSSeedResult,
+)
 from src.network.messages.ctrl_msg import SendAddrV2, VerAck, Version, WtxidRelay
 from src.network.peer import Peer
 from src.network.peer_address_book import PeerAddressBook, PeerSource
@@ -46,7 +51,11 @@ class Node:
             transport: Transport | None = None,
             address_book: PeerAddressBook | None = None,
     ):
-        self.config = config or BitCloneConfig.from_options(data_dir=data_dir, network=network, db_path=db_path)
+        self.config = config or BitCloneConfig.from_options(
+            data_dir=data_dir,
+            network=network,
+            db_path=db_path,
+        )
         self.db_path = self.config.db_path
 
         self.blockchain = blockchain or Blockchain(db_path=self.db_path, blocks_dir=self.config.blocks_dir)
@@ -92,13 +101,18 @@ class Node:
 
     # --- Peer networking ---------------------------------------------- #
 
-    def bootstrap_dns(self, resolver: DNSResolver | None = None) -> DNSSeedResult:
+    def bootstrap_dns(
+            self,
+            resolver: DNSResolver | None = None,
+            max_workers: int = DEFAULT_DNS_SEED_WORKERS,
+    ) -> DNSSeedResult:
         """Resolve this network's DNS seeds into the shared peer address book."""
         return DNSSeedBootstrap(
             network=self.config.network,
             address_book=self.address_book,
             port=self.config.p2p_port,
             resolver=resolver,
+            max_workers=max_workers,
         ).resolve()
 
     def connect_peer(self, host: str, port: int | None = None) -> Peer:
@@ -108,9 +122,9 @@ class Node:
         try:
             self.transport.connect(peer)
         except Exception:
-            self.address_book.record_failure(peer.host, peer.port, failed_at=time.time())
+            self.address_book.record_failure(peer, failed_at=time.time())
             raise
-        peer.state = PeerState.HANDSHAKING
+        peer.transition(PeerState.HANDSHAKING)
 
         try:
             local_host, local_port = self.transport.get_local_address(peer)
@@ -145,7 +159,7 @@ class Node:
             for _ in range(NETWORK.MAX_PRE_VERACK_MESSAGES + 1):
                 response = self.transport.recv_one(peer)
                 if isinstance(response, VerAck):
-                    peer.state = PeerState.READY
+                    peer.transition(PeerState.READY)
                     break
                 if not isinstance(response, (SendAddrV2, WtxidRelay)):
                     response_command = getattr(response, "command", response.__class__.COMMAND)
@@ -155,9 +169,7 @@ class Node:
                     f"Peer exceeded limit of {NETWORK.MAX_PRE_VERACK_MESSAGES} messages before verack"
                 )
         except Exception:
-            peer.fail_count += 1
-            peer.last_fail = time.time()
-            self.address_book.record_failure(peer.host, peer.port, failed_at=peer.last_fail)
+            self.address_book.record_failure(peer, failed_at=time.time())
             self.transport.disconnect(peer)
             raise
 

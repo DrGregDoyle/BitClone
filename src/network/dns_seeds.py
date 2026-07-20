@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 import socket
 from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Final
 
-from src.config import NetworkName
-from src.core import NETWORK
+from src.core.network_profiles import NETWORK_PROFILES, NetworkName
 from src.network.peer_address_book import PeerAddressBook, PeerKey, PeerSource
 
 __all__ = [
@@ -21,6 +21,7 @@ __all__ = [
     "DNSSeedBootstrap",
     "DNSSeedFailure",
     "DNSSeedResult",
+    "DEFAULT_DNS_SEED_WORKERS",
 ]
 
 BITCOIN_CORE_SEED_VERSION: Final[str] = "v31.0"
@@ -29,11 +30,9 @@ BITCOIN_CORE_CHAINPARAMS_SOURCE: Final[str] = (
 )
 
 DNS_SEEDS = MappingProxyType({
-    NetworkName.MAINNET: NETWORK.MAINNET_DNS_SEEDS,
-    NetworkName.TESTNET: NETWORK.TESTNET_DNS_SEEDS,
-    NetworkName.SIGNET: NETWORK.SIGNET_DNS_SEEDS,
-    NetworkName.REGTEST: NETWORK.REGTEST_DNS_SEEDS,
+    network: profile.dns_seeds for network, profile in NETWORK_PROFILES.items()
 })
+DEFAULT_DNS_SEED_WORKERS: Final[int] = 4
 
 AddressInfo = tuple[int, int, int, str, tuple[Any, ...]]
 DNSResolver = Callable[[str, int], Iterable[AddressInfo]]
@@ -87,23 +86,28 @@ class DNSSeedBootstrap:
             address_book: PeerAddressBook,
             port: int | None = None,
             resolver: DNSResolver | None = None,
+            max_workers: int = DEFAULT_DNS_SEED_WORKERS,
     ):
         self.network = network if isinstance(network, NetworkName) else NetworkName(network)
         self.address_book = address_book
         self.port = address_book.default_port if port is None else port
         self.resolver = _system_resolver if resolver is None else resolver
+        if not isinstance(max_workers, int) or isinstance(max_workers, bool) or max_workers < 1:
+            raise ValueError("DNS seed worker count must be a positive integer")
+        self.max_workers = max_workers
 
     def resolve(self) -> DNSSeedResult:
-        queried_seeds: list[str] = []
+        queried_seeds = DNS_SEEDS[self.network]
         failures: list[DNSSeedFailure] = []
         peer_keys: set[PeerKey] = set()
 
-        for seed in DNS_SEEDS[self.network]:
-            queried_seeds.append(seed)
-            try:
-                for family, _socktype, _protocol, _canonical_name, socket_address in self.resolver(
-                        seed, self.port
-                ):
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            seed_results = executor.map(self._resolve_seed, queried_seeds)
+            for seed, addresses, error in seed_results:
+                if error is not None:
+                    failures.append(DNSSeedFailure(seed, str(error)))
+                    continue
+                for family, socket_address in addresses:
                     if family not in (socket.AF_INET, socket.AF_INET6):
                         continue
                     peer = self.address_book.add(
@@ -112,14 +116,26 @@ class DNSSeedBootstrap:
                         source=PeerSource.DNS_SEED,
                     )
                     peer_keys.add(peer.key)
-            except OSError as error:
-                failures.append(DNSSeedFailure(seed, str(error)))
-                continue
 
         return DNSSeedResult(
             network=self.network,
             port=self.port,
-            queried_seeds=tuple(queried_seeds),
+            queried_seeds=queried_seeds,
             peer_keys=tuple(sorted(peer_keys)),
             failures=tuple(failures),
         )
+
+    def _resolve_seed(
+            self,
+            seed: str,
+    ) -> tuple[str, tuple[tuple[int, tuple[Any, ...]], ...], OSError | None]:
+        """Resolve one seed without mutating shared bootstrap state."""
+        try:
+            addresses = tuple(
+                (family, socket_address)
+                for family, _socktype, _protocol, _canonical_name, socket_address
+                in self.resolver(seed, self.port)
+            )
+            return seed, addresses, None
+        except OSError as error:
+            return seed, (), error
