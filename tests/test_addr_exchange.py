@@ -98,3 +98,23 @@ def test_receive_peer_message_rejects_unready_peer(tmp_path):
             node.receive_peer_message(peer)
     finally:
         node.close()
+
+
+def test_receive_failure_disconnects_peer_and_wakes_manager(tmp_path):
+    peer_manager = MagicMock()
+    peer_manager.target_outbound = 8
+    node = Node(db_path=tmp_path / "node.db", peer_manager=peer_manager)
+    peer = _ready_peer(SOURCE_HOST, NETWORK.MAINNET_PORT)
+    node._ready_peers[peer.key] = peer
+    node.transport.recv_one = MagicMock(side_effect=ConnectionError("peer closed"))
+
+    try:
+        with pytest.raises(ConnectionError, match="peer closed"):
+            node.receive_peer_message(peer)
+
+        assert peer.state is PeerState.DISCONNECTED
+        assert peer not in node.ready_peers
+        assert node.address_book.get(SOURCE_HOST).consecutive_failures == 1
+        peer_manager.wake.assert_called_once_with()
+    finally:
+        node.close()

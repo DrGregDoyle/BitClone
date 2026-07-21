@@ -214,6 +214,13 @@ so that my peer address book grows organically over time.
 - [x] Parse `addr` messages and merge into address book
 - [x] Relay `addr` messages to a subset of connected peers
 
+#### Story 2.3 — Peer Manager
+As a node, I want a peer manager that maintains a target number of outbound connections
+and reconnects on disconnect.
+
+- [x] Target outbound slot count (8 by default)
+- [x] Reconnect backoff with jitter
+
 ### Sprint 3 — Propagation Groundwork
 
 - [x] `inv`, `getdata`, `notfound`, block, and tx message serialization/deserialization

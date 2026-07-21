@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -42,6 +43,7 @@ class PeerAddress:
     last_failure: float | None = None
     success_count: int = 0
     fail_count: int = 0
+    consecutive_failures: int = 0
     protocol_version: int | None = None
     user_agent: str | None = None
     last_block: int | None = None
@@ -63,6 +65,7 @@ class PeerAddress:
             "last_failure": self.last_failure,
             "success_count": self.success_count,
             "fail_count": self.fail_count,
+            "consecutive_failures": self.consecutive_failures,
             "protocol_version": self.protocol_version,
             "user_agent": self.user_agent,
             "last_block": self.last_block,
@@ -75,12 +78,15 @@ class PeerAddressBook:
     def __init__(self, default_port: int = NETWORK.MAINNET_PORT):
         self.default_port = self._validate_port(default_port)
         self._entries: dict[PeerKey, PeerAddress] = {}
+        self._lock = threading.RLock()
 
     def __len__(self) -> int:
-        return len(self._entries)
+        with self._lock:
+            return len(self._entries)
 
     def __iter__(self):
-        return iter(self._entries.values())
+        with self._lock:
+            return iter(tuple(self._entries.values()))
 
     def add(
             self,
@@ -90,28 +96,29 @@ class PeerAddressBook:
             services: Services = Services.UNNAMED,
             seen_at: float | None = None,
     ) -> PeerAddress:
-        normalized_host = ip_address(str(host))
-        normalized_port = self._validate_port(self.default_port if port is None else port)
-        observed_at = time.time() if seen_at is None else seen_at
-        key = str(normalized_host), normalized_port
-        entry = self._entries.get(key)
+        with self._lock:
+            normalized_host = ip_address(str(host))
+            normalized_port = self._validate_port(self.default_port if port is None else port)
+            observed_at = time.time() if seen_at is None else seen_at
+            key = str(normalized_host), normalized_port
+            entry = self._entries.get(key)
 
-        if entry is None:
-            entry = PeerAddress(
-                host=normalized_host,
-                port=normalized_port,
-                sources={source},
-                services=Services(services),
-                first_seen=observed_at,
-                last_seen=observed_at,
-            )
-            self._entries[key] = entry
-        else:
-            entry.sources.add(source)
-            entry.services |= Services(services)
-            entry.last_seen = max(entry.last_seen, observed_at)
+            if entry is None:
+                entry = PeerAddress(
+                    host=normalized_host,
+                    port=normalized_port,
+                    sources={source},
+                    services=Services(services),
+                    first_seen=observed_at,
+                    last_seen=observed_at,
+                )
+                self._entries[key] = entry
+            else:
+                entry.sources.add(source)
+                entry.services |= Services(services)
+                entry.last_seen = max(entry.last_seen, observed_at)
 
-        return entry
+            return entry
 
     def add_peer(
             self,
@@ -119,44 +126,47 @@ class PeerAddressBook:
             source: PeerSource = PeerSource.MANUAL,
             seen_at: float | None = None,
     ) -> PeerAddress:
-        entry = self.add(
-            peer.host,
-            peer.port,
-            source=source,
-            services=peer.services or Services.UNNAMED,
-            seen_at=peer.last_seen if seen_at is None else seen_at,
-        )
-        if peer.protocol_version is not None:
-            entry.protocol_version = peer.protocol_version
-        if peer.user_agent is not None:
-            entry.user_agent = peer.user_agent
-        if peer.last_block is not None:
-            entry.last_block = peer.last_block
-        return entry
+        with self._lock:
+            entry = self.add(
+                peer.host,
+                peer.port,
+                source=source,
+                services=peer.services or Services.UNNAMED,
+                seen_at=peer.last_seen if seen_at is None else seen_at,
+            )
+            if peer.protocol_version is not None:
+                entry.protocol_version = peer.protocol_version
+            if peer.user_agent is not None:
+                entry.user_agent = peer.user_agent
+            if peer.last_block is not None:
+                entry.last_block = peer.last_block
+            return entry
 
     def merge_net_addresses(self, addresses: Iterable[NetAddr]) -> tuple[PeerAddress, ...]:
         """Merge addresses learned from an ``addr`` message."""
-        merged: dict[PeerKey, PeerAddress] = {}
-        for address in addresses:
-            try:
-                entry = self.add(
-                    address.ip_addr.ip,
-                    address.port,
-                    source=PeerSource.ADDR,
-                    services=address.services,
-                    seen_at=float(address.timestamp),
-                )
-            except ValueError:
-                # Valid wire addresses can still be unusable connection targets,
-                # for example when they advertise port zero.
-                continue
-            merged[entry.key] = entry
-        return tuple(merged[key] for key in sorted(merged))
+        with self._lock:
+            merged: dict[PeerKey, PeerAddress] = {}
+            for address in addresses:
+                try:
+                    entry = self.add(
+                        address.ip_addr.ip,
+                        address.port,
+                        source=PeerSource.ADDR,
+                        services=address.services,
+                        seen_at=float(address.timestamp),
+                    )
+                except ValueError:
+                    # Valid wire addresses can still be unusable connection targets,
+                    # for example when they advertise port zero.
+                    continue
+                merged[entry.key] = entry
+            return tuple(merged[key] for key in sorted(merged))
 
     def get(self, host: str | IPAddress, port: int | None = None) -> PeerAddress | None:
         normalized_host = ip_address(str(host))
         normalized_port = self.default_port if port is None else self._validate_port(port)
-        return self._entries.get((str(normalized_host), normalized_port))
+        with self._lock:
+            return self._entries.get((str(normalized_host), normalized_port))
 
     def record_success(
             self,
@@ -165,11 +175,13 @@ class PeerAddressBook:
             succeeded_at: float | None = None,
     ) -> PeerAddress:
         timestamp = time.time() if succeeded_at is None else succeeded_at
-        peer.record_success(timestamp)
-        entry = self.add_peer(peer, source=source, seen_at=timestamp)
-        entry.last_success = timestamp
-        entry.success_count += 1
-        return entry
+        with self._lock:
+            peer.record_success(timestamp)
+            entry = self.add_peer(peer, source=source, seen_at=timestamp)
+            entry.last_success = timestamp
+            entry.success_count += 1
+            entry.consecutive_failures = 0
+            return entry
 
     def record_failure(
             self,
@@ -178,11 +190,13 @@ class PeerAddressBook:
             failed_at: float | None = None,
     ) -> PeerAddress:
         timestamp = time.time() if failed_at is None else failed_at
-        peer.record_failure(timestamp)
-        entry = self.add_peer(peer, source=source, seen_at=timestamp)
-        entry.last_failure = timestamp
-        entry.fail_count += 1
-        return entry
+        with self._lock:
+            peer.record_failure(timestamp)
+            entry = self.add_peer(peer, source=source, seen_at=timestamp)
+            entry.last_failure = timestamp
+            entry.fail_count += 1
+            entry.consecutive_failures += 1
+            return entry
 
     def candidates(
             self,
@@ -191,16 +205,16 @@ class PeerAddressBook:
     ) -> tuple[PeerAddress, ...]:
         """Return deterministic candidates, preferring reliable and recent peers."""
         excluded = set(exclude)
-        entries = (entry for entry in self._entries.values() if entry.key not in excluded)
-        ordered = sorted(
-            entries,
-            key=lambda entry: (
-                entry.fail_count,
-                -(entry.last_success or 0),
-                -entry.last_seen,
-                entry.key,
-            ),
-        )
+        with self._lock:
+            ordered = sorted(
+                (entry for entry in self._entries.values() if entry.key not in excluded),
+                key=lambda entry: (
+                    entry.fail_count,
+                    -(entry.last_success or 0),
+                    -entry.last_seen,
+                    entry.key,
+                ),
+            )
         if limit is not None:
             if limit < 0:
                 raise ValueError("Candidate limit cannot be negative")
@@ -208,7 +222,8 @@ class PeerAddressBook:
         return tuple(ordered)
 
     def to_data(self) -> dict:
-        peers = sorted(self._entries.values(), key=lambda entry: entry.key)
+        with self._lock:
+            peers = sorted(self._entries.values(), key=lambda entry: entry.key)
         return {
             "count": len(peers),
             "default_port": self.default_port,

@@ -11,17 +11,6 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 
 ---
 
-### Sprint 2 — Peer Discovery
-
-**Story 2.3 — Peer Manager**
-As a node, I want a peer manager that maintains a target number of outbound connections
-and reconnects on disconnect.
-
-- [ ] Target outbound slot count (8 by default)
-- [ ] Reconnect backoff with jitter
-
----
-
 ### Sprint 3 — Block & Transaction Propagation
 
 **Story 0 — Cleanup and Maintenance**

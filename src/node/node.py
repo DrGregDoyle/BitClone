@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import random
 import secrets
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,7 @@ from src.network.messages.ctrl_msg import Addr, GetAddr, SendAddrV2, VerAck, Ver
 from src.network.messages.message import Message
 from src.network.peer import Peer
 from src.network.peer_address_book import PeerAddress, PeerAddressBook, PeerKey, PeerSource
+from src.network.peer_manager import PeerManager
 from src.network.transport import Transport
 from src.tx.tx import Tx, TxIn, TxOut
 from src.wallet.wallet import Wallet
@@ -54,6 +56,8 @@ class Node:
             miner: Miner | None = None,
             transport: Transport | None = None,
             address_book: PeerAddressBook | None = None,
+            peer_manager: PeerManager | None = None,
+            target_outbound: int = 8,
     ):
         self.config = config or BitCloneConfig.from_options(
             data_dir=data_dir,
@@ -70,6 +74,14 @@ class Node:
         self.transport = transport or Transport(magic_bytes=self.config.magic_bytes)
         self.address_book = address_book if address_book is not None else PeerAddressBook(self.config.p2p_port)
         self._ready_peers: dict[PeerKey, Peer] = {}
+        self._ready_peers_lock = threading.RLock()
+        self.peer_manager = peer_manager or PeerManager(
+            address_book=self.address_book,
+            connect_peer=self._connect_address_book_peer,
+            ready_peers=lambda: self.ready_peers,
+            bootstrap_peers=self.bootstrap_dns,
+            target_outbound=target_outbound,
+        )
         self.started = False
 
     # --- Lifecycle ----------------------------------------------------- #
@@ -81,14 +93,18 @@ class Node:
         Networking and background sync loops will be attached here once those
         components exist.
         """
+        if self.started:
+            return
         self.started = True
+        self.peer_manager.start()
 
     def stop(self) -> None:
         """
         Stop active background work without closing persistent resources.
         """
+        self.peer_manager.stop()
         self.stop_mining()
-        for peer in tuple(self._ready_peers.values()):
+        for peer in self.ready_peers:
             self.disconnect_peer(peer)
         self.started = False
 
@@ -122,14 +138,19 @@ class Node:
             max_workers=max_workers,
         ).resolve()
 
-    def connect_peer(self, host: str, port: int | None = None) -> Peer:
+    def connect_peer(
+            self,
+            host: str,
+            port: int | None = None,
+            source: PeerSource = PeerSource.MANUAL,
+    ) -> Peer:
         """Connect to a fixed peer and initiate the Bitcoin version handshake."""
         peer = Peer(host, self.config.p2p_port if port is None else port)
-        self.address_book.add_peer(peer, source=PeerSource.MANUAL)
+        self.address_book.add_peer(peer, source=source)
         try:
             self.transport.connect(peer)
         except Exception:
-            self.address_book.record_failure(peer, failed_at=time.time())
+            self.address_book.record_failure(peer, source=source, failed_at=time.time())
             raise
         peer.transition(PeerState.HANDSHAKING)
 
@@ -177,29 +198,51 @@ class Node:
                 )
             self.transport.send(peer, GetAddr())
         except Exception:
-            self.address_book.record_failure(peer, failed_at=time.time())
+            self.address_book.record_failure(peer, source=source, failed_at=time.time())
             self.transport.disconnect(peer)
             raise
 
-        self.address_book.record_success(peer, succeeded_at=time.time())
-        self._ready_peers[peer.key] = peer
+        self.address_book.record_success(peer, source=source, succeeded_at=time.time())
+        with self._ready_peers_lock:
+            self._ready_peers[peer.key] = peer
         return peer
+
+    def _connect_address_book_peer(self, host: str, port: int) -> Peer:
+        return self.connect_peer(host, port, source=self._source_for_peer(host, port))
+
+    def _source_for_peer(self, host: str, port: int) -> PeerSource:
+        address = self.address_book.get(host, port)
+        if address is None or not address.sources:
+            return PeerSource.MANUAL
+        return min(address.sources, key=lambda item: item.value)
 
     @property
     def ready_peers(self) -> tuple[Peer, ...]:
         """Return a stable snapshot of peers ready for application messages."""
-        return tuple(self._ready_peers[key] for key in sorted(self._ready_peers))
+        with self._ready_peers_lock:
+            return tuple(self._ready_peers[key] for key in sorted(self._ready_peers))
 
     def disconnect_peer(self, peer: Peer) -> None:
         """Disconnect a peer and remove it from the ready-peer registry."""
-        self._ready_peers.pop(peer.key, None)
+        with self._ready_peers_lock:
+            self._ready_peers.pop(peer.key, None)
         self.transport.disconnect(peer)
+        self.peer_manager.wake()
 
     def receive_peer_message(self, peer: Peer) -> Message:
         """Receive and handle one post-handshake message from a ready peer."""
         if self._ready_peers.get(peer.key) is not peer or peer.state is not PeerState.READY:
             raise ConnectionError(f"Peer {peer.host}:{peer.port} is not ready")
-        message = self.transport.recv_one(peer)
+        try:
+            message = self.transport.recv_one(peer)
+        except Exception:
+            self.address_book.record_failure(
+                peer,
+                source=self._source_for_peer(str(peer.host), peer.port),
+                failed_at=time.time(),
+            )
+            self.disconnect_peer(peer)
+            raise
         self.handle_peer_message(peer, message)
         return message
 
@@ -361,6 +404,8 @@ class Node:
             "tip": tip.block_id[::-1].hex() if tip else None,
             "utxo_count": self.blockchain.utxo_count(),
             "mempool_size": len(self.mempool),
+            "outbound_peers": len(self.ready_peers),
+            "target_outbound": self.peer_manager.target_outbound,
             "bits": self.blockchain.bits.hex(),
             "target": self.blockchain.target.hex(),
             "mining": self.miner.is_mining() if self.miner else False,

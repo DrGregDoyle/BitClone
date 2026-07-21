@@ -136,6 +136,8 @@ def test_node_status_returns_structured_runtime_data(tmp_path):
         assert status["tip"] == node.blockchain.tip.block_id[::-1].hex()
         assert status["utxo_count"] == node.blockchain.utxo_count()
         assert status["mempool_size"] == 0
+        assert status["outbound_peers"] == 0
+        assert status["target_outbound"] == 8
         assert status["bits"] == node.blockchain.bits.hex()
         assert status["magic_bytes"] == MAGICBYTES.MAINNET.hex()
         assert status["mining"] is False
@@ -150,6 +152,25 @@ def test_node_uses_configured_network_magic(tmp_path):
         assert node.config.magic_bytes == MAGICBYTES.REGTEST
         assert node.transport.magic_bytes == MAGICBYTES.REGTEST
         assert node.status()["magic_bytes"] == MAGICBYTES.REGTEST.hex()
+    finally:
+        node.close()
+
+
+def test_node_lifecycle_starts_and_stops_injected_peer_manager(tmp_path):
+    peer_manager = MagicMock()
+    node = Node(db_path=tmp_path / "node.db", peer_manager=peer_manager)
+
+    try:
+        node.start()
+        node.start()
+
+        assert node.started
+        peer_manager.start.assert_called_once_with()
+
+        node.stop()
+
+        assert not node.started
+        peer_manager.stop.assert_called_once_with()
     finally:
         node.close()
 
