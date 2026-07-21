@@ -3,6 +3,7 @@ from ipaddress import IPv4Address
 import pytest
 
 from src.core import NETWORK
+from src.network.datatypes.network_data import NetAddr
 from src.network.datatypes.network_types import PeerState, Services
 from src.network.peer import Peer
 from src.network.peer_address_book import PeerAddressBook, PeerSource
@@ -64,6 +65,25 @@ def test_peer_address_book_preserves_learned_metadata_before_reconnect():
     assert entry.protocol_version == NETWORK.PROTOCOL_VERSION
     assert entry.user_agent == "/Satoshi:test/"
     assert entry.last_block == 850_000
+
+
+def test_peer_address_book_merges_addr_entries_and_skips_unusable_ports():
+    address_book = PeerAddressBook()
+    addresses = [
+        NetAddr(FIRST_PEER, NETWORK.MAINNET_PORT, Services.NODE_NETWORK, timestamp=10),
+        NetAddr(FIRST_PEER, NETWORK.MAINNET_PORT, Services.NODE_WITNESS, timestamp=20),
+        NetAddr(SECOND_PEER, 0, Services.NODE_NETWORK, timestamp=30),
+    ]
+
+    merged = address_book.merge_net_addresses(addresses)
+
+    assert len(merged) == 1
+    assert merged[0] is address_book.get(FIRST_PEER)
+    assert merged[0].sources == {PeerSource.ADDR}
+    assert merged[0].services == Services.NODE_NETWORK | Services.NODE_WITNESS
+    assert merged[0].first_seen == 10
+    assert merged[0].last_seen == 20
+    assert address_book.get(SECOND_PEER, NETWORK.MAINNET_PORT) is None
 
 
 def test_peer_address_book_candidates_prefer_reliable_recent_peers():

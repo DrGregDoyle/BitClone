@@ -6,7 +6,7 @@ from src.block.block import Block
 from src.core import MAGICBYTES, NETWORK, NetworkError
 from src.network.datatypes.network_data import NetAddr
 from src.network.datatypes.network_types import PeerState, Services
-from src.network.messages.ctrl_msg import Ping, SendAddrV2, VerAck, Version, WtxidRelay
+from src.network.messages.ctrl_msg import GetAddr, Ping, SendAddrV2, VerAck, Version, WtxidRelay
 from src.network.messages.message import UnknownMessage
 from src.network.peer_address_book import PeerSource
 from src.node.node import Node
@@ -165,11 +165,13 @@ def test_connect_peer_sends_version_first_with_node_state(monkeypatch, tmp_path)
         peer = node.connect_peer(KNOWN_TEST_ENDPOINT, NETWORK.REGTEST_PORT)
         version = Version.from_bytes(fake_socket.sent[0])
         verack = VerAck.from_bytes(fake_socket.sent[1])
+        getaddr = GetAddr.from_bytes(fake_socket.sent[2])
 
-        assert len(fake_socket.sent) == 2
+        assert len(fake_socket.sent) == 3
         assert fake_socket.sent[0][:4] == MAGICBYTES.REGTEST
         assert fake_socket.sent[1][:4] == MAGICBYTES.REGTEST
         assert isinstance(verack, VerAck)
+        assert isinstance(getaddr, GetAddr)
         assert peer.state is PeerState.READY
         assert peer.local_nonce == FIXED_NONCE
         assert peer.protocol_version == NETWORK.PROTOCOL_VERSION
@@ -282,7 +284,7 @@ def test_connect_peer_allows_standard_messages_before_verack(monkeypatch, tmp_pa
         peer = node.connect_peer(KNOWN_TEST_ENDPOINT, NETWORK.MAINNET_PORT)
 
         assert peer.state is PeerState.READY
-        assert len(fake_socket.sent) == 2
+        assert len(fake_socket.sent) == 3
         assert isinstance(VerAck.from_bytes(fake_socket.sent[1]), VerAck)
     finally:
         node.close()

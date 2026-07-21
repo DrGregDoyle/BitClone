@@ -4,7 +4,7 @@ Control messages
 """
 import secrets
 
-from src.core import NETWORK, SERIALIZED, TX, get_stream, read_little_int, read_stream
+from src.core import NETWORK, SERIALIZED, TX, NetworkDataError, get_stream, read_little_int, read_stream
 from src.core.byte_stream import read_compact_size, write_compact_size
 from src.network.datatypes.network_data import NetAddr
 from src.network.datatypes.network_types import Services, RejectType, BloomFlags
@@ -59,6 +59,8 @@ class Addr(Message):
     __slots__ = ("addr_list",)
 
     def __init__(self, addr_list: list[NetAddr]):
+        if len(addr_list) > NETWORK.MAX_ADDR_ENTRIES:
+            raise NetworkDataError("Address list exceeds maximum entries")
         super().__init__()
         self.addr_list = addr_list
 
@@ -68,6 +70,8 @@ class Addr(Message):
 
         # count
         count = read_compact_size(stream)
+        if count > NETWORK.MAX_ADDR_ENTRIES:
+            raise NetworkDataError("Address list exceeds maximum entries")
 
         # timestamp + net_addr
         addr_list = []

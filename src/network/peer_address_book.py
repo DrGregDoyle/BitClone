@@ -10,10 +10,11 @@ from ipaddress import IPv4Address, IPv6Address, ip_address
 from typing import Iterable
 
 from src.core import NETWORK
+from src.network.datatypes.network_data import NetAddr
 from src.network.datatypes.network_types import Services
 from src.network.peer import Peer
 
-__all__ = ["PeerAddress", "PeerAddressBook", "PeerSource"]
+__all__ = ["PeerAddress", "PeerAddressBook", "PeerKey", "PeerSource"]
 
 IPAddress = IPv4Address | IPv6Address
 PeerKey = tuple[str, int]
@@ -132,6 +133,25 @@ class PeerAddressBook:
         if peer.last_block is not None:
             entry.last_block = peer.last_block
         return entry
+
+    def merge_net_addresses(self, addresses: Iterable[NetAddr]) -> tuple[PeerAddress, ...]:
+        """Merge addresses learned from an ``addr`` message."""
+        merged: dict[PeerKey, PeerAddress] = {}
+        for address in addresses:
+            try:
+                entry = self.add(
+                    address.ip_addr.ip,
+                    address.port,
+                    source=PeerSource.ADDR,
+                    services=address.services,
+                    seen_at=float(address.timestamp),
+                )
+            except ValueError:
+                # Valid wire addresses can still be unusable connection targets,
+                # for example when they advertise port zero.
+                continue
+            merged[entry.key] = entry
+        return tuple(merged[key] for key in sorted(merged))
 
     def get(self, host: str | IPAddress, port: int | None = None) -> PeerAddress | None:
         normalized_host = ip_address(str(host))

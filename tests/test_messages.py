@@ -11,7 +11,7 @@ from src.network.datatypes.network_types import *
 from src.network.messages.ctrl_msg import *
 from src.network.messages.data_msg import *
 from src.network.messages.message import EmptyMessage
-from src.core import MAGICBYTES, NETWORK
+from src.core import MAGICBYTES, NETWORK, NetworkDataError, write_compact_size
 
 
 @pytest.mark.parametrize("msg_class, expected_command", [
@@ -72,6 +72,15 @@ def test_addr(getrand_netaddr):
     assert payload_msg == addr_msg, "Addr message failed to_payload -> from_payload construction"
     assert addr_msg.payload_data()["addresses"] == [address.to_data() for address in addr_list]
     assert addr_msg.payload_dict()["addresses"] == [address.to_dict() for address in addr_list]
+
+
+def test_addr_rejects_more_than_the_protocol_maximum(getrand_netaddr):
+    addresses = [getrand_netaddr()] * (NETWORK.MAX_ADDR_ENTRIES + 1)
+
+    with pytest.raises(NetworkDataError, match="maximum entries"):
+        Addr(addresses)
+    with pytest.raises(NetworkDataError, match="maximum entries"):
+        Addr.from_payload(write_compact_size(len(addresses)))
 
 
 def test_feefilter():

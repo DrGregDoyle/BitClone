@@ -3,6 +3,7 @@ The Node class - main runtime coordinator for BitClone.
 """
 from __future__ import annotations
 
+import random
 import secrets
 import time
 from pathlib import Path
@@ -22,9 +23,10 @@ from src.network.dns_seeds import (
     DNSSeedBootstrap,
     DNSSeedResult,
 )
-from src.network.messages.ctrl_msg import SendAddrV2, VerAck, Version, WtxidRelay
+from src.network.messages.ctrl_msg import Addr, GetAddr, SendAddrV2, VerAck, Version, WtxidRelay
+from src.network.messages.message import Message
 from src.network.peer import Peer
-from src.network.peer_address_book import PeerAddressBook, PeerSource
+from src.network.peer_address_book import PeerAddress, PeerAddressBook, PeerKey, PeerSource
 from src.network.transport import Transport
 from src.tx.tx import Tx, TxIn, TxOut
 from src.wallet.wallet import Wallet
@@ -37,6 +39,8 @@ class Node:
     Consensus and policy rules stay in their component modules. Node owns their
     lifecycle and provides a stable API for the future CLI/RPC layer.
     """
+
+    ADDR_RELAY_PEER_COUNT = 2
 
     def __init__(
             self,
@@ -65,6 +69,7 @@ class Node:
         self.miner = miner or Miner()
         self.transport = transport or Transport(magic_bytes=self.config.magic_bytes)
         self.address_book = address_book if address_book is not None else PeerAddressBook(self.config.p2p_port)
+        self._ready_peers: dict[PeerKey, Peer] = {}
         self.started = False
 
     # --- Lifecycle ----------------------------------------------------- #
@@ -83,6 +88,8 @@ class Node:
         Stop active background work without closing persistent resources.
         """
         self.stop_mining()
+        for peer in tuple(self._ready_peers.values()):
+            self.disconnect_peer(peer)
         self.started = False
 
     def close(self) -> None:
@@ -168,13 +175,58 @@ class Node:
                 raise NetworkError(
                     f"Peer exceeded limit of {NETWORK.MAX_PRE_VERACK_MESSAGES} messages before verack"
                 )
+            self.transport.send(peer, GetAddr())
         except Exception:
             self.address_book.record_failure(peer, failed_at=time.time())
             self.transport.disconnect(peer)
             raise
 
         self.address_book.record_success(peer, succeeded_at=time.time())
+        self._ready_peers[peer.key] = peer
         return peer
+
+    @property
+    def ready_peers(self) -> tuple[Peer, ...]:
+        """Return a stable snapshot of peers ready for application messages."""
+        return tuple(self._ready_peers[key] for key in sorted(self._ready_peers))
+
+    def disconnect_peer(self, peer: Peer) -> None:
+        """Disconnect a peer and remove it from the ready-peer registry."""
+        self._ready_peers.pop(peer.key, None)
+        self.transport.disconnect(peer)
+
+    def receive_peer_message(self, peer: Peer) -> Message:
+        """Receive and handle one post-handshake message from a ready peer."""
+        if self._ready_peers.get(peer.key) is not peer or peer.state is not PeerState.READY:
+            raise ConnectionError(f"Peer {peer.host}:{peer.port} is not ready")
+        message = self.transport.recv_one(peer)
+        self.handle_peer_message(peer, message)
+        return message
+
+    def handle_peer_message(
+            self,
+            peer: Peer,
+            message: Message,
+    ) -> tuple[PeerAddress, ...]:
+        """Apply a received peer message to node networking state."""
+        if self._ready_peers.get(peer.key) is not peer or peer.state is not PeerState.READY:
+            raise ConnectionError(f"Peer {peer.host}:{peer.port} is not ready")
+        if not isinstance(message, Addr):
+            return ()
+        merged = self.address_book.merge_net_addresses(message.addr_list)
+        self._relay_addr(peer, message)
+        return merged
+
+    def _relay_addr(self, source_peer: Peer, message: Addr) -> tuple[Peer, ...]:
+        candidates = [
+            peer for peer in self.ready_peers
+            if peer.key != source_peer.key and peer.state is PeerState.READY
+        ]
+        relay_count = min(self.ADDR_RELAY_PEER_COUNT, len(candidates))
+        recipients = tuple(random.sample(candidates, relay_count))
+        for peer in recipients:
+            self.transport.send(peer, message)
+        return recipients
 
     # --- Block construction / mining ---------------------------------- #
 

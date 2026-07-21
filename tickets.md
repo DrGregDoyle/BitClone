@@ -13,14 +13,6 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 
 ### Sprint 2 — Peer Discovery
 
-**Story 2.2 — `addr` / `getaddr` Exchange**
-As a node, I want to send `getaddr` to peers and handle incoming `addr` messages
-so that my peer address book grows organically over time.
-
-- [ ] Send `getaddr` after handshake
-- [ ] Parse `addr` messages and merge into address book
-- [ ] Relay `addr` messages to a subset of connected peers
-
 **Story 2.3 — Peer Manager**
 As a node, I want a peer manager that maintains a target number of outbound connections
 and reconnects on disconnect.

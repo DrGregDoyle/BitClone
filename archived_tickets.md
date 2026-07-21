@@ -206,6 +206,14 @@ so that I can find an initial set of peers without any configuration.
 - [x] Store resolved IPs in a peer address book
 - [x] Query hardcoded DNS seeds (`seed.bitcoin.sipa.be`, etc.)
 
+#### Story 2.2 — `addr` / `getaddr` Exchange
+As a node, I want to send `getaddr` to peers and handle incoming `addr` messages
+so that my peer address book grows organically over time.
+
+- [x] Send `getaddr` after handshake
+- [x] Parse `addr` messages and merge into address book
+- [x] Relay `addr` messages to a subset of connected peers
+
 ### Sprint 3 — Propagation Groundwork
 
 - [x] `inv`, `getdata`, `notfound`, block, and tx message serialization/deserialization
