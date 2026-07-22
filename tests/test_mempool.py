@@ -13,10 +13,11 @@ or directly:
 import os
 import unittest
 from random import randint
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.core import TX
 from src.mempool.mempool import MemPool, MemPoolTx
+from src.script import P2SH_Key, P2WPKH_Key
 from src.tx import TxIn, TxOut, Tx, UTXO
 
 
@@ -24,16 +25,20 @@ from src.tx import TxIn, TxOut, Tx, UTXO
 # Helpers / factories
 # ---------------------------------------------------------------------------
 
+ANYONE_CAN_SPEND_REDEEM_SCRIPT = b'\x51'
+ANYONE_CAN_SPEND_SCRIPTSIG = b'\x01\x51'
+ANYONE_CAN_SPEND_SCRIPTPUBKEY = P2SH_Key.from_data(ANYONE_CAN_SPEND_REDEEM_SCRIPT).script
+
 def make_txid() -> bytes:
     """Return 32 random bytes to use as a fake previous txid."""
     return os.urandom(32)
 
 
 def make_utxo(txid: bytes, vout: int = 0, amount: int = 100_000,
-              scriptpubkey: bytes = b'\x51') -> UTXO:
+              scriptpubkey: bytes = ANYONE_CAN_SPEND_SCRIPTPUBKEY) -> UTXO:
     """
-    Build a UTXO.  scriptpubkey defaults to OP_1 (anyone-can-spend) so the
-    script engine won't reject it while script validation is still a stub.
+    Build a UTXO. The default is P2SH-wrapped OP_1 (anyone-can-spend), so it
+    exercises a recognized script template without requiring a signature.
     """
     outpoint = txid + vout.to_bytes(TX.VOUT, "little")
     return UTXO(outpoint=outpoint, amount=amount, scriptpubkey=scriptpubkey, block_height=randint(1, 1_000_000))
@@ -43,7 +48,7 @@ def make_spending_tx(utxos: list[UTXO], output_amount: int,
                      sequence: int = 0xffffffff) -> Tx:
     """
     Build an unsigned transaction that spends every UTXO in the list and
-    sends output_amount sats to an OP_1 anyone-can-spend output.
+    sends output_amount sats to a P2SH-wrapped OP_1 anyone-can-spend output.
 
     The fee is implicitly:  sum(utxo.amount) - output_amount
     """
@@ -51,12 +56,12 @@ def make_spending_tx(utxos: list[UTXO], output_amount: int,
         TxIn(
             txid=u.outpoint[:32],
             vout=u.outpoint[32:],
-            scriptsig=b'',  # unsigned — mempool doesn't verify scripts yet
+            scriptsig=ANYONE_CAN_SPEND_SCRIPTSIG,
             sequence=sequence,
         )
         for u in utxos
     ]
-    outputs = [TxOut(amount=output_amount, scriptpubkey=b'\x51')]
+    outputs = [TxOut(amount=output_amount, scriptpubkey=ANYONE_CAN_SPEND_SCRIPTPUBKEY)]
     return Tx(inputs=inputs, outputs=outputs)
 
 
@@ -73,8 +78,6 @@ def make_mempool_with_utxos(utxos: list[UTXO]) -> MemPool:
     mp.mempool = {}
     mp.total_vbytes = 0
     mp.spent_outpoints = set()
-    mp.script_engine = MagicMock()  # script validation is a stub in mempool
-
     # Build a dict of outpoint -> UTXO so the mock db can serve lookups
     utxo_map = {u.outpoint: u for u in utxos}
 
@@ -90,6 +93,9 @@ def make_mempool_with_utxos(utxos: list[UTXO]) -> MemPool:
 # ---------------------------------------------------------------------------
 
 class TestAddTxHappyPath(unittest.TestCase):
+
+    def test_short_p2sh_redeem_script_is_not_misclassified_as_p2wpkh(self):
+        self.assertFalse(P2WPKH_Key.matches(ANYONE_CAN_SPEND_REDEEM_SCRIPT))
 
     def test_valid_single_input_tx_is_accepted(self):
         """A well-formed tx with a known UTXO and positive fee is accepted."""
@@ -161,6 +167,43 @@ class TestAddTxHappyPath(unittest.TestCase):
 
 class TestAddTxRejectionCases(unittest.TestCase):
 
+    def test_script_validation_is_enabled(self):
+        """Mempool admission must execute scripts for every candidate tx."""
+        utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([utxo])
+        tx = make_spending_tx([utxo], output_amount=90_000)
+
+        with patch("src.mempool.mempool.validate_loaded_tx", return_value=True) as validate:
+            self.assertTrue(mp.add_tx(tx))
+
+        context = validate.call_args.args[1]
+        self.assertTrue(context.validate_scripts)
+
+    def test_script_validation_error_rejects_transaction(self):
+        """Malformed scripts are ignored instead of escaping peer admission."""
+        utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([utxo])
+        tx = make_spending_tx([utxo], output_amount=90_000)
+
+        with patch(
+                "src.mempool.mempool.validate_loaded_tx",
+                side_effect=ValueError("malformed script"),
+        ):
+            result = mp.add_tx(tx)
+
+        self.assertFalse(result)
+        self.assertNotIn(tx.txid, mp.mempool)
+
+    def test_invalid_redeem_script_is_rejected(self):
+        """A scriptSig that does not satisfy its spent output is rejected."""
+        utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([utxo])
+        tx = make_spending_tx([utxo], output_amount=90_000)
+        tx.inputs[0].scriptsig = b'\x01\x00'
+
+        self.assertFalse(mp.add_tx(tx))
+        self.assertNotIn(tx.txid, mp.mempool)
+
     def test_duplicate_tx_is_rejected(self):
         """The same tx submitted twice should be rejected the second time."""
         txid = make_txid()
@@ -201,6 +244,15 @@ class TestAddTxRejectionCases(unittest.TestCase):
         result = mp.add_tx(tx.to_bytes())
 
         self.assertFalse(result)
+
+    def test_tx_below_minimum_feerate_is_rejected(self):
+        """A positive fee below the configured sat/vbyte floor is rejected."""
+        utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([utxo])
+        tx = make_spending_tx([utxo], output_amount=99_999)
+
+        self.assertGreater(tx.vbytes, 1)
+        self.assertFalse(mp.add_tx(tx))
 
     def test_coinbase_tx_is_rejected(self):
         """

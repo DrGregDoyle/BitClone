@@ -11,29 +11,6 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 
 ---
 
-### Sprint 3 — Block & Transaction Propagation
-
-**Story 0 — Cleanup and Maintenance**
-Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 3.
-Each item should be handled as a separate ticket with sufficient tests.
-
-**Story 3.1 — `inv` / `getdata` Round-Trip**
-As a node, I want to announce and request inventory items (blocks and transactions)
-using `inv` and `getdata` so that I can discover and fetch new data from peers.
-
-- [ ] Send `inv` when a new block or transaction enters the mempool or active chain
-- [ ] Handle incoming `inv` and issue `getdata` for unknown items
-- [ ] Deduplicate in-flight requests
-
-**Story 3.2 — `tx` Message Handling**
-As a node, I want to receive `tx` messages from peers, validate the transaction,
-and add it to the mempool so that unconfirmed transactions propagate across the network.
-
-- [ ] Run script validation and fee checks
-- [ ] Add to mempool on success; log and ignore on failure
-
----
-
 ### Sprint 4 — Initial Block Download (IBD)
 
 **Story 0 — Cleanup and Maintenance**

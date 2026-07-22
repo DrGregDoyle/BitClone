@@ -221,7 +221,29 @@ and reconnects on disconnect.
 - [x] Target outbound slot count (8 by default)
 - [x] Reconnect backoff with jitter
 
-### Sprint 3 — Propagation Groundwork
+### Sprint 3 — Block & Transaction Propagation
+
+#### Story 0 — Cleanup and Maintenance
+
+- [x] Make P2WPKH script-template matching safely reject short redeem scripts instead of raising during P2SH validation
+
+#### Story 3.1 — `inv` / `getdata` Round-Trip
+As a node, I want to announce and request inventory items (blocks and transactions)
+using `inv` and `getdata` so that I can discover and fetch new data from peers.
+
+- [x] Send `inv` when a new block or transaction enters the mempool or active chain
+- [x] Handle incoming `inv` and issue `getdata` for unknown items
+- [x] Deduplicate in-flight requests
+
+#### Story 3.2 — `tx` Message Handling
+As a node, I want to receive `tx` messages from peers, validate the transaction,
+and add it to the mempool so that unconfirmed transactions propagate across the network.
+
+- [x] Run script validation and fee checks
+- [x] Add to mempool on success; log and ignore on failure
+- [x] Relay accepted transaction inventory to other ready peers without echoing it to the source
+
+#### Propagation Groundwork
 
 - [x] `inv`, `getdata`, `notfound`, block, and tx message serialization/deserialization
 - [x] Deserialise `tx` message into `Tx` object

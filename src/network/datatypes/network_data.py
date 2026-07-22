@@ -148,19 +148,12 @@ class InvVector(Serializable):
 
     @staticmethod
     def _validate_inv_type(inv_type: int | InvType) -> bool:
-        # --- int
-        if isinstance(inv_type, int):
-            if inv_type in list(InvType):
-                return True
-            else:
-                logger.error(f"Invalid integer value. Expected one of {list(InvType)}, received {inv_type}")
-                return False
-        # --- InvType
-        if isinstance(inv_type, InvType):
+        declared_values = {member.value for member in InvType.__members__.values()}
+        if isinstance(inv_type, (int, InvType)) and int(inv_type) in declared_values:
             return True
-
-        # --- invalid type
-        logger.error(f"Invalid type. Expected one of: int, InvType. Received: {type(inv_type)}")
+        logger.error(
+            f"Invalid inventory type. Expected one of {sorted(declared_values)}, received {inv_type!r}"
+        )
         return False
 
 

@@ -4,6 +4,14 @@
 
 ---
 
+## Development environment
+
+The primary external Bitcoin block source and storage host is currently the downstairs Linux computer running the
+Bitcoin Core daemon (accessed with `bitcoin-cli`). Its current LAN address is `192.168.0.108`, but that address may
+change; integrations should discover or configure the current address rather than hard-code it.
+
+---
+
 ## Bitcoin Notes
 
 Types of Bitcoin wallets:

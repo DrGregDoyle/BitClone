@@ -5,7 +5,12 @@ import pytest
 
 from src.cli import _handle_command, main
 from src.node.node import Node
+from src.script import P2SH_Key
 from src.tx.tx import Tx, TxIn, TxOut, UTXO
+
+ANYONE_CAN_SPEND_REDEEM_SCRIPT = b"\x51"
+ANYONE_CAN_SPEND_SCRIPTSIG = b"\x01\x51"
+ANYONE_CAN_SPEND_SCRIPTPUBKEY = P2SH_Key.from_data(ANYONE_CAN_SPEND_REDEEM_SCRIPT).script
 
 
 def _coinbase_tx() -> Tx:
@@ -184,7 +189,7 @@ def test_sendrawtransaction_accepts_valid_tx_when_utxo_exists(tmp_path, capsys):
         utxo = UTXO(
             outpoint=funding_txid + (0).to_bytes(4, "little"),
             amount=100_000,
-            scriptpubkey=b"\x51",
+            scriptpubkey=ANYONE_CAN_SPEND_SCRIPTPUBKEY,
             block_height=1,
         )
         seed_node.blockchain.db.add_utxo(utxo)
@@ -192,7 +197,7 @@ def test_sendrawtransaction_accepts_valid_tx_when_utxo_exists(tmp_path, capsys):
         seed_node.close()
 
     tx = Tx(
-        inputs=[TxIn(funding_txid, 0, b"", 0xffffffff)],
+        inputs=[TxIn(funding_txid, 0, ANYONE_CAN_SPEND_SCRIPTSIG, 0xffffffff)],
         outputs=[TxOut(90_000, b"\x51")],
     )
 
@@ -237,13 +242,13 @@ def test_getrawmempool_verbose_outputs_transaction_metadata(tmp_path):
         utxo = UTXO(
             outpoint=funding_txid + (0).to_bytes(4, "little"),
             amount=100_000,
-            scriptpubkey=b"\x51",
+            scriptpubkey=ANYONE_CAN_SPEND_SCRIPTPUBKEY,
             block_height=1,
         )
         node.blockchain.db.add_utxo(utxo)
 
         tx = Tx(
-            inputs=[TxIn(funding_txid, 0, b"", 0xffffffff)],
+            inputs=[TxIn(funding_txid, 0, ANYONE_CAN_SPEND_SCRIPTSIG, 0xffffffff)],
             outputs=[TxOut(90_000, b"\x51")],
         )
         assert node.submit_tx(tx)

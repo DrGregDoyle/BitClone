@@ -13,11 +13,11 @@ from typing import Any
 from src.block.block import Block
 from src.blockchain.blockchain import Blockchain
 from src.config import BitCloneConfig, NetworkName
-from src.core import BLOCK, NETWORK, TX, NetworkError
+from src.core import BLOCK, NETWORK, TX, NetworkError, get_logger
 from src.mempool.mempool import MemPool
 from src.mining.miner import Miner
-from src.network.datatypes.network_data import NetAddr
-from src.network.datatypes.network_types import PeerState, Services
+from src.network.datatypes.network_data import InvVector, NetAddr
+from src.network.datatypes.network_types import InvType, PeerState, Services
 from src.network.dns_seeds import (
     DEFAULT_DNS_SEED_WORKERS,
     DNSResolver,
@@ -25,13 +25,17 @@ from src.network.dns_seeds import (
     DNSSeedResult,
 )
 from src.network.messages.ctrl_msg import Addr, GetAddr, SendAddrV2, VerAck, Version, WtxidRelay
+from src.network.messages.data_msg import BlockMessage, GetData, Inv, NotFound, Txn
 from src.network.messages.message import Message
+from src.network.inventory import InflightInventory, inventory_key
 from src.network.peer import Peer
 from src.network.peer_address_book import PeerAddress, PeerAddressBook, PeerKey, PeerSource
 from src.network.peer_manager import PeerManager
 from src.network.transport import Transport
 from src.tx.tx import Tx, TxIn, TxOut
 from src.wallet.wallet import Wallet
+
+logger = get_logger(__name__)
 
 
 class Node:
@@ -58,6 +62,7 @@ class Node:
             address_book: PeerAddressBook | None = None,
             peer_manager: PeerManager | None = None,
             target_outbound: int = 8,
+            inventory_requests: InflightInventory | None = None,
     ):
         self.config = config or BitCloneConfig.from_options(
             data_dir=data_dir,
@@ -82,6 +87,7 @@ class Node:
             bootstrap_peers=self.bootstrap_dns,
             target_outbound=target_outbound,
         )
+        self.inventory_requests = inventory_requests if inventory_requests is not None else InflightInventory()
         self.started = False
 
     # --- Lifecycle ----------------------------------------------------- #
@@ -226,15 +232,17 @@ class Node:
         """Disconnect a peer and remove it from the ready-peer registry."""
         with self._ready_peers_lock:
             self._ready_peers.pop(peer.key, None)
+        self.inventory_requests.release_peer(peer.key)
         self.transport.disconnect(peer)
         self.peer_manager.wake()
 
     def receive_peer_message(self, peer: Peer) -> Message:
         """Receive and handle one post-handshake message from a ready peer."""
-        if self._ready_peers.get(peer.key) is not peer or peer.state is not PeerState.READY:
+        if not self._is_ready_peer(peer):
             raise ConnectionError(f"Peer {peer.host}:{peer.port} is not ready")
         try:
             message = self.transport.recv_one(peer)
+            self.handle_peer_message(peer, message)
         except Exception:
             self.address_book.record_failure(
                 peer,
@@ -243,22 +251,45 @@ class Node:
             )
             self.disconnect_peer(peer)
             raise
-        self.handle_peer_message(peer, message)
         return message
 
     def handle_peer_message(
             self,
             peer: Peer,
             message: Message,
-    ) -> tuple[PeerAddress, ...]:
+    ) -> tuple:
         """Apply a received peer message to node networking state."""
-        if self._ready_peers.get(peer.key) is not peer or peer.state is not PeerState.READY:
+        if not self._is_ready_peer(peer):
             raise ConnectionError(f"Peer {peer.host}:{peer.port} is not ready")
-        if not isinstance(message, Addr):
+        if isinstance(message, Addr):
+            merged = self.address_book.merge_net_addresses(message.addr_list)
+            self._relay_addr(peer, message)
+            return merged
+        if isinstance(message, Inv):
+            return self._handle_inv(peer, message)
+        if isinstance(message, GetData):
+            return self._handle_getdata(peer, message)
+        if isinstance(message, NotFound):
+            for vector in message.items:
+                self.inventory_requests.release(vector)
             return ()
-        merged = self.address_book.merge_net_addresses(message.addr_list)
-        self._relay_addr(peer, message)
-        return merged
+        if isinstance(message, Txn):
+            self.inventory_requests.release_key(("tx", message.tx.txid))
+            if self.submit_tx(message.tx, source_peer=peer):
+                return (message.tx,)
+            logger.warning(
+                f"Rejected transaction {message.tx.txid.hex()} "
+                f"from {peer.host}:{peer.port}"
+            )
+            return ()
+        if isinstance(message, BlockMessage):
+            self.inventory_requests.release_key(("block", message.block.block_id))
+            return ()
+        return ()
+
+    def _is_ready_peer(self, peer: Peer) -> bool:
+        with self._ready_peers_lock:
+            return self._ready_peers.get(peer.key) is peer and peer.state is PeerState.READY
 
     def _relay_addr(self, source_peer: Peer, message: Addr) -> tuple[Peer, ...]:
         candidates = [
@@ -270,6 +301,95 @@ class Node:
         for peer in recipients:
             self.transport.send(peer, message)
         return recipients
+
+    def _handle_inv(self, peer: Peer, message: Inv) -> tuple[InvVector, ...]:
+        requested: list[InvVector] = []
+        for vector in message.items:
+            if not self._is_requestable_inventory(vector) or self._has_inventory(vector):
+                continue
+            if self.inventory_requests.claim(vector, peer.key):
+                requested.append(vector)
+        if requested:
+            try:
+                self.transport.send(peer, GetData(requested))
+            except Exception:
+                for vector in requested:
+                    self.inventory_requests.release(vector)
+                raise
+        return tuple(requested)
+
+    def _handle_getdata(self, peer: Peer, message: GetData) -> tuple[InvVector, ...]:
+        served: list[InvVector] = []
+        missing: list[InvVector] = []
+        for vector in message.items:
+            if not self._is_requestable_inventory(vector):
+                missing.append(vector)
+                continue
+            key = inventory_key(vector)
+            if key is None:
+                missing.append(vector)
+                continue
+            kind, object_hash = key
+            if kind == "tx":
+                tx = self.mempool.get_tx(object_hash)
+                if tx is not None:
+                    self.transport.send(peer, Txn(tx))
+                    served.append(vector)
+                    continue
+            elif kind == "block":
+                block = self.blockchain.get_block(object_hash)
+                if block is not None:
+                    self.transport.send(peer, BlockMessage(block))
+                    served.append(vector)
+                    continue
+            missing.append(vector)
+        if missing:
+            self.transport.send(peer, NotFound(missing))
+        return tuple(served)
+
+    def _has_inventory(self, vector: InvVector) -> bool:
+        key = inventory_key(vector)
+        if key is None:
+            return True
+        kind, object_hash = key
+        if kind == "tx":
+            return object_hash in self.mempool
+        return self.blockchain.get_block(object_hash) is not None
+
+    @staticmethod
+    def _is_requestable_inventory(vector: InvVector) -> bool:
+        return vector.inv_type in {
+            InvType.MSG_TX,
+            InvType.MSG_WITNESS_TX,
+            InvType.MSG_BLOCK,
+            InvType.MSG_WITNESS_BLOCK,
+        }
+
+    def _announce_inventory(
+            self,
+            vector: InvVector,
+            source_peer: Peer | None = None,
+    ) -> tuple[Peer, ...]:
+        message = Inv([vector])
+        sent: list[Peer] = []
+        for peer in self.ready_peers:
+            if source_peer is not None and peer.key == source_peer.key:
+                continue
+            try:
+                self.transport.send(peer, message)
+            except Exception as error:
+                logger.warning(
+                    f"Failed to announce inventory to {peer.host}:{peer.port}: {error}"
+                )
+                self.address_book.record_failure(
+                    peer,
+                    source=self._source_for_peer(str(peer.host), peer.port),
+                    failed_at=time.time(),
+                )
+                self.disconnect_peer(peer)
+                continue
+            sent.append(peer)
+        return tuple(sent)
 
     # --- Block construction / mining ---------------------------------- #
 
@@ -345,11 +465,21 @@ class Node:
 
     # --- Mempool ------------------------------------------------------- #
 
-    def submit_tx(self, tx: bytes | Tx) -> bool:
+    def submit_tx(self, tx: bytes | Tx, source_peer: Peer | None = None) -> bool:
         """
-        Validate and add a transaction to the mempool.
+        Validate and add a transaction to the mempool, then announce it.
+
+        When the transaction came from a peer, that source is excluded from
+        the inventory announcement to avoid echoing its own transaction back.
         """
-        return self.mempool.add_tx(tx)
+        accepted = self.mempool.add_tx(tx)
+        if not accepted:
+            return False
+        accepted_tx = Tx.from_bytes(tx) if isinstance(tx, bytes) else tx
+        vector = InvVector(InvType.MSG_TX, accepted_tx.txid)
+        self.inventory_requests.release(vector)
+        self._announce_inventory(vector, source_peer=source_peer)
+        return True
 
     def add_transaction_to_mempool(self, tx: bytes | Tx) -> bool:
         """
@@ -377,6 +507,9 @@ class Node:
         accepted = self.blockchain.add_block(block)
         if accepted:
             self.mempool.confirm_block([tx.txid for tx in block.txs])
+            vector = InvVector(InvType.MSG_BLOCK, block.block_id)
+            self.inventory_requests.release(vector)
+            self._announce_inventory(vector)
         return accepted
 
     def on_block_mined(self, block: Block | None) -> bool:

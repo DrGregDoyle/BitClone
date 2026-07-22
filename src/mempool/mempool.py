@@ -6,7 +6,6 @@ from pathlib import Path
 
 from src.core import TX, ReadError, get_logger, TransactionError
 from src.database.database import BitCloneDatabase
-from src.script import ScriptEngine
 from src.tx import LoadedTx, Tx
 from src.tx.validation import TxValidationContext, validate_loaded_tx
 
@@ -57,9 +56,6 @@ class MemPool:
 
         # --- UTXO set
         self.btcdb = BitCloneDatabase(db_path, blocks_dir=blocks_dir)
-
-        # --- Script Engine for Tx Validation
-        self.script_engine = ScriptEngine()
 
         # --- MemPool storage
         self.mempool = {}  # Dict where the key will be the txid
@@ -164,6 +160,11 @@ class MemPool:
         """
         return self.mempool[txid].fee
 
+    def get_tx(self, txid: bytes) -> Tx | None:
+        """Return a transaction currently held in the mempool."""
+        entry = self.mempool.get(txid)
+        return entry.tx if entry is not None else None
+
     def get_txids(self) -> list[str]:
         """
         Return mempool transaction ids in display byte order.
@@ -219,7 +220,14 @@ class MemPool:
             logger.error(f"Validation error: {e}")
             return False
 
-        if not validate_loaded_tx(loaded_tx, TxValidationContext(validate_scripts=False)):
+        try:
+            if not validate_loaded_tx(loaded_tx, TxValidationContext(validate_scripts=True)):
+                return False
+        except Exception as e:
+            # Candidate transactions are untrusted network input. Script parsing
+            # and execution failures reject the transaction; they must not escape
+            # mempool admission and tear down the peer session.
+            logger.error(f"Transaction validation failed for {tx.txid.hex()}: {e}")
             return False
 
         tx_fee = loaded_tx.fee
@@ -234,8 +242,6 @@ class MemPool:
         if self.total_vbytes + tx.vbytes > self.max_size:
             logger.error(f"Mempool full. Rejecting tx {tx.txid.hex()}")
             return False
-
-        # --- Validate Scripts
 
         return True
 

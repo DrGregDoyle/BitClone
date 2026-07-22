@@ -277,10 +277,11 @@ class P2WPKH_Key(ScriptPubKey):
 
     @classmethod
     def matches(cls, b: bytes) -> bool:
+        if len(b) != 22:
+            return False
         truthlist = [
             b[0] == OP_0[0],
             b[1] == OP_PUSHBYTES_20[0],
-            len(b[2:]) == 20
         ]
         return all(truthlist)
 
