@@ -17,18 +17,6 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 4.
 Each item should be handled as a separate ticket with sufficient tests.
 
-**Story 4.1 — `getheaders` / `headers` Sync**
-As a node starting from genesis, I want to download all block headers first
-so that I can verify proof-of-work on the full chain before downloading block data.
-
-- [ ] Generate block locators for `getheaders` / `getblocks`
-- [ ] Send `getheaders` with the known tip locator
-- [ ] Implement a header-first chain-sync state machine
-- [ ] Validate each header's proof of work and chain linkage
-- [ ] Track the best header separately from the best active block
-- [ ] Loop until the peer returns fewer than 2,000 headers
-- [ ] Add header-sync tests using synthetic chains
-
 **Story 4.2 — Parallel Block Download**
 As a node, I want to download full blocks from multiple peers in parallel during IBD
 so that I saturate available bandwidth and sync as fast as possible.
@@ -114,7 +102,6 @@ Each item should be handled as a separate ticket with sufficient tests.
 **Story 7.1 — Fork Detection and Reorganisation**
 
 - [ ] Track competing chain tips by cumulative work during normal block and header processing
-- [ ] Store undo data for every connected block
 - [ ] Roll back UTXOs and apply the winning chain during a reorganisation
 - [ ] Mark active and inactive block-index entries during a reorganisation
 - [ ] Add reorganisation and fork-simulation tests
@@ -124,12 +111,6 @@ Each item should be handled as a separate ticket with sufficient tests.
 - [ ] Atomically update block files, block index, chain tip, and UTXO set
 - [ ] Add an orphan-block pool for blocks whose parents are not known
 - [ ] Add a checkpoint map of hard-coded known-good hashes at key heights
-
-**Story 7.3 — Pruning Design**
-
-- [ ] Design optional pruning mode while retaining archival-node mode as the default
-
----
 
 ### Sprint 8 — Mempool Policy & Package Handling
 

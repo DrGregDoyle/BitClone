@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence
 
-from src.config import BitCloneConfig, NetworkName
+from src.config import BitCloneConfig, BlockStorageMode, NetworkName
 from src.core import ReadError, TransactionError
 from src.node.node import Node
 from src.tx.tx import Tx
@@ -37,6 +37,29 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=[n.value for n in NetworkName],
         default=NetworkName.MAINNET.value,
         help="Network data namespace.",
+    )
+    parser.add_argument(
+        "--upstream-host",
+        default=None,
+        help="Preferred Bitcoin Core P2P host for synchronization.",
+    )
+    parser.add_argument(
+        "--upstream-port",
+        type=int,
+        default=None,
+        help="Preferred upstream P2P port; defaults to the selected network port.",
+    )
+    parser.add_argument(
+        "--block-storage",
+        choices=[mode.value for mode in BlockStorageMode],
+        default=BlockStorageMode.ARCHIVAL.value,
+        help="Retain all blocks or keep only a recent pruned window.",
+    )
+    parser.add_argument(
+        "--prune-keep-blocks",
+        type=int,
+        default=288,
+        help="Recent block bodies and undo records retained in pruned mode.",
     )
     parser.add_argument(
         "--json",
@@ -189,6 +212,10 @@ def _config_from_args(args: argparse.Namespace) -> BitCloneConfig:
         data_dir=args.data_dir,
         network=args.network,
         db_path=args.db_path,
+        upstream_host=args.upstream_host,
+        upstream_port=args.upstream_port,
+        block_storage=args.block_storage,
+        prune_keep_blocks=args.prune_keep_blocks,
     )
 
 

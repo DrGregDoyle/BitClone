@@ -47,7 +47,13 @@ class MemPool:
     MIN_FEE = 1  # sats/vbyte = feerate
     MAX_BLOCK_WEIGHT = 4_000_000  # 4 million wu
 
-    def __init__(self, db_path: Path = TEST_DB_PATH, blocks_dir: Path | None = None) -> None:
+    def __init__(
+            self,
+            db_path: Path = TEST_DB_PATH,
+            blocks_dir: Path | None = None,
+            storage_mode: str = "archival",
+            prune_keep_blocks: int = 288,
+    ) -> None:
         # --- MemPool constants
         self.max_size = MemPool.MAX_SIZE
         self.max_time = MemPool.MAX_TIME
@@ -55,7 +61,12 @@ class MemPool:
         self.max_block_weight = MemPool.MAX_BLOCK_WEIGHT
 
         # --- UTXO set
-        self.btcdb = BitCloneDatabase(db_path, blocks_dir=blocks_dir)
+        self.btcdb = BitCloneDatabase(
+            db_path,
+            blocks_dir=blocks_dir,
+            storage_mode=storage_mode,
+            prune_keep_blocks=prune_keep_blocks,
+        )
 
         # --- MemPool storage
         self.mempool = {}  # Dict where the key will be the txid

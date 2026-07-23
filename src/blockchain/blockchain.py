@@ -5,12 +5,12 @@ import json
 from pathlib import Path
 import time
 
-from src.block.block import Block
+from src.block.block import Block, BlockHeader
 from src.blockchain.genesis_block import genesis_block
-from src.core import BLOCK, TX, get_logger, TransactionError
+from src.core import BLOCK, TX, NetworkDataError, get_logger, TransactionError
 from src.cryptography import hash256
 from src.data import bits_to_target, target_to_bits, MerkleTree
-from src.database.database import BitCloneDatabase, DB_PATH
+from src.database.database import BitCloneDatabase, BlockUndo, DB_PATH
 from src.tx import TxIn
 from src.tx.tx import LoadedTx, UTXO, Tx
 from src.tx.validation import TxValidationContext, validate_loaded_tx, validate_tx_scripts
@@ -62,9 +62,20 @@ class Blockchain:
 
     # --- Construction/Reset
 
-    def __init__(self, db_path: Path = DB_PATH, blocks_dir: Path | None = None):
+    def __init__(
+            self,
+            db_path: Path = DB_PATH,
+            blocks_dir: Path | None = None,
+            storage_mode: str = "archival",
+            prune_keep_blocks: int = 288,
+    ):
         # --- Main db
-        self.db = BitCloneDatabase(db_path, blocks_dir=blocks_dir)
+        self.db = BitCloneDatabase(
+            db_path,
+            blocks_dir=blocks_dir,
+            storage_mode=storage_mode,
+            prune_keep_blocks=prune_keep_blocks,
+        )
         self.utxo_stats = {}  # Dictionary for tracking status of UTXO set
 
         # --- State tracking
@@ -178,6 +189,74 @@ class Blockchain:
         """Return the indexed header with the most cumulative work."""
         return self.db.get_best_header()
 
+    def get_block_locator(self, start_hash: bytes | None = None) -> list[bytes]:
+        """Return a Bitcoin-style locator from the best known header backwards."""
+        entry = self.db.get_block_index(start_hash) if start_hash is not None else self.get_best_header()
+        if entry is None:
+            return []
+
+        locator: list[bytes] = []
+        step = 1
+        while entry is not None:
+            locator.append(entry.block_hash)
+            if entry.height == 0:
+                break
+            next_height = max(0, entry.height - step)
+            entry = self.db.get_block_index_ancestor(entry.block_hash, next_height)
+            if len(locator) >= 10:
+                step *= 2
+        return locator
+
+    def add_headers(self, headers: list[BlockHeader]) -> tuple[BlockHeader, ...]:
+        """Validate and persist a contiguous batch of header-only chain data."""
+        if not headers:
+            return ()
+
+        accepted: list[BlockHeader] = []
+        previous_hash = headers[0].prev_block
+        parent = self.db.get_block_index(previous_hash)
+        if parent is None:
+            raise NetworkDataError(f"Header parent is unknown: {previous_hash.hex()}")
+
+        for header in headers:
+            if header.prev_block != previous_hash:
+                raise NetworkDataError(
+                    f"Non-contiguous header batch: expected parent {previous_hash.hex()}, "
+                    f"received {header.prev_block.hex()}"
+                )
+
+            existing = self.db.get_block_index(header.block_id)
+            if existing is None:
+                if not self._validate_header_pow(header):
+                    raise NetworkDataError(f"Header failed proof of work: {header.block_id.hex()}")
+                if header.timestamp > int(time.time()) + MAX_FUTURE_BLOCK_TIME:
+                    raise NetworkDataError(f"Header timestamp is too far in the future: {header.timestamp}")
+                self.db.add_block_header(header, parent.height + 1)
+                accepted.append(header)
+                parent = self.db.get_block_index(header.block_id)
+            else:
+                if existing.prev_hash != header.prev_block or existing.height != parent.height + 1:
+                    raise NetworkDataError(f"Conflicting indexed header: {header.block_id.hex()}")
+                parent = existing
+            previous_hash = header.block_id
+
+        return tuple(accepted)
+
+    @staticmethod
+    def _validate_header_pow(header: BlockHeader) -> bool:
+        """Validate compact-target shape and the header hash against that target."""
+        if len(header.bits) != BLOCK.BITS:
+            return False
+        exponent = header.bits[0]
+        coefficient = int.from_bytes(header.bits[1:], "big")
+        if exponent < 3 or exponent > 32 or coefficient == 0 or coefficient & 0x800000:
+            return False
+        try:
+            target = int.from_bytes(bits_to_target(header.bits), "big")
+        except Exception:
+            return False
+        return 0 < target < (1 << 256) and int.from_bytes(header.block_id, "little") <= target
+
     def utxo_count(self) -> int:
         """Return the total number of UTXOs in the set"""
         return self.db.count_utxos()
@@ -216,7 +295,8 @@ class Blockchain:
 
             new_height = self._height + 1
 
-            self.db.add_block(block, new_height)
+            undo = self._build_block_undo(block)
+            self.db.add_block(block, new_height, undo=undo)
             self._update_utxo_set(block, new_height)
 
             # Update cached state
@@ -224,6 +304,7 @@ class Blockchain:
             self._tip = block
             self._block_subsidy = self.calc_subsidy(new_height)
             self._target = bits_to_target(block.bits)
+            self.db.prune_blocks(new_height)
 
             return True
 
@@ -232,6 +313,26 @@ class Blockchain:
             return False
 
     # --- UTXO management
+
+    def _build_block_undo(self, block: Block) -> BlockUndo:
+        """Capture the pre-block UTXOs and new outpoints needed to disconnect a block."""
+        created_outpoints = tuple(
+            tx.txid + vout.to_bytes(TX.VOUT, "little")
+            for tx in block.txs
+            for vout, _ in enumerate(tx.outputs)
+        )
+        created_set = set(created_outpoints)
+        spent_utxos: list[UTXO] = []
+        for tx in block.txs:
+            if tx.is_coinbase:
+                continue
+            for txin in tx.inputs:
+                if txin.outpoint in created_set:
+                    continue
+                utxo = self.db.get_utxo(txin.outpoint)
+                if utxo is not None:
+                    spent_utxos.append(utxo)
+        return BlockUndo(tuple(spent_utxos), created_outpoints)
 
     def _update_utxo_set(self, block: Block, block_height: int):
         """
@@ -393,10 +494,14 @@ class Blockchain:
 
         first_block = self.get_block_at_height(height - 2016)
         last_block = self.tip
-        if first_block is None or last_block is None:
+        first_timestamp = first_block.timestamp if first_block is not None else None
+        if first_timestamp is None and last_block is not None:
+            first_entry = self.db.get_block_index_ancestor(last_block.block_id, height - 2016)
+            first_timestamp = first_entry.timestamp if first_entry is not None else None
+        if first_timestamp is None or last_block is None:
             return self.bits
 
-        new_target = self._calculate_retarget(self._target, first_block.timestamp, last_block.timestamp)
+        new_target = self._calculate_retarget(self._target, first_timestamp, last_block.timestamp)
         return target_to_bits(new_target.to_bytes(32, "big"))
 
     def _calculate_retarget(self, current_target: bytes, first_timestamp: int, last_timestamp: int) -> int:

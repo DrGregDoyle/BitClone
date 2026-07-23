@@ -4,6 +4,7 @@ Configuration and data-directory paths for BitClone.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,12 @@ from src.core.network_profiles import NetworkName, NetworkProfile, get_network_p
 
 DEFAULT_DATA_DIR = Path.home() / ".bitclone"
 CONFIG_FILENAME = "bitclone.toml"
+MIN_PRUNE_KEEP_BLOCKS = 288
+
+
+class BlockStorageMode(str, Enum):
+    ARCHIVAL = "archival"
+    PRUNED = "pruned"
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +26,10 @@ class BitCloneConfig:
     data_dir: Path = DEFAULT_DATA_DIR
     network: NetworkName = NetworkName.MAINNET
     db_path_override: Path | None = None
+    upstream_host: str | None = None
+    upstream_port: int | None = None
+    block_storage: BlockStorageMode = BlockStorageMode.ARCHIVAL
+    prune_keep_blocks: int = MIN_PRUNE_KEEP_BLOCKS
 
     @classmethod
     def from_options(
@@ -26,7 +37,24 @@ class BitCloneConfig:
             data_dir: str | Path | None = None,
             network: str | NetworkName = NetworkName.MAINNET,
             db_path: str | Path | None = None,
+            upstream_host: str | None = None,
+            upstream_port: int | None = None,
+            block_storage: str | BlockStorageMode = BlockStorageMode.ARCHIVAL,
+            prune_keep_blocks: int = MIN_PRUNE_KEEP_BLOCKS,
     ) -> "BitCloneConfig":
+        if upstream_port is not None and not 1 <= upstream_port <= 65535:
+            raise ValueError("upstream_port must be between 1 and 65535")
+        storage_mode = (
+            block_storage
+            if isinstance(block_storage, BlockStorageMode)
+            else BlockStorageMode(block_storage)
+        )
+        if prune_keep_blocks < 1:
+            raise ValueError("prune_keep_blocks must be at least 1")
+        if storage_mode is BlockStorageMode.PRUNED and prune_keep_blocks < MIN_PRUNE_KEEP_BLOCKS:
+            raise ValueError(
+                f"pruned storage must retain at least {MIN_PRUNE_KEEP_BLOCKS} recent blocks"
+            )
         network_name = network if isinstance(network, NetworkName) else NetworkName(network)
         db_path_override = Path(db_path).expanduser() if db_path is not None else None
         if data_dir is not None:
@@ -39,6 +67,10 @@ class BitCloneConfig:
             data_dir=resolved_data_dir,
             network=network_name,
             db_path_override=db_path_override,
+            upstream_host=upstream_host,
+            upstream_port=upstream_port,
+            block_storage=storage_mode,
+            prune_keep_blocks=prune_keep_blocks,
         )
 
     @property
@@ -82,6 +114,10 @@ class BitCloneConfig:
         return self.profile.p2p_port
 
     @property
+    def configured_upstream_port(self) -> int:
+        return self.upstream_port if self.upstream_port is not None else self.p2p_port
+
+    @property
     def profile(self) -> NetworkProfile:
         return get_network_profile(self.network)
 
@@ -112,6 +148,10 @@ class BitCloneConfig:
             "network": self.network.value,
             "magic_bytes": self.magic_bytes.hex(),
             "p2p_port": self.p2p_port,
+            "upstream_host": self.upstream_host,
+            "upstream_port": self.configured_upstream_port if self.upstream_host is not None else None,
+            "block_storage": self.block_storage.value,
+            "prune_keep_blocks": self.prune_keep_blocks,
             "network_dir": str(self.network_dir),
             "chainstate_dir": str(self.chainstate_dir),
             "blocks_dir": str(self.blocks_dir),
@@ -122,8 +162,16 @@ class BitCloneConfig:
         }
 
     def _default_config_text(self) -> str:
-        return (
+        text = (
             "# BitClone configuration\n"
             f'data_dir = "{self.data_dir}"\n'
             f'network = "{self.network.value}"\n'
+            f'block_storage = "{self.block_storage.value}"\n'
+            f"prune_keep_blocks = {self.prune_keep_blocks}\n"
         )
+        if self.upstream_host is not None:
+            text += f'upstream_host = "{self.upstream_host}"\n'
+            text += f"upstream_port = {self.configured_upstream_port}\n"
+        else:
+            text += "# upstream_host and upstream_port may select a preferred Bitcoin Core peer.\n"
+        return text

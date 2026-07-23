@@ -25,8 +25,9 @@ from src.network.dns_seeds import (
     DNSSeedResult,
 )
 from src.network.messages.ctrl_msg import Addr, GetAddr, SendAddrV2, VerAck, Version, WtxidRelay
-from src.network.messages.data_msg import BlockMessage, GetData, Inv, NotFound, Txn
+from src.network.messages.data_msg import BlockMessage, GetData, GetHeaders, Headers, Inv, NotFound, Txn
 from src.network.messages.message import Message
+from src.network.header_sync import HeaderSync, HeaderSyncState
 from src.network.inventory import InflightInventory, inventory_key
 from src.network.peer import Peer
 from src.network.peer_address_book import PeerAddress, PeerAddressBook, PeerKey, PeerSource
@@ -63,6 +64,7 @@ class Node:
             peer_manager: PeerManager | None = None,
             target_outbound: int = 8,
             inventory_requests: InflightInventory | None = None,
+            header_sync: HeaderSync | None = None,
     ):
         self.config = config or BitCloneConfig.from_options(
             data_dir=data_dir,
@@ -71,9 +73,29 @@ class Node:
         )
         self.db_path = self.config.db_path
 
-        self.blockchain = blockchain or Blockchain(db_path=self.db_path, blocks_dir=self.config.blocks_dir)
+        self.blockchain = blockchain or Blockchain(
+            db_path=self.db_path,
+            blocks_dir=self.config.blocks_dir,
+            storage_mode=self.config.block_storage.value,
+            prune_keep_blocks=self.config.prune_keep_blocks,
+        )
         chain_db_path = getattr(self.blockchain.db, "db_path", self.db_path)
-        self.mempool = mempool or MemPool(db_path=chain_db_path, blocks_dir=self.config.blocks_dir)
+        chain_storage_mode = getattr(
+            self.blockchain.db,
+            "storage_mode",
+            self.config.block_storage.value,
+        )
+        chain_prune_keep_blocks = getattr(
+            self.blockchain.db,
+            "prune_keep_blocks",
+            self.config.prune_keep_blocks,
+        )
+        self.mempool = mempool or MemPool(
+            db_path=chain_db_path,
+            blocks_dir=self.config.blocks_dir,
+            storage_mode=chain_storage_mode,
+            prune_keep_blocks=chain_prune_keep_blocks,
+        )
         self.wallet = wallet
         self.miner = miner or Miner()
         self.transport = transport or Transport(magic_bytes=self.config.magic_bytes)
@@ -88,6 +110,10 @@ class Node:
             target_outbound=target_outbound,
         )
         self.inventory_requests = inventory_requests if inventory_requests is not None else InflightInventory()
+        self.header_sync = header_sync or HeaderSync(
+            self.blockchain,
+            lambda peer, message: self.transport.send(peer, message),
+        )
         self.started = False
 
     # --- Lifecycle ----------------------------------------------------- #
@@ -213,6 +239,19 @@ class Node:
             self._ready_peers[peer.key] = peer
         return peer
 
+    def connect_upstream(self, start_header_sync: bool = True) -> Peer:
+        """Connect to the configured preferred peer and optionally start header sync."""
+        if self.config.upstream_host is None:
+            raise ValueError("No preferred upstream host is configured")
+        peer = self.connect_peer(
+            self.config.upstream_host,
+            self.config.configured_upstream_port,
+            source=PeerSource.MANUAL,
+        )
+        if start_header_sync:
+            self.start_header_sync(peer)
+        return peer
+
     def _connect_address_book_peer(self, host: str, port: int) -> Peer:
         return self.connect_peer(host, port, source=self._source_for_peer(host, port))
 
@@ -233,8 +272,23 @@ class Node:
         with self._ready_peers_lock:
             self._ready_peers.pop(peer.key, None)
         self.inventory_requests.release_peer(peer.key)
+        self.header_sync.peer_disconnected(peer)
         self.transport.disconnect(peer)
         self.peer_manager.wake()
+
+    def start_header_sync(self, peer: Peer) -> GetHeaders:
+        """Begin or resume header-first synchronization with a ready peer."""
+        if not self._is_ready_peer(peer):
+            raise ConnectionError(f"Peer {peer.host}:{peer.port} is not ready")
+        return self.header_sync.start(peer)
+
+    def sync_headers(self, peer: Peer) -> int:
+        """Synchronously receive messages until header-first synchronization completes."""
+        if self.header_sync.state is not HeaderSyncState.SYNCING or self.header_sync.peer_key != peer.key:
+            self.start_header_sync(peer)
+        while self.header_sync.state is HeaderSyncState.SYNCING:
+            self.receive_peer_message(peer)
+        return self.header_sync.headers_received
 
     def receive_peer_message(self, peer: Peer) -> Message:
         """Receive and handle one post-handshake message from a ready peer."""
@@ -273,6 +327,8 @@ class Node:
             for vector in message.items:
                 self.inventory_requests.release(vector)
             return ()
+        if isinstance(message, Headers):
+            return self.header_sync.handle_headers(peer, message)
         if isinstance(message, Txn):
             self.inventory_requests.release_key(("tx", message.tx.txid))
             if self.submit_tx(message.tx, source_peer=peer):
@@ -527,14 +583,20 @@ class Node:
         Return structured node status for CLI/RPC consumers.
         """
         tip = self.blockchain.tip
+        best_header = self.blockchain.get_best_header()
         return {
             "started": self.started,
             "network": self.config.network.value,
             "magic_bytes": self.config.magic_bytes.hex(),
             "data_dir": str(self.config.data_dir),
             "db_path": str(self.db_path),
+            "block_storage": self.config.block_storage.value,
+            "prune_keep_blocks": self.config.prune_keep_blocks,
             "height": self.blockchain.height,
             "tip": tip.block_id[::-1].hex() if tip else None,
+            "best_header_height": best_header.height if best_header is not None else -1,
+            "best_header": best_header.block_hash[::-1].hex() if best_header is not None else None,
+            "header_sync": self.header_sync.state.value,
             "utxo_count": self.blockchain.utxo_count(),
             "mempool_size": len(self.mempool),
             "outbound_peers": len(self.ready_peers),

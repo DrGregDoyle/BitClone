@@ -2,21 +2,30 @@
 The Database class - holds the UTXO set
 """
 import sqlite3
+from dataclasses import dataclass
 from pathlib import Path
 
-from src.block.block import Block
+from src.block.block import Block, BlockHeader
 from src.core import get_logger
 from src.data import bits_to_target
-from src.database.block_files import BlockFileManager
+from src.database.block_store import ArchivalBlockStore, BlockLocation, BlockStore, PrunedBlockStore
 from src.tx.tx import Tx, UTXO
 
 DB_PATH = Path(__file__).parent / "db_files" / "bitclone.db"
 
-__all__ = ["BitCloneDatabase", "BlockIndexEntry", "DB_PATH", "calc_block_work"]
+__all__ = ["BitCloneDatabase", "BlockIndexEntry", "BlockUndo", "DB_PATH", "calc_block_work"]
 logger = get_logger(__name__)
 
 MAX_TARGET_PLUS_ONE = 1 << 256
 CHAINWORK_BYTES = 32
+ARCHIVAL_STORAGE = "archival"
+PRUNED_STORAGE = "pruned"
+
+
+@dataclass(frozen=True, slots=True)
+class BlockUndo:
+    spent_utxos: tuple[UTXO, ...]
+    created_outpoints: tuple[bytes, ...]
 
 
 class BlockIndexEntry:
@@ -59,7 +68,14 @@ def calc_block_work(bits: bytes) -> int:
 
 
 class BitCloneDatabase:
-    def __init__(self, db_path=DB_PATH, testing=False, blocks_dir: Path | None = None):
+    def __init__(
+            self,
+            db_path=DB_PATH,
+            testing=False,
+            blocks_dir: Path | None = None,
+            storage_mode: str = ARCHIVAL_STORAGE,
+            prune_keep_blocks: int = 288,
+    ):
         # --- Establish db path
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -67,14 +83,33 @@ class BitCloneDatabase:
         # --- testing bool
         self.testing = testing
 
-        # --- Block file manager
+        if storage_mode not in {ARCHIVAL_STORAGE, PRUNED_STORAGE}:
+            raise ValueError(f"Unsupported block storage mode: {storage_mode}")
+        if prune_keep_blocks < 1:
+            raise ValueError("prune_keep_blocks must be at least 1")
+        self.storage_mode = storage_mode
+        self.prune_keep_blocks = prune_keep_blocks
+
+        # --- Block body store
         blocks_dir = blocks_dir or self.db_path.parent / "blocks"
-        self.block_files = BlockFileManager(blocks_dir)
+        self.block_store: BlockStore = (
+            ArchivalBlockStore(blocks_dir)
+            if storage_mode == ARCHIVAL_STORAGE
+            else PrunedBlockStore(blocks_dir)
+        )
+        # Compatibility for existing callers that inspect archival rollover.
+        self.block_files = getattr(self.block_store, "manager", self.block_store)
 
         # --- Persistent connection
         self.conn: sqlite3.Connection | None = sqlite3.connect(self.db_path)
         self.conn.execute("PRAGMA foreign_keys = ON")
         self._initialize_database()
+        try:
+            self._validate_storage_mode()
+        except Exception:
+            self.conn.close()
+            self.conn = None
+            raise
 
     def _require_conn(self) -> sqlite3.Connection:
         """Return the active connection or raise if the database is closed."""
@@ -96,6 +131,38 @@ class BitCloneDatabase:
                     coinbase INTEGER NOT NULL DEFAULT 0
                         CHECK (coinbase IN (0, 1)),
                     PRIMARY KEY (outpoint)
+                ) WITHOUT ROWID
+            """)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS metadata
+                (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                ) WITHOUT ROWID
+            """)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS block_undo_spent
+                (
+                    block_hash BLOB NOT NULL,
+                    sequence INTEGER NOT NULL,
+                    outpoint BLOB NOT NULL,
+                    amount INTEGER NOT NULL,
+                    script_pubkey BLOB NOT NULL,
+                    height INTEGER NOT NULL,
+                    coinbase INTEGER NOT NULL CHECK (coinbase IN (0, 1)),
+                    PRIMARY KEY (block_hash, sequence)
+                ) WITHOUT ROWID
+            """)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS block_undo_created
+                (
+                    block_hash BLOB NOT NULL,
+                    sequence INTEGER NOT NULL,
+                    outpoint BLOB NOT NULL,
+                    PRIMARY KEY (block_hash, sequence)
                 ) WITHOUT ROWID
             """)
 
@@ -150,12 +217,35 @@ class BitCloneDatabase:
             conn.execute("DROP TABLE IF EXISTS utxos")
             conn.execute("DROP TABLE IF EXISTS blocks")
             conn.execute("DROP TABLE IF EXISTS block_index")
+            conn.execute("DROP TABLE IF EXISTS block_undo_spent")
+            conn.execute("DROP TABLE IF EXISTS block_undo_created")
+            conn.execute("DROP TABLE IF EXISTS metadata")
 
         # Remove all .dat block files to keep storage in sync with the DB
-        deleted = self.block_files.clear_block_files()
+        deleted = self.block_store.clear()
         logger.info(f"Cleared {deleted} block file(s) from disk).")
 
         self._initialize_database()
+        self._validate_storage_mode()
+
+    def _validate_storage_mode(self) -> None:
+        conn = self._require_conn()
+        row = conn.execute("SELECT value FROM metadata WHERE key = 'block_storage_mode'").fetchone()
+        if row is not None:
+            if row[0] != self.storage_mode:
+                raise ValueError(
+                    f"Database uses {row[0]!r} block storage and cannot be opened as {self.storage_mode!r}"
+                )
+            return
+
+        block_count = conn.execute("SELECT COUNT(*) FROM blocks").fetchone()[0]
+        if block_count and self.storage_mode != ARCHIVAL_STORAGE:
+            raise ValueError("Existing block data must be migrated before enabling pruned storage")
+        with conn:
+            conn.execute(
+                "INSERT INTO metadata(key, value) VALUES ('block_storage_mode', ?)",
+                (self.storage_mode,),
+            )
 
     # --- UTXOS --- #
     def add_utxo(self, u: UTXO) -> None:
@@ -221,10 +311,10 @@ class BitCloneDatabase:
         return utxos
 
     # --- BLOCKS --- #
-    def add_block(self, block: Block, block_height: int) -> None:
+    def add_block(self, block: Block, block_height: int, undo: BlockUndo | None = None) -> None:
         """Add a block to storage."""
         block_bytes = block.to_bytes()
-        file_num, offset, size = self.block_files.write_block(block_bytes)
+        location = self.block_store.write_block(block_bytes)
 
         header = block.get_header()
         conn = self._require_conn()
@@ -242,25 +332,108 @@ class BitCloneDatabase:
                     header.block_id,
                     block.prev_block,
                     block.timestamp,
-                    file_num,
-                    offset,
-                    size,
+                    location.file_number,
+                    location.file_offset,
+                    location.block_size,
                 ),
             )
 
             self._add_block_index_entry(block, block_height, active=True, conn=conn)
+            if undo is not None:
+                self._add_block_undo(header.block_id, undo, conn)
+
+    @staticmethod
+    def _add_block_undo(block_hash: bytes, undo: BlockUndo, conn: sqlite3.Connection) -> None:
+        conn.executemany(
+            """
+            INSERT INTO block_undo_spent(
+                block_hash, sequence, outpoint, amount, script_pubkey, height, coinbase
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    block_hash,
+                    sequence,
+                    utxo.outpoint,
+                    utxo.amount,
+                    utxo.scriptpubkey,
+                    utxo.block_height,
+                    1 if utxo.is_coinbase else 0,
+                )
+                for sequence, utxo in enumerate(undo.spent_utxos)
+            ],
+        )
+        conn.executemany(
+            "INSERT INTO block_undo_created(block_hash, sequence, outpoint) VALUES (?, ?, ?)",
+            [
+                (block_hash, sequence, outpoint)
+                for sequence, outpoint in enumerate(undo.created_outpoints)
+            ],
+        )
+
+    def get_block_undo(self, block_hash: bytes) -> BlockUndo | None:
+        conn = self._require_conn()
+        spent_rows = conn.execute(
+            """
+            SELECT outpoint, amount, script_pubkey, height, coinbase
+            FROM block_undo_spent WHERE block_hash = ? ORDER BY sequence
+            """,
+            (block_hash,),
+        ).fetchall()
+        created_rows = conn.execute(
+            "SELECT outpoint FROM block_undo_created WHERE block_hash = ? ORDER BY sequence",
+            (block_hash,),
+        ).fetchall()
+        if not spent_rows and not created_rows:
+            return None
+        return BlockUndo(
+            spent_utxos=tuple(
+                UTXO(outpoint, amount, scriptpubkey, height, bool(coinbase))
+                for outpoint, amount, scriptpubkey, height, coinbase in spent_rows
+            ),
+            created_outpoints=tuple(row[0] for row in created_rows),
+        )
+
+    def prune_blocks(self, tip_height: int) -> tuple[int, ...]:
+        """Delete block bodies and undo data older than the configured safety window."""
+        if self.storage_mode != PRUNED_STORAGE:
+            return ()
+        cutoff_height = tip_height - self.prune_keep_blocks
+        if cutoff_height < 0:
+            return ()
+
+        conn = self._require_conn()
+        rows = conn.execute(
+            """
+            SELECT height, block_hash, file_number, file_offset, block_size
+            FROM blocks WHERE height <= ? ORDER BY height
+            """,
+            (cutoff_height,),
+        ).fetchall()
+        if not rows:
+            return ()
+
+        with conn:
+            conn.executemany("DELETE FROM block_undo_spent WHERE block_hash = ?", [(row[1],) for row in rows])
+            conn.executemany("DELETE FROM block_undo_created WHERE block_hash = ?", [(row[1],) for row in rows])
+            conn.execute("DELETE FROM blocks WHERE height <= ?", (cutoff_height,))
+
+        for _, _, file_number, file_offset, block_size in rows:
+            self.block_store.delete_block(BlockLocation(file_number, file_offset, block_size))
+        return tuple(row[0] for row in rows)
 
     def _add_block_index_entry(
             self,
-            block: Block,
+            block: Block | BlockHeader,
             block_height: int,
             active: bool,
             conn: sqlite3.Connection | None = None,
+            status: str = "valid",
     ) -> None:
-        header = block.get_header()
+        header = block.get_header() if isinstance(block, Block) else block
         conn = conn or self._require_conn()
         parent_entry = self.get_block_index(header.prev_block)
-        work = calc_block_work(block.bits)
+        work = calc_block_work(header.bits)
         parent_chainwork = parent_entry.chainwork if parent_entry is not None else 0
         chainwork = parent_chainwork + work
 
@@ -274,14 +447,14 @@ class BitCloneDatabase:
             """,
             (
                 header.block_id,
-                block.prev_block,
+                header.prev_block,
                 block_height,
-                block.bits,
-                block.timestamp,
+                header.bits,
+                header.timestamp,
                 work.to_bytes(CHAINWORK_BYTES, "big"),
                 chainwork.to_bytes(CHAINWORK_BYTES, "big"),
                 1 if active else 0,
-                "valid",
+                status,
             ),
         )
 
@@ -292,6 +465,18 @@ class BitCloneDatabase:
         conn = self._require_conn()
         with conn:
             self._add_block_index_entry(block, block_height, active=active, conn=conn)
+
+    def add_block_header(self, header: BlockHeader, block_height: int) -> None:
+        """Persist a validated header without writing a full block body."""
+        conn = self._require_conn()
+        with conn:
+            self._add_block_index_entry(
+                header,
+                block_height,
+                active=False,
+                conn=conn,
+                status="headers-only",
+            )
 
     def get_block_index(self, block_hash: bytes) -> BlockIndexEntry | None:
         conn = self._require_conn()
@@ -318,6 +503,17 @@ class BitCloneDatabase:
         ).fetchone()
 
         return self._row_to_block_index_entry(row)
+
+    def get_block_index_ancestor(self, block_hash: bytes, height: int) -> BlockIndexEntry | None:
+        """Walk a block-index branch back to its entry at ``height``."""
+        entry = self.get_block_index(block_hash)
+        if entry is None or height < 0 or height > entry.height:
+            return None
+        while entry.height > height:
+            entry = self.get_block_index(entry.prev_hash)
+            if entry is None:
+                return None
+        return entry
 
     def get_active_tip(self) -> BlockIndexEntry | None:
         conn = self._require_conn()
@@ -367,7 +563,7 @@ class BitCloneDatabase:
             return None
 
         file_num, offset, size = row
-        block_bytes = self.block_files.read_block(file_num, offset, size)
+        block_bytes = self.block_store.read_block(BlockLocation(file_num, offset, size))
         return Block.from_bytes(block_bytes)
 
     def get_block_at_height(self, height: int) -> Block | None:
@@ -386,7 +582,7 @@ class BitCloneDatabase:
             return None
 
         file_num, offset, size = row
-        block_bytes = self.block_files.read_block(file_num, offset, size)
+        block_bytes = self.block_store.read_block(BlockLocation(file_num, offset, size))
         return Block.from_bytes(block_bytes)
 
     def get_chain_height(self) -> int:

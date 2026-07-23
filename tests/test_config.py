@@ -2,7 +2,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from src.config import BitCloneConfig, NetworkName
+from src.config import BitCloneConfig, BlockStorageMode, MIN_PRUNE_KEEP_BLOCKS, NetworkName
 from src.core import MAGICBYTES, NETWORK
 from src.core.network_profiles import NETWORK_PROFILES, get_network_profile
 
@@ -65,6 +65,63 @@ def test_config_uses_network_specific_p2p_ports(tmp_path):
 
         assert config.p2p_port == expected_port
         assert config.to_data()["p2p_port"] == expected_port
+
+
+def test_configured_upstream_defaults_to_network_port_without_hardcoded_host(tmp_path):
+    default_config = BitCloneConfig.from_options(data_dir=tmp_path, network="mainnet")
+    configured = BitCloneConfig.from_options(
+        data_dir=tmp_path,
+        network="mainnet",
+        upstream_host="bitcoin-storage.lan",
+    )
+
+    assert default_config.upstream_host is None
+    assert default_config.to_data()["upstream_port"] is None
+    assert configured.upstream_host == "bitcoin-storage.lan"
+    assert configured.configured_upstream_port == NETWORK.MAINNET_PORT
+
+
+def test_initialize_writes_configured_upstream(tmp_path):
+    config = BitCloneConfig.from_options(
+        data_dir=tmp_path,
+        network="mainnet",
+        upstream_host="192.168.0.108",
+        upstream_port=8333,
+    )
+
+    config.initialize()
+
+    text = config.config_path.read_text(encoding="utf-8")
+    assert 'upstream_host = "192.168.0.108"' in text
+    assert "upstream_port = 8333" in text
+
+
+@pytest.mark.parametrize("port", [0, 65536])
+def test_config_rejects_invalid_upstream_port(tmp_path, port):
+    with pytest.raises(ValueError, match="upstream_port"):
+        BitCloneConfig.from_options(data_dir=tmp_path, upstream_host="bitcoin-storage.lan", upstream_port=port)
+
+
+def test_block_storage_defaults_to_archival_and_supports_pruned_mode(tmp_path):
+    default_config = BitCloneConfig.from_options(data_dir=tmp_path)
+    pruned_config = BitCloneConfig.from_options(
+        data_dir=tmp_path,
+        block_storage="pruned",
+        prune_keep_blocks=MIN_PRUNE_KEEP_BLOCKS,
+    )
+
+    assert default_config.block_storage is BlockStorageMode.ARCHIVAL
+    assert pruned_config.block_storage is BlockStorageMode.PRUNED
+    assert pruned_config.to_data()["prune_keep_blocks"] == MIN_PRUNE_KEEP_BLOCKS
+
+
+def test_config_rejects_unsafe_pruned_window(tmp_path):
+    with pytest.raises(ValueError, match="must retain"):
+        BitCloneConfig.from_options(
+            data_dir=tmp_path,
+            block_storage="pruned",
+            prune_keep_blocks=MIN_PRUNE_KEEP_BLOCKS - 1,
+        )
 
 
 def test_config_uses_canonical_immutable_network_profile(tmp_path):

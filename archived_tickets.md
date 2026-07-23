@@ -253,4 +253,29 @@ and add it to the mempool so that unconfirmed transactions propagate across the 
 
 ### Sprint 4 — IBD Groundwork
 
+#### Story 0 — Cleanup and Maintenance
+
+- [x] Make the preferred upstream Bitcoin Core P2P endpoint configurable without hard-coding its changing LAN address
+- [x] Define a block-storage interface with archival and pruned/streaming implementations before bulk block download
+- [x] Retain the undo data and recent block window required for safe reorganisations in pruned mode
+
+#### Story 4.1 — `getheaders` / `headers` Sync
+As a node starting from genesis, I want to download all block headers first
+so that I can verify proof-of-work on the full chain before downloading block data.
+
+- [x] Generate block locators for `getheaders` / `getblocks`
+- [x] Send `getheaders` with the known tip locator
+- [x] Implement a header-first chain-sync state machine
+- [x] Validate each header's proof of work and chain linkage
+- [x] Track the best header separately from the best active block
+- [x] Loop until the peer returns fewer than 2,000 headers
+- [x] Add header-sync tests using synthetic chains
+
+#### Earlier Groundwork
+
 - [x] Parse `headers` response (up to 2000 headers per message)
+
+### Sprint 7 — Chain Reorganisation & Storage Integrity Groundwork
+
+- [x] Store undo data for every connected block
+- [x] Design optional pruning mode while retaining archival-node mode as the default
