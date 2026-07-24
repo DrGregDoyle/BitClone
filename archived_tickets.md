@@ -271,6 +271,16 @@ so that I can verify proof-of-work on the full chain before downloading block da
 - [x] Loop until the peer returns fewer than 2,000 headers
 - [x] Add header-sync tests using synthetic chains
 
+#### Story 4.2 — Bitcoin Core Remote Block Store
+As a storage-constrained development node, I want to read blockchain data from an existing Bitcoin Core node
+so that BitClone can inspect blocks without conducting IBD or duplicating the block archive.
+
+- [x] Add authenticated Bitcoin Core JSON-RPC configuration without persisting passwords
+- [x] Fetch chain status, raw headers, and raw blocks by hash or height
+- [x] Keep remote block bodies out of local block files
+- [x] Preserve archival and pruned modes for future independent-node operation
+- [x] Add mocked RPC and remote-store tests plus a bounded optional live check
+
 #### Earlier Groundwork
 
 - [x] Parse `headers` response (up to 2000 headers per message)

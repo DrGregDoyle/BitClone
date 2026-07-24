@@ -5,12 +5,14 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.database.bitcoin_core_rpc import BitcoinCoreRPC
 from src.database.block_files import BlockFileManager
 
 __all__ = [
     "ArchivalBlockStore",
     "BlockLocation",
     "BlockStore",
+    "BitcoinCoreRemoteBlockStore",
     "PrunedBlockStore",
 ]
 
@@ -30,11 +32,11 @@ class BlockStore(ABC):
         self.blocks_dir.mkdir(parents=True, exist_ok=True)
 
     @abstractmethod
-    def write_block(self, block_bytes: bytes) -> BlockLocation:
+    def write_block(self, block_hash: bytes, block_bytes: bytes) -> BlockLocation:
         raise NotImplementedError
 
     @abstractmethod
-    def read_block(self, location: BlockLocation) -> bytes:
+    def read_block(self, block_hash: bytes, location: BlockLocation | None) -> bytes | None:
         raise NotImplementedError
 
     @abstractmethod
@@ -45,6 +47,15 @@ class BlockStore(ABC):
     def clear(self) -> int:
         raise NotImplementedError
 
+    def get_block_hash(self, height: int) -> bytes | None:
+        return None
+
+    def get_blockchain_info(self) -> dict | None:
+        return None
+
+    def read_header(self, block_hash: bytes) -> bytes | None:
+        return None
+
 
 class ArchivalBlockStore(BlockStore):
     """Append block bodies to packed 128 MB files and retain them indefinitely."""
@@ -53,10 +64,12 @@ class ArchivalBlockStore(BlockStore):
         super().__init__(blocks_dir)
         self.manager = BlockFileManager(self.blocks_dir)
 
-    def write_block(self, block_bytes: bytes) -> BlockLocation:
+    def write_block(self, block_hash: bytes, block_bytes: bytes) -> BlockLocation:
         return BlockLocation(*self.manager.write_block(block_bytes))
 
-    def read_block(self, location: BlockLocation) -> bytes:
+    def read_block(self, block_hash: bytes, location: BlockLocation | None) -> bytes | None:
+        if location is None:
+            return None
         return self.manager.read_block(
             location.file_number,
             location.file_offset,
@@ -80,13 +93,15 @@ class PrunedBlockStore(BlockStore):
         existing = self._block_files()
         self.current_file_number = max((self._file_number(path) for path in existing), default=-1)
 
-    def write_block(self, block_bytes: bytes) -> BlockLocation:
+    def write_block(self, block_hash: bytes, block_bytes: bytes) -> BlockLocation:
         self.current_file_number += 1
         path = self._file_path(self.current_file_number)
         path.write_bytes(block_bytes)
         return BlockLocation(self.current_file_number, 0, len(block_bytes))
 
-    def read_block(self, location: BlockLocation) -> bytes:
+    def read_block(self, block_hash: bytes, location: BlockLocation | None) -> bytes | None:
+        if location is None:
+            return None
         path = self._file_path(location.file_number)
         if not path.exists():
             raise FileNotFoundError(f"Block file {path} not found")
@@ -123,3 +138,36 @@ class PrunedBlockStore(BlockStore):
             return int(path.stem[3:])
         except ValueError:
             return -1
+
+
+class BitcoinCoreRemoteBlockStore(BlockStore):
+    """Read block bodies from Bitcoin Core RPC without persisting them locally."""
+
+    REMOTE_FILE_NUMBER = -1
+
+    def __init__(self, blocks_dir: Path, rpc: BitcoinCoreRPC) -> None:
+        super().__init__(blocks_dir)
+        self.rpc = rpc
+
+    def write_block(self, block_hash: bytes, block_bytes: bytes) -> BlockLocation:
+        # The source Core node already owns this body. Keep only local index
+        # metadata and a sentinel location.
+        return BlockLocation(self.REMOTE_FILE_NUMBER, 0, len(block_bytes))
+
+    def read_block(self, block_hash: bytes, location: BlockLocation | None) -> bytes | None:
+        return self.rpc.get_block(block_hash)
+
+    def get_block_hash(self, height: int) -> bytes | None:
+        return self.rpc.get_block_hash(height)
+
+    def get_blockchain_info(self) -> dict | None:
+        return self.rpc.get_blockchain_info()
+
+    def read_header(self, block_hash: bytes) -> bytes | None:
+        return self.rpc.get_block_header(block_hash)
+
+    def delete_block(self, location: BlockLocation) -> bool:
+        return False
+
+    def clear(self) -> int:
+        return 0

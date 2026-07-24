@@ -15,6 +15,7 @@ from src.blockchain.blockchain import Blockchain
 from src.config import BitCloneConfig, NetworkName
 from src.core import BLOCK, NETWORK, TX, NetworkError, get_logger
 from src.mempool.mempool import MemPool
+from src.database.bitcoin_core_rpc import BitcoinCoreRPC
 from src.mining.miner import Miner
 from src.network.datatypes.network_data import InvVector, NetAddr
 from src.network.datatypes.network_types import InvType, PeerState, Services
@@ -65,6 +66,7 @@ class Node:
             target_outbound: int = 8,
             inventory_requests: InflightInventory | None = None,
             header_sync: HeaderSync | None = None,
+            core_rpc: BitcoinCoreRPC | None = None,
     ):
         self.config = config or BitCloneConfig.from_options(
             data_dir=data_dir,
@@ -72,12 +74,22 @@ class Node:
             db_path=db_path,
         )
         self.db_path = self.config.db_path
+        if core_rpc is None and self.config.block_storage.value == "bitcoin-core-remote":
+            core_rpc = BitcoinCoreRPC(
+                url=self.config.core_rpc_url,
+                username=self.config.core_rpc_user,
+                password=self.config.core_rpc_password,
+                cookie_file=self.config.core_rpc_cookie,
+                timeout=self.config.core_rpc_timeout,
+            )
+        self.core_rpc = core_rpc
 
         self.blockchain = blockchain or Blockchain(
             db_path=self.db_path,
             blocks_dir=self.config.blocks_dir,
             storage_mode=self.config.block_storage.value,
             prune_keep_blocks=self.config.prune_keep_blocks,
+            core_rpc=self.core_rpc,
         )
         chain_db_path = getattr(self.blockchain.db, "db_path", self.db_path)
         chain_storage_mode = getattr(
@@ -90,11 +102,14 @@ class Node:
             "prune_keep_blocks",
             self.config.prune_keep_blocks,
         )
+        if self.core_rpc is None:
+            self.core_rpc = getattr(getattr(self.blockchain.db, "block_store", None), "rpc", None)
         self.mempool = mempool or MemPool(
             db_path=chain_db_path,
             blocks_dir=self.config.blocks_dir,
             storage_mode=chain_storage_mode,
             prune_keep_blocks=chain_prune_keep_blocks,
+            core_rpc=self.core_rpc,
         )
         self.wallet = wallet
         self.miner = miner or Miner()
@@ -605,6 +620,10 @@ class Node:
             "target": self.blockchain.target.hex(),
             "mining": self.miner.is_mining() if self.miner else False,
         }
+
+    def remote_blockchain_info(self) -> dict | None:
+        """Query the configured Bitcoin Core source without starting IBD."""
+        return self.blockchain.get_remote_blockchain_info()
 
     def print_info(self) -> None:
         """

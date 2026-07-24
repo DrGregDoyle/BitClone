@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Sequence
@@ -62,6 +63,24 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Recent block bodies and undo records retained in pruned mode.",
     )
     parser.add_argument(
+        "--core-rpc-url",
+        default=None,
+        help="Bitcoin Core JSON-RPC URL used by bitcoin-core-remote storage.",
+    )
+    parser.add_argument("--core-rpc-user", default=None, help="Bitcoin Core RPC username.")
+    parser.add_argument(
+        "--core-rpc-cookie",
+        type=Path,
+        default=None,
+        help="Local path to a Bitcoin Core RPC cookie file.",
+    )
+    parser.add_argument(
+        "--core-rpc-timeout",
+        type=float,
+        default=10.0,
+        help="Bitcoin Core RPC timeout in seconds.",
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
         help="Print command output as JSON.",
@@ -73,6 +92,10 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("status", help="Show node status.")
     subparsers.add_parser("build-template", help="Build and print a candidate block template.")
     subparsers.add_parser("getchaintip", help="Show the active chain tip.")
+    subparsers.add_parser(
+        "getremotechaininfo",
+        help="Query the configured Bitcoin Core remote block source.",
+    )
 
     getblockheader = subparsers.add_parser("getblockheader", help="Read a block header by display hash.")
     getblockheader.add_argument("block_hash", help="Block hash in display byte order.")
@@ -145,16 +168,17 @@ def _format_block_index(entry) -> dict[str, Any] | None:
 
 
 def _format_block_header(node: Node, block_hash: bytes, display_hash: str) -> dict[str, Any]:
-    block = node.blockchain.get_block(block_hash)
     index_entry = node.blockchain.get_block_index(block_hash)
+    block = node.blockchain.get_block(block_hash) if index_entry is not None else None
+    header = block.get_header() if block is not None else node.blockchain.get_remote_block_header(block_hash)
 
-    if block is None:
+    if header is None:
         return {"found": False, "block_hash": display_hash}
 
     return {
         "found": True,
         "height": index_entry.height if index_entry is not None else None,
-        "header": block.get_header().to_data(),
+        "header": header.to_data(),
         "index": _format_block_index(index_entry),
     }
 
@@ -175,6 +199,9 @@ def _handle_command(node: Node, args: argparse.Namespace) -> Any:
         case "getchaintip":
             tip = node.blockchain.db.get_active_tip()
             return {"found": tip is not None, "tip": _format_block_index(tip)}
+        case "getremotechaininfo":
+            info = node.remote_blockchain_info()
+            return {"configured": info is not None, "blockchain": info}
         case "getblockheader":
             block_hash = _decode_display_hash(args.block_hash, "block_hash")
             return _format_block_header(node, block_hash, args.block_hash)
@@ -216,6 +243,11 @@ def _config_from_args(args: argparse.Namespace) -> BitCloneConfig:
         upstream_port=args.upstream_port,
         block_storage=args.block_storage,
         prune_keep_blocks=args.prune_keep_blocks,
+        core_rpc_url=args.core_rpc_url,
+        core_rpc_user=args.core_rpc_user,
+        core_rpc_password=os.environ.get("BITCLONE_CORE_RPC_PASSWORD"),
+        core_rpc_cookie=args.core_rpc_cookie,
+        core_rpc_timeout=args.core_rpc_timeout,
     )
 
 

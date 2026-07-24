@@ -10,6 +10,36 @@ The primary external Bitcoin block source and storage host is currently the down
 Bitcoin Core daemon (accessed with `bitcoin-cli`). Its current LAN address is `192.168.0.108`, but that address may
 change; integrations should discover or configure the current address rather than hard-code it.
 
+### Remote Core prerequisite
+
+BitClone development and testing that retrieves real block or transaction data requires an active SSH tunnel from
+Lenny to the downstairs Linux computer (`Skyscraper`). Mocked unit tests do not require the tunnel. Start it in a
+dedicated terminal and leave that terminal open:
+
+```bash
+ssh -N \
+  -o ExitOnForwardFailure=yes \
+  -o ServerAliveInterval=30 \
+  -L 127.0.0.1:18332:127.0.0.1:8332 \
+  greg@192.168.0.108
+```
+
+Bitcoin Core RPC authentication currently uses Skyscraper's cookie at `/mnt/bitcoin/Bitcoin/.cookie`. Copy it to
+Lenny as `~/.bitclone/skyscraper.cookie` with mode `600`. The cookie rotates whenever Bitcoin Core restarts and must
+then be copied again.
+
+BitClone's `bitcoin-core-remote` storage mode reads blocks on demand through Bitcoin Core JSON-RPC and does not retain
+block bodies locally. Prefer the SSH tunnel to Core's loopback RPC listener instead of exposing port 8332 broadly:
+
+```bash
+python -m src \
+  --data-dir ~/.bitclone-remote \
+  --block-storage bitcoin-core-remote \
+  --core-rpc-url http://127.0.0.1:18332 \
+  --core-rpc-cookie ~/.bitclone/skyscraper.cookie \
+  getremotechaininfo
+```
+
 ---
 
 ## Bitcoin Notes

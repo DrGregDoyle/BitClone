@@ -8,7 +8,14 @@ from pathlib import Path
 from src.block.block import Block, BlockHeader
 from src.core import get_logger
 from src.data import bits_to_target
-from src.database.block_store import ArchivalBlockStore, BlockLocation, BlockStore, PrunedBlockStore
+from src.database.bitcoin_core_rpc import BitcoinCoreRPC
+from src.database.block_store import (
+    ArchivalBlockStore,
+    BitcoinCoreRemoteBlockStore,
+    BlockLocation,
+    BlockStore,
+    PrunedBlockStore,
+)
 from src.tx.tx import Tx, UTXO
 
 DB_PATH = Path(__file__).parent / "db_files" / "bitclone.db"
@@ -20,6 +27,7 @@ MAX_TARGET_PLUS_ONE = 1 << 256
 CHAINWORK_BYTES = 32
 ARCHIVAL_STORAGE = "archival"
 PRUNED_STORAGE = "pruned"
+REMOTE_STORAGE = "bitcoin-core-remote"
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +83,7 @@ class BitCloneDatabase:
             blocks_dir: Path | None = None,
             storage_mode: str = ARCHIVAL_STORAGE,
             prune_keep_blocks: int = 288,
+            core_rpc: BitcoinCoreRPC | None = None,
     ):
         # --- Establish db path
         self.db_path = Path(db_path)
@@ -83,7 +92,7 @@ class BitCloneDatabase:
         # --- testing bool
         self.testing = testing
 
-        if storage_mode not in {ARCHIVAL_STORAGE, PRUNED_STORAGE}:
+        if storage_mode not in {ARCHIVAL_STORAGE, PRUNED_STORAGE, REMOTE_STORAGE}:
             raise ValueError(f"Unsupported block storage mode: {storage_mode}")
         if prune_keep_blocks < 1:
             raise ValueError("prune_keep_blocks must be at least 1")
@@ -92,11 +101,14 @@ class BitCloneDatabase:
 
         # --- Block body store
         blocks_dir = blocks_dir or self.db_path.parent / "blocks"
-        self.block_store: BlockStore = (
-            ArchivalBlockStore(blocks_dir)
-            if storage_mode == ARCHIVAL_STORAGE
-            else PrunedBlockStore(blocks_dir)
-        )
+        if storage_mode == ARCHIVAL_STORAGE:
+            self.block_store = ArchivalBlockStore(blocks_dir)
+        elif storage_mode == PRUNED_STORAGE:
+            self.block_store = PrunedBlockStore(blocks_dir)
+        else:
+            if core_rpc is None:
+                raise ValueError("bitcoin-core-remote storage requires a Bitcoin Core RPC client")
+            self.block_store = BitcoinCoreRemoteBlockStore(blocks_dir, core_rpc)
         # Compatibility for existing callers that inspect archival rollover.
         self.block_files = getattr(self.block_store, "manager", self.block_store)
 
@@ -314,7 +326,7 @@ class BitCloneDatabase:
     def add_block(self, block: Block, block_height: int, undo: BlockUndo | None = None) -> None:
         """Add a block to storage."""
         block_bytes = block.to_bytes()
-        location = self.block_store.write_block(block_bytes)
+        location = self.block_store.write_block(block.block_id, block_bytes)
 
         header = block.get_header()
         conn = self._require_conn()
@@ -559,11 +571,10 @@ class BitCloneDatabase:
             (block_hash,),
         ).fetchone()
 
-        if row is None:
+        location = BlockLocation(*row) if row is not None else None
+        block_bytes = self.block_store.read_block(block_hash, location)
+        if block_bytes is None:
             return None
-
-        file_num, offset, size = row
-        block_bytes = self.block_store.read_block(BlockLocation(file_num, offset, size))
         return Block.from_bytes(block_bytes)
 
     def get_block_at_height(self, height: int) -> Block | None:
@@ -571,7 +582,7 @@ class BitCloneDatabase:
         conn = self._require_conn()
         row = conn.execute(
             """
-            SELECT file_number, file_offset, block_size
+            SELECT block_hash, file_number, file_offset, block_size
             FROM blocks
             WHERE height = ?
             """,
@@ -579,11 +590,26 @@ class BitCloneDatabase:
         ).fetchone()
 
         if row is None:
+            block_hash = self.block_store.get_block_hash(height)
+            if block_hash is None:
+                return None
+            location = None
+        else:
+            block_hash, file_num, offset, size = row
+            location = BlockLocation(file_num, offset, size)
+        block_bytes = self.block_store.read_block(block_hash, location)
+        if block_bytes is None:
             return None
-
-        file_num, offset, size = row
-        block_bytes = self.block_store.read_block(BlockLocation(file_num, offset, size))
         return Block.from_bytes(block_bytes)
+
+    def get_remote_blockchain_info(self) -> dict | None:
+        """Return source-node chain status when using a remote block store."""
+        return self.block_store.get_blockchain_info()
+
+    def get_remote_block_header(self, block_hash: bytes) -> BlockHeader | None:
+        """Fetch a raw header from the remote source without a block body."""
+        header_bytes = self.block_store.read_header(block_hash)
+        return BlockHeader.from_bytes(header_bytes) if header_bytes is not None else None
 
     def get_chain_height(self) -> int:
         """Return the current blockchain height."""

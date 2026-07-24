@@ -3,7 +3,7 @@ Configuration and data-directory paths for BitClone.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -19,6 +19,7 @@ MIN_PRUNE_KEEP_BLOCKS = 288
 class BlockStorageMode(str, Enum):
     ARCHIVAL = "archival"
     PRUNED = "pruned"
+    BITCOIN_CORE_REMOTE = "bitcoin-core-remote"
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +31,11 @@ class BitCloneConfig:
     upstream_port: int | None = None
     block_storage: BlockStorageMode = BlockStorageMode.ARCHIVAL
     prune_keep_blocks: int = MIN_PRUNE_KEEP_BLOCKS
+    core_rpc_url: str | None = None
+    core_rpc_user: str | None = None
+    core_rpc_password: str | None = field(default=None, repr=False, compare=False)
+    core_rpc_cookie: Path | None = None
+    core_rpc_timeout: float = 10.0
 
     @classmethod
     def from_options(
@@ -41,6 +47,11 @@ class BitCloneConfig:
             upstream_port: int | None = None,
             block_storage: str | BlockStorageMode = BlockStorageMode.ARCHIVAL,
             prune_keep_blocks: int = MIN_PRUNE_KEEP_BLOCKS,
+            core_rpc_url: str | None = None,
+            core_rpc_user: str | None = None,
+            core_rpc_password: str | None = None,
+            core_rpc_cookie: str | Path | None = None,
+            core_rpc_timeout: float = 10.0,
     ) -> "BitCloneConfig":
         if upstream_port is not None and not 1 <= upstream_port <= 65535:
             raise ValueError("upstream_port must be between 1 and 65535")
@@ -55,6 +66,10 @@ class BitCloneConfig:
             raise ValueError(
                 f"pruned storage must retain at least {MIN_PRUNE_KEEP_BLOCKS} recent blocks"
             )
+        if storage_mode is BlockStorageMode.BITCOIN_CORE_REMOTE and not core_rpc_url:
+            raise ValueError("bitcoin-core-remote storage requires core_rpc_url")
+        if core_rpc_timeout <= 0:
+            raise ValueError("core_rpc_timeout must be positive")
         network_name = network if isinstance(network, NetworkName) else NetworkName(network)
         db_path_override = Path(db_path).expanduser() if db_path is not None else None
         if data_dir is not None:
@@ -71,6 +86,11 @@ class BitCloneConfig:
             upstream_port=upstream_port,
             block_storage=storage_mode,
             prune_keep_blocks=prune_keep_blocks,
+            core_rpc_url=core_rpc_url,
+            core_rpc_user=core_rpc_user,
+            core_rpc_password=core_rpc_password,
+            core_rpc_cookie=Path(core_rpc_cookie).expanduser() if core_rpc_cookie is not None else None,
+            core_rpc_timeout=core_rpc_timeout,
         )
 
     @property
@@ -152,6 +172,10 @@ class BitCloneConfig:
             "upstream_port": self.configured_upstream_port if self.upstream_host is not None else None,
             "block_storage": self.block_storage.value,
             "prune_keep_blocks": self.prune_keep_blocks,
+            "core_rpc_url": self.core_rpc_url,
+            "core_rpc_user": self.core_rpc_user,
+            "core_rpc_cookie": str(self.core_rpc_cookie) if self.core_rpc_cookie is not None else None,
+            "core_rpc_timeout": self.core_rpc_timeout,
             "network_dir": str(self.network_dir),
             "chainstate_dir": str(self.chainstate_dir),
             "blocks_dir": str(self.blocks_dir),
@@ -169,6 +193,14 @@ class BitCloneConfig:
             f'block_storage = "{self.block_storage.value}"\n'
             f"prune_keep_blocks = {self.prune_keep_blocks}\n"
         )
+        if self.core_rpc_url is not None:
+            text += f'core_rpc_url = "{self.core_rpc_url}"\n'
+        if self.core_rpc_user is not None:
+            text += f'core_rpc_user = "{self.core_rpc_user}"\n'
+        if self.core_rpc_cookie is not None:
+            text += f'core_rpc_cookie = "{self.core_rpc_cookie}"\n'
+        if self.block_storage is BlockStorageMode.BITCOIN_CORE_REMOTE:
+            text += "# Set BITCLONE_CORE_RPC_PASSWORD in the environment; passwords are not written here.\n"
         if self.upstream_host is not None:
             text += f'upstream_host = "{self.upstream_host}"\n'
             text += f"upstream_port = {self.configured_upstream_port}\n"

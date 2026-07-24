@@ -6,6 +6,7 @@ from pathlib import Path
 
 from src.core import TX, ReadError, get_logger, TransactionError
 from src.database.database import BitCloneDatabase
+from src.database.bitcoin_core_rpc import BitcoinCoreRPC
 from src.tx import LoadedTx, Tx
 from src.tx.validation import TxValidationContext, validate_loaded_tx
 
@@ -53,6 +54,7 @@ class MemPool:
             blocks_dir: Path | None = None,
             storage_mode: str = "archival",
             prune_keep_blocks: int = 288,
+            core_rpc: BitcoinCoreRPC | None = None,
     ) -> None:
         # --- MemPool constants
         self.max_size = MemPool.MAX_SIZE
@@ -66,6 +68,7 @@ class MemPool:
             blocks_dir=blocks_dir,
             storage_mode=storage_mode,
             prune_keep_blocks=prune_keep_blocks,
+            core_rpc=core_rpc,
         )
 
         # --- MemPool storage

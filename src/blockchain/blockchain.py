@@ -11,6 +11,7 @@ from src.core import BLOCK, TX, NetworkDataError, get_logger, TransactionError
 from src.cryptography import hash256
 from src.data import bits_to_target, target_to_bits, MerkleTree
 from src.database.database import BitCloneDatabase, BlockUndo, DB_PATH
+from src.database.bitcoin_core_rpc import BitcoinCoreRPC
 from src.tx import TxIn
 from src.tx.tx import LoadedTx, UTXO, Tx
 from src.tx.validation import TxValidationContext, validate_loaded_tx, validate_tx_scripts
@@ -68,6 +69,7 @@ class Blockchain:
             blocks_dir: Path | None = None,
             storage_mode: str = "archival",
             prune_keep_blocks: int = 288,
+            core_rpc: BitcoinCoreRPC | None = None,
     ):
         # --- Main db
         self.db = BitCloneDatabase(
@@ -75,6 +77,7 @@ class Blockchain:
             blocks_dir=blocks_dir,
             storage_mode=storage_mode,
             prune_keep_blocks=prune_keep_blocks,
+            core_rpc=core_rpc,
         )
         self.utxo_stats = {}  # Dictionary for tracking status of UTXO set
 
@@ -188,6 +191,14 @@ class Blockchain:
     def get_best_header(self):
         """Return the indexed header with the most cumulative work."""
         return self.db.get_best_header()
+
+    def get_remote_blockchain_info(self) -> dict | None:
+        """Return source Bitcoin Core status when remote storage is configured."""
+        return self.db.get_remote_blockchain_info()
+
+    def get_remote_block_header(self, block_hash: bytes) -> BlockHeader | None:
+        """Fetch one header directly from the remote Bitcoin Core source."""
+        return self.db.get_remote_block_header(block_hash)
 
     def get_block_locator(self, start_hash: bytes | None = None) -> list[bytes]:
         """Return a Bitcoin-style locator from the best known header backwards."""

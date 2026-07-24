@@ -11,28 +11,21 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 
 ---
 
-### Sprint 4 — Initial Block Download (IBD)
+### Sprint 4 — Blockchain Data Access (No Local IBD)
 
 **Story 0 — Cleanup and Maintenance**
 Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 4.
 Each item should be handled as a separate ticket with sufficient tests.
 
-**Story 4.2 — Parallel Block Download**
-As a node, I want to download full blocks from multiple peers in parallel during IBD
-so that I saturate available bandwidth and sync as fast as possible.
+**Story 4.3 — Remote Source Health & Trust Reporting**
+As a node operator, I want BitClone to report the state and trust boundary of its Bitcoin Core source
+so that remote-backed development is explicit and failures are easy to diagnose.
 
-- [ ] Assign block ranges to peers
-- [ ] Re-request blocks from alternate peers on timeout
-- [ ] Apply blocks in order once downloaded out of order
-- [ ] Add block-download tests with out-of-order delivery
-
-**Story 4.3 — IBD State & Progress Reporting**
-As a node operator, I want to see IBD progress (height, percentage complete, estimated time remaining, blocks/sec)
-in the logs so that I know the sync is healthy.
-
-- [ ] Track sync start time and current height
-- [ ] Log progress every N blocks or every M seconds
-- [ ] Set an `is_in_ibd` flag and suppress mempool relay until caught up
+- [ ] Show remote reachability, chain, tip height/hash, verification progress, and pruning state in node status
+- [ ] Reject a remote source whose Bitcoin network does not match BitClone's selected network
+- [ ] Clearly distinguish trusted remote data from independently validated local chainstate
+- [ ] Delegate remote-mode UTXO queries to Bitcoin Core instead of presenting the incomplete local UTXO set
+- [ ] Load remote-storage settings from `bitclone.toml` so flags do not need to be repeated
 
 ---
 
