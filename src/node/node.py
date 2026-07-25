@@ -12,10 +12,10 @@ from typing import Any
 
 from src.block.block import Block
 from src.blockchain.blockchain import Blockchain
-from src.config import BitCloneConfig, NetworkName
+from src.config import BitCloneConfig, BlockStorageMode, NetworkName
 from src.core import BLOCK, NETWORK, TX, NetworkError, get_logger
 from src.mempool.mempool import MemPool
-from src.database.bitcoin_core_rpc import BitcoinCoreRPC
+from src.database.bitcoin_core_rpc import BitcoinCoreRPC, BitcoinCoreRPCError
 from src.mining.miner import Miner
 from src.network.datatypes.network_data import InvVector, NetAddr
 from src.network.datatypes.network_types import InvType, PeerState, Services
@@ -38,6 +38,13 @@ from src.tx.tx import Tx, TxIn, TxOut
 from src.wallet.wallet import Wallet
 
 logger = get_logger(__name__)
+
+CORE_CHAIN_NETWORKS = {
+    "main": NetworkName.MAINNET,
+    "test": NetworkName.TESTNET,
+    "regtest": NetworkName.REGTEST,
+    "signet": NetworkName.SIGNET,
+}
 
 
 class Node:
@@ -83,6 +90,7 @@ class Node:
                 timeout=self.config.core_rpc_timeout,
             )
         self.core_rpc = core_rpc
+        self._validate_remote_source_network()
 
         self.blockchain = blockchain or Blockchain(
             db_path=self.db_path,
@@ -130,6 +138,28 @@ class Node:
             lambda peer, message: self.transport.send(peer, message),
         )
         self.started = False
+
+    def _validate_remote_source_network(self) -> None:
+        """Reject a reachable remote source on a different Bitcoin network."""
+        if (
+                self.config.block_storage is not BlockStorageMode.BITCOIN_CORE_REMOTE
+                or self.core_rpc is None
+        ):
+            return
+        try:
+            info = self.core_rpc.get_blockchain_info()
+        except BitcoinCoreRPCError:
+            return
+
+        core_chain = info.get("chain")
+        core_network = CORE_CHAIN_NETWORKS.get(core_chain)
+        if core_network is None:
+            raise ValueError(f"Unsupported Bitcoin Core network: {core_chain!r}")
+        if core_network is not self.config.network:
+            raise ValueError(
+                "Bitcoin Core network mismatch: "
+                f"BitClone={self.config.network.value}, Core={core_network.value}"
+            )
 
     # --- Lifecycle ----------------------------------------------------- #
 
@@ -619,6 +649,40 @@ class Node:
             "bits": self.blockchain.bits.hex(),
             "target": self.blockchain.target.hex(),
             "mining": self.miner.is_mining() if self.miner else False,
+            "remote_source": self._remote_source_status(),
+        }
+
+    def _remote_source_status(self) -> dict[str, Any] | None:
+        """Return normalized health and trust details for remote-backed storage."""
+        if self.config.block_storage is not BlockStorageMode.BITCOIN_CORE_REMOTE:
+            return None
+
+        unavailable = {
+            "reachable": False,
+            "chain": None,
+            "tip_height": None,
+            "tip_hash": None,
+            "verification_progress": None,
+            "pruned": None,
+            "trust": "trusted-remote",
+            "error": None,
+        }
+        try:
+            info = self.remote_blockchain_info()
+        except BitcoinCoreRPCError as error:
+            return {**unavailable, "error": str(error)}
+
+        if info is None:
+            return unavailable
+        return {
+            "reachable": True,
+            "chain": info.get("chain"),
+            "tip_height": info.get("blocks"),
+            "tip_hash": info.get("bestblockhash"),
+            "verification_progress": info.get("verificationprogress"),
+            "pruned": info.get("pruned"),
+            "trust": "trusted-remote",
+            "error": None,
         }
 
     def remote_blockchain_info(self) -> dict | None:

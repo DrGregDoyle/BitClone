@@ -21,8 +21,8 @@ Each item should be handled as a separate ticket with sufficient tests.
 As a node operator, I want BitClone to report the state and trust boundary of its Bitcoin Core source
 so that remote-backed development is explicit and failures are easy to diagnose.
 
-- [ ] Show remote reachability, chain, tip height/hash, verification progress, and pruning state in node status
-- [ ] Reject a remote source whose Bitcoin network does not match BitClone's selected network
+- [x] Show remote reachability, chain, tip height/hash, verification progress, and pruning state in node status
+- [x] Reject a remote source whose Bitcoin network does not match BitClone's selected network
 - [ ] Clearly distinguish trusted remote data from independently validated local chainstate
 - [ ] Delegate remote-mode UTXO queries to Bitcoin Core instead of presenting the incomplete local UTXO set
 - [ ] Load remote-storage settings from `bitclone.toml` so flags do not need to be repeated

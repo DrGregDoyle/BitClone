@@ -7,6 +7,7 @@ from src.block.block import Block
 from src.blockchain.genesis_block import genesis_block
 from src.cli import _handle_command
 from src.config import BitCloneConfig, BlockStorageMode
+from src.database.bitcoin_core_rpc import BitcoinCoreRPCError
 from src.database.block_store import BitcoinCoreRemoteBlockStore
 from src.database.database import BitCloneDatabase
 from src.node.node import Node
@@ -38,6 +39,8 @@ class FakeCoreRPC:
             "chain": "main",
             "blocks": len(blocks) - 1,
             "headers": len(blocks) - 1,
+            "bestblockhash": blocks[-1].block_id[::-1].hex(),
+            "verificationprogress": 0.999,
             "initialblockdownload": False,
             "pruned": False,
         }
@@ -122,6 +125,106 @@ def test_node_remote_mode_queries_core_without_starting_ibd(tmp_path):
         assert node.blockchain.get_block_at_height(1).block_id == rpc.heights[1]
         assert node.blockchain.height == 0
         assert list(config.blocks_dir.glob("blk*.dat")) == []
+    finally:
+        node.close()
+
+
+@pytest.mark.parametrize(
+    ("network", "core_chain"),
+    [
+        ("mainnet", "main"),
+        ("testnet", "test"),
+        ("regtest", "regtest"),
+        ("signet", "signet"),
+    ],
+)
+def test_remote_mode_accepts_matching_bitcoin_core_network(tmp_path, network, core_chain):
+    rpc = FakeCoreRPC([genesis_block])
+    rpc.info["chain"] = core_chain
+    config = BitCloneConfig.from_options(
+        data_dir=tmp_path,
+        network=network,
+        block_storage="bitcoin-core-remote",
+        core_rpc_url="http://Skyscraper:8332",
+        core_rpc_user="bitclone",
+        core_rpc_password="secret",
+    )
+
+    node = Node(config=config, core_rpc=rpc)
+    try:
+        assert node.status()["remote_source"]["chain"] == core_chain
+    finally:
+        node.close()
+
+
+def test_remote_mode_rejects_bitcoin_core_network_mismatch(tmp_path):
+    rpc = FakeCoreRPC([genesis_block])
+    rpc.info["chain"] = "regtest"
+    config = BitCloneConfig.from_options(
+        data_dir=tmp_path,
+        network="mainnet",
+        block_storage="bitcoin-core-remote",
+        core_rpc_url="http://Skyscraper:8332",
+        core_rpc_user="bitclone",
+        core_rpc_password="secret",
+    )
+
+    with pytest.raises(
+            ValueError,
+            match="Bitcoin Core network mismatch: BitClone=mainnet, Core=regtest",
+    ):
+        Node(config=config, core_rpc=rpc)
+
+
+def test_node_status_reports_normalized_remote_source_health_and_trust(tmp_path):
+    rpc = FakeCoreRPC([genesis_block, _block()])
+    config = BitCloneConfig.from_options(
+        data_dir=tmp_path,
+        block_storage="bitcoin-core-remote",
+        core_rpc_url="http://Skyscraper:8332",
+        core_rpc_user="bitclone",
+        core_rpc_password="secret",
+    )
+    node = Node(config=config, core_rpc=rpc)
+    try:
+        assert node.status()["remote_source"] == {
+            "reachable": True,
+            "chain": "main",
+            "tip_height": 1,
+            "tip_hash": rpc.info["bestblockhash"],
+            "verification_progress": 0.999,
+            "pruned": False,
+            "trust": "trusted-remote",
+            "error": None,
+        }
+    finally:
+        node.close()
+
+
+def test_node_status_reports_unreachable_remote_source_without_failing(tmp_path):
+    rpc = FakeCoreRPC([genesis_block])
+    rpc.get_blockchain_info.side_effect = BitcoinCoreRPCError(
+        "Bitcoin Core RPC unavailable: connection refused"
+    )
+    config = BitCloneConfig.from_options(
+        data_dir=tmp_path,
+        block_storage="bitcoin-core-remote",
+        core_rpc_url="http://Skyscraper:8332",
+        core_rpc_user="bitclone",
+        core_rpc_password="secret",
+    )
+    node = Node(config=config, core_rpc=rpc)
+    try:
+        assert node.status()["remote_source"] == {
+            "reachable": False,
+            "chain": None,
+            "tip_height": None,
+            "tip_hash": None,
+            "verification_progress": None,
+            "pruned": None,
+            "trust": "trusted-remote",
+            "error": "Bitcoin Core RPC unavailable: connection refused",
+        }
     finally:
         node.close()
 

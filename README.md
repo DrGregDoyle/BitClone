@@ -13,8 +13,34 @@ change; integrations should discover or configure the current address rather tha
 ### Remote Core prerequisite
 
 BitClone development and testing that retrieves real block or transaction data requires an active SSH tunnel from
-Lenny to the downstairs Linux computer (`Skyscraper`). Mocked unit tests do not require the tunnel. Start it in a
-dedicated terminal and leave that terminal open:
+Lenny to the downstairs Linux computer (`Skyscraper`). Mocked unit tests do not require the tunnel.
+
+From the repository root, run:
+
+```bash
+./.venv/bin/python startup.py
+```
+
+The startup helper creates or reuses a persistent SSH connection, starts Bitcoin Core on Skyscraper if necessary,
+waits for its RPC service, atomically refreshes `~/.bitclone/skyscraper.cookie`, opens the local RPC tunnel on port
+18332, and prints the result of `getblockchaininfo`. It may prompt for Greg's SSH password when no SSH key or existing
+control connection is available. The helper does not store that password.
+
+The SSH connection and tunnel remain available after the helper exits. Close them at the end of a development session
+with:
+
+```bash
+ssh -S ~/.bitclone/skyscraper-ssh.sock -O exit greg@Skyscraper
+```
+
+If hostname discovery is unavailable, select Skyscraper's current LAN address explicitly:
+
+```bash
+./.venv/bin/python startup.py --ssh-host 192.168.0.108
+```
+
+The current address may change and is therefore only a fallback, not embedded in the helper. To establish the tunnel
+and copy the cookie manually instead, start this command in a dedicated terminal and leave it open:
 
 ```bash
 ssh -N \
@@ -24,9 +50,9 @@ ssh -N \
   greg@192.168.0.108
 ```
 
-Bitcoin Core RPC authentication currently uses Skyscraper's cookie at `/mnt/bitcoin/Bitcoin/.cookie`. Copy it to
-Lenny as `~/.bitclone/skyscraper.cookie` with mode `600`. The cookie rotates whenever Bitcoin Core restarts and must
-then be copied again.
+Bitcoin Core RPC authentication currently uses Skyscraper's cookie at `/mnt/bitcoin/Bitcoin/.cookie`. In the manual
+workflow, copy it to Lenny as `~/.bitclone/skyscraper.cookie` with mode `600`. The cookie rotates whenever Bitcoin Core
+restarts and must then be copied again; `startup.py` handles this refresh on every run.
 
 BitClone's `bitcoin-core-remote` storage mode reads blocks on demand through Bitcoin Core JSON-RPC and does not retain
 block bodies locally. Prefer the SSH tunnel to Core's loopback RPC listener instead of exposing port 8332 broadly:

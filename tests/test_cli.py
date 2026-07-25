@@ -40,6 +40,22 @@ def test_status_outputs_plain_text(tmp_path, capsys):
     assert "mempool_size: 0" in output
 
 
+def test_node_initialization_error_is_reported_without_traceback(tmp_path, monkeypatch, capsys):
+    def reject_config(**_kwargs):
+        raise ValueError("Bitcoin Core network mismatch: BitClone=regtest, Core=mainnet")
+
+    monkeypatch.setattr("src.cli.Node", reject_config)
+
+    with pytest.raises(SystemExit) as error:
+        main(["--data-dir", str(tmp_path), "--network", "regtest", "status"])
+
+    assert error.value.code == 2
+    assert capsys.readouterr().err == (
+        "bitclone: error: Bitcoin Core network mismatch: "
+        "BitClone=regtest, Core=mainnet\n"
+    )
+
+
 def test_init_creates_data_directory_layout(tmp_path, capsys):
     exit_code = main(["--data-dir", str(tmp_path), "--network", "regtest", "--json", "init"])
 

@@ -260,15 +260,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_output(config.initialize(), args.json)
         return 0
 
-    node = Node(config=config)
+    node = None
     try:
+        node = Node(config=config)
         output = _handle_command(node, args)
         _print_output(output, args.json)
         return 0
     except (ValueError, argparse.ArgumentTypeError) as e:
         parser.exit(2, f"{parser.prog}: error: {e}\n")
     finally:
-        node.close()
+        if node is not None:
+            node.close()
 
 
 if __name__ == "__main__":
