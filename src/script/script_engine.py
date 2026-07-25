@@ -5,25 +5,28 @@ import json
 from dataclasses import replace, dataclass
 from io import BytesIO
 
-from src.core import ECC, serialize_data
+from src.core import ECC, ScriptVerifyFlag, serialize_data
 from src.core.byte_stream import get_stream, read_stream, read_little_int
 from src.core.exceptions import ScriptEngineError
 from src.core.logging import get_logger
 from src.core.opcodes import OPCODES
 from src.cryptography import sha256
-from src.data import validate_control_block
+from src.data import Leaf, validate_control_block
 from src.script import sig_ops as sig_engine
-from src.script.context import ExecutionContext
+from src.script.context import LegacyExecutionContext, ScriptExecutionContext
 from src.script.opcode_map import OPCODE_MAP
-from src.script.parser import to_asm
+from src.script.parser import parse_script_ops, to_asm
 from src.script.script_types import ScriptType
-from src.script.scriptpubkeys import ScriptPubKey, P2PKH_Key, P2SH_Key, P2WPKH_Key
+from src.script.scriptpubkeys import ScriptPubKey, P2PKH_Key, P2SH_Key, P2WPKH_Key, P2WSH_Key, classify_scriptpubkey
+from src.script.context import SignatureVersion
+from src.script.stack_ops import encode_pushdata
 from src.script.scriptsigs import ScriptSig
 from src.script.stack import BitStack, BitNum
 from src.tx.tx import Witness
 
 __all__ = ["ScriptEngine"]
 logger = get_logger(__name__)
+ScriptContext = ScriptExecutionContext | LegacyExecutionContext
 
 _OP = OPCODES()
 op_verify = OPCODE_MAP[0x69]
@@ -57,12 +60,14 @@ class ScriptEngine:
         self.stack = BitStack()
         self.alt_stack = BitStack()
         self.ops_log = []
+        self.tapscript_validation_weight_left: int | None = None
         # self.sig_engine = SignatureEngine()
 
     def clear_stacks(self):
         self.stack.clear()
         self.alt_stack.clear()
         self.ops_log = []
+        self.tapscript_validation_weight_left = None
 
     @staticmethod
     def _read_instructions(stream: BytesIO) -> Instruction | None:
@@ -103,7 +108,7 @@ class ScriptEngine:
         # Non-push opcodes: single byte
         return Instruction(opcode=opcode, raw=opcode_byte, is_push=False, push_data=None)
 
-    def _handle_conditionals(self, opcode: int, stream: BytesIO, ctx: ExecutionContext):
+    def _handle_conditionals(self, opcode: int, stream: BytesIO, ctx: ScriptContext):
         """
         Handle OP_IF (0x63) and OP_NOTIF (0x64) with proper branching logic.
         Reads stream until OP_ELSE or OP_ENDIF, validates structure, and executes appropriate branch.
@@ -191,7 +196,7 @@ class ScriptEngine:
 
         return if_branch.getvalue(), else_branch.getvalue()
 
-    def _handle_signatures(self, opcode: int, ctx: ExecutionContext):
+    def _handle_signatures(self, opcode: int, ctx: ScriptContext):
         """
         0xab -- 0xba
         """
@@ -209,6 +214,8 @@ class ScriptEngine:
             # OP_CHECKMULTISIG
             case 0xae:
                 self._handle_multisig(ctx)
+            case 0xba:
+                self._handle_checksigadd(ctx)
             case _:
                 raise ScriptEngineError(f"Unhandled signature opcode: {opcode}")
 
@@ -224,7 +231,7 @@ class ScriptEngine:
         # Interpret as ScriptNum; zero is false, non-zero is true.
         return BitNum.from_bytes(v).value != 0
 
-    def _compute_sighash(self, ctx: ExecutionContext, script_code: bytes, sighash_num: int) -> bytes:
+    def _compute_sighash(self, ctx: ScriptContext, script_code: bytes, sighash_num: int) -> bytes:
         """
         Compute the appropriate sighash for the current context (legacy / segwit / tapscript).
         """
@@ -264,7 +271,7 @@ class ScriptEngine:
             sighash_num=sighash_num,
         )
 
-    def _verify_sig(self, ctx: ExecutionContext, pubkey: bytes, der_sig: bytes, message_hash: bytes) -> bool:
+    def _verify_sig(self, ctx: ScriptContext, pubkey: bytes, der_sig: bytes, message_hash: bytes) -> bool:
         """
         Verify a single signature given the current script context.
         """
@@ -281,9 +288,10 @@ class ScriptEngine:
             signature=der_sig,
             message=message_hash,
             public_key=pubkey,
+            strict_der=bool(ctx.script_flags & ScriptVerifyFlag.DERSIG),
         )
 
-    def _handle_checksig(self, ctx: ExecutionContext):
+    def _handle_checksig(self, ctx: ScriptContext):
         # Get context elements
         tx = ctx.tx
         utxos = ctx.utxos
@@ -298,10 +306,26 @@ class ScriptEngine:
 
         # Signature should be DER-encoded with sighash num
         if len(sig) < 1:
+            if ctx.tapscript:
+                self.stack.pushbool(False)
+                return
             raise ScriptEngineError("Signature stack item too short for OP_CHECKSIG")
 
-        der_sig = sig[:-1]
-        sighash_num = sig[-1]
+        if ctx.tapscript:
+            if len(sig) == 64:
+                der_sig = sig
+                sighash_num = 0
+            elif len(sig) == 65 and sig[-1] != 0:
+                der_sig = sig[:-1]
+                sighash_num = sig[-1]
+            else:
+                self.stack.pushbool(False)
+                return
+            if not self._consume_tapscript_sigop(sig):
+                raise ScriptEngineError("Tapscript signature validation weight exceeded")
+        else:
+            der_sig = sig[:-1]
+            sighash_num = sig[-1]
 
         # Use script_code from context if available (for P2SH), otherwise use scriptpubkey
         script_code = ctx.script_code if getattr(ctx, "script_code", None) else utxos[input_index].scriptpubkey
@@ -315,7 +339,43 @@ class ScriptEngine:
         # Push result
         self.stack.pushbool(signature_verified)
 
-    def _handle_multisig(self, ctx: ExecutionContext):
+    def _handle_checksigadd(self, ctx: ScriptContext) -> None:
+        """Execute BIP342 OP_CHECKSIGADD for tapscript."""
+        if not ctx.tapscript:
+            raise ScriptEngineError("OP_CHECKSIGADD is only valid in tapscript")
+
+        pubkey = self.stack.pop()
+        count = self.stack.popnum()
+        sig = self.stack.pop()
+
+        if not sig:
+            self.stack.push(BitNum(count).to_bytes())
+            return
+        if len(sig) == 64:
+            schnorr_sig = sig
+            sighash_num = 0
+        elif len(sig) == 65 and sig[-1] != 0:
+            schnorr_sig = sig[:-1]
+            sighash_num = sig[-1]
+        else:
+            raise ScriptEngineError("Invalid tapscript signature length")
+        if not self._consume_tapscript_sigop(sig):
+            raise ScriptEngineError("Tapscript signature validation weight exceeded")
+
+        script_code = ctx.script_code or ctx.utxo.scriptpubkey
+        message_hash = self._compute_sighash(ctx, script_code, sighash_num)
+        verified = self._verify_sig(ctx, pubkey, schnorr_sig, message_hash)
+        self.stack.push(BitNum(count + int(verified)).to_bytes())
+
+    def _consume_tapscript_sigop(self, signature: bytes) -> bool:
+        if not signature:
+            return True
+        if self.tapscript_validation_weight_left is None:
+            return False
+        self.tapscript_validation_weight_left -= 50
+        return self.tapscript_validation_weight_left >= 0
+
+    def _handle_multisig(self, ctx: ScriptContext):
         """
         OP_CHECKMULTISIG:
             1) pop n, then pop that number of public keys
@@ -351,7 +411,12 @@ class ScriptEngine:
             sighash_num = sig[-1]
             message_hash = self._compute_sighash(ctx, script_code, sighash_num)
 
-            if sig_engine.verify_ecdsa_sig(signature=der_sig, message=message_hash, public_key=pub):
+            if sig_engine.verify_ecdsa_sig(
+                    signature=der_sig,
+                    message=message_hash,
+                    public_key=pub,
+                    strict_der=bool(ctx.script_flags & ScriptVerifyFlag.DERSIG),
+            ):
                 matches += 1
                 sig_index += 1
 
@@ -360,7 +425,7 @@ class ScriptEngine:
         # Push bool
         self.stack.pushbool(matches == len(sigs))
 
-    def _checklocktime(self, ctx: ExecutionContext) -> bool:
+    def _checklocktime(self, ctx: ScriptContext) -> bool:
         """
         OP_CHECKLOCKTIMEVERIFY: When executed, if any of the following conditions are true, the script interpreter will terminate with an error:
 
@@ -436,7 +501,7 @@ class ScriptEngine:
 
         return control_byte[-1], xonly_pubkey, merkle_proof
 
-    def validate_segwit(self, scriptpubkey: ScriptPubKey, ctx: ExecutionContext) -> bool:
+    def validate_segwit(self, scriptpubkey: ScriptPubKey, ctx: ScriptContext) -> bool:
         """
         For use with P2WPKH and P2WSH
         """
@@ -490,8 +555,8 @@ class ScriptEngine:
         if is_p2wsh:
             stackitems = len(witness_field.items)
             # Validation
-            if stackitems < 2:
-                raise ScriptEngineError("Need at least 1 signature and 1 script for P2WSH")
+            if stackitems < 1:
+                raise ScriptEngineError("P2WSH witness is missing its witness script")
 
             # Script
             script = witness_field.items[-1]
@@ -519,6 +584,8 @@ class ScriptEngine:
         if is_p2tr:
             # Sort into key-path or spend-path
             stackitems = len(witness_field.items)
+            if stackitems == 0:
+                return False
             if stackitems == 1:
                 # Key-path
                 sig = witness_field.items[0]
@@ -552,12 +619,25 @@ class ScriptEngine:
 
                 # Push remaining witness items and execute leaf_script
                 self.stack.pushlist(witness_items)
-                self.execute_script(leaf_script, ctx)
+                self.tapscript_validation_weight_left = len(witness_field.to_bytes()) + 50
+                leaf_version = bytes([control_block[0] & 0xfe])
+                leaf_hash = Leaf(leaf_script, leaf_version=leaf_version).leaf_hash
+                tapscript_ctx = replace(
+                    ctx,
+                    signature_version=SignatureVersion.TAPSCRIPT,
+                    tapleaf_hash=leaf_hash,
+                ) if hasattr(ctx, "signature_version") else replace(
+                    ctx,
+                    tapscript=True,
+                    merkle_root=leaf_hash,
+                )
+                if not self.execute_script(leaf_script, tapscript_ctx):
+                    return False
 
         # Validate the stack
         return self.validate_stack()
 
-    def validate_script_pair(self, scriptpubkey: ScriptPubKey, scriptsig: ScriptSig, ctx: ExecutionContext = None) -> \
+    def validate_script_pair(self, scriptpubkey: ScriptPubKey, scriptsig: ScriptSig, ctx: ScriptContext = None) -> \
             bool:
         """
         We validate the scriptsig + scriptpubkey against the given ExecutionContext. For use with legacy signatures
@@ -567,12 +647,17 @@ class ScriptEngine:
             # Not P2SH, validate combined script pairs
             return self.validate_script(scriptsig.script + scriptpubkey.script, ctx)
 
-        # Assuming P2SH operation
-        # ctx.is_p2sh = True
+        # BIP16 requires a push-only scriptSig.
+        operations = parse_script_ops(scriptsig.script)
+        if not operations or any(data is None and opcode > 0x60 for opcode, data in operations):
+            self.ops_log.append("P2SH scriptSig is not push-only")
+            return False
+
         self.clear_stacks()  # Clear stacks here for P2SH
 
         # Execute scriptSig
-        self.execute_script(scriptsig.script, ctx)
+        if not self.execute_script(scriptsig.script, ctx) or self.stack.height == 0:
+            return False
 
         # Before processing the scriptpubkey we copy the redeem_script
         redeem_script = self.stack.top
@@ -585,34 +670,27 @@ class ScriptEngine:
             self.ops_log.append("Script Invalid -- P2SH ScriptPubKey failed OP_EQUAL check for HASH160")
             return False
 
-        # Handle P2WPKH
-        if P2WPKH_Key.matches(redeem_script):
-            # Get elements
-            tx = ctx.tx
-            witness = tx.witness[ctx.input_index]
-            witsig = witness.items[0]
-            witkey = witness.items[1]
+        # Nested SegWit requires scriptSig to contain exactly one canonical
+        # push of the witness program, with all unlocking data in the witness.
+        if P2WPKH_Key.matches(redeem_script) or P2WSH_Key.matches(redeem_script):
+            if scriptsig.script != encode_pushdata(redeem_script):
+                self.ops_log.append("Nested witness scriptSig contains extra or non-canonical data")
+                return False
+            nested_key = classify_scriptpubkey(redeem_script)
+            nested_ctx = replace(
+                ctx,
+                signature_version=SignatureVersion.WITNESS_V0,
+            ) if hasattr(ctx, "signature_version") else replace(ctx, is_segwit=True)
+            return self.validate_segwit(nested_key, nested_ctx)
 
-            # Remove P2WPKH key and push signature and pubkey
-            self.stack.push(witsig)
-            self.stack.push(witkey)
-
-            # Get pubkeyhash from P2SH-P2WPKH_Sig and create P2PKH script
-            pubkeyhash = scriptsig.script[3:]
-            p2pkh_script = P2PKH_Key.from_pubkeyhash(pubkeyhash)
-            
-            # BIP143 scriptCode is the length-prefixed P2PKH script (e.g. 0x19 + 25 bytes)
-            new_ctx = replace(ctx, script_code=serialize_data(p2pkh_script.script))
-
-            # Execute the P2PKH script
-            self.execute_script(p2pkh_script.script, new_ctx)
-        else:
-            # Execute redeem script
-            new_ctx = replace(ctx, script_code=redeem_script)  # ExecutionContext is immutable.
-            self.execute_script(redeem_script, new_ctx)
+        # Execute the legacy redeem script with the stack left by scriptSig
+        # (minus the redeem script consumed by HASH160).
+        new_ctx = replace(ctx, script_code=redeem_script)
+        if not self.execute_script(redeem_script, new_ctx):
+            return False
         return self.validate_stack()
 
-    def execute_script(self, script: bytes | BytesIO, ctx: ExecutionContext = None) -> bool:
+    def execute_script(self, script: bytes | BytesIO, ctx: ScriptContext = None) -> bool:
         """
         We only execute the given script with the accompanying ExecutionContext. We do NOT manage or validate the
         stacks.
@@ -673,13 +751,15 @@ class ScriptEngine:
                 continue
 
             # --- Signature-related opcodes that don't call OP_VERIFY ---
-            if opcode in [0xac, 0xae]:
+            if opcode in [0xac, 0xae, 0xba]:
                 self._handle_signatures(opcode, ctx)
                 continue
 
             # --- Check Locktime Verify (OP_CLTV)
             if opcode == 0xb1:
-                valid_script = self._checklocktime(ctx)
+                if ctx is not None and ctx.script_flags & ScriptVerifyFlag.CHECKLOCKTIMEVERIFY:
+                    valid_script = self._checklocktime(ctx)
+                # Before BIP65 activation OP_CHECKLOCKTIMEVERIFY is OP_NOP2.
                 continue
 
             # --- All remaining opcodes: dispatch via OPCODE_MAP ---
@@ -710,7 +790,13 @@ class ScriptEngine:
         # Return script status
         return valid_script
 
-    def validate_script(self, script: bytes, ctx: ExecutionContext = None) -> bool:
+    def validate_script(
+            self,
+            script: bytes,
+            ctx: ScriptContext = None,
+            *,
+            require_clean_stack: bool = True,
+    ) -> bool:
         # Clear stacks
         self.clear_stacks()
 
@@ -718,23 +804,20 @@ class ScriptEngine:
         if not self.execute_script(script, ctx):
             return False  # Triggered invalid script
 
-        # Logging
-        print("BEFORE VALIDATING STACK", end="\n====\n")
-        print(f"MAIN STACK: {self.stack.to_json()}")
-
         # Validate stack
-        return self.validate_stack()
+        return self.validate_stack(require_clean_stack=require_clean_stack)
 
-    def validate_stack(self) -> bool:
+    def validate_stack(self, *, require_clean_stack: bool = True) -> bool:
         """
         Called at the end of the script engine. Return False if any of the following are True:
             - Stack is empty
             - Only element left on the stack is OP_0 (aka b'')
-            - More than one element left on the stack
+            - More than one element is left when clean-stack semantics apply
             - Script exits prematurely (e.g. OP_RETURN)
         """
-        if self.stack.height != 1:
-            # Handles empty stack and more than one element left on stack
+        if self.stack.height == 0:
+            return False
+        if require_clean_stack and self.stack.height != 1:
             return False
         last_element = self.stack.pop()  # Also clears stack for next execution
         return self._stack_value_is_true(last_element)

@@ -11,32 +11,6 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 
 ---
 
-### Sprint 6 — Consensus & Script Compliance
-
-**Story 0 — Cleanup and Maintenance**
-Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 6.
-Each item should be handled as a separate ticket with sufficient tests.
-
-**Story 6.1 — Network-Aware Consensus Rules**
-
-- [ ] Add explicit mainnet, testnet, regtest, and signet chain-parameter objects
-- [ ] Add exact historical activation handling for BIP16, BIP34, BIP65, BIP66, SegWit, and Taproot
-- [ ] Add BIP30 duplicate-transaction edge-case handling
-- [ ] Enforce standard and consensus script flags by network and height
-
-**Story 6.2 — Script Engine Hardening**
-
-- [ ] Remove or replace `ExecutionContext` with clearer validation inputs
-- [ ] Improve nested-signature handling for P2SH and related script types
-- [ ] Harden sigop counting for P2SH, P2WSH, and tapscript paths
-
-**Story 6.3 — Bitcoin Core Validation Vectors**
-
-- [ ] Add Bitcoin Core vectors for blocks, scripts, and transactions where practical
-- [ ] Expand block-validation tests for Merkle roots, proof of work, coinbase rewards, and witness commitments
-
----
-
 ### Sprint 7 — Chain Reorganisation & Storage Integrity
 
 **Story 0 — Cleanup and Maintenance**

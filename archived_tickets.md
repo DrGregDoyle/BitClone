@@ -324,6 +324,28 @@ within a timeout so that stale connections are cleaned up automatically.
 - [x] Match `pong` nonces to outstanding pings
 - [x] Disconnect peers after the keepalive timeout
 
+### Sprint 6 — Consensus & Script Compliance
+
+**Status: Complete**
+
+#### Story 6.1 — Network-Aware Consensus Rules
+
+- [x] Add explicit mainnet, testnet, regtest, and signet chain-parameter objects
+- [x] Add exact historical activation handling for BIP16, BIP34, BIP65, BIP66, SegWit, and Taproot
+- [x] Add BIP30 duplicate-transaction edge-case handling
+- [x] Enforce standard and consensus script flags by network and height
+
+#### Story 6.2 — Script Engine Hardening
+
+- [x] Replace consensus use of `ExecutionContext` with required, typed script-validation inputs
+- [x] Improve nested-signature handling for P2SH, P2WPKH, and P2WSH paths
+- [x] Harden sigop accounting for P2SH and P2WSH and enforce tapscript's validation-weight budget
+
+#### Story 6.3 — Bitcoin Core Validation Vectors
+
+- [x] Add Bitcoin Core vectors for blocks, scripts, and transactions where practical
+- [x] Expand block-validation tests for Merkle roots, proof of work, coinbase rewards, and witness commitments
+
 ### Sprint 7 — Chain Reorganisation & Storage Integrity Groundwork
 
 - [x] Store undo data for every connected block

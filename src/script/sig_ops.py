@@ -245,7 +245,85 @@ def get_ecdsa_sig(private_key: int, message: bytes):
     return encode_der_signature(r, s)
 
 
-def verify_ecdsa_sig(signature: bytes, message: bytes, public_key: bytes):
-    signature_tuple = decode_der_signature(signature)
-    pubkey = PubKey.from_bytes(public_key)
-    return verify_ecdsa(signature_tuple, message, pubkey.to_point())
+def _decode_lax_der_signature(signature: bytes) -> tuple[int, int]:
+    """
+    Parse the historical non-strict DER forms accepted before BIP66.
+
+    This follows Bitcoin Core's bounded lax parser: sequence lengths are
+    ignored, long-form integer lengths are accepted, redundant zero padding
+    and trailing garbage are tolerated, and values larger than 32 bytes are
+    converted to an invalid zero signature.
+    """
+    position = 0
+
+    def read_byte() -> int:
+        nonlocal position
+        if position >= len(signature):
+            raise ValueError("Truncated DER signature")
+        value = signature[position]
+        position += 1
+        return value
+
+    def read_length() -> int:
+        nonlocal position
+        length = read_byte()
+        if not length & 0x80:
+            return length
+
+        length_bytes = length & 0x7f
+        if length_bytes > len(signature) - position:
+            raise ValueError("Truncated DER length")
+        while length_bytes > 0 and signature[position] == 0:
+            position += 1
+            length_bytes -= 1
+        if length_bytes >= 4:
+            raise ValueError("DER length is too large")
+
+        value = 0
+        for _ in range(length_bytes):
+            value = (value << 8) | read_byte()
+        return value
+
+    if read_byte() != 0x30:
+        raise ValueError("DER signature is not a sequence")
+    sequence_length = read_byte()
+    if sequence_length & 0x80:
+        descriptor_bytes = sequence_length & 0x7f
+        if descriptor_bytes > len(signature) - position:
+            raise ValueError("Truncated DER sequence length")
+        position += descriptor_bytes
+
+    values: list[int] = []
+    for _ in range(2):
+        if read_byte() != 0x02:
+            raise ValueError("DER signature value is not an integer")
+        value_length = read_length()
+        if value_length > len(signature) - position:
+            raise ValueError("Truncated DER integer")
+        raw_value = signature[position:position + value_length]
+        position += value_length
+        raw_value = raw_value.lstrip(b"\x00")
+        if len(raw_value) > 32:
+            return 0, 0
+        values.append(int.from_bytes(raw_value, "big"))
+
+    return values[0], values[1]
+
+
+def verify_ecdsa_sig(
+        signature: bytes,
+        message: bytes,
+        public_key: bytes,
+        *,
+        strict_der: bool = True,
+) -> bool:
+    try:
+        signature_tuple = (
+            decode_der_signature(signature)
+            if strict_der
+            else _decode_lax_der_signature(signature)
+        )
+        pubkey = PubKey.from_bytes(public_key)
+        return verify_ecdsa(signature_tuple, message, pubkey.to_point())
+    except (TypeError, ValueError):
+        return False

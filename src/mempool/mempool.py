@@ -8,7 +8,8 @@ from src.core import TX, ReadError, get_logger, TransactionError
 from src.database.database import BitCloneDatabase
 from src.database.bitcoin_core_rpc import BitcoinCoreRPC
 from src.tx import LoadedTx, Tx
-from src.tx.validation import TxValidationContext, validate_loaded_tx
+from src.core import ChainParams, NetworkName, get_chain_params
+from src.tx.validation import TxValidationContext, validate_loaded_tx, validate_tx_scripts
 
 logger = get_logger(__name__)
 
@@ -55,7 +56,10 @@ class MemPool:
             storage_mode: str = "archival",
             prune_keep_blocks: int = 288,
             core_rpc: BitcoinCoreRPC | None = None,
+            network: NetworkName | str = NetworkName.MAINNET,
+            chain_params: ChainParams | None = None,
     ) -> None:
+        self.chain_params = chain_params or get_chain_params(network)
         # --- MemPool constants
         self.max_size = MemPool.MAX_SIZE
         self.max_time = MemPool.MAX_TIME
@@ -235,7 +239,25 @@ class MemPool:
             return False
 
         try:
-            if not validate_loaded_tx(loaded_tx, TxValidationContext(validate_scripts=True)):
+            chain_params = getattr(self, "chain_params", get_chain_params(NetworkName.MAINNET))
+            chain_height = self.btcdb.get_chain_height()
+            next_height = chain_height + 1 if isinstance(chain_height, int) else 0
+            tip = self.btcdb.get_latest_block()
+            tip_time = getattr(tip, "timestamp", None)
+            standard_flags = chain_params.standard_script_flags(
+                next_height,
+                block_time=tip_time if isinstance(tip_time, int) else None,
+            )
+            if not validate_loaded_tx(
+                    loaded_tx,
+                    TxValidationContext(
+                        validate_scripts=True,
+                        script_validator=lambda candidate: validate_tx_scripts(
+                            candidate,
+                            flags=standard_flags,
+                        ),
+                    ),
+            ):
                 return False
         except Exception as e:
             # Candidate transactions are untrusted network input. Script parsing

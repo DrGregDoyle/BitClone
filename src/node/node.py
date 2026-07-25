@@ -121,6 +121,7 @@ class Node:
             storage_mode=self.config.block_storage.value,
             prune_keep_blocks=self.config.prune_keep_blocks,
             core_rpc=self.core_rpc,
+            network=self.config.network,
         )
         chain_db_path = getattr(self.blockchain.db, "db_path", self.db_path)
         chain_storage_mode = getattr(
@@ -141,6 +142,7 @@ class Node:
             storage_mode=chain_storage_mode,
             prune_keep_blocks=chain_prune_keep_blocks,
             core_rpc=self.core_rpc,
+            network=self.config.network,
         )
         self.wallet = wallet
         self.miner = miner or Miner()

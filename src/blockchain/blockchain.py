@@ -7,11 +7,22 @@ import time
 
 from src.block.block import Block, BlockHeader
 from src.blockchain.genesis_block import genesis_block
-from src.core import BLOCK, TX, NetworkDataError, get_logger, TransactionError
+from src.core import (
+    BLOCK,
+    TX,
+    ChainParams,
+    NetworkDataError,
+    NetworkName,
+    ScriptVerifyFlag,
+    TransactionError,
+    get_chain_params,
+    get_logger,
+)
 from src.cryptography import hash256
 from src.data import bits_to_target, target_to_bits, MerkleTree
 from src.database.database import BitCloneDatabase, BlockUndo, DB_PATH
 from src.database.bitcoin_core_rpc import BitcoinCoreRPC
+from src.script import parse_script_ops
 from src.tx import TxIn
 from src.tx.tx import LoadedTx, UTXO, Tx
 from src.tx.validation import TxValidationContext, validate_loaded_tx, validate_tx_scripts
@@ -70,7 +81,11 @@ class Blockchain:
             storage_mode: str = "archival",
             prune_keep_blocks: int = 288,
             core_rpc: BitcoinCoreRPC | None = None,
+            network: NetworkName | str = NetworkName.MAINNET,
+            chain_params: ChainParams | None = None,
     ):
+        self.chain_params = chain_params or get_chain_params(network)
+
         # --- Main db
         self.db = BitCloneDatabase(
             db_path,
@@ -363,6 +378,10 @@ class Blockchain:
             # Step 2: Add new UTXOs from this transaction
             for vout, output in enumerate(tx.outputs):
                 outpoint = tx.txid + vout.to_bytes(TX.VOUT, "little")
+                if self.chain_params.is_bip30_exception(block_height, block.block_id):
+                    # The two historical exception blocks overwrite an older
+                    # unspent coinbase outpoint, matching Bitcoin's UTXO view.
+                    self.db.remove_utxo(outpoint)
                 utxo = UTXO.from_txoutput(
                     outpoint=outpoint,
                     txoutput=output,
@@ -427,6 +446,9 @@ class Blockchain:
             logger.error("Block contains duplicate transaction ids")
             return False
 
+        if not self._validate_bip30(block, next_height):
+            return False
+
         # --- Merkle root
         calc_root = MerkleTree(txids).merkle_root
         if calc_root != block_header.merkle_root:
@@ -438,13 +460,34 @@ class Blockchain:
             return False
 
         # --- Witness commitment
-        if not self._validate_witness_commitment(block):
+        if not self._validate_witness_commitment(block, next_height):
             return False
 
         # --- Non-coinbase transactions
         if not self._validate_block_txs(block):
             return False
 
+        return True
+
+    def _validate_bip30(self, block: Block, block_height: int) -> bool:
+        """
+        Reject a transaction whose txid would overwrite any unspent output.
+
+        Mainnet blocks 91842 and 91880 are the two exact historical
+        exceptions retained by Bitcoin Core.
+        """
+        if self.chain_params.is_bip30_exception(block_height, block.block_id):
+            return True
+
+        for tx in block.txs:
+            for vout, _ in enumerate(tx.outputs):
+                outpoint = tx.txid + vout.to_bytes(TX.VOUT, "little")
+                if self.db.get_utxo(outpoint) is not None:
+                    logger.error(
+                        f"BIP30 violation: transaction {tx.txid.hex()} "
+                        f"would overwrite unspent output {vout}"
+                    )
+                    return False
         return True
 
     @staticmethod
@@ -455,7 +498,7 @@ class Blockchain:
             bits -> target decoding yields big-endian bytes object
             block_id uses little-endian encoding
         """
-        return int.from_bytes(block.block_id, "little") < int.from_bytes(bits_to_target(block.bits), "big")
+        return int.from_bytes(block.block_id, "little") <= int.from_bytes(bits_to_target(block.bits), "big")
 
     def _validate_block_timestamp(self, block: Block, current_time: int | None = None) -> bool:
         """
@@ -525,18 +568,72 @@ class Blockchain:
         return min(new_target, genesis_target)
 
     def _block_sigop_cost(self, block: Block) -> int:
-        return sum(self._tx_sigop_cost(tx) for tx in block.txs)
+        cost = 0
+        pending_utxos: dict[bytes, UTXO] = {}
+        next_height = self._height + 1
 
-    def _tx_sigop_cost(self, tx: Tx) -> int:
-        sigops = 0
+        for tx in block.txs:
+            spent_utxos: list[UTXO] = []
+            if not tx.is_coinbase:
+                for txin in tx.inputs:
+                    utxo = pending_utxos.get(txin.outpoint) or self.db.get_utxo(txin.outpoint)
+                    if utxo is not None:
+                        spent_utxos.append(utxo)
+            cost += self._tx_sigop_cost(tx, spent_utxos)
+
+            for vout, output in enumerate(tx.outputs):
+                utxo = UTXO.from_txoutput(
+                    outpoint=tx.txid + vout.to_bytes(TX.VOUT, "little"),
+                    txoutput=output,
+                    block_height=next_height,
+                    is_coinbase=tx.is_coinbase,
+                )
+                pending_utxos[utxo.outpoint] = utxo
+
+        return cost
+
+    def _tx_sigop_cost(self, tx: Tx, spent_utxos: list[UTXO] | None = None) -> int:
+        # Legacy sigops are counted in scriptSig and scriptPubKey with the
+        # historical inaccurate CHECKMULTISIG rule, then scaled by four.
+        legacy_sigops = 0
         for txin in tx.inputs:
-            sigops += self._count_sigops(txin.scriptsig)
+            legacy_sigops += self._count_sigops(txin.scriptsig, accurate=False)
         for txout in tx.outputs:
-            sigops += self._count_sigops(txout.scriptpubkey)
-        return sigops * WITNESS_SCALE_FACTOR
+            legacy_sigops += self._count_sigops(txout.scriptpubkey, accurate=False)
+        cost = legacy_sigops * WITNESS_SCALE_FACTOR
+
+        if tx.is_coinbase or not spent_utxos or len(spent_utxos) != len(tx.inputs):
+            return cost
+
+        for input_index, (txin, spent_utxo) in enumerate(zip(tx.inputs, spent_utxos)):
+            witness_program = spent_utxo.scriptpubkey
+            redeem_script = None
+
+            if self._is_p2sh(witness_program):
+                redeem_script = self._last_pushed_data(txin.scriptsig)
+                if redeem_script is None:
+                    continue
+                if not self._is_witness_program(redeem_script):
+                    cost += self._count_sigops(redeem_script, accurate=True) * WITNESS_SCALE_FACTOR
+                    continue
+                witness_program = redeem_script
+
+            if not self._is_witness_program(witness_program):
+                continue
+            witness_items = tx.witness[input_index].items if input_index < len(tx.witness) else []
+
+            if self._is_p2wpkh(witness_program):
+                cost += 1
+            elif self._is_p2wsh(witness_program) and witness_items:
+                cost += self._count_sigops(witness_items[-1], accurate=True)
+            # Taproot/tapscript does not contribute to the legacy block sigop
+            # cost. BIP342 instead enforces a per-input validation-weight
+            # budget dynamically while executing non-empty signatures.
+
+        return cost
 
     @staticmethod
-    def _count_sigops(script: bytes) -> int:
+    def _count_sigops(script: bytes, *, accurate: bool = True, tapscript: bool = False) -> int:
         sigops = 0
         previous_opcode = None
         i = 0
@@ -571,10 +668,15 @@ class Blockchain:
                 previous_opcode = opcode
                 continue
 
-            if opcode in (OP_CHECKSIG, OP_CHECKSIGVERIFY, OP_CHECKSIGADD):
+            if opcode in (OP_CHECKSIG, OP_CHECKSIGVERIFY) or (
+                    tapscript and opcode == OP_CHECKSIGADD
+            ):
                 sigops += 1
             elif opcode in (OP_CHECKMULTISIG, OP_CHECKMULTISIGVERIFY):
-                if previous_opcode is not None and OP_1 <= previous_opcode <= OP_16:
+                if tapscript:
+                    previous_opcode = opcode
+                    continue
+                if accurate and previous_opcode is not None and OP_1 <= previous_opcode <= OP_16:
                     sigops += previous_opcode - OP_1 + 1
                 else:
                     sigops += 20
@@ -582,6 +684,36 @@ class Blockchain:
             previous_opcode = opcode
 
         return sigops
+
+    @staticmethod
+    def _last_pushed_data(script: bytes) -> bytes | None:
+        try:
+            operations = parse_script_ops(script)
+        except Exception:
+            return None
+        if not operations:
+            return None
+        return operations[-1][1]
+
+    @staticmethod
+    def _is_p2sh(script: bytes) -> bool:
+        return len(script) == 23 and script[:2] == b"\xa9\x14" and script[-1:] == b"\x87"
+
+    @staticmethod
+    def _is_p2wpkh(script: bytes) -> bool:
+        return len(script) == 22 and script[:2] == b"\x00\x14"
+
+    @staticmethod
+    def _is_p2wsh(script: bytes) -> bool:
+        return len(script) == 34 and script[:2] == b"\x00\x20"
+
+    @staticmethod
+    def _is_p2tr(script: bytes) -> bool:
+        return len(script) == 34 and script[:2] == b"\x51\x20"
+
+    @classmethod
+    def _is_witness_program(cls, script: bytes) -> bool:
+        return cls._is_p2wpkh(script) or cls._is_p2wsh(script) or cls._is_p2tr(script)
 
     def _validate_coinbase(self, block: Block, block_height: int | None = None) -> bool:
         """
@@ -600,7 +732,10 @@ class Blockchain:
             logger.error(f"Coinbase script size {scriptsig_len} outside allowed range 2..100")
             return False
 
-        if block_height > 0 and not self._validate_bip34_height(coinbase_tx.inputs[0].scriptsig, block_height):
+        if (
+                block_height >= self.chain_params.bip34_height
+                and not self._validate_bip34_height(coinbase_tx.inputs[0].scriptsig, block_height)
+        ):
             return False
 
         # --- Verify no other tx is a coinbase
@@ -666,12 +801,20 @@ class Blockchain:
 
         return True
 
-    def _validate_witness_commitment(self, block: Block) -> bool:
-        witness_present = any(tx.is_segwit for tx in block.txs[1:])
+    def _validate_witness_commitment(self, block: Block, block_height: int | None = None) -> bool:
+        block_height = self._height + 1 if block_height is None else block_height
+        witness_present = any(tx.is_segwit for tx in block.txs)
         commitment = self._find_witness_commitment(block.txs[0])
 
-        if not witness_present:
+        if not witness_present and commitment is None:
             return True
+
+        if block_height < self.chain_params.segwit_height:
+            logger.error(
+                f"SegWit transaction appears before activation at height "
+                f"{self.chain_params.segwit_height}"
+            )
+            return False
 
         if commitment is None:
             logger.error("SegWit block missing coinbase witness commitment")
@@ -769,6 +912,11 @@ class Blockchain:
             utxos.append(utxo)
 
         loaded_tx = LoadedTx(tx, utxos)
+        script_flags = self.chain_params.consensus_script_flags(
+            next_height,
+            block_time=block.timestamp,
+            block_hash=block.block_id,
+        )
         validation_ctx = TxValidationContext(
             next_height=next_height,
             block_timestamp=block.timestamp,
@@ -778,7 +926,10 @@ class Blockchain:
             check_locktime=True,
             check_relative_locktime=True,
             validate_scripts=True,
-            script_validator=self._validate_tx_scripts,
+            script_validator=lambda candidate: self._validate_tx_scripts(
+                candidate,
+                flags=script_flags,
+            ),
         )
 
         if not validate_loaded_tx(loaded_tx, validation_ctx):
@@ -786,9 +937,20 @@ class Blockchain:
 
         return True
 
-    def _validate_tx_scripts(self, tx: Tx | LoadedTx, utxos: list[UTXO] | None = None) -> bool:
+    def _validate_tx_scripts(
+            self,
+            tx: Tx | LoadedTx,
+            utxos: list[UTXO] | None = None,
+            *,
+            flags: ScriptVerifyFlag | None = None,
+    ) -> bool:
         loaded_tx = tx if isinstance(tx, LoadedTx) else LoadedTx(tx, utxos)
-        return validate_tx_scripts(loaded_tx)
+        if flags is None:
+            flags = self.chain_params.consensus_script_flags(
+                self._height + 1,
+                block_time=int(time.time()),
+            )
+        return validate_tx_scripts(loaded_tx, flags=flags)
 
     def _check_relative_locktime(self, txin: TxIn, utxo: UTXO, block: Block, next_height: int) -> bool:
         """

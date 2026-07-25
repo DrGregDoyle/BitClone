@@ -3,8 +3,47 @@ Methods for parsing script
 """
 from src.core import SERIALIZED, get_stream, StreamError, OpCodeError, OPCODES
 
-__all__ = ["to_asm"]
+__all__ = ["parse_script_ops", "to_asm"]
 _OP = OPCODES
+
+
+def parse_script_ops(script: bytes) -> tuple[tuple[int, bytes | None], ...]:
+    """Parse script opcodes and return pushed data without executing them."""
+    operations: list[tuple[int, bytes | None]] = []
+    position = 0
+
+    while position < len(script):
+        opcode = script[position]
+        position += 1
+        push_length: int | None = None
+
+        if 1 <= opcode <= 0x4b:
+            push_length = opcode
+        elif opcode == 0x4c:
+            if position >= len(script):
+                raise OpCodeError("Script truncated during OP_PUSHDATA1")
+            push_length = script[position]
+            position += 1
+        elif opcode == 0x4d:
+            if position + 2 > len(script):
+                raise OpCodeError("Script truncated during OP_PUSHDATA2")
+            push_length = int.from_bytes(script[position:position + 2], "little")
+            position += 2
+        elif opcode == 0x4e:
+            if position + 4 > len(script):
+                raise OpCodeError("Script truncated during OP_PUSHDATA4")
+            push_length = int.from_bytes(script[position:position + 4], "little")
+            position += 4
+
+        if push_length is None:
+            operations.append((opcode, None))
+            continue
+        if position + push_length > len(script):
+            raise OpCodeError("Script truncated during push operation")
+        operations.append((opcode, script[position:position + push_length]))
+        position += push_length
+
+    return tuple(operations)
 
 
 def to_asm(script: SERIALIZED) -> list:

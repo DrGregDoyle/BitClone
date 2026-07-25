@@ -318,6 +318,8 @@ class P2WSH_Key(ScriptPubKey):
 
     @classmethod
     def matches(cls, b: bytes) -> bool:
+        if len(b) != 34:
+            return False
         lead_byte = b[0]
         first_byte = b[1]
         scripthash_len = len(b[2:])

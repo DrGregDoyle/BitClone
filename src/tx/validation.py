@@ -7,9 +7,18 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from src.core import get_logger
-from src.script import classify_scriptpubkey, ExecutionContext, P2WSH_Key, P2WPKH_Key, P2TR_Key, ScriptEngine, \
-    ScriptType, classify_scriptsig
+from src.core import ScriptVerifyFlag, get_logger
+from src.script import (
+    P2TR_Key,
+    P2WPKH_Key,
+    P2WSH_Key,
+    ScriptEngine,
+    ScriptType,
+    ScriptValidationInput,
+    SignatureVersion,
+    classify_scriptpubkey,
+    classify_scriptsig,
+)
 from src.tx.tx import LoadedTx, UTXO
 
 logger = get_logger(__name__)
@@ -140,7 +149,17 @@ def _validate_tx_structure(loaded_tx: LoadedTx) -> bool:
     return True
 
 
-def validate_tx_scripts(loaded_tx: LoadedTx) -> bool:
+def validate_tx_scripts(
+        loaded_tx: LoadedTx,
+        *,
+        flags: ScriptVerifyFlag = (
+            ScriptVerifyFlag.P2SH
+            | ScriptVerifyFlag.DERSIG
+            | ScriptVerifyFlag.CHECKLOCKTIMEVERIFY
+            | ScriptVerifyFlag.WITNESS
+            | ScriptVerifyFlag.TAPROOT
+        ),
+) -> bool:
     """
     Validate all input scripts for a loaded transaction.
     """
@@ -158,19 +177,46 @@ def validate_tx_scripts(loaded_tx: LoadedTx) -> bool:
             scriptsig = classify_scriptsig(txin.scriptsig)
             input_is_nested_segwit = scriptsig.script_type == ScriptType.P2SH_P2WPKH
 
-        exec_ctx = ExecutionContext(
+        if input_is_native_segwit and not flags & ScriptVerifyFlag.WITNESS:
+            # Before BIP141 activation, witness programs are legacy
+            # anyone-can-spend outputs.
+            continue
+        if (
+                type(scriptpubkey) is P2TR_Key
+                and not flags & ScriptVerifyFlag.TAPROOT
+        ):
+            # Unknown witness versions remain upgradeable anyone-can-spend
+            # programs until their rules activate.
+            continue
+
+        validation_input = ScriptValidationInput(
             tx=tx,
             input_index=i,
-            utxos=utxos,
-            script_code=None,
-            is_segwit=input_is_native_segwit or input_is_nested_segwit,
-            tapscript=False,
-            merkle_root=None,
+            spent_outputs=tuple(utxos),
+            flags=flags,
+        )
+        exec_ctx = validation_input.execution_context(
+            signature_version=(
+                SignatureVersion.WITNESS_V0
+                if input_is_native_segwit or input_is_nested_segwit
+                else SignatureVersion.BASE
+            ),
         )
 
         script_engine = ScriptEngine()
         if input_is_native_segwit:
             ok = script_engine.validate_segwit(scriptpubkey, exec_ctx)
+        elif (
+                scriptpubkey.script_type == ScriptType.P2SH
+                and not flags & ScriptVerifyFlag.P2SH
+        ):
+            # Prior to BIP16, only the legacy HASH160/EQUAL scriptPubKey
+            # is evaluated; the redeem script is not executed.
+            ok = script_engine.validate_script(
+                scriptsig.script + scriptpubkey.script,
+                exec_ctx,
+                require_clean_stack=False,
+            )
         else:
             ok = script_engine.validate_script_pair(scriptpubkey, scriptsig, exec_ctx)
 

@@ -13,6 +13,7 @@ from src.blockchain.blockchain import (
 )
 from src.blockchain.genesis_block import genesis_block
 from src.cryptography import hash256
+from src.core import NetworkName
 from src.data import bits_to_target, target_to_bits
 from src.tx.tx import LoadedTx, Tx, TxIn, TxOut, UTXO, Witness
 from tests.script_vectors import *
@@ -78,7 +79,7 @@ def _segwit_block_with_commitment(reserved_value: bytes = b"\x00" * 32, bad_comm
 def chain():
     """Fresh Blockchain for each test; db connection closed and file deleted on teardown."""
     TEST_DB_PATH.unlink(missing_ok=True)
-    blockchain = Blockchain(db_path=TEST_DB_PATH)
+    blockchain = Blockchain(db_path=TEST_DB_PATH, network=NetworkName.REGTEST)
     yield blockchain
     blockchain.db.close()  # release the SQLite file handle
     TEST_DB_PATH.unlink(missing_ok=True)
@@ -184,7 +185,7 @@ def test_validate_tx_immature_coinbase_fails(chain):
 
 
 def test_validate_tx_detects_intrablock_double_spend(chain):
-    chain._validate_tx_scripts = lambda tx, utxos=None: True
+    chain._validate_tx_scripts = lambda tx, utxos=None, flags=None: True
 
     funding_outpoint = b"\x11" * 32 + (0).to_bytes(4, "little")
     chain.db.add_utxo(
@@ -206,7 +207,7 @@ def test_validate_tx_detects_intrablock_double_spend(chain):
 
 
 def test_validate_tx_accepts_pending_utxo_from_same_block(chain):
-    chain._validate_tx_scripts = lambda tx, utxos=None: True
+    chain._validate_tx_scripts = lambda tx, utxos=None, flags=None: True
 
     funding_outpoint = b"\x22" * 32 + (0).to_bytes(4, "little")
     chain.db.add_utxo(

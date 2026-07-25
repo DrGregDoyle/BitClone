@@ -1,0 +1,83 @@
+{
+  "source": "https://github.com/bitcoin/bitcoin/blob/e34b8d5a7dcd45e4faa3bb5fdeae64bf049037f6/src/test/data/script_tests.json",
+  "license": "MIT",
+  "vectors": [
+    {
+      "source_index": 15,
+      "script_sig": "51",
+      "script_pubkey": "",
+      "expected": true,
+      "comment": "OP_1 leaves a true stack value"
+    },
+    {
+      "source_index": 18,
+      "script_sig": "010b",
+      "script_pubkey": "5b87",
+      "expected": true,
+      "comment": "One-byte push equals OP_11"
+    },
+    {
+      "source_index": 21,
+      "script_sig": "4c0107",
+      "script_pubkey": "5787",
+      "expected": true,
+      "comment": "OP_PUSHDATA1 value equals OP_7"
+    },
+    {
+      "source_index": 30,
+      "script_sig": "51",
+      "script_pubkey": "61",
+      "expected": true,
+      "comment": "OP_NOP preserves a true stack"
+    },
+    {
+      "source_index": 59,
+      "script_sig": "5151",
+      "script_pubkey": "69",
+      "expected": true,
+      "comment": "OP_VERIFY consumes one true value and leaves one"
+    },
+    {
+      "source_index": 608,
+      "script_sig": "",
+      "script_pubkey": "",
+      "expected": false,
+      "comment": "Empty scripts leave an empty stack"
+    },
+    {
+      "source_index": 609,
+      "script_sig": "",
+      "script_pubkey": "61",
+      "expected": false,
+      "comment": "OP_NOP alone leaves an empty stack"
+    },
+    {
+      "source_index": 621,
+      "script_sig": "00",
+      "script_pubkey": "61",
+      "expected": false,
+      "comment": "OP_0 followed by OP_NOP remains false"
+    },
+    {
+      "source_index": 658,
+      "script_sig": "00",
+      "script_pubkey": "6951",
+      "expected": false,
+      "comment": "OP_VERIFY fails on false before OP_1"
+    },
+    {
+      "source_index": 659,
+      "script_sig": "51",
+      "script_pubkey": "69",
+      "expected": false,
+      "comment": "OP_VERIFY consumes the only stack value"
+    },
+    {
+      "source_index": 723,
+      "script_sig": "0051",
+      "script_pubkey": "87",
+      "expected": false,
+      "comment": "OP_0 and OP_1 are not equal"
+    }
+  ]
+}
