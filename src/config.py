@@ -6,6 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+import tomllib
 from typing import Any
 
 from src.core.network_profiles import NetworkName, NetworkProfile, get_network_profile
@@ -91,6 +92,70 @@ class BitCloneConfig:
             core_rpc_password=core_rpc_password,
             core_rpc_cookie=Path(core_rpc_cookie).expanduser() if core_rpc_cookie is not None else None,
             core_rpc_timeout=core_rpc_timeout,
+        )
+
+    @classmethod
+    def from_toml(
+            cls,
+            data_dir: str | Path | None = None,
+            network: str | NetworkName | None = None,
+            db_path: str | Path | None = None,
+            upstream_host: str | None = None,
+            upstream_port: int | None = None,
+            block_storage: str | BlockStorageMode | None = None,
+            prune_keep_blocks: int | None = None,
+            core_rpc_url: str | None = None,
+            core_rpc_user: str | None = None,
+            core_rpc_password: str | None = None,
+            core_rpc_cookie: str | Path | None = None,
+            core_rpc_timeout: float | None = None,
+    ) -> "BitCloneConfig":
+        """Load persistent options from bitclone.toml, then apply explicit overrides."""
+        if data_dir is not None:
+            resolved_data_dir = Path(data_dir).expanduser()
+        elif db_path is not None:
+            resolved_data_dir = Path(db_path).expanduser().parent
+        else:
+            resolved_data_dir = DEFAULT_DATA_DIR
+
+        config_path = resolved_data_dir / CONFIG_FILENAME
+        values: dict[str, Any] = {}
+        if config_path.exists():
+            try:
+                with config_path.open("rb") as stream:
+                    values = tomllib.load(stream)
+            except (OSError, tomllib.TOMLDecodeError) as error:
+                raise ValueError(f"Cannot load {config_path}: {error}") from error
+            if "core_rpc_password" in values:
+                raise ValueError(
+                    "core_rpc_password is not allowed in bitclone.toml; "
+                    "use BITCLONE_CORE_RPC_PASSWORD"
+                )
+
+        def configured(name: str, override: Any, default: Any = None) -> Any:
+            return override if override is not None else values.get(name, default)
+
+        return cls.from_options(
+            data_dir=resolved_data_dir,
+            network=configured("network", network, NetworkName.MAINNET),
+            db_path=configured("db_path", db_path),
+            upstream_host=configured("upstream_host", upstream_host),
+            upstream_port=configured("upstream_port", upstream_port),
+            block_storage=configured(
+                "block_storage",
+                block_storage,
+                BlockStorageMode.ARCHIVAL,
+            ),
+            prune_keep_blocks=configured(
+                "prune_keep_blocks",
+                prune_keep_blocks,
+                MIN_PRUNE_KEEP_BLOCKS,
+            ),
+            core_rpc_url=configured("core_rpc_url", core_rpc_url),
+            core_rpc_user=configured("core_rpc_user", core_rpc_user),
+            core_rpc_password=core_rpc_password,
+            core_rpc_cookie=configured("core_rpc_cookie", core_rpc_cookie),
+            core_rpc_timeout=configured("core_rpc_timeout", core_rpc_timeout, 10.0),
         )
 
     @property
@@ -199,6 +264,8 @@ class BitCloneConfig:
             text += f'core_rpc_user = "{self.core_rpc_user}"\n'
         if self.core_rpc_cookie is not None:
             text += f'core_rpc_cookie = "{self.core_rpc_cookie}"\n'
+        if self.core_rpc_url is not None:
+            text += f"core_rpc_timeout = {self.core_rpc_timeout}\n"
         if self.block_storage is BlockStorageMode.BITCOIN_CORE_REMOTE:
             text += "# Set BITCLONE_CORE_RPC_PASSWORD in the environment; passwords are not written here.\n"
         if self.upstream_host is not None:

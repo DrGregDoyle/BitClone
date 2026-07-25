@@ -87,6 +87,17 @@ class BitcoinCoreRPC:
         raw_hex = self.call("getblockheader", block_hash[::-1].hex(), False)
         return bytes.fromhex(raw_hex)
 
+    def get_block_header_info(self, display_hash: str) -> dict:
+        return self.call("getblockheader", display_hash, True)
+
+    def get_tx_out(
+            self,
+            txid: bytes,
+            vout: int,
+            include_mempool: bool = True,
+    ) -> dict | None:
+        return self.call("gettxout", txid[::-1].hex(), vout, include_mempool)
+
     def _authorization_header(self) -> str:
         username, password = self._credentials()
         token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")

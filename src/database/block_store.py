@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 
-from src.database.bitcoin_core_rpc import BitcoinCoreRPC
+from src.database.bitcoin_core_rpc import BitcoinCoreRPC, BitcoinCoreRPCError
 from src.database.block_files import BlockFileManager
+from src.tx import UTXO
 
 __all__ = [
     "ArchivalBlockStore",
@@ -54,6 +56,9 @@ class BlockStore(ABC):
         return None
 
     def read_header(self, block_hash: bytes) -> bytes | None:
+        return None
+
+    def get_utxo(self, outpoint: bytes) -> UTXO | None:
         return None
 
 
@@ -165,6 +170,29 @@ class BitcoinCoreRemoteBlockStore(BlockStore):
 
     def read_header(self, block_hash: bytes) -> bytes | None:
         return self.rpc.get_block_header(block_hash)
+
+    def get_utxo(self, outpoint: bytes) -> UTXO | None:
+        if len(outpoint) != 36:
+            raise ValueError("outpoint must contain a 32-byte txid and 4-byte vout")
+        txid = outpoint[:32]
+        vout = int.from_bytes(outpoint[32:], "little")
+        result = self.rpc.get_tx_out(txid, vout)
+        if result is None:
+            return None
+
+        try:
+            amount = Decimal(str(result["value"])) * Decimal(100_000_000)
+            if amount != amount.to_integral_value():
+                raise ValueError("fractional satoshi amount")
+            tip = self.rpc.get_block_header_info(result["bestblock"])
+            block_height = int(tip["height"]) - int(result["confirmations"]) + 1
+            scriptpubkey = bytes.fromhex(result["scriptPubKey"]["hex"])
+            is_coinbase = bool(result["coinbase"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise BitcoinCoreRPCError(
+                f"Bitcoin Core RPC returned invalid gettxout data: {error}"
+            ) from error
+        return UTXO(outpoint, int(amount), scriptpubkey, block_height, is_coinbase)
 
     def delete_block(self, location: BlockLocation) -> bool:
         return False

@@ -55,7 +55,8 @@ workflow, copy it to Lenny as `~/.bitclone/skyscraper.cookie` with mode `600`. T
 restarts and must then be copied again; `startup.py` handles this refresh on every run.
 
 BitClone's `bitcoin-core-remote` storage mode reads blocks on demand through Bitcoin Core JSON-RPC and does not retain
-block bodies locally. Prefer the SSH tunnel to Core's loopback RPC listener instead of exposing port 8332 broadly:
+block bodies locally. Prefer the SSH tunnel to Core's loopback RPC listener instead of exposing port 8332 broadly.
+Initialize the remote data directory once:
 
 ```bash
 python -m src \
@@ -63,7 +64,15 @@ python -m src \
   --block-storage bitcoin-core-remote \
   --core-rpc-url http://127.0.0.1:18332 \
   --core-rpc-cookie ~/.bitclone/skyscraper.cookie \
-  getremotechaininfo
+  init
+```
+
+Later commands load those settings from `~/.bitclone-remote/bitclone.toml`, so only the data directory needs to be
+selected:
+
+```bash
+python -m src --data-dir ~/.bitclone-remote getremotechaininfo
+python -m src --data-dir ~/.bitclone-remote status
 ```
 
 ---

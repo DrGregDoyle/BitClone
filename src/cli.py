@@ -36,7 +36,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--network",
         choices=[n.value for n in NetworkName],
-        default=NetworkName.MAINNET.value,
+        default=None,
         help="Network data namespace.",
     )
     parser.add_argument(
@@ -53,13 +53,13 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--block-storage",
         choices=[mode.value for mode in BlockStorageMode],
-        default=BlockStorageMode.ARCHIVAL.value,
+        default=None,
         help="Retain all blocks or keep only a recent pruned window.",
     )
     parser.add_argument(
         "--prune-keep-blocks",
         type=int,
-        default=288,
+        default=None,
         help="Recent block bodies and undo records retained in pruned mode.",
     )
     parser.add_argument(
@@ -77,7 +77,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--core-rpc-timeout",
         type=float,
-        default=10.0,
+        default=None,
         help="Bitcoin Core RPC timeout in seconds.",
     )
     parser.add_argument(
@@ -235,7 +235,7 @@ def _handle_command(node: Node, args: argparse.Namespace) -> Any:
 
 
 def _config_from_args(args: argparse.Namespace) -> BitCloneConfig:
-    return BitCloneConfig.from_options(
+    return BitCloneConfig.from_toml(
         data_dir=args.data_dir,
         network=args.network,
         db_path=args.db_path,
@@ -254,7 +254,10 @@ def _config_from_args(args: argparse.Namespace) -> BitCloneConfig:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    config = _config_from_args(args)
+    try:
+        config = _config_from_args(args)
+    except ValueError as error:
+        parser.exit(2, f"{parser.prog}: error: {error}\n")
 
     if args.command == "init":
         _print_output(config.initialize(), args.json)

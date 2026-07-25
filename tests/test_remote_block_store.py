@@ -11,7 +11,7 @@ from src.database.bitcoin_core_rpc import BitcoinCoreRPCError
 from src.database.block_store import BitcoinCoreRemoteBlockStore
 from src.database.database import BitCloneDatabase
 from src.node.node import Node
-from src.tx import Tx, TxIn, TxOut
+from src.tx import Tx, TxIn, TxOut, UTXO
 
 
 def _coinbase() -> Tx:
@@ -50,6 +50,14 @@ class FakeCoreRPC:
             side_effect=lambda block_hash: Block.from_bytes(self.blocks[block_hash]).get_header().to_bytes()
         )
         self.get_blockchain_info = MagicMock(return_value=self.info)
+        self.tx_outs = {}
+        self.block_header_infos = {}
+        self.get_tx_out = MagicMock(
+            side_effect=lambda txid, vout: self.tx_outs.get((txid, vout))
+        )
+        self.get_block_header_info = MagicMock(
+            side_effect=lambda display_hash: self.block_header_infos[display_hash]
+        )
 
 
 def test_remote_store_reads_by_hash_and_height_without_local_block_files(tmp_path):
@@ -93,6 +101,59 @@ def test_remote_store_records_connected_metadata_without_writing_body(tmp_path):
         assert row == (-1, 0, len(block.to_bytes()))
         assert list(blocks_dir.glob("blk*.dat")) == []
         assert db.get_block(block.block_id).block_id == block.block_id
+    finally:
+        db.close()
+
+
+def test_remote_mode_delegates_utxo_lookup_and_converts_core_data(tmp_path):
+    rpc = FakeCoreRPC([genesis_block])
+    txid = bytes(range(32))
+    vout = 7
+    outpoint = txid + vout.to_bytes(4, "little")
+    bestblock = "11" * 32
+    rpc.tx_outs[(txid, vout)] = {
+        "bestblock": bestblock,
+        "confirmations": 6,
+        "value": 1.23456789,
+        "scriptPubKey": {"hex": "0014" + "22" * 20},
+        "coinbase": True,
+    }
+    rpc.block_header_infos[bestblock] = {"height": 100}
+    db = BitCloneDatabase(
+        tmp_path / "chain.db",
+        storage_mode="bitcoin-core-remote",
+        core_rpc=rpc,
+    )
+    try:
+        utxo = db.get_utxo(outpoint)
+
+        assert utxo == UTXO(
+            outpoint=outpoint,
+            amount=123_456_789,
+            scriptpubkey=bytes.fromhex("0014" + "22" * 20),
+            block_height=95,
+            is_coinbase=True,
+        )
+        rpc.get_tx_out.assert_called_once_with(txid, vout)
+        rpc.get_block_header_info.assert_called_once_with(bestblock)
+    finally:
+        db.close()
+
+
+def test_remote_mode_does_not_fall_back_to_incomplete_local_utxo_set(tmp_path):
+    rpc = FakeCoreRPC([genesis_block])
+    txid = b"\x33" * 32
+    outpoint = txid + (1).to_bytes(4, "little")
+    db = BitCloneDatabase(
+        tmp_path / "chain.db",
+        storage_mode="bitcoin-core-remote",
+        core_rpc=rpc,
+    )
+    try:
+        db.add_utxo(UTXO(outpoint, 50_000, b"\x51", 1))
+
+        assert db.get_utxo(outpoint) is None
+        rpc.get_tx_out.assert_called_once_with(txid, 1)
     finally:
         db.close()
 
@@ -176,7 +237,7 @@ def test_remote_mode_rejects_bitcoin_core_network_mismatch(tmp_path):
         Node(config=config, core_rpc=rpc)
 
 
-def test_node_status_reports_normalized_remote_source_health_and_trust(tmp_path):
+def test_node_status_reports_normalized_remote_source_health_and_trust(tmp_path, capsys):
     rpc = FakeCoreRPC([genesis_block, _block()])
     config = BitCloneConfig.from_options(
         data_dir=tmp_path,
@@ -187,7 +248,14 @@ def test_node_status_reports_normalized_remote_source_health_and_trust(tmp_path)
     )
     node = Node(config=config, core_rpc=rpc)
     try:
-        assert node.status()["remote_source"] == {
+        status = node.status()
+        assert status["block_data"] == {
+            "source": "bitcoin-core-remote",
+            "trust": "trusted-remote",
+            "independently_validated": False,
+        }
+        assert status["utxo_count"] is None
+        assert status["remote_source"] == {
             "reachable": True,
             "chain": "main",
             "tip_height": 1,
@@ -197,6 +265,8 @@ def test_node_status_reports_normalized_remote_source_health_and_trust(tmp_path)
             "trust": "trusted-remote",
             "error": None,
         }
+        node.print_info()
+        assert "UTXO Count:        remote" in capsys.readouterr().out
     finally:
         node.close()
 
@@ -259,5 +329,47 @@ def test_remote_chain_info_cli_command_delegates_without_ibd(tmp_path):
 
         assert result == {"configured": True, "blockchain": rpc.info}
         assert node.blockchain.height == 0
+    finally:
+        node.close()
+
+
+def test_remote_gettxout_cli_command_delegates_to_core(tmp_path):
+    rpc = FakeCoreRPC([genesis_block])
+    txid = b"\x44" * 32
+    bestblock = "55" * 32
+    rpc.tx_outs[(txid, 2)] = {
+        "bestblock": bestblock,
+        "confirmations": 2,
+        "value": 0.00001001,
+        "scriptPubKey": {"hex": "51"},
+        "coinbase": False,
+    }
+    rpc.block_header_infos[bestblock] = {"height": 20}
+    config = BitCloneConfig.from_options(
+        data_dir=tmp_path,
+        block_storage="bitcoin-core-remote",
+        core_rpc_url="http://Skyscraper:8332",
+        core_rpc_user="bitclone",
+        core_rpc_password="secret",
+    )
+    node = Node(config=config, core_rpc=rpc)
+    try:
+        result = _handle_command(
+            node,
+            SimpleNamespace(command="gettxout", txid=txid[::-1].hex(), vout=2),
+        )
+
+        assert result == {
+            "found": True,
+            "utxo": {
+                "outpoint": (txid + (2).to_bytes(4, "little")).hex(),
+                "txid": txid[::-1].hex(),
+                "vout": 2,
+                "amount": 1001,
+                "scriptpubkey": "51",
+                "block_height": 19,
+                "is_coinbase": False,
+            },
+        }
     finally:
         node.close()

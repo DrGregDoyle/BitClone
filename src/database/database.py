@@ -280,6 +280,9 @@ class BitCloneDatabase:
 
     def get_utxo(self, outpoint: bytes) -> UTXO | None:
         """Fetch a UTXO by outpoint."""
+        if self.storage_mode == REMOTE_STORAGE:
+            return self.block_store.get_utxo(outpoint)
+
         conn = self._require_conn()
         row = conn.execute(
             """

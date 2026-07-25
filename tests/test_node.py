@@ -141,6 +141,11 @@ def test_node_status_returns_structured_runtime_data(tmp_path):
         assert status["bits"] == node.blockchain.bits.hex()
         assert status["magic_bytes"] == MAGICBYTES.MAINNET.hex()
         assert status["mining"] is False
+        assert status["block_data"] == {
+            "source": "local-chainstate",
+            "trust": "independently-validated",
+            "independently_validated": True,
+        }
         assert status["remote_source"] is None
     finally:
         node.close()

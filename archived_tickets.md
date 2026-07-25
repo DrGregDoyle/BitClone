@@ -251,7 +251,9 @@ and add it to the mempool so that unconfirmed transactions propagate across the 
 - [x] Run append-only block validation (PoW, Merkle, scripts, coinbase)
 - [x] Update UTXO set and chain height on successful append-only active-chain block
 
-### Sprint 4 — IBD Groundwork
+### Sprint 4 — Blockchain Data Access (No Local IBD)
+
+**Status: Complete**
 
 #### Story 0 — Cleanup and Maintenance
 
@@ -280,6 +282,16 @@ so that BitClone can inspect blocks without conducting IBD or duplicating the bl
 - [x] Keep remote block bodies out of local block files
 - [x] Preserve archival and pruned modes for future independent-node operation
 - [x] Add mocked RPC and remote-store tests plus a bounded optional live check
+
+#### Story 4.3 — Remote Source Health & Trust Reporting
+As a node operator, I want BitClone to report the state and trust boundary of its Bitcoin Core source
+so that remote-backed development is explicit and failures are easy to diagnose.
+
+- [x] Show remote reachability, chain, tip height/hash, verification progress, and pruning state in node status
+- [x] Reject a remote source whose Bitcoin network does not match BitClone's selected network
+- [x] Clearly distinguish trusted remote data from independently validated local chainstate
+- [x] Delegate remote-mode UTXO queries to Bitcoin Core instead of presenting the incomplete local UTXO set
+- [x] Load remote-storage settings from `bitclone.toml` so flags do not need to be repeated
 
 #### Earlier Groundwork
 

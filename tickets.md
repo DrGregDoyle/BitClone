@@ -11,24 +11,6 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 
 ---
 
-### Sprint 4 — Blockchain Data Access (No Local IBD)
-
-**Story 0 — Cleanup and Maintenance**
-Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 4.
-Each item should be handled as a separate ticket with sufficient tests.
-
-**Story 4.3 — Remote Source Health & Trust Reporting**
-As a node operator, I want BitClone to report the state and trust boundary of its Bitcoin Core source
-so that remote-backed development is explicit and failures are easy to diagnose.
-
-- [x] Show remote reachability, chain, tip height/hash, verification progress, and pruning state in node status
-- [x] Reject a remote source whose Bitcoin network does not match BitClone's selected network
-- [ ] Clearly distinguish trusted remote data from independently validated local chainstate
-- [ ] Delegate remote-mode UTXO queries to Bitcoin Core instead of presenting the incomplete local UTXO set
-- [ ] Load remote-storage settings from `bitclone.toml` so flags do not need to be repeated
-
----
-
 ### Sprint 5 — Network Hardening & Integration Testing
 
 **Story 0 — Cleanup and Maintenance**
@@ -230,6 +212,68 @@ Each item should be handled as a separate ticket with sufficient tests.
 **Story 12.3 — Runtime Boundaries**
 
 - [ ] Split consensus logic, policy logic, node orchestration, and wallet concerns into clearer module boundaries
+
+---
+
+### Sprint 13 — Independent Node Runtime & Release
+
+This is the final integration sprint. Its outcome is a distributable BitClone installation that can synchronize
+from the Bitcoin P2P network, operate without Bitcoin Core, remain online after IBD, and expose safe interfaces for
+node, wallet, and mining operations.
+
+**Story 0 — Cleanup and Maintenance**
+Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 13.
+Each item should be handled as a separate ticket with sufficient tests.
+
+**Story 13.1 — Local Initial Block Download**
+As a node operator, I want BitClone to build its own validated chainstate from Bitcoin peers
+so that archival and pruned installations can operate independently of Bitcoin Core.
+
+- [ ] Continue from header sync into a bounded parallel block-download scheduler
+- [ ] Select, rotate, and penalize download peers when blocks are invalid, unavailable, or stalled
+- [ ] Independently validate and atomically connect every downloaded block in chain order
+- [ ] Persist IBD checkpoints and resume safely after clean shutdown, interruption, or process failure
+- [ ] Support both archival retention and configured pruning throughout IBD
+- [ ] Report header, block, chainstate, verification, throughput, and estimated-completion progress
+- [ ] Transition automatically from IBD into normal tip-following and relay operation
+- [ ] Complete IBD without requiring Bitcoin Core, its RPC service, or its block storage
+
+**Story 13.2 — Concurrent Long-Running Runtime**
+As a node operator, I want networking, synchronization, wallet services, mining, and control interfaces to remain
+responsive concurrently so that BitClone behaves as a continuously running node.
+
+- [ ] Define one asynchronous node runtime with bounded worker threads or processes for blocking and CPU-heavy work
+- [ ] Run peer networking, IBD, block validation, mempool maintenance, wallet scanning, mining coordination, and API
+      serving without blocking one another
+- [ ] Protect shared chain, mempool, wallet, and mining state with explicit ownership, queues, and synchronization
+- [ ] Add cancellation, backpressure, task supervision, and graceful shutdown across all background services
+- [ ] Prevent mining and wallet operations from using stale chainstate during tip changes or reorganisations
+- [ ] Add concurrency, restart, long-running soak, and controlled-failure tests
+
+**Story 13.3 — Node, Wallet & Mining Service API**
+As a user, I want to interact with a running BitClone process without stopping it
+so that node administration, wallet use, and mining controls are available to local applications.
+
+- [ ] Host the existing Bitcoin-style JSON-RPC interface and an optional versioned REST API over HTTP
+- [ ] Expose node status, sync progress, peers, chain data, mempool data, and transaction broadcast
+- [ ] Expose wallet balances, addresses, UTXOs, transaction creation/signing, history, and rescan controls
+- [ ] Expose mining status, block-template retrieval, start/stop controls, candidate submission, and found-block results
+- [ ] Provide `getblocktemplate` and `submitblock` for external mining software
+- [ ] Define a supported Stratum-compatible solo-mining endpoint or documented bridge for devices such as BitAxe
+- [ ] Add authenticated local access, configurable bind addresses, TLS support, and safe secret handling
+- [ ] Keep private keys, RPC credentials, and administrative operations out of unauthenticated responses
+- [ ] Add API integration tests covering simultaneous node, wallet, and mining activity
+
+**Story 13.4 — Independent-Node Release Qualification**
+As a user, I want a documented and tested BitClone distribution
+so that I can install it, synchronize it, and keep it operating as a Bitcoin node.
+
+- [ ] Package an installable service with sample full-node, pruned-node, and remote-development configurations
+- [ ] Run end-to-end IBD, restart, reorganisation, pruning, wallet, relay, and mining qualification scenarios
+- [ ] Verify that a synchronized node remains at the network tip and recovers after peers or the API restart
+- [ ] Document storage, memory, bandwidth, security, backup, pruning, and upgrade requirements
+- [ ] Clearly label experimental features and establish release-readiness criteria for mainnet use
+- [ ] Demonstrate a fresh installation synchronizing and operating without any Bitcoin Core dependency
 
 ---
 

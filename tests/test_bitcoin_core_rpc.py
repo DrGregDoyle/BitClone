@@ -59,6 +59,24 @@ def test_rpc_converts_hashes_between_core_display_and_internal_order():
     assert rpc.call.call_args_list[2].args == ("getblockheader", display_hash, False)
 
 
+def test_rpc_queries_tx_out_in_core_display_order_and_requests_verbose_header():
+    internal_txid = bytes(range(32))
+    display_txid = internal_txid[::-1].hex()
+    rpc = BitcoinCoreRPC("http://127.0.0.1:8332", username="user", password="pass")
+    tx_out = {"bestblock": "00" * 32, "confirmations": 3}
+    header_info = {"height": 100}
+    rpc.call = MagicMock(side_effect=[tx_out, header_info])
+
+    assert rpc.get_tx_out(internal_txid, 7) == tx_out
+    assert rpc.get_block_header_info(tx_out["bestblock"]) == header_info
+    assert rpc.call.call_args_list[0].args == ("gettxout", display_txid, 7, True)
+    assert rpc.call.call_args_list[1].args == (
+        "getblockheader",
+        tx_out["bestblock"],
+        True,
+    )
+
+
 def test_rpc_surfaces_core_error_without_credentials_in_message():
     rpc = BitcoinCoreRPC("http://127.0.0.1:8332", username="user", password="secret")
     with patch(

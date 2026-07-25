@@ -642,14 +642,33 @@ class Node:
             "best_header_height": best_header.height if best_header is not None else -1,
             "best_header": best_header.block_hash[::-1].hex() if best_header is not None else None,
             "header_sync": self.header_sync.state.value,
-            "utxo_count": self.blockchain.utxo_count(),
+            "utxo_count": (
+                None
+                if self.config.block_storage is BlockStorageMode.BITCOIN_CORE_REMOTE
+                else self.blockchain.utxo_count()
+            ),
             "mempool_size": len(self.mempool),
             "outbound_peers": len(self.ready_peers),
             "target_outbound": self.peer_manager.target_outbound,
             "bits": self.blockchain.bits.hex(),
             "target": self.blockchain.target.hex(),
             "mining": self.miner.is_mining() if self.miner else False,
+            "block_data": self._block_data_status(),
             "remote_source": self._remote_source_status(),
+        }
+
+    def _block_data_status(self) -> dict[str, Any]:
+        """Describe where block data comes from and who validates it."""
+        if self.config.block_storage is BlockStorageMode.BITCOIN_CORE_REMOTE:
+            return {
+                "source": BlockStorageMode.BITCOIN_CORE_REMOTE.value,
+                "trust": "trusted-remote",
+                "independently_validated": False,
+            }
+        return {
+            "source": "local-chainstate",
+            "trust": "independently-validated",
+            "independently_validated": True,
         }
 
     def _remote_source_status(self) -> dict[str, Any] | None:
@@ -700,7 +719,9 @@ class Node:
         print(f"Started:           {info['started']}")
         print(f"Blockchain Height: {info['height']}")
         print(f"Tip:               {info['tip']}")
-        print(f"UTXO Count:        {info['utxo_count']:,}")
+        utxo_count = info["utxo_count"]
+        utxo_count_text = "remote" if utxo_count is None else f"{utxo_count:,}"
+        print(f"UTXO Count:        {utxo_count_text}")
         print(f"Mempool Size:      {info['mempool_size']}")
         print(f"Bits:              {info['bits']}")
         print(f"Mining:            {info['mining']}")

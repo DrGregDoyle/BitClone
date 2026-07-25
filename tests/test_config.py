@@ -150,3 +150,60 @@ def test_initialize_creates_data_directory_layout(tmp_path):
     assert config.wallet_dir.is_dir()
     assert result["network"] == "regtest"
     assert result["db_path"] == str(config.db_path)
+
+
+def test_config_loads_remote_storage_settings_from_toml(tmp_path):
+    cookie = tmp_path / "core.cookie"
+    persisted = BitCloneConfig.from_options(
+        data_dir=tmp_path,
+        network="signet",
+        block_storage="bitcoin-core-remote",
+        core_rpc_url="http://127.0.0.1:38332",
+        core_rpc_user="bitclone",
+        core_rpc_cookie=cookie,
+        core_rpc_timeout=4.5,
+    )
+    persisted.initialize()
+
+    loaded = BitCloneConfig.from_toml(data_dir=tmp_path)
+
+    assert loaded.network is NetworkName.SIGNET
+    assert loaded.block_storage is BlockStorageMode.BITCOIN_CORE_REMOTE
+    assert loaded.core_rpc_url == "http://127.0.0.1:38332"
+    assert loaded.core_rpc_user == "bitclone"
+    assert loaded.core_rpc_cookie == cookie
+    assert loaded.core_rpc_timeout == 4.5
+    assert loaded.core_rpc_password is None
+
+
+def test_explicit_options_override_toml_settings(tmp_path):
+    persisted = BitCloneConfig.from_options(
+        data_dir=tmp_path,
+        network="signet",
+        block_storage="bitcoin-core-remote",
+        core_rpc_url="http://127.0.0.1:38332",
+        core_rpc_user="from-file",
+        core_rpc_cookie=tmp_path / "file.cookie",
+    )
+    persisted.initialize()
+
+    loaded = BitCloneConfig.from_toml(
+        data_dir=tmp_path,
+        network="regtest",
+        core_rpc_user="from-cli",
+        core_rpc_cookie=tmp_path / "cli.cookie",
+    )
+
+    assert loaded.network is NetworkName.REGTEST
+    assert loaded.core_rpc_user == "from-cli"
+    assert loaded.core_rpc_cookie == tmp_path / "cli.cookie"
+
+
+def test_config_rejects_rpc_password_in_toml(tmp_path):
+    (tmp_path / "bitclone.toml").write_text(
+        'core_rpc_password = "do-not-store-me"\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="BITCLONE_CORE_RPC_PASSWORD"):
+        BitCloneConfig.from_toml(data_dir=tmp_path)

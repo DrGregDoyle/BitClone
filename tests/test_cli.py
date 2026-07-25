@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.cli import _handle_command, main
+from src.config import BitCloneConfig
 from src.node.node import Node
 from src.script import P2SH_Key
 from src.tx.tx import Tx, TxIn, TxOut, UTXO
@@ -80,6 +81,49 @@ def test_status_uses_data_dir_and_network_without_db_path(tmp_path, capsys):
     assert output["db_path"] == str(tmp_path / "regtest" / "chainstate" / "bitclone.db")
     assert (tmp_path / "regtest" / "chainstate" / "bitclone.db").exists()
     assert (tmp_path / "regtest" / "blocks").is_dir()
+
+
+def test_status_loads_remote_config_from_toml_without_repeated_flags(
+        tmp_path,
+        monkeypatch,
+        capsys,
+):
+    cookie = tmp_path / "core.cookie"
+    BitCloneConfig.from_options(
+        data_dir=tmp_path,
+        network="signet",
+        block_storage="bitcoin-core-remote",
+        core_rpc_url="http://127.0.0.1:38332",
+        core_rpc_cookie=cookie,
+        core_rpc_timeout=3.0,
+    ).initialize()
+    captured = {}
+
+    class ConfigRecordingNode:
+        def __init__(self, config):
+            captured["config"] = config
+
+        def status(self):
+            return self.config.to_data()
+
+        @property
+        def config(self):
+            return captured["config"]
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("src.cli.Node", ConfigRecordingNode)
+
+    exit_code = main(["--data-dir", str(tmp_path), "--json", "status"])
+
+    assert exit_code == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["network"] == "signet"
+    assert output["block_storage"] == "bitcoin-core-remote"
+    assert output["core_rpc_url"] == "http://127.0.0.1:38332"
+    assert output["core_rpc_cookie"] == str(cookie)
+    assert output["core_rpc_timeout"] == 3.0
 
 
 def test_build_template_outputs_candidate_block(tmp_path, capsys):
