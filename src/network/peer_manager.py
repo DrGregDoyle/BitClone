@@ -19,6 +19,7 @@ logger = get_logger(__name__)
 ConnectPeer = Callable[[str, int], Peer]
 ReadyPeers = Callable[[], Iterable[Peer]]
 BootstrapPeers = Callable[[], object]
+IsBanned = Callable[[str], bool]
 
 
 class PeerManager:
@@ -30,6 +31,7 @@ class PeerManager:
             connect_peer: ConnectPeer,
             ready_peers: ReadyPeers,
             bootstrap_peers: BootstrapPeers | None = None,
+            is_banned: IsBanned | None = None,
             target_outbound: int = 8,
             base_backoff: float = 1.0,
             max_backoff: float = 300.0,
@@ -56,6 +58,7 @@ class PeerManager:
         self._connect_peer = connect_peer
         self._ready_peers = ready_peers
         self._bootstrap_peers = bootstrap_peers
+        self._is_banned = (lambda _host: False) if is_banned is None else is_banned
         self._clock = clock
         self._random_value = random_value
         self._retry_at: dict[PeerKey, float] = {}
@@ -116,6 +119,8 @@ class PeerManager:
         for address in self.address_book.candidates(exclude=ready_keys):
             if len(connected) >= open_slots:
                 break
+            if self._is_banned(str(address.host)):
+                continue
             if self._retry_at.get(address.key, 0) > now:
                 continue
             try:

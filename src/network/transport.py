@@ -87,6 +87,14 @@ class Transport:
             return self._socket_factory(family, socktype, protocol)
         return socket.socket(family, socktype, protocol)
 
+    def adopt_socket(self, peer: Peer, sock: socket.socket) -> None:
+        """Register an already-connected inbound socket."""
+        if peer.key in self._conns:
+            raise ConnectionError(f"Already connected to {peer.host}:{peer.port}")
+        sock.settimeout(self._timeout)
+        self._conns[peer.key] = Connection(sock=sock, peer_key=peer.key)
+        peer.transition(PeerState.CONNECTED, time.time())
+
     def disconnect(self, peer: Peer) -> None:
         conn = self._conns.pop(peer.key, None)
         peer.transition(PeerState.DISCONNECTED)

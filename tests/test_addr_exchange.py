@@ -5,7 +5,7 @@ import pytest
 from src.core import NETWORK
 from src.network.datatypes.network_data import NetAddr
 from src.network.datatypes.network_types import PeerState, Services
-from src.network.messages.ctrl_msg import Addr, Ping
+from src.network.messages.ctrl_msg import Addr, WtxidRelay
 from src.network.peer import Peer
 from src.network.peer_address_book import PeerSource
 from src.node.node import Node
@@ -76,14 +76,14 @@ def test_addr_relay_excludes_source_and_disconnected_peers(monkeypatch, tmp_path
         node.close()
 
 
-def test_non_addr_message_is_ignored_by_addr_handler(tmp_path):
+def test_unhandled_control_message_is_ignored_by_addr_handler(tmp_path):
     node = Node(db_path=tmp_path / "node.db")
     peer = _ready_peer(SOURCE_HOST, NETWORK.MAINNET_PORT)
     node._ready_peers[peer.key] = peer
     node.transport.send = MagicMock()
 
     try:
-        assert node.handle_peer_message(peer, Ping(1)) == ()
+        assert node.handle_peer_message(peer, WtxidRelay()) == ()
         node.transport.send.assert_not_called()
     finally:
         node.close()

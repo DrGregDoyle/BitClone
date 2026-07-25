@@ -11,37 +11,6 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 
 ---
 
-### Sprint 5 — Network Hardening & Integration Testing
-
-**Story 0 — Cleanup and Maintenance**
-Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 5.
-Each item should be handled as a separate ticket with sufficient tests.
-
-**Story 5.1 — Network Integration Tests**
-As a developer, I want automated tests that exercise the full P2P path without hitting the live network.
-
-- [ ] Spin up two in-process nodes in regtest mode, complete a handshake, and propagate a block
-- [ ] Add P2P handshake tests using in-process sockets
-- [ ] Add an IBD simulation against a local regtest peer
-
-**Story 5.2 — Peer Misbehaviour Scoring**
-As a node, I want to assign misbehaviour scores to peers and disconnect or ban those that exceed a threshold
-so that the node is resilient to malformed or malicious messages.
-
-- [ ] Define peer misbehaviour scores and a disconnect threshold
-- [ ] Maintain a ban list for peers that send invalid data
-- [ ] Add malformed-message and ban-expiry tests
-
-**Story 5.3 — `ping` / `pong` Keepalive**
-As a node, I want to send periodic `ping` messages and disconnect peers that do not respond with `pong`
-within a timeout so that stale connections are cleaned up automatically.
-
-- [ ] Schedule periodic `ping` messages for ready peers
-- [ ] Match `pong` nonces to outstanding pings
-- [ ] Disconnect peers after the keepalive timeout
-
----
-
 ### Sprint 6 — Consensus & Script Compliance
 
 **Story 0 — Cleanup and Maintenance**

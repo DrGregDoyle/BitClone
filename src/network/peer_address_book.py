@@ -25,6 +25,7 @@ class PeerSource(str, Enum):
     """How BitClone learned about a peer address."""
 
     MANUAL = "manual"
+    INBOUND = "inbound"
     DNS_SEED = "dns_seed"
     ADDR = "addr"
 

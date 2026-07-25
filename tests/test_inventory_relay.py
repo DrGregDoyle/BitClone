@@ -160,6 +160,28 @@ def test_submit_block_announces_inventory_after_acceptance(tmp_path):
         node.close()
 
 
+def test_received_block_is_not_announced_back_to_source(tmp_path):
+    node = Node(db_path=tmp_path / "node.db")
+    source = _ready_peer(SOURCE_HOST)
+    recipient = _ready_peer(SECOND_HOST)
+    node._ready_peers = {peer.key: peer for peer in (source, recipient)}
+    node.blockchain.add_block = MagicMock(return_value=True)
+    node.mempool.confirm_block = MagicMock()
+    node.transport.send = MagicMock()
+    block = Block(prev_block=node.blockchain.tip.block_id, bits=node.blockchain.bits, txs=[_tx()])
+
+    try:
+        assert node.handle_peer_message(source, BlockMessage(block)) == (block,)
+
+        node.transport.send.assert_called_once()
+        assert node.transport.send.call_args.args[0] is recipient
+        announcement = node.transport.send.call_args.args[1]
+        assert isinstance(announcement, Inv)
+        assert announcement.items == [InvVector(InvType.MSG_BLOCK, block.block_id)]
+    finally:
+        node.close()
+
+
 def test_inv_requests_only_unknown_supported_and_not_inflight_items(tmp_path):
     node = Node(db_path=tmp_path / "node.db")
     first_peer = _ready_peer(SOURCE_HOST)

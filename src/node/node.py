@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import random
 import secrets
+import socket
 import threading
 import time
 from pathlib import Path
@@ -13,7 +14,16 @@ from typing import Any
 from src.block.block import Block
 from src.blockchain.blockchain import Blockchain
 from src.config import BitCloneConfig, BlockStorageMode, NetworkName
-from src.core import BLOCK, NETWORK, TX, NetworkError, get_logger
+from src.core import (
+    BLOCK,
+    NETWORK,
+    TX,
+    NetworkDataError,
+    NetworkError,
+    ReadError,
+    TransactionError,
+    get_logger,
+)
 from src.mempool.mempool import MemPool
 from src.database.bitcoin_core_rpc import BitcoinCoreRPC, BitcoinCoreRPCError
 from src.mining.miner import Miner
@@ -25,13 +35,24 @@ from src.network.dns_seeds import (
     DNSSeedBootstrap,
     DNSSeedResult,
 )
-from src.network.messages.ctrl_msg import Addr, GetAddr, SendAddrV2, VerAck, Version, WtxidRelay
+from src.network.messages.ctrl_msg import (
+    Addr,
+    GetAddr,
+    Ping,
+    Pong,
+    SendAddrV2,
+    VerAck,
+    Version,
+    WtxidRelay,
+)
 from src.network.messages.data_msg import BlockMessage, GetData, GetHeaders, Headers, Inv, NotFound, Txn
 from src.network.messages.message import Message
 from src.network.header_sync import HeaderSync, HeaderSyncState
 from src.network.inventory import InflightInventory, inventory_key
+from src.network.keepalive import PeerKeepalive
 from src.network.peer import Peer
 from src.network.peer_address_book import PeerAddress, PeerAddressBook, PeerKey, PeerSource
+from src.network.peer_discipline import PeerDiscipline, PeerMisbehaviour
 from src.network.peer_manager import PeerManager
 from src.network.transport import Transport
 from src.tx.tx import Tx, TxIn, TxOut
@@ -69,7 +90,9 @@ class Node:
             miner: Miner | None = None,
             transport: Transport | None = None,
             address_book: PeerAddressBook | None = None,
+            peer_discipline: PeerDiscipline | None = None,
             peer_manager: PeerManager | None = None,
+            keepalive: PeerKeepalive | None = None,
             target_outbound: int = 8,
             inventory_requests: InflightInventory | None = None,
             header_sync: HeaderSync | None = None,
@@ -123,6 +146,7 @@ class Node:
         self.miner = miner or Miner()
         self.transport = transport or Transport(magic_bytes=self.config.magic_bytes)
         self.address_book = address_book if address_book is not None else PeerAddressBook(self.config.p2p_port)
+        self.peer_discipline = peer_discipline or PeerDiscipline()
         self._ready_peers: dict[PeerKey, Peer] = {}
         self._ready_peers_lock = threading.RLock()
         self.peer_manager = peer_manager or PeerManager(
@@ -130,12 +154,18 @@ class Node:
             connect_peer=self._connect_address_book_peer,
             ready_peers=lambda: self.ready_peers,
             bootstrap_peers=self.bootstrap_dns,
+            is_banned=self.peer_discipline.is_banned,
             target_outbound=target_outbound,
         )
         self.inventory_requests = inventory_requests if inventory_requests is not None else InflightInventory()
         self.header_sync = header_sync or HeaderSync(
             self.blockchain,
             lambda peer, message: self.transport.send(peer, message),
+        )
+        self.keepalive = keepalive or PeerKeepalive(
+            ready_peers=lambda: self.ready_peers,
+            send_ping=lambda peer, message: self.transport.send(peer, message),
+            disconnect_peer=self.disconnect_peer,
         )
         self.started = False
 
@@ -174,11 +204,13 @@ class Node:
             return
         self.started = True
         self.peer_manager.start()
+        self.keepalive.start()
 
     def stop(self) -> None:
         """
         Stop active background work without closing persistent resources.
         """
+        self.keepalive.stop()
         self.peer_manager.stop()
         self.stop_mining()
         for peer in self.ready_peers:
@@ -222,6 +254,8 @@ class Node:
             source: PeerSource = PeerSource.MANUAL,
     ) -> Peer:
         """Connect to a fixed peer and initiate the Bitcoin version handshake."""
+        if self.peer_discipline.is_banned(host):
+            raise ConnectionError(f"Peer {host} is temporarily banned")
         peer = Peer(host, self.config.p2p_port if port is None else port)
         self.address_book.add_peer(peer, source=source)
         try:
@@ -249,16 +283,7 @@ class Node:
             if not isinstance(peer_version, Version):
                 raise NetworkError(f"Expected Version, received {type(peer_version).__name__}")
 
-            peer.protocol_version = peer_version.protocol_version
-            peer.services = peer_version.services
-            peer.user_agent = peer_version.user_agent
-            peer.nonce = peer_version.nonce
-            peer.last_block = peer_version.last_block
-            if peer.protocol_version < NETWORK.MIN_PROTOCOL_VERSION:
-                raise NetworkError(
-                    f"Peer protocol version {peer.protocol_version} is below minimum supported version "
-                    f"{NETWORK.MIN_PROTOCOL_VERSION}"
-                )
+            self._apply_peer_version(peer, peer_version)
 
             self.transport.send(peer, VerAck())
             for _ in range(NETWORK.MAX_PRE_VERACK_MESSAGES + 1):
@@ -274,7 +299,8 @@ class Node:
                     f"Peer exceeded limit of {NETWORK.MAX_PRE_VERACK_MESSAGES} messages before verack"
                 )
             self.transport.send(peer, GetAddr())
-        except Exception:
+        except Exception as error:
+            self._record_peer_misbehaviour(peer, error)
             self.address_book.record_failure(peer, source=source, failed_at=time.time())
             self.transport.disconnect(peer)
             raise
@@ -282,7 +308,88 @@ class Node:
         self.address_book.record_success(peer, source=source, succeeded_at=time.time())
         with self._ready_peers_lock:
             self._ready_peers[peer.key] = peer
+        self.keepalive.wake()
         return peer
+
+    def accept_peer(self, sock: socket.socket) -> Peer:
+        """Adopt an inbound socket and complete the responder-side handshake."""
+        remote_host, remote_port = sock.getpeername()[:2]
+        if self.peer_discipline.is_banned(str(remote_host)):
+            sock.close()
+            raise ConnectionError(f"Peer {remote_host} is temporarily banned")
+        peer = Peer(str(remote_host), int(remote_port))
+        self.address_book.add_peer(peer, source=PeerSource.INBOUND)
+        self.transport.adopt_socket(peer, sock)
+        peer.transition(PeerState.HANDSHAKING)
+
+        try:
+            peer_version = self.transport.recv_one(peer, expected_command=Version.COMMAND)
+            if not isinstance(peer_version, Version):
+                raise NetworkError(f"Expected Version, received {type(peer_version).__name__}")
+            self._apply_peer_version(peer, peer_version)
+
+            local_host, local_port = self.transport.get_local_address(peer)
+            peer.local_nonce = secrets.randbits(64)
+            self.transport.send(
+                peer,
+                Version(
+                    version=NETWORK.PROTOCOL_VERSION,
+                    services=Services.UNNAMED,
+                    timestamp=int(time.time()),
+                    remote_addr=NetAddr(peer.host, peer.port, Services.UNNAMED),
+                    local_addr=NetAddr(local_host, local_port, Services.UNNAMED),
+                    nonce=peer.local_nonce,
+                    user_agent=NETWORK.USER_AGENT,
+                    last_block=self.blockchain.height,
+                ),
+            )
+            self.transport.send(peer, VerAck())
+
+            for _ in range(NETWORK.MAX_PRE_VERACK_MESSAGES + 1):
+                response = self.transport.recv_one(peer)
+                if isinstance(response, VerAck):
+                    peer.transition(PeerState.READY)
+                    break
+                if not isinstance(response, (SendAddrV2, WtxidRelay)):
+                    response_command = getattr(response, "command", response.__class__.COMMAND)
+                    raise NetworkError(f"Unexpected command before verack: {response_command!r}")
+            else:
+                raise NetworkError(
+                    f"Peer exceeded limit of {NETWORK.MAX_PRE_VERACK_MESSAGES} messages before verack"
+                )
+        except Exception as error:
+            self._record_peer_misbehaviour(peer, error)
+            self.address_book.record_failure(
+                peer,
+                source=PeerSource.INBOUND,
+                failed_at=time.time(),
+            )
+            self.transport.disconnect(peer)
+            raise
+
+        self.address_book.record_success(
+            peer,
+            source=PeerSource.INBOUND,
+            succeeded_at=time.time(),
+        )
+        with self._ready_peers_lock:
+            self._ready_peers[peer.key] = peer
+        self.keepalive.wake()
+        return peer
+
+    @staticmethod
+    def _apply_peer_version(peer: Peer, version: Version) -> None:
+        """Record negotiated version fields and enforce the protocol floor."""
+        peer.protocol_version = version.protocol_version
+        peer.services = version.services
+        peer.user_agent = version.user_agent
+        peer.nonce = version.nonce
+        peer.last_block = version.last_block
+        if peer.protocol_version < NETWORK.MIN_PROTOCOL_VERSION:
+            raise NetworkError(
+                f"Peer protocol version {peer.protocol_version} is below minimum supported version "
+                f"{NETWORK.MIN_PROTOCOL_VERSION}"
+            )
 
     def connect_upstream(self, start_header_sync: bool = True) -> Peer:
         """Connect to the configured preferred peer and optionally start header sync."""
@@ -316,6 +423,7 @@ class Node:
         """Disconnect a peer and remove it from the ready-peer registry."""
         with self._ready_peers_lock:
             self._ready_peers.pop(peer.key, None)
+        self.keepalive.forget(peer)
         self.inventory_requests.release_peer(peer.key)
         self.header_sync.peer_disconnected(peer)
         self.transport.disconnect(peer)
@@ -342,7 +450,8 @@ class Node:
         try:
             message = self.transport.recv_one(peer)
             self.handle_peer_message(peer, message)
-        except Exception:
+        except Exception as error:
+            self._record_peer_misbehaviour(peer, error)
             self.address_book.record_failure(
                 peer,
                 source=self._source_for_peer(str(peer.host), peer.port),
@@ -352,6 +461,47 @@ class Node:
             raise
         return message
 
+    def _record_peer_misbehaviour(
+            self,
+            peer: Peer,
+            error: Exception | None = None,
+    ) -> int:
+        """Score malformed peer input while leaving ordinary I/O failures unpenalized."""
+        violation = self._classify_peer_error(error)
+        if violation is None:
+            return self.peer_discipline.score(str(peer.host))
+        score = self.peer_discipline.record(str(peer.host), violation)
+        logger.warning(
+            f"Peer {peer.host}:{peer.port} misbehaviour "
+            f"{violation.label} (+{violation.score}, total={score})"
+        )
+        if self.peer_discipline.is_banned(str(peer.host)):
+            for candidate in self.ready_peers:
+                if candidate is not peer and self.peer_discipline.is_banned(str(candidate.host)):
+                    self.disconnect_peer(candidate)
+        return score
+
+    @staticmethod
+    def _classify_peer_error(error: Exception | None) -> PeerMisbehaviour | None:
+        if error is None:
+            return None
+        if isinstance(error, NetworkError):
+            if (
+                    "Unexpected" in str(error)
+                    or "without an outstanding" in str(error)
+                    or "below minimum supported" in str(error)
+            ):
+                return PeerMisbehaviour.PROTOCOL_VIOLATION
+            return PeerMisbehaviour.MALFORMED_MESSAGE
+        if isinstance(error, (NetworkDataError, TransactionError)):
+            return PeerMisbehaviour.INVALID_DATA
+        if isinstance(
+                error,
+                (ReadError, UnicodeDecodeError, ValueError),
+        ):
+            return PeerMisbehaviour.MALFORMED_MESSAGE
+        return None
+
     def handle_peer_message(
             self,
             peer: Peer,
@@ -360,6 +510,13 @@ class Node:
         """Apply a received peer message to node networking state."""
         if not self._is_ready_peer(peer):
             raise ConnectionError(f"Peer {peer.host}:{peer.port} is not ready")
+        if isinstance(message, Ping):
+            self.transport.send(peer, Pong(message.nonce))
+            return ()
+        if isinstance(message, Pong):
+            if not self.keepalive.handle_pong(peer, message.nonce):
+                raise NetworkError(f"Unexpected pong nonce from {peer.host}:{peer.port}")
+            return ()
         if isinstance(message, Addr):
             merged = self.address_book.merge_net_addresses(message.addr_list)
             self._relay_addr(peer, message)
@@ -385,6 +542,12 @@ class Node:
             return ()
         if isinstance(message, BlockMessage):
             self.inventory_requests.release_key(("block", message.block.block_id))
+            if self.submit_block(message.block, source_peer=peer):
+                return (message.block,)
+            logger.warning(
+                f"Rejected block {message.block.block_id.hex()} "
+                f"from {peer.host}:{peer.port}"
+            )
             return ()
         return ()
 
@@ -600,7 +763,7 @@ class Node:
 
     # --- Block handling ------------------------------------------------ #
 
-    def submit_block(self, block: Block) -> bool:
+    def submit_block(self, block: Block, source_peer: Peer | None = None) -> bool:
         """
         Validate and connect a block. Confirmed mempool transactions are removed
         after a successful active-chain append.
@@ -610,7 +773,7 @@ class Node:
             self.mempool.confirm_block([tx.txid for tx in block.txs])
             vector = InvVector(InvType.MSG_BLOCK, block.block_id)
             self.inventory_requests.release(vector)
-            self._announce_inventory(vector)
+            self._announce_inventory(vector, source_peer=source_peer)
         return accepted
 
     def on_block_mined(self, block: Block | None) -> bool:
@@ -650,6 +813,9 @@ class Node:
             "mempool_size": len(self.mempool),
             "outbound_peers": len(self.ready_peers),
             "target_outbound": self.peer_manager.target_outbound,
+            "banned_peers": len(self.peer_discipline.active_bans()),
+            "peer_ban_threshold": self.peer_discipline.ban_threshold,
+            "pending_pings": self.keepalive.pending_count,
             "bits": self.blockchain.bits.hex(),
             "target": self.blockchain.target.hex(),
             "mining": self.miner.is_mining() if self.miner else False,

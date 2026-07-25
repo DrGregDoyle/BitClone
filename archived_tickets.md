@@ -297,6 +297,33 @@ so that remote-backed development is explicit and failures are easy to diagnose.
 
 - [x] Parse `headers` response (up to 2000 headers per message)
 
+### Sprint 5 — Network Hardening & Integration Testing
+
+**Status: Complete**
+
+#### Story 5.1 — Network Integration Tests
+As a developer, I want automated tests that exercise the full P2P path without hitting the live network.
+
+- [x] Spin up two in-process nodes in regtest mode, complete a handshake, and propagate a block
+- [x] Add P2P handshake tests using in-process sockets
+- [x] Add an IBD simulation against a local regtest peer
+
+#### Story 5.2 — Peer Misbehaviour Scoring
+As a node, I want to assign misbehaviour scores to peers and disconnect or ban those that exceed a threshold
+so that the node is resilient to malformed or malicious messages.
+
+- [x] Define peer misbehaviour scores and a disconnect threshold
+- [x] Maintain a ban list for peers that send invalid data
+- [x] Add malformed-message and ban-expiry tests
+
+#### Story 5.3 — `ping` / `pong` Keepalive
+As a node, I want to send periodic `ping` messages and disconnect peers that do not respond with `pong`
+within a timeout so that stale connections are cleaned up automatically.
+
+- [x] Schedule periodic `ping` messages for ready peers
+- [x] Match `pong` nonces to outstanding pings
+- [x] Disconnect peers after the keepalive timeout
+
 ### Sprint 7 — Chain Reorganisation & Storage Integrity Groundwork
 
 - [x] Store undo data for every connected block

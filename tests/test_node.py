@@ -164,7 +164,12 @@ def test_node_uses_configured_network_magic(tmp_path):
 
 def test_node_lifecycle_starts_and_stops_injected_peer_manager(tmp_path):
     peer_manager = MagicMock()
-    node = Node(db_path=tmp_path / "node.db", peer_manager=peer_manager)
+    keepalive = MagicMock()
+    node = Node(
+        db_path=tmp_path / "node.db",
+        peer_manager=peer_manager,
+        keepalive=keepalive,
+    )
 
     try:
         node.start()
@@ -172,11 +177,13 @@ def test_node_lifecycle_starts_and_stops_injected_peer_manager(tmp_path):
 
         assert node.started
         peer_manager.start.assert_called_once_with()
+        keepalive.start.assert_called_once_with()
 
         node.stop()
 
         assert not node.started
         peer_manager.stop.assert_called_once_with()
+        keepalive.stop.assert_called_once_with()
     finally:
         node.close()
 
