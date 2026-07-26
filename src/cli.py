@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence
 
+from src.api import BitCloneHTTPServer, NodeApplicationService
 from src.config import BitCloneConfig, BlockStorageMode, NetworkName
 from src.core import ReadError, TransactionError
 from src.node.node import Node
@@ -90,6 +91,16 @@ def _build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("init", help="Create the BitClone data-directory layout.")
     subparsers.add_parser("status", help="Show node status.")
+    serve_api = subparsers.add_parser(
+        "serve-api",
+        help="Run the local versioned REST API until interrupted.",
+    )
+    serve_api.add_argument(
+        "--port",
+        type=int,
+        default=8334,
+        help="Loopback API port. Defaults to 8334.",
+    )
     subparsers.add_parser("build-template", help="Build and print a candidate block template.")
     subparsers.add_parser("getchaintip", help="Show the active chain tip.")
     subparsers.add_parser(
@@ -266,6 +277,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     node = None
     try:
         node = Node(config=config)
+        if args.command == "serve-api":
+            if not 1 <= args.port <= 65535:
+                raise ValueError("API port must be between 1 and 65535")
+            node.start()
+            server = BitCloneHTTPServer(
+                NodeApplicationService(node),
+                host="127.0.0.1",
+                port=args.port,
+            )
+            print(f"BitClone API listening at {server.url}")
+            try:
+                server.run()
+            except KeyboardInterrupt:
+                pass
+            return 0
         output = _handle_command(node, args)
         _print_output(output, args.json)
         return 0

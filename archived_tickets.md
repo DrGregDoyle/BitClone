@@ -346,6 +346,19 @@ within a timeout so that stale connections are cleaned up automatically.
 - [x] Add Bitcoin Core vectors for blocks, scripts, and transactions where practical
 - [x] Expand block-validation tests for Merkle roots, proof of work, coinbase rewards, and witness commitments
 
+### Sprint 7 — Local Control Plane & Browser Console
+
+#### Story 7.1 — Versioned Service API
+As a node operator, I want a stable local API so that the browser interface and automation tools can control a running
+BitClone process without reaching directly into consensus, wallet, or networking internals.
+
+- [x] Add an application-service layer between transports and node internals
+- [x] Serve a versioned REST API under `/api/v1`
+- [x] Add health, version, capability, node-status, sync, trust-source, chain, peer, and mempool endpoints
+- [x] Define consistent errors, pagination, timestamps, amount units, and API-version compatibility rules
+- [x] Publish an OpenAPI document generated from the implementation route registry
+- [x] Add endpoint integration and contract tests
+
 ### Chain Reorganisation & Storage Integrity — Early Groundwork
 
 Completed ahead of the active Chain Reorganisation & Storage Integrity sprint.

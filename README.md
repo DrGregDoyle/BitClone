@@ -75,6 +75,18 @@ python -m src --data-dir ~/.bitclone-remote getremotechaininfo
 python -m src --data-dir ~/.bitclone-remote status
 ```
 
+### Local service API
+
+BitClone can expose its read-only v1 operator API on the loopback interface:
+
+```bash
+python -m src --data-dir ~/.bitclone serve-api
+```
+
+The API defaults to `http://127.0.0.1:8334/api/v1`. Its generated OpenAPI document is available at
+`/api/v1/openapi.json`. The service is deliberately local and read-only during Sprint 7.1; authenticated access,
+live events, and explicit LAN/TLS configuration follow in Story 7.2.
+
 ---
 
 ## Bitcoin Notes

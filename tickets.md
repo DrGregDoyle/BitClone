@@ -20,17 +20,6 @@ node state; the browser, CLI, and future integrations use the same authenticated
 Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 7.
 Each item should be handled as a separate ticket with sufficient tests.
 
-**Story 7.1 — Versioned Service API**
-As a node operator, I want a stable local API so that the browser interface and automation tools can control a running
-BitClone process without reaching directly into consensus, wallet, or networking internals.
-
-- [ ] Add an application-service layer between transports and node internals
-- [ ] Serve a versioned REST API under `/api/v1`
-- [ ] Add health, version, capability, node-status, sync, trust-source, chain, peer, and mempool endpoints
-- [ ] Define consistent errors, pagination, timestamps, amount units, and API-version compatibility rules
-- [ ] Publish an OpenAPI document generated or validated from the implementation
-- [ ] Add endpoint integration and contract tests
-
 **Story 7.2 — Live Events and Local-First Security**
 
 - [ ] Stream sync, peer, block, mempool, warning, and lifecycle events using SSE or WebSockets
