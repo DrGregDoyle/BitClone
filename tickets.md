@@ -11,46 +11,96 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 
 ---
 
-### Sprint 7 — Chain Reorganisation & Storage Integrity
+### Sprint 7 — Local Control Plane & Browser Console
+
+This sprint establishes BitClone as downloadable node software operated through a local browser. The daemon owns all
+node state; the browser, CLI, and future integrations use the same authenticated service boundary.
 
 **Story 0 — Cleanup and Maintenance**
 Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 7.
 Each item should be handled as a separate ticket with sufficient tests.
 
-**Story 7.1 — Fork Detection and Reorganisation**
+**Story 7.1 — Versioned Service API**
+As a node operator, I want a stable local API so that the browser interface and automation tools can control a running
+BitClone process without reaching directly into consensus, wallet, or networking internals.
+
+- [ ] Add an application-service layer between transports and node internals
+- [ ] Serve a versioned REST API under `/api/v1`
+- [ ] Add health, version, capability, node-status, sync, trust-source, chain, peer, and mempool endpoints
+- [ ] Define consistent errors, pagination, timestamps, amount units, and API-version compatibility rules
+- [ ] Publish an OpenAPI document generated or validated from the implementation
+- [ ] Add endpoint integration and contract tests
+
+**Story 7.2 — Live Events and Local-First Security**
+
+- [ ] Stream sync, peer, block, mempool, warning, and lifecycle events using SSE or WebSockets
+- [ ] Bind HTTP and RPC services to loopback by default
+- [ ] Add authenticated sessions or bearer tokens, scoped API credentials, CSRF protection, and strict origin rules
+- [ ] Require explicit configuration for LAN access and TLS for access beyond loopback
+- [ ] Redact cookies, private keys, wallet secrets, and credentials from responses and logs
+- [ ] Add rate limits, sensitive-action audit records, and security-focused integration tests
+
+**Story 7.3 — Bitcoin-Compatible JSON-RPC and CLI**
+
+- [ ] Implement a local JSON-RPC server compatible with standard Bitcoin RPC where practical
+- [ ] Add `getblockchaininfo`, `getnetworkinfo`, `getpeerinfo`, and `getrawmempool`
+- [ ] Add `getrawtransaction`, `decoderawtransaction`, `sendrawtransaction`, and `gettxout`
+- [ ] Report unavailable wallet or mining capabilities explicitly until their later sprints are complete
+- [ ] Route CLI configuration, peer, chain, and transaction commands through the same application-service layer
+- [ ] Add JSON-RPC and CLI integration tests
+
+**Story 7.4 — Browser Operator Console**
+
+- [ ] Serve a same-origin browser application from the BitClone daemon
+- [ ] Add dashboard, sync, chain, block, transaction, peer, and mempool views
+- [ ] Prominently distinguish independently validated local data from trusted remote Bitcoin Core data
+- [ ] Add loading, empty, degraded, offline, and recovery states for long-running node operations
+- [ ] Add an allowlisted advanced RPC console with warnings and confirmation for mutating commands
+- [ ] Make the console responsive and keyboard accessible
+- [ ] Add browser end-to-end tests for the primary operator workflows
+
+---
+
+### Sprint 8 — Chain Reorganisation & Storage Integrity
+
+**Story 0 — Cleanup and Maintenance**
+Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 8.
+Each item should be handled as a separate ticket with sufficient tests.
+
+**Story 8.1 — Fork Detection and Reorganisation**
 
 - [ ] Track competing chain tips by cumulative work during normal block and header processing
 - [ ] Roll back UTXOs and apply the winning chain during a reorganisation
 - [ ] Mark active and inactive block-index entries during a reorganisation
 - [ ] Add reorganisation and fork-simulation tests
 
-**Story 7.2 — Atomic Chain Updates and Orphans**
+**Story 8.2 — Atomic Chain Updates and Orphans**
 
 - [ ] Atomically update block files, block index, chain tip, and UTXO set
 - [ ] Add an orphan-block pool for blocks whose parents are not known
 - [ ] Add a checkpoint map of hard-coded known-good hashes at key heights
 
-### Sprint 8 — Mempool Policy & Package Handling
+### Sprint 9 — Mempool Policy & Package Handling
 
 **Story 0 — Cleanup and Maintenance**
-Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 8.
+Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 9.
 Each item should be handled as a separate ticket with sufficient tests.
 
-**Story 8.1 — Active-Chain Admission and Dependencies**
+**Story 9.1 — Active-Chain Admission and Dependencies**
 
 - [ ] Use the node's active-chain UTXO view for mempool admission
 - [ ] Finish dependency-aware block-template transaction selection
 - [ ] Enforce ancestor and descendant count and size limits
 - [ ] Add an orphan-transaction pool for spends whose parents are not known
 
-**Story 8.2 — Replacement, Eviction, and Relay Policy**
+**Story 9.2 — Replacement, Eviction, and Relay Policy**
 
 - [ ] Implement Replace-by-Fee rules from BIP125
 - [ ] Evict low-fee transactions under memory pressure
 - [ ] Maintain a rolling minimum relay fee after eviction
 - [ ] Reject non-standard transactions separately from consensus-invalid transactions
 
-**Story 8.3 — Packages and Persistence**
+**Story 9.3 — Packages and Persistence**
 
 - [ ] Add package-validation and package-relay groundwork
 - [ ] Add optional mempool persistence across restarts
@@ -58,13 +108,13 @@ Each item should be handled as a separate ticket with sufficient tests.
 
 ---
 
-### Sprint 9 — Mining & Regtest Development
+### Sprint 10 — Mining & Regtest Development
 
 **Story 0 — Cleanup and Maintenance**
-Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 9.
+Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 10.
 Each item should be handled as a separate ticket with sufficient tests.
 
-**Story 9.1 — Consensus-Correct Mining**
+**Story 10.1 — Consensus-Correct Mining**
 
 - [ ] Fix mining proof-of-work integer byte order to match consensus validation
 - [ ] Wire `Miner` fully into the `Node` lifecycle
@@ -74,21 +124,29 @@ Each item should be handled as a separate ticket with sufficient tests.
 - [ ] Stop and rebuild mining work when the chain tip or mempool changes
 - [ ] Add tests proving mined blocks pass `Blockchain.add_block()`
 
-**Story 9.2 — Regtest and Development Commands**
+**Story 10.2 — Regtest and Development Commands**
 
 - [ ] Add regtest-only easy-mining mode
-- [ ] Add CLI commands for `generateblock`, `wipe-chain`, and `loadblock`
+- [ ] Add CLI, REST, and RPC commands for `generateblock`, `wipe-chain`, and `loadblock`
 - [ ] Support mining blocks on demand in regtest mode
+
+**Story 10.3 — Mining API and Browser Workflows**
+
+- [ ] Expose mining status, block templates, candidate submission, start/stop controls, and found-block results
+- [ ] Provide `getblocktemplate` and `submitblock` for external mining software
+- [ ] Define a Stratum-compatible solo-mining endpoint or documented bridge for devices such as BitAxe
+- [ ] Add browser workflows for regtest generation and mining status
+- [ ] Clearly distinguish educational/regtest mining from realistic mainnet ASIC mining
 
 ---
 
-### Sprint 10 — Wallet Completion
+### Sprint 11 — Wallet Completion
 
 **Story 0 — Cleanup and Maintenance**
-Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 10.
+Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 11.
 Each item should be handled as a separate ticket with sufficient tests.
 
-**Story 10.1 — Accounts, Storage, and Scanning**
+**Story 11.1 — Accounts, Storage, and Scanning**
 
 - [ ] Complete HD-wallet account scanning and gap-limit handling
 - [ ] Encrypt key storage on disk
@@ -96,45 +154,25 @@ Each item should be handled as a separate ticket with sufficient tests.
 - [ ] Add watch-only wallet mode
 - [ ] Persist wallet metadata independently from chainstate
 
-**Story 10.2 — Transaction Construction and Signing**
+**Story 11.2 — Transaction Construction and Signing**
 
 - [ ] Select UTXOs, construct outputs, and compute change
 - [ ] Estimate fees using a mempool fee-rate histogram
 - [ ] Sign ECDSA P2PKH/P2WPKH and Schnorr P2TR transactions
 - [ ] Add wallet signing and UTXO-selection tests
 
-**Story 10.3 — Wallet Runtime Boundary**
+**Story 11.3 — Wallet Runtime, API, and Browser Workflows**
 
 - [ ] Separate the wallet runtime from full-node consensus and node orchestration
+- [ ] Expose balances, addresses, UTXOs, transaction creation/signing, history, and rescan controls
+- [ ] Add browser workflows for receiving, coin selection, fee review, signing, and broadcasting
+- [ ] Require explicit confirmation for signing, broadcasting, key export, and destructive wallet operations
+- [ ] Never return seed material or private keys through ordinary API responses
+- [ ] Add watch-only and spending-wallet API and browser integration tests
 
 ---
 
-### Sprint 11 — CLI, RPC & API
-
-**Story 0 — Cleanup and Maintenance**
-Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 11.
-Each item should be handled as a separate ticket with sufficient tests.
-
-**Story 11.1 — CLI Completion**
-
-- [ ] Add CLI configuration inspection
-- [ ] Add peer commands: `addnode`, `disconnect`, and `peers`
-- [ ] Add CLI command-integration tests
-
-**Story 11.2 — Local JSON-RPC Server**
-
-- [ ] Implement a local JSON-RPC server compatible with standard Bitcoin RPC where practical
-- [ ] Add `getblockchaininfo`
-- [ ] Expose `getrawmempool`
-- [ ] Add `getrawtransaction` and `decoderawtransaction`
-- [ ] Add `sendrawtransaction` with mempool submission and broadcast
-- [ ] Add `getutxo` / `gettxout`
-- [ ] Expose regtest `generateblock`
-- [ ] Add RPC endpoint integration tests
-
----
-
-### Sprint 12 — Configuration, Operations & Architecture
+### Sprint 12 — Configuration, Operations & Local Packaging
 
 **Story 0 — Cleanup and Maintenance**
 Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 12.
@@ -142,27 +180,36 @@ Each item should be handled as a separate ticket with sufficient tests.
 
 **Story 12.1 — Configuration and Logging**
 
-- [ ] Load configuration for data directories, ports, network selection, and fixed peers
-- [ ] Add configurable logging levels and log rotation
-- [ ] Add structured progress output for CLI-first operation
+- [ ] Load configuration for data directories, ports, network selection, fixed peers, API binding, and browser launch
+- [ ] Add configurable logging levels, log rotation, and structured progress events
+- [ ] Expose safe configuration inspection while redacting credentials
 
 **Story 12.2 — Lifecycle and Recovery**
 
-- [ ] Add clean shutdown for database connections, peer connections, miner threads, and background tasks
+- [ ] Add clean shutdown for database connections, peer connections, miner workers, APIs, and background tasks
 - [ ] Add startup recovery checks for interrupted block and UTXO writes
-- [ ] Add node lifecycle startup and shutdown tests
+- [ ] Add node lifecycle startup, shutdown, and API reconnection tests
 
 **Story 12.3 — Runtime Boundaries**
 
-- [ ] Split consensus logic, policy logic, node orchestration, and wallet concerns into clearer module boundaries
+- [ ] Split consensus, policy, node orchestration, wallet, transport, and presentation concerns into clear boundaries
+- [ ] Ensure HTTP handlers and browser code cannot mutate shared state outside application services
+
+**Story 12.4 — Downloadable Local Application**
+
+- [ ] Package the daemon and version-matched browser assets as one installable distribution
+- [ ] Start the local service safely and open the browser console without exposing it publicly
+- [ ] Provide sample full-node, pruned-node, and remote-development configurations
+- [ ] Add data-directory migrations, upgrade checks, and rollback-safe release procedures
+- [ ] Keep a desktop wrapper optional so the browser interface remains the primary client
 
 ---
 
 ### Sprint 13 — Independent Node Runtime & Release
 
-This is the final integration sprint. Its outcome is a distributable BitClone installation that can synchronize
-from the Bitcoin P2P network, operate without Bitcoin Core, remain online after IBD, and expose safe interfaces for
-node, wallet, and mining operations.
+This is the final local-product integration sprint. Its outcome is a distributable BitClone installation that can
+synchronize from the Bitcoin P2P network, operate without Bitcoin Core, remain online after IBD, and expose safe
+interfaces for node, wallet, and mining operations.
 
 **Story 0 — Cleanup and Maintenance**
 Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 13.
@@ -177,7 +224,7 @@ so that archival and pruned installations can operate independently of Bitcoin C
 - [ ] Independently validate and atomically connect every downloaded block in chain order
 - [ ] Persist IBD checkpoints and resume safely after clean shutdown, interruption, or process failure
 - [ ] Support both archival retention and configured pruning throughout IBD
-- [ ] Report header, block, chainstate, verification, throughput, and estimated-completion progress
+- [ ] Report header, block, chainstate, verification, throughput, and estimated-completion progress through the API
 - [ ] Transition automatically from IBD into normal tip-following and relay operation
 - [ ] Complete IBD without requiring Bitcoin Core, its RPC service, or its block storage
 
@@ -190,33 +237,44 @@ responsive concurrently so that BitClone behaves as a continuously running node.
       serving without blocking one another
 - [ ] Protect shared chain, mempool, wallet, and mining state with explicit ownership, queues, and synchronization
 - [ ] Add cancellation, backpressure, task supervision, and graceful shutdown across all background services
-- [ ] Prevent mining and wallet operations from using stale chainstate during tip changes or reorganisations
+- [ ] Prevent API, mining, and wallet operations from using stale chainstate during tip changes or reorganisations
 - [ ] Add concurrency, restart, long-running soak, and controlled-failure tests
 
-**Story 13.3 — Node, Wallet & Mining Service API**
-As a user, I want to interact with a running BitClone process without stopping it
-so that node administration, wallet use, and mining controls are available to local applications.
-
-- [ ] Host the existing Bitcoin-style JSON-RPC interface and an optional versioned REST API over HTTP
-- [ ] Expose node status, sync progress, peers, chain data, mempool data, and transaction broadcast
-- [ ] Expose wallet balances, addresses, UTXOs, transaction creation/signing, history, and rescan controls
-- [ ] Expose mining status, block-template retrieval, start/stop controls, candidate submission, and found-block results
-- [ ] Provide `getblocktemplate` and `submitblock` for external mining software
-- [ ] Define a supported Stratum-compatible solo-mining endpoint or documented bridge for devices such as BitAxe
-- [ ] Add authenticated local access, configurable bind addresses, TLS support, and safe secret handling
-- [ ] Keep private keys, RPC credentials, and administrative operations out of unauthenticated responses
-- [ ] Add API integration tests covering simultaneous node, wallet, and mining activity
-
-**Story 13.4 — Independent-Node Release Qualification**
+**Story 13.3 — Independent-Node Release Qualification**
 As a user, I want a documented and tested BitClone distribution
 so that I can install it, synchronize it, and keep it operating as a Bitcoin node.
 
-- [ ] Package an installable service with sample full-node, pruned-node, and remote-development configurations
-- [ ] Run end-to-end IBD, restart, reorganisation, pruning, wallet, relay, and mining qualification scenarios
+- [ ] Run end-to-end IBD, restart, reorganisation, pruning, API, browser, wallet, relay, and mining scenarios
 - [ ] Verify that a synchronized node remains at the network tip and recovers after peers or the API restart
 - [ ] Document storage, memory, bandwidth, security, backup, pruning, and upgrade requirements
 - [ ] Clearly label experimental features and establish release-readiness criteria for mainnet use
 - [ ] Demonstrate a fresh installation synchronizing and operating without any Bitcoin Core dependency
+
+---
+
+### Sprint 14 — Optional Hosted & Fleet Services
+
+This is a post-release commercial layer. It must remain optional: a local BitClone installation continues to work
+without an account, subscription, hosted control plane, or custody of wallet keys.
+
+**Story 14.1 — Secure Remote Node Access**
+
+- [ ] Pair a local node with a remote account without exposing the node's RPC port directly to the internet
+- [ ] Use end-to-end authenticated channels and revocable, least-privilege device credentials
+- [ ] Keep wallet seeds and private keys on the user's node
+- [ ] Add remote session, device revocation, and account-recovery security tests
+
+**Story 14.2 — Monitoring and Fleet Management**
+
+- [ ] Add opt-in uptime, sync, storage, peer, and warning telemetry
+- [ ] Add alerts, historical health views, and multi-node fleet administration
+- [ ] Make every transmitted field visible to the operator and disable telemetry by default
+
+**Story 14.3 — Hosted Developer Environments**
+
+- [ ] Offer isolated, disposable regtest and signet BitClone environments through the same API
+- [ ] Add tenant isolation, quotas, usage metering, audit logs, and abuse controls
+- [ ] Validate demand before adding billing, hosted mainnet nodes, or managed wallet functionality
 
 ---
 

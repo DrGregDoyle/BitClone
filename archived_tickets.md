@@ -346,7 +346,9 @@ within a timeout so that stale connections are cleaned up automatically.
 - [x] Add Bitcoin Core vectors for blocks, scripts, and transactions where practical
 - [x] Expand block-validation tests for Merkle roots, proof of work, coinbase rewards, and witness commitments
 
-### Sprint 7 — Chain Reorganisation & Storage Integrity Groundwork
+### Chain Reorganisation & Storage Integrity — Early Groundwork
+
+Completed ahead of the active Chain Reorganisation & Storage Integrity sprint.
 
 - [x] Store undo data for every connected block
 - [x] Design optional pruning mode while retaining archival-node mode as the default
