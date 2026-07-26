@@ -5,6 +5,7 @@ import pytest
 from src.api import APIError, NodeApplicationService, ROUTES, build_openapi_document
 from src.network.datatypes.network_types import PeerState, Services
 from src.network.peer import Peer
+from src.network.peer_address_book import PeerSource
 from src.node.node import Node
 
 
@@ -107,6 +108,32 @@ def test_peer_collection_uses_stable_pagination_and_rfc3339_timestamps(service, 
         Services.NODE_NETWORK | Services.NODE_WITNESS
     )
     assert result["items"][0]["last_seen_at"].endswith("Z")
+
+
+def test_peer_address_book_includes_disconnected_peer_diagnostics(service, node):
+    peer = Peer("192.0.2.10", 8333)
+    node.address_book.add(
+        peer.host,
+        peer.port,
+        source=PeerSource.DNS_SEED,
+        seen_at=10,
+    )
+    node.address_book.record_failure(
+        peer,
+        source=PeerSource.DNS_SEED,
+        failed_at=20,
+        message="Connection closed while receiving data",
+    )
+
+    result = service.peer_address_book({}, {})
+
+    assert result["count"] == 1
+    assert result["default_port"] == 8333
+    assert result["peers"][0]["host"] == "192.0.2.10"
+    assert result["peers"][0]["sources"] == ["dns_seed"]
+    assert result["peers"][0]["last_known_message"] == (
+        "Connection closed while receiving data"
+    )
 
 
 @pytest.mark.parametrize(

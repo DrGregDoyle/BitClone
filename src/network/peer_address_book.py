@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -19,6 +20,20 @@ __all__ = ["PeerAddress", "PeerAddressBook", "PeerKey", "PeerSource"]
 
 IPAddress = IPv4Address | IPv6Address
 PeerKey = tuple[str, int]
+
+_SENSITIVE_MESSAGE_VALUE = re.compile(
+    r"(?i)\b(cookie|credential|mnemonic|passphrase|password|private_key|secret|seed|token)"
+    r"(\s*[=:]\s*)([^\s,;]+)"
+)
+_BEARER_VALUE = re.compile(r"(?i)\b(Bearer\s+)([^\s,;]+)")
+
+
+def _safe_message(message: object) -> str:
+    """Keep peer diagnostics compact and remove common credential forms."""
+    normalized = " ".join(str(message).split())
+    normalized = _SENSITIVE_MESSAGE_VALUE.sub(r"\1\2[REDACTED]", normalized)
+    normalized = _BEARER_VALUE.sub(r"\1[REDACTED]", normalized)
+    return normalized[:500]
 
 
 class PeerSource(str, Enum):
@@ -48,6 +63,7 @@ class PeerAddress:
     protocol_version: int | None = None
     user_agent: str | None = None
     last_block: int | None = None
+    last_known_message: str | None = None
 
     @property
     def key(self) -> PeerKey:
@@ -70,6 +86,7 @@ class PeerAddress:
             "protocol_version": self.protocol_version,
             "user_agent": self.user_agent,
             "last_block": self.last_block,
+            "last_known_message": self.last_known_message,
         }
 
 
@@ -174,6 +191,7 @@ class PeerAddressBook:
             peer: Peer,
             source: PeerSource = PeerSource.MANUAL,
             succeeded_at: float | None = None,
+            message: object = "Connection established",
     ) -> PeerAddress:
         timestamp = time.time() if succeeded_at is None else succeeded_at
         with self._lock:
@@ -182,6 +200,7 @@ class PeerAddressBook:
             entry.last_success = timestamp
             entry.success_count += 1
             entry.consecutive_failures = 0
+            entry.last_known_message = _safe_message(message)
             return entry
 
     def record_failure(
@@ -189,6 +208,7 @@ class PeerAddressBook:
             peer: Peer,
             source: PeerSource = PeerSource.MANUAL,
             failed_at: float | None = None,
+            message: object = "Connection failed",
     ) -> PeerAddress:
         timestamp = time.time() if failed_at is None else failed_at
         with self._lock:
@@ -197,6 +217,32 @@ class PeerAddressBook:
             entry.last_failure = timestamp
             entry.fail_count += 1
             entry.consecutive_failures += 1
+            entry.last_known_message = _safe_message(message)
+            return entry
+
+    def record_message(
+            self,
+            host: str | IPAddress,
+            port: int | None,
+            message: object,
+            observed_at: float | None = None,
+    ) -> PeerAddress:
+        """Record connection lifecycle detail without changing success/failure counts."""
+        timestamp = time.time() if observed_at is None else observed_at
+        with self._lock:
+            normalized_host = ip_address(str(host))
+            normalized_port = self._validate_port(self.default_port if port is None else port)
+            key = str(normalized_host), normalized_port
+            entry = self._entries.get(key)
+            if entry is None:
+                entry = self.add(
+                    normalized_host,
+                    normalized_port,
+                    seen_at=timestamp,
+                )
+            else:
+                entry.last_seen = max(entry.last_seen, timestamp)
+            entry.last_known_message = _safe_message(message)
             return entry
 
     def candidates(

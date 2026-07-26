@@ -230,6 +230,11 @@ def test_connect_peer_sends_version_first_with_node_state(monkeypatch, tmp_path)
         assert address.protocol_version == NETWORK.PROTOCOL_VERSION
         assert address.user_agent == PEER_USER_AGENT
         assert address.last_block == PEER_BLOCK_HEIGHT
+        assert address.last_known_message == "Connection established"
+
+        node.disconnect_peer(peer)
+
+        assert address.last_known_message == "Disconnected"
     finally:
         node.close()
 
@@ -349,6 +354,9 @@ def test_connect_peer_rejects_unexpected_message_before_verack(monkeypatch, tmp_
         assert captured_peer.fail_count == 1
         assert len(fake_socket.sent) == 2
         assert fake_socket.closed
+        address = node.address_book.get(KNOWN_TEST_ENDPOINT, NETWORK.MAINNET_PORT)
+        assert address is not None
+        assert address.last_known_message.startswith("Protocol failure:")
     finally:
         node.close()
 

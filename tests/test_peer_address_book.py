@@ -49,6 +49,38 @@ def test_peer_address_book_captures_negotiated_peer_metadata():
     assert entry.last_block == 850_000
     assert entry.services == Services.NODE_NETWORK | Services.NODE_WITNESS
     assert peer.last_success == 30
+    assert entry.last_known_message == "Connection established"
+
+
+def test_peer_address_book_records_sanitized_lifecycle_messages():
+    address_book = PeerAddressBook()
+    peer = Peer(FIRST_PEER, NETWORK.MAINNET_PORT)
+
+    failed = address_book.record_failure(
+        peer,
+        failed_at=30,
+        message="RPC password=hunter2 Authorization: Bearer api-token",
+    )
+    failure_data = address_book.to_data()["peers"][0]
+
+    assert failure_data["last_known_message"] == (
+        "RPC password=[REDACTED] Authorization: Bearer [REDACTED]"
+    )
+    assert "hunter2" not in address_book.to_display()
+    assert "api-token" not in address_book.to_display()
+
+    updated = address_book.record_message(
+        FIRST_PEER,
+        NETWORK.MAINNET_PORT,
+        "Disconnected by operator",
+        observed_at=40,
+    )
+
+    assert failed is updated
+    assert failed.fail_count == 1
+    assert updated.last_known_message == "Disconnected by operator"
+    serialized = address_book.to_data()["peers"][0]
+    assert serialized["last_known_message"] == "Disconnected by operator"
 
 
 def test_peer_address_book_preserves_learned_metadata_before_reconnect():

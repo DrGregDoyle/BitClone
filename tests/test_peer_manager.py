@@ -1,3 +1,4 @@
+import logging
 import threading
 
 import pytest
@@ -176,6 +177,49 @@ def test_peer_manager_success_clears_backoff_and_consecutive_failures():
 
     assert manager.retry_at(entry.key) is None
     assert entry.consecutive_failures == 0
+
+
+def test_peer_manager_records_individual_failures_at_debug_and_warns_once_for_outage(
+        caplog,
+):
+    address_book = PeerAddressBook()
+    first = address_book.add("192.0.2.1")
+    second = address_book.add("192.0.2.2")
+
+    def connect(_host, _port):
+        raise ConnectionError("Connection closed while receiving data")
+
+    manager = PeerManager(
+        address_book,
+        connect,
+        lambda: (),
+        target_outbound=1,
+        jitter_fraction=0,
+        clock=lambda: 100,
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="src.network.peer_manager"):
+        manager.maintain()
+        manager.maintain()
+
+    debug_messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno == logging.DEBUG
+    ]
+    warning_messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno == logging.WARNING
+    ]
+    assert len(debug_messages) == 2
+    assert all("Outbound peer" in message for message in debug_messages)
+    assert warning_messages == [
+        "Unable to establish any outbound peers after 2 attempt(s); "
+        "individual failures are recorded in the peer address book"
+    ]
+    assert first.last_known_message == "Outbound connection failed: Connection closed while receiving data"
+    assert second.last_known_message == "Outbound connection failed: Connection closed while receiving data"
 
 
 def test_peer_manager_worker_bootstraps_and_connects_until_stopped():

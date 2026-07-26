@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from src.api import BitCloneHTTPServer, NodeApplicationService
+from src.api.security import generate_api_token
 from src.config import BitCloneConfig, BlockStorageMode, NetworkName
 from src.core import ReadError, TransactionError
 from src.node.node import Node
@@ -98,8 +99,36 @@ def _build_parser() -> argparse.ArgumentParser:
     serve_api.add_argument(
         "--port",
         type=int,
-        default=8334,
-        help="Loopback API port. Defaults to 8334.",
+        default=None,
+        help="API port. Defaults to the configured port or 8334.",
+    )
+    serve_api.add_argument(
+        "--host",
+        default=None,
+        help="API bind host. Non-loopback addresses require TLS and an allowed origin.",
+    )
+    serve_api.add_argument(
+        "--allowed-origin",
+        action="append",
+        default=None,
+        help="Allowed browser origin. Repeat for multiple origins.",
+    )
+    serve_api.add_argument(
+        "--tls-cert",
+        type=Path,
+        default=None,
+        help="PEM TLS certificate for API serving.",
+    )
+    serve_api.add_argument(
+        "--tls-key",
+        type=Path,
+        default=None,
+        help="PEM private key for the API certificate.",
+    )
+    serve_api.add_argument(
+        "--api-only",
+        action="store_true",
+        help="Serve the API without starting BitClone's public P2P workers.",
     )
     subparsers.add_parser("build-template", help="Build and print a candidate block template.")
     subparsers.add_parser("getchaintip", help="Show the active chain tip.")
@@ -259,6 +288,11 @@ def _config_from_args(args: argparse.Namespace) -> BitCloneConfig:
         core_rpc_password=os.environ.get("BITCLONE_CORE_RPC_PASSWORD"),
         core_rpc_cookie=args.core_rpc_cookie,
         core_rpc_timeout=args.core_rpc_timeout,
+        api_host=getattr(args, "host", None),
+        api_port=getattr(args, "port", None),
+        api_allowed_origins=getattr(args, "allowed_origin", None),
+        api_tls_cert=getattr(args, "tls_cert", None),
+        api_tls_key=getattr(args, "tls_key", None),
     )
 
 
@@ -278,14 +312,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         node = Node(config=config)
         if args.command == "serve-api":
-            if not 1 <= args.port <= 65535:
-                raise ValueError("API port must be between 1 and 65535")
-            node.start()
+            if not args.api_only:
+                node.start()
+            configured_token = os.environ.get("BITCLONE_API_TOKEN")
+            api_token = configured_token or generate_api_token()
             server = BitCloneHTTPServer(
                 NodeApplicationService(node),
-                host="127.0.0.1",
-                port=args.port,
+                api_token=api_token,
+                host=config.api_host,
+                port=config.api_port,
+                allowed_origins=config.api_allowed_origins or None,
+                tls_cert=config.api_tls_cert,
+                tls_key=config.api_tls_key,
+                audit_path=config.logs_dir / "api-audit.jsonl",
             )
+            if configured_token is None:
+                print(f"Generated one-run API token: {api_token}")
             print(f"BitClone API listening at {server.url}")
             try:
                 server.run()

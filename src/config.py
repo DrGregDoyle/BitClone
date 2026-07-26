@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from ipaddress import ip_address
 from pathlib import Path
 import tomllib
 from typing import Any
@@ -37,6 +38,11 @@ class BitCloneConfig:
     core_rpc_password: str | None = field(default=None, repr=False, compare=False)
     core_rpc_cookie: Path | None = None
     core_rpc_timeout: float = 10.0
+    api_host: str = "127.0.0.1"
+    api_port: int = 8334
+    api_allowed_origins: tuple[str, ...] = ()
+    api_tls_cert: Path | None = None
+    api_tls_key: Path | None = field(default=None, repr=False, compare=False)
 
     @classmethod
     def from_options(
@@ -53,6 +59,11 @@ class BitCloneConfig:
             core_rpc_password: str | None = None,
             core_rpc_cookie: str | Path | None = None,
             core_rpc_timeout: float = 10.0,
+            api_host: str = "127.0.0.1",
+            api_port: int = 8334,
+            api_allowed_origins: list[str] | tuple[str, ...] | None = None,
+            api_tls_cert: str | Path | None = None,
+            api_tls_key: str | Path | None = None,
     ) -> "BitCloneConfig":
         if upstream_port is not None and not 1 <= upstream_port <= 65535:
             raise ValueError("upstream_port must be between 1 and 65535")
@@ -71,6 +82,21 @@ class BitCloneConfig:
             raise ValueError("bitcoin-core-remote storage requires core_rpc_url")
         if core_rpc_timeout <= 0:
             raise ValueError("core_rpc_timeout must be positive")
+        if not 1 <= api_port <= 65535:
+            raise ValueError("api_port must be between 1 and 65535")
+        if (api_tls_cert is None) != (api_tls_key is None):
+            raise ValueError("api_tls_cert and api_tls_key must be configured together")
+        normalized_origins = tuple(api_allowed_origins or ())
+        if any(not origin.startswith(("http://", "https://")) for origin in normalized_origins):
+            raise ValueError("Every API allowed origin must begin with http:// or https://")
+        try:
+            loopback_api = ip_address(api_host).is_loopback
+        except ValueError:
+            loopback_api = api_host.lower() == "localhost"
+        if not loopback_api and api_tls_cert is None:
+            raise ValueError("Non-loopback API binding requires TLS")
+        if not loopback_api and not normalized_origins:
+            raise ValueError("Non-loopback API binding requires api_allowed_origins")
         network_name = network if isinstance(network, NetworkName) else NetworkName(network)
         db_path_override = Path(db_path).expanduser() if db_path is not None else None
         if data_dir is not None:
@@ -92,6 +118,11 @@ class BitCloneConfig:
             core_rpc_password=core_rpc_password,
             core_rpc_cookie=Path(core_rpc_cookie).expanduser() if core_rpc_cookie is not None else None,
             core_rpc_timeout=core_rpc_timeout,
+            api_host=api_host,
+            api_port=api_port,
+            api_allowed_origins=normalized_origins,
+            api_tls_cert=Path(api_tls_cert).expanduser() if api_tls_cert is not None else None,
+            api_tls_key=Path(api_tls_key).expanduser() if api_tls_key is not None else None,
         )
 
     @classmethod
@@ -109,6 +140,11 @@ class BitCloneConfig:
             core_rpc_password: str | None = None,
             core_rpc_cookie: str | Path | None = None,
             core_rpc_timeout: float | None = None,
+            api_host: str | None = None,
+            api_port: int | None = None,
+            api_allowed_origins: list[str] | tuple[str, ...] | None = None,
+            api_tls_cert: str | Path | None = None,
+            api_tls_key: str | Path | None = None,
     ) -> "BitCloneConfig":
         """Load persistent options from bitclone.toml, then apply explicit overrides."""
         if data_dir is not None:
@@ -130,6 +166,11 @@ class BitCloneConfig:
                 raise ValueError(
                     "core_rpc_password is not allowed in bitclone.toml; "
                     "use BITCLONE_CORE_RPC_PASSWORD"
+                )
+            if "api_token" in values:
+                raise ValueError(
+                    "api_token is not allowed in bitclone.toml; "
+                    "use BITCLONE_API_TOKEN"
                 )
 
         def configured(name: str, override: Any, default: Any = None) -> Any:
@@ -156,6 +197,15 @@ class BitCloneConfig:
             core_rpc_password=core_rpc_password,
             core_rpc_cookie=configured("core_rpc_cookie", core_rpc_cookie),
             core_rpc_timeout=configured("core_rpc_timeout", core_rpc_timeout, 10.0),
+            api_host=configured("api_host", api_host, "127.0.0.1"),
+            api_port=configured("api_port", api_port, 8334),
+            api_allowed_origins=configured(
+                "api_allowed_origins",
+                api_allowed_origins,
+                (),
+            ),
+            api_tls_cert=configured("api_tls_cert", api_tls_cert),
+            api_tls_key=configured("api_tls_key", api_tls_key),
         )
 
     @property
@@ -241,6 +291,11 @@ class BitCloneConfig:
             "core_rpc_user": self.core_rpc_user,
             "core_rpc_cookie": str(self.core_rpc_cookie) if self.core_rpc_cookie is not None else None,
             "core_rpc_timeout": self.core_rpc_timeout,
+            "api_host": self.api_host,
+            "api_port": self.api_port,
+            "api_allowed_origins": list(self.api_allowed_origins),
+            "api_tls_cert": str(self.api_tls_cert) if self.api_tls_cert is not None else None,
+            "api_tls_key": str(self.api_tls_key) if self.api_tls_key is not None else None,
             "network_dir": str(self.network_dir),
             "chainstate_dir": str(self.chainstate_dir),
             "blocks_dir": str(self.blocks_dir),
@@ -257,7 +312,16 @@ class BitCloneConfig:
             f'network = "{self.network.value}"\n'
             f'block_storage = "{self.block_storage.value}"\n'
             f"prune_keep_blocks = {self.prune_keep_blocks}\n"
+            f'api_host = "{self.api_host}"\n'
+            f"api_port = {self.api_port}\n"
         )
+        if self.api_allowed_origins:
+            origins = ", ".join(f'"{origin}"' for origin in self.api_allowed_origins)
+            text += f"api_allowed_origins = [{origins}]\n"
+        if self.api_tls_cert is not None:
+            text += f'api_tls_cert = "{self.api_tls_cert}"\n'
+            text += f'api_tls_key = "{self.api_tls_key}"\n'
+        text += "# Set BITCLONE_API_TOKEN in the environment; API tokens are not written here.\n"
         if self.core_rpc_url is not None:
             text += f'core_rpc_url = "{self.core_rpc_url}"\n'
         if self.core_rpc_user is not None:

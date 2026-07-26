@@ -359,6 +359,25 @@ BitClone process without reaching directly into consensus, wallet, or networking
 - [x] Publish an OpenAPI document generated from the implementation route registry
 - [x] Add endpoint integration and contract tests
 
+#### Story 7.2 — Live Events and Local-First Security
+
+- [x] Stream sync, peer, block, mempool, warning, and lifecycle events using SSE
+- [x] Bind HTTP and future RPC services to loopback by default
+- [x] Add scoped bearer credentials, CSRF protection, and strict origin rules
+- [x] Require explicit configuration, allowed origins, and TLS for access beyond loopback
+- [x] Redact cookies, private keys, wallet secrets, and credentials from responses, events, and audit logs
+- [x] Add rate limits, sensitive-action audit groundwork, and security-focused integration tests
+
+#### Cleanup 7.0.1 — Quiet Peer Diagnostics and Shutdown Summary
+
+- [x] Add `last_known_message` to each `PeerAddress` and include it in `PeerAddressBook.to_data()`
+- [x] Update the message on connection success, connection failure, protocol failure, and disconnect
+- [x] Treat expected per-peer connection churn as debug information instead of emitting a warning for every failed peer
+- [x] Preserve warnings for systemic conditions such as DNS bootstrap failure, worker failure, or inability to maintain
+      any outbound peers
+- [x] Expose one structured JSON snapshot through the authenticated `/api/v1/peers/address-book` endpoint
+- [x] Add tests for message updates, reduced warning output, redaction-safe JSON, and the address-book endpoint
+
 ### Chain Reorganisation & Storage Integrity — Early Groundwork
 
 Completed ahead of the active Chain Reorganisation & Storage Integrity sprint.

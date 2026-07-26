@@ -207,3 +207,53 @@ def test_config_rejects_rpc_password_in_toml(tmp_path):
 
     with pytest.raises(ValueError, match="BITCLONE_CORE_RPC_PASSWORD"):
         BitCloneConfig.from_toml(data_dir=tmp_path)
+
+
+def test_api_configuration_defaults_to_loopback_and_persists_safe_settings(tmp_path):
+    config = BitCloneConfig.from_options(data_dir=tmp_path)
+
+    config.initialize()
+    loaded = BitCloneConfig.from_toml(data_dir=tmp_path)
+
+    assert loaded.api_host == "127.0.0.1"
+    assert loaded.api_port == 8334
+    assert loaded.api_allowed_origins == ()
+    text = config.config_path.read_text(encoding="utf-8")
+    assert 'api_host = "127.0.0.1"' in text
+    assert "api_port = 8334" in text
+    assert "BITCLONE_API_TOKEN" in text
+    assert "api_token =" not in text
+
+
+def test_non_loopback_api_requires_tls_and_explicit_origin(tmp_path):
+    with pytest.raises(ValueError, match="requires TLS"):
+        BitCloneConfig.from_options(data_dir=tmp_path, api_host="0.0.0.0")
+
+    with pytest.raises(ValueError, match="api_allowed_origins"):
+        BitCloneConfig.from_options(
+            data_dir=tmp_path,
+            api_host="0.0.0.0",
+            api_tls_cert=tmp_path / "cert.pem",
+            api_tls_key=tmp_path / "key.pem",
+        )
+
+    config = BitCloneConfig.from_options(
+        data_dir=tmp_path,
+        api_host="0.0.0.0",
+        api_port=9443,
+        api_allowed_origins=["https://node.example"],
+        api_tls_cert=tmp_path / "cert.pem",
+        api_tls_key=tmp_path / "key.pem",
+    )
+    assert config.api_port == 9443
+    assert config.api_allowed_origins == ("https://node.example",)
+
+
+def test_config_rejects_api_token_in_toml(tmp_path):
+    (tmp_path / "bitclone.toml").write_text(
+        'api_token = "do-not-store-me"\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="BITCLONE_API_TOKEN"):
+        BitCloneConfig.from_toml(data_dir=tmp_path)

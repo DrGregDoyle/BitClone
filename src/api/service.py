@@ -170,6 +170,13 @@ class NodeApplicationService:
     def openapi(self, _path: dict, _query: dict) -> dict[str, Any]:
         return build_openapi_document()
 
+    def events(self, _path: dict, _query: dict) -> dict[str, Any]:
+        raise APIError(
+            406,
+            "event_stream_required",
+            "This endpoint must be consumed as a Server-Sent Events stream",
+        )
+
     def health(self, _path: dict, _query: dict) -> dict[str, Any]:
         return {
             "status": "ok",
@@ -305,6 +312,10 @@ class NodeApplicationService:
         ]
         return _page(resources, limit, offset, len(peers))
 
+    def peer_address_book(self, _path: dict, _query: dict) -> dict[str, Any]:
+        """Return all known endpoints, including failed and disconnected peers."""
+        return self._node.address_book.to_data()
+
     def list_mempool(self, _path: dict, query: dict[str, list[str]]) -> dict[str, Any]:
         limit, offset = _pagination(query)
         entries = list(self._node.mempool.mempool.items())
@@ -338,4 +349,41 @@ class NodeApplicationService:
             "fee_sats": entry.fee,
             "feerate_sats_per_vbyte": entry.feerate,
             "arrival_at": _utc_timestamp(entry.arrival_time),
+        }
+
+    def event_snapshot(self) -> dict[str, dict[str, Any]]:
+        """
+        Return bounded in-memory state for the event monitor.
+
+        This deliberately avoids SQLite and remote RPC access because it runs
+        independently of the synchronous application-service request thread.
+        """
+        tip = self._node.blockchain.tip
+        ready_peers = self._node.ready_peers
+        mempool_txids = tuple(sorted(self._node.mempool.get_txids()))
+        return {
+            "lifecycle": {
+                "started": self._node.started,
+            },
+            "sync": {
+                "state": self._node.header_sync.state.value,
+                "block_height": self._node.blockchain.height,
+                "header_batches_received": self._node.header_sync.batches_received,
+                "headers_received": self._node.header_sync.headers_received,
+            },
+            "peer": {
+                "ready_count": len(ready_peers),
+                "peers": [
+                    {"host": str(peer.host), "port": peer.port}
+                    for peer in ready_peers
+                ],
+            },
+            "block": {
+                "height": self._node.blockchain.height,
+                "tip": tip.block_id[::-1].hex() if tip is not None else None,
+            },
+            "mempool": {
+                "size": len(mempool_txids),
+                "txids": list(mempool_txids),
+            },
         }

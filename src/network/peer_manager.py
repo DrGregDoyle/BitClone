@@ -65,6 +65,7 @@ class PeerManager:
         self._stop_event = threading.Event()
         self._wake_event = threading.Event()
         self._thread: threading.Thread | None = None
+        self._outbound_unavailable = False
 
     @property
     def is_running(self) -> bool:
@@ -109,12 +110,15 @@ class PeerManager:
             peer for peer in self._ready_peers()
             if peer.state is PeerState.READY
         )
+        if ready:
+            self._outbound_unavailable = False
         open_slots = max(0, self.target_outbound - len(ready))
         if open_slots == 0:
             return ()
 
         now = self._clock()
         connected: list[Peer] = []
+        failed_attempts = 0
         ready_keys = {peer.key for peer in ready}
         for address in self.address_book.candidates(exclude=ready_keys):
             if len(connected) >= open_slots:
@@ -123,16 +127,44 @@ class PeerManager:
                 continue
             if self._retry_at.get(address.key, 0) > now:
                 continue
+            failure_count_before = address.fail_count
             try:
                 peer = self._connect_peer(str(address.host), address.port)
             except Exception as error:
+                failed_attempts += 1
                 self._schedule_retry(address.key, now)
-                logger.warning(
-                    f"Outbound connection to {address.host}:{address.port} failed: {error}"
+                if address.fail_count == failure_count_before:
+                    diagnostic = self.address_book.record_message(
+                        address.host,
+                        address.port,
+                        f"Outbound connection failed: {error}",
+                    ).last_known_message
+                else:
+                    diagnostic = address.last_known_message
+                logger.debug(
+                    "Outbound peer %s:%s: %s",
+                    address.host,
+                    address.port,
+                    diagnostic or "Connection failed",
                 )
                 continue
             self._retry_at.pop(address.key, None)
             connected.append(peer)
+        if connected:
+            self._outbound_unavailable = False
+        elif not ready and failed_attempts and not self._outbound_unavailable:
+            logger.warning(
+                "Unable to establish any outbound peers after %s attempt(s); "
+                "individual failures are recorded in the peer address book",
+                failed_attempts,
+            )
+            self._outbound_unavailable = True
+        elif not ready and not self._outbound_unavailable:
+            logger.warning(
+                "Unable to maintain any outbound peers because no eligible "
+                "peer addresses are currently available"
+            )
+            self._outbound_unavailable = True
         return tuple(connected)
 
     def _run(self) -> None:

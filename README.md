@@ -77,15 +77,42 @@ python -m src --data-dir ~/.bitclone-remote status
 
 ### Local service API
 
-BitClone can expose its read-only v1 operator API on the loopback interface:
+BitClone can expose its read-only v1 operator API on the loopback interface. Supply a bearer token through the
+environment so it is not written to `bitclone.toml`:
 
 ```bash
+export BITCLONE_API_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
 python -m src --data-dir ~/.bitclone serve-api
 ```
 
+If the environment variable is omitted, BitClone prints a high-entropy token valid only for that server run. For a
+remote-backed inspection session that should not start BitClone's public P2P workers, add `--api-only`.
+
 The API defaults to `http://127.0.0.1:8334/api/v1`. Its generated OpenAPI document is available at
-`/api/v1/openapi.json`. The service is deliberately local and read-only during Sprint 7.1; authenticated access,
-live events, and explicit LAN/TLS configuration follow in Story 7.2.
+`/api/v1/openapi.json`. Health, version, and OpenAPI metadata are public locally; operational resources require:
+
+```bash
+curl -H "Authorization: Bearer $BITCLONE_API_TOKEN" \
+  http://127.0.0.1:8334/api/v1/node/status
+```
+
+Live sync, peer, block, mempool, warning, and lifecycle events are available through SSE:
+
+```bash
+curl -N -H "Authorization: Bearer $BITCLONE_API_TOKEN" \
+  http://127.0.0.1:8334/api/v1/events
+```
+
+Known peer addresses, including disconnected endpoints and their latest connection diagnostics, are available at:
+
+```bash
+curl -H "Authorization: Bearer $BITCLONE_API_TOKEN" \
+  http://127.0.0.1:8334/api/v1/peers/address-book
+```
+
+Binding beyond loopback is rejected unless a TLS certificate, private key, and explicit browser origin are configured.
+The API applies exact origin checks, scoped bearer credentials, rate limits, secret redaction, CSRF groundwork, and a
+mode-`0600` audit log under the selected network's log directory.
 
 ---
 

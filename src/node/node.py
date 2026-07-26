@@ -262,8 +262,13 @@ class Node:
         self.address_book.add_peer(peer, source=source)
         try:
             self.transport.connect(peer)
-        except Exception:
-            self.address_book.record_failure(peer, source=source, failed_at=time.time())
+        except Exception as error:
+            self.address_book.record_failure(
+                peer,
+                source=source,
+                failed_at=time.time(),
+                message=f"Connection failed: {error}",
+            )
             raise
         peer.transition(PeerState.HANDSHAKING)
 
@@ -303,7 +308,12 @@ class Node:
             self.transport.send(peer, GetAddr())
         except Exception as error:
             self._record_peer_misbehaviour(peer, error)
-            self.address_book.record_failure(peer, source=source, failed_at=time.time())
+            self.address_book.record_failure(
+                peer,
+                source=source,
+                failed_at=time.time(),
+                message=self._peer_failure_message(error),
+            )
             self.transport.disconnect(peer)
             raise
 
@@ -365,6 +375,7 @@ class Node:
                 peer,
                 source=PeerSource.INBOUND,
                 failed_at=time.time(),
+                message=self._peer_failure_message(error),
             )
             self.transport.disconnect(peer)
             raise
@@ -421,7 +432,7 @@ class Node:
         with self._ready_peers_lock:
             return tuple(self._ready_peers[key] for key in sorted(self._ready_peers))
 
-    def disconnect_peer(self, peer: Peer) -> None:
+    def disconnect_peer(self, peer: Peer, message: object | None = "Disconnected") -> None:
         """Disconnect a peer and remove it from the ready-peer registry."""
         with self._ready_peers_lock:
             self._ready_peers.pop(peer.key, None)
@@ -429,6 +440,8 @@ class Node:
         self.inventory_requests.release_peer(peer.key)
         self.header_sync.peer_disconnected(peer)
         self.transport.disconnect(peer)
+        if message is not None:
+            self.address_book.record_message(peer.host, peer.port, message)
         self.peer_manager.wake()
 
     def start_header_sync(self, peer: Peer) -> GetHeaders:
@@ -458,10 +471,18 @@ class Node:
                 peer,
                 source=self._source_for_peer(str(peer.host), peer.port),
                 failed_at=time.time(),
+                message=self._peer_failure_message(error),
             )
-            self.disconnect_peer(peer)
+            self.disconnect_peer(peer, message=None)
             raise
         return message
+
+    @classmethod
+    def _peer_failure_message(cls, error: Exception) -> str:
+        """Describe protocol violations separately from ordinary connection churn."""
+        if cls._classify_peer_error(error) is not None:
+            return f"Protocol failure: {error}"
+        return f"Connection failed: {error}"
 
     def _record_peer_misbehaviour(
             self,

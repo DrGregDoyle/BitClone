@@ -20,14 +20,16 @@ node state; the browser, CLI, and future integrations use the same authenticated
 Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 7.
 Each item should be handled as a separate ticket with sufficient tests.
 
-**Story 7.2 — Live Events and Local-First Security**
+**Cleanup 7.0.2 — Dataclass Conversion for Data Records**
 
-- [ ] Stream sync, peer, block, mempool, warning, and lifecycle events using SSE or WebSockets
-- [ ] Bind HTTP and RPC services to loopback by default
-- [ ] Add authenticated sessions or bearer tokens, scoped API credentials, CSRF protection, and strict origin rules
-- [ ] Require explicit configuration for LAN access and TLS for access beyond loopback
-- [ ] Redact cookies, private keys, wallet secrets, and credentials from responses and logs
-- [ ] Add rate limits, sensitive-action audit records, and security-focused integration tests
+- [ ] Convert `BlockIndexEntry` to `@dataclass(frozen=True, slots=True)`
+- [ ] Convert mutable `MemPoolTx` to `@dataclass(slots=True)` with safe list and arrival-time factories
+- [ ] Preserve `MemPoolTx` byte-to-`Tx` normalization through explicit post-initialization
+- [ ] Convert `PrefilledTx`, `BlockTxns`, `BlockTxnsRequest`, and `HeaderAndShortIDs` to slotted dataclasses
+- [ ] Preserve compact-block validation, differential encoding, constructor signatures, and wire serialization
+- [ ] Explicitly select and test equality, representation, mutability, and hashing behavior instead of accepting
+      dataclass defaults implicitly
+- [ ] Add database-row, mempool-metadata, and compact-block round-trip regression tests
 
 **Story 7.3 — Bitcoin-Compatible JSON-RPC and CLI**
 
