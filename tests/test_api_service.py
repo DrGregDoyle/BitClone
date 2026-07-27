@@ -3,6 +3,7 @@ import re
 import pytest
 
 from src.api import APIError, NodeApplicationService, ROUTES, build_openapi_document
+from src.api.service import RPCError
 from src.network.datatypes.network_types import PeerState, Services
 from src.network.peer import Peer
 from src.network.peer_address_book import PeerSource
@@ -134,6 +135,42 @@ def test_peer_address_book_includes_disconnected_peer_diagnostics(service, node)
     assert result["peers"][0]["last_known_message"] == (
         "Connection closed while receiving data"
     )
+
+
+def test_transaction_rpc_decodes_reads_and_queries_genesis_outputs(service, node):
+    tx = node.blockchain.tip.txs[0]
+    raw_hex = tx.to_bytes().hex()
+    txid = tx.txid[::-1].hex()
+    block_hash = node.blockchain.tip.block_id[::-1].hex()
+
+    decoded = service.dispatch_rpc("decoderawtransaction", [raw_hex])
+    raw = service.dispatch_rpc("getrawtransaction", [txid, False, block_hash])
+    verbose = service.dispatch_rpc(
+        "getrawtransaction",
+        {"txid": txid, "verbose": True, "blockhash": block_hash},
+    )
+    txout = service.dispatch_rpc("gettxout", [txid, 0])
+
+    assert decoded["txid"] == txid
+    assert decoded["hex"] == raw_hex
+    assert raw == raw_hex
+    assert verbose["blockhash"] == block_hash
+    assert verbose["is_coinbase"] is True
+    assert txout["value"] == 50
+    assert txout["amount_sats"] == 5_000_000_000
+    assert txout["coinbase"] is True
+
+
+def test_transaction_rpc_rejects_invalid_or_policy_rejected_transactions(service, node):
+    coinbase_hex = node.blockchain.tip.txs[0].to_bytes().hex()
+
+    with pytest.raises(RPCError) as decode_error:
+        service.dispatch_rpc("decoderawtransaction", ["deadbeef"])
+    with pytest.raises(RPCError) as rejected:
+        service.dispatch_rpc("sendrawtransaction", [coinbase_hex])
+
+    assert decode_error.value.code == -22
+    assert rejected.value.code == -26
 
 
 @pytest.mark.parametrize(

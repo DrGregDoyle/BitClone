@@ -23,12 +23,14 @@ from src.api.security import (
     SlidingWindowRateLimiter,
     redact_secrets,
 )
-from src.api.service import APIError, NodeApplicationService
+from src.api.service import APIError, NodeApplicationService, RPCError
 from src.core import get_logger
 
 
 logger = get_logger(__name__)
 CSRF_HEADER = "X-BitClone-CSRF"
+RPC_PATHS = {"/", "/rpc", f"/api/{API_VERSION}/rpc"}
+MAX_RPC_BODY_BYTES = 1_000_000
 
 
 def _match_route(path: str):
@@ -118,6 +120,9 @@ class _BitCloneRequestHandler(BaseHTTPRequestHandler):
         self._write_json(HTTPStatus.OK, result)
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+        if urlsplit(self.path).path in RPC_PATHS:
+            self._handle_rpc()
+            return
         self._reject_mutating_method()
 
     def do_PUT(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
@@ -153,6 +158,151 @@ class _BitCloneRequestHandler(BaseHTTPRequestHandler):
             APIError(405, "method_not_allowed", "This route does not accept this method"),
             allow="GET",
         )
+
+    def _handle_rpc(self) -> None:
+        try:
+            self._allowed_origin = self.server.origin_policy.validate(
+                self.headers.get("Origin")
+            )
+            principal = self.server.authenticator.authenticate_rpc(
+                self.headers.get("Authorization"),
+                "read",
+            )
+            self._rate_limit_remaining = self.server.rate_limiter.check(
+                f"{self.client_address[0]}:{principal.credential_id}"
+            )
+        except APIError as error:
+            self.server.audit.record(
+                "request_denied",
+                client=self.client_address[0],
+                path=urlsplit(self.path).path,
+                code=error.code,
+            )
+            self._write_error(error)
+            return
+
+        try:
+            content_length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            self._write_rpc_payload(
+                {"result": None, "error": {"code": -32700, "message": "Parse error"}, "id": None}
+            )
+            return
+        if not 0 < content_length <= MAX_RPC_BODY_BYTES:
+            self._write_rpc_payload(
+                {
+                    "result": None,
+                    "error": {"code": -32600, "message": "Invalid Request"},
+                    "id": None,
+                }
+            )
+            return
+        try:
+            payload = json.loads(self.rfile.read(content_length))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self._write_rpc_payload(
+                {"result": None, "error": {"code": -32700, "message": "Parse error"}, "id": None}
+            )
+            return
+
+        requests = payload if isinstance(payload, list) else [payload]
+        if not requests:
+            requests = [None]
+        methods = [
+            request.get("method")
+            for request in requests
+            if isinstance(request, dict)
+        ]
+        required_scope = (
+            "admin"
+            if any(
+                isinstance(method, str)
+                and self.server.application.rpc_required_scope(method) == "admin"
+                for method in methods
+            )
+            else "read"
+        )
+        if required_scope == "admin":
+            try:
+                principal = self.server.authenticator.authenticate_rpc(
+                    self.headers.get("Authorization"),
+                    required_scope,
+                )
+                if (
+                        self._allowed_origin is not None
+                        and self.headers.get(CSRF_HEADER) != "1"
+                ):
+                    raise APIError(
+                        403,
+                        "csrf_validation_failed",
+                        f"Browser RPC mutations require the {CSRF_HEADER} header",
+                    )
+            except APIError as error:
+                self.server.audit.record(
+                    "request_denied",
+                    client=self.client_address[0],
+                    path=urlsplit(self.path).path,
+                    code=error.code,
+                )
+                self._write_error(error)
+                return
+
+        if required_scope == "admin":
+            self.server.audit.record(
+                "rpc_mutation",
+                client=self.client_address[0],
+                credential_id=principal.credential_id,
+                methods=methods,
+            )
+
+        responses = [
+            response
+            for request in requests
+            if (response := self._rpc_response(request)) is not None
+        ]
+        if not responses:
+            self.send_response(HTTPStatus.NO_CONTENT)
+            self.send_header("API-Version", API_VERSION)
+            self.send_header("Cache-Control", "no-store")
+            self._write_security_headers()
+            self.end_headers()
+            return
+        self._write_rpc_payload(
+            responses if isinstance(payload, list) else responses[0]
+        )
+
+    def _rpc_response(self, request: Any) -> dict[str, Any] | None:
+        request_id = request.get("id") if isinstance(request, dict) else None
+        is_notification = isinstance(request, dict) and "id" not in request
+        if (
+                not isinstance(request, dict)
+                or request.get("jsonrpc", "1.0") not in ("1.0", "2.0")
+                or not isinstance(request.get("method"), str)
+        ):
+            return {
+                "result": None,
+                "error": {"code": -32600, "message": "Invalid Request"},
+                "id": request_id,
+            }
+        try:
+            result = self.server.application.dispatch_rpc(
+                request["method"],
+                request.get("params", []),
+            )
+            response = {"result": result, "error": None, "id": request_id}
+        except RPCError as error:
+            response = {"result": None, "error": error.to_data(), "id": request_id}
+        except Exception:
+            logger.exception("Unhandled BitClone RPC request failure")
+            response = {
+                "result": None,
+                "error": {"code": -32603, "message": "Internal error"},
+                "id": request_id,
+            }
+        return None if is_notification else response
+
+    def _write_rpc_payload(self, payload: Any) -> None:
+        self._write_json(HTTPStatus.OK, payload)
 
     def _stream_events(self) -> None:
         last_event_header = self.headers.get("Last-Event-ID", "0")
@@ -203,7 +353,7 @@ class _BitCloneRequestHandler(BaseHTTPRequestHandler):
     def _write_json(
             self,
             status: int,
-            payload: dict[str, Any],
+            payload: Any,
             allow: str | None = None,
             extra_headers: dict[str, str] | None = None,
     ) -> None:

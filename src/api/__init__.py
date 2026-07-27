@@ -2,7 +2,7 @@
 
 from src.api.contracts import API_VERSION, OPENAPI_VERSION, ROUTES, build_openapi_document
 from src.api.http import BitCloneHTTPServer
-from src.api.service import APIError, NodeApplicationService
+from src.api.service import APIError, NodeApplicationService, RPCError
 
 __all__ = [
     "APIError",
@@ -11,5 +11,6 @@ __all__ = [
     "NodeApplicationService",
     "OPENAPI_VERSION",
     "ROUTES",
+    "RPCError",
     "build_openapi_document",
 ]

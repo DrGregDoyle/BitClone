@@ -110,6 +110,22 @@ curl -H "Authorization: Bearer $BITCLONE_API_TOKEN" \
   http://127.0.0.1:8334/api/v1/peers/address-book
 ```
 
+The same server accepts Bitcoin-compatible JSON-RPC at `/` and `/rpc`. Bearer authentication works for native clients;
+Bitcoin tooling can use any non-empty RPC username and the BitClone API token as its HTTP Basic password:
+
+```bash
+bitcoin-cli \
+  -rpcconnect=127.0.0.1 \
+  -rpcport=8334 \
+  -rpcuser=bitclone \
+  -rpcpassword="$BITCLONE_API_TOKEN" \
+  getblockchaininfo
+```
+
+Supported compatibility methods are `getblockchaininfo`, `getnetworkinfo`, `getpeerinfo`, `getrawmempool`,
+`getrawtransaction`, `decoderawtransaction`, `sendrawtransaction`, and `gettxout`. Wallet and mining RPC methods return
+explicitly unavailable errors until their planned sprints.
+
 Binding beyond loopback is rejected unless a TLS certificate, private key, and explicit browser origin are configured.
 The API applies exact origin checks, scoped bearer credentials, rate limits, secret redaction, CSRF groundwork, and a
 mode-`0600` audit log under the selected network's log directory.

@@ -12,6 +12,7 @@ from typing import Any, Sequence
 
 from src.api import BitCloneHTTPServer, NodeApplicationService
 from src.api.security import generate_api_token
+from src.api.service import RPCError
 from src.config import BitCloneConfig, BlockStorageMode, NetworkName
 from src.core import ReadError, TransactionError
 from src.node.node import Node
@@ -92,6 +93,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("init", help="Create the BitClone data-directory layout.")
     subparsers.add_parser("status", help="Show node status.")
+    subparsers.add_parser("getblockchaininfo", help="Show Bitcoin-compatible chain status.")
+    subparsers.add_parser("getnetworkinfo", help="Show Bitcoin-compatible network status.")
+    subparsers.add_parser("getpeerinfo", help="Show connected peers in Bitcoin RPC format.")
     serve_api = subparsers.add_parser(
         "serve-api",
         help="Run the local versioned REST API until interrupted.",
@@ -160,6 +164,14 @@ def _build_parser() -> argparse.ArgumentParser:
     gettxout.add_argument("txid", help="Transaction id in display byte order.")
     gettxout.add_argument("vout", type=int, help="Output index.")
 
+    getrawtransaction = subparsers.add_parser(
+        "getrawtransaction",
+        help="Read a mempool transaction or a confirmed transaction with its block hash.",
+    )
+    getrawtransaction.add_argument("txid", help="Transaction id in display byte order.")
+    getrawtransaction.add_argument("--verbose", action="store_true")
+    getrawtransaction.add_argument("--block-hash", default=None)
+
     return parser
 
 
@@ -183,46 +195,6 @@ def _decode_hex(value: str, name: str) -> bytes:
         raise argparse.ArgumentTypeError(f"{name} must be valid hex") from e
 
 
-def _decode_display_hash(value: str, name: str) -> bytes:
-    raw = _decode_hex(value, name)
-    if len(raw) != 32:
-        raise argparse.ArgumentTypeError(f"{name} must be 32 bytes / 64 hex characters")
-    return raw[::-1]
-
-
-def _format_block_index(entry) -> dict[str, Any] | None:
-    if entry is None:
-        return None
-
-    return {
-        "block_hash": entry.block_hash[::-1].hex(),
-        "prev_hash": entry.prev_hash[::-1].hex(),
-        "height": entry.height,
-        "bits": entry.bits.hex(),
-        "timestamp": entry.timestamp,
-        "work": entry.work,
-        "chainwork": entry.chainwork,
-        "active": entry.active,
-        "status": entry.status,
-    }
-
-
-def _format_block_header(node: Node, block_hash: bytes, display_hash: str) -> dict[str, Any]:
-    index_entry = node.blockchain.get_block_index(block_hash)
-    block = node.blockchain.get_block(block_hash) if index_entry is not None else None
-    header = block.get_header() if block is not None else node.blockchain.get_remote_block_header(block_hash)
-
-    if header is None:
-        return {"found": False, "block_hash": display_hash}
-
-    return {
-        "found": True,
-        "height": index_entry.height if index_entry is not None else None,
-        "header": header.to_data(),
-        "index": _format_block_index(index_entry),
-    }
-
-
 def _decode_tx(tx_hex: str) -> Tx:
     try:
         return Tx.from_bytes(_decode_hex(tx_hex, "tx_hex"))
@@ -231,45 +203,61 @@ def _decode_tx(tx_hex: str) -> Tx:
 
 
 def _handle_command(node: Node, args: argparse.Namespace) -> Any:
+    service = NodeApplicationService(node)
     match args.command:
         case "status":
-            return node.status()
+            return service.command_status()
         case "build-template":
             return node.build_block_template().to_data()
         case "getchaintip":
-            tip = node.blockchain.db.get_active_tip()
-            return {"found": tip is not None, "tip": _format_block_index(tip)}
+            return service.command_chain_tip()
         case "getremotechaininfo":
-            info = node.remote_blockchain_info()
-            return {"configured": info is not None, "blockchain": info}
+            return service.command_remote_chain_info()
+        case "getblockchaininfo" | "getnetworkinfo" | "getpeerinfo":
+            return service.dispatch_rpc(args.command)
         case "getblockheader":
-            block_hash = _decode_display_hash(args.block_hash, "block_hash")
-            return _format_block_header(node, block_hash, args.block_hash)
+            return service.command_block_header(args.block_hash)
         case "sendrawtransaction":
             tx = _decode_tx(args.tx_hex)
-            accepted = node.submit_tx(tx)
+            try:
+                txid = service.dispatch_rpc("sendrawtransaction", [args.tx_hex])
+                accepted = True
+            except RPCError as error:
+                if error.code != -26:
+                    raise
+                txid = tx.txid[::-1].hex()
+                accepted = False
             return {
                 "accepted": accepted,
-                "txid": tx.txid[::-1].hex(),
+                "txid": txid,
             }
         case "decoderawtransaction":
-            tx = _decode_tx(args.tx_hex)
-            return tx.to_data()
+            return service.dispatch_rpc("decoderawtransaction", [args.tx_hex])
         case "getrawmempool":
-            return node.mempool.to_data(verbose=args.verbose)
+            return service.dispatch_rpc("getrawmempool", [args.verbose])
+        case "getrawtransaction":
+            return service.dispatch_rpc(
+                "getrawtransaction",
+                [args.txid, args.verbose, args.block_hash],
+            )
         case "getblock":
-            block_hash = _decode_display_hash(args.block_hash, "block_hash")
-            block = node.blockchain.get_block(block_hash)
-            if block is None:
-                return {"found": False, "block_hash": args.block_hash}
-            return {"found": True, "block": block.to_data()}
+            return service.command_block(args.block_hash)
         case "gettxout":
-            txid = _decode_display_hash(args.txid, "txid")
-            outpoint = txid + args.vout.to_bytes(4, "little")
-            utxo = node.blockchain.get_utxo(outpoint)
-            if utxo is None:
+            result = service.dispatch_rpc("gettxout", [args.txid, args.vout, True])
+            if result is None:
                 return {"found": False, "txid": args.txid, "vout": args.vout}
-            return {"found": True, "utxo": utxo.to_data()}
+            return {
+                "found": True,
+                "utxo": {
+                    "outpoint": result["outpoint"],
+                    "txid": args.txid,
+                    "vout": args.vout,
+                    "amount": result["amount_sats"],
+                    "scriptpubkey": result["scriptPubKey"]["hex"],
+                    "block_height": result["block_height"],
+                    "is_coinbase": result["coinbase"],
+                },
+            }
         case _:
             raise ValueError(f"Unsupported command: {args.command}")
 
@@ -337,7 +325,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         output = _handle_command(node, args)
         _print_output(output, args.json)
         return 0
-    except (ValueError, argparse.ArgumentTypeError) as e:
+    except (ValueError, argparse.ArgumentTypeError, RPCError) as e:
         parser.exit(2, f"{parser.prog}: error: {e}\n")
     finally:
         if node is not None:

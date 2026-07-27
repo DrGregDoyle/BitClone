@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from src.api.contracts import API_PREFIX, API_VERSION, ROUTES, build_openapi_document
+from src.config import BlockStorageMode
+from src.core import NETWORK, ReadError, TransactionError
 from src.node.node import Node
 from src.tx.tx import Tx
 
@@ -13,6 +15,19 @@ from src.tx.tx import Tx
 BITCLONE_VERSION = "0.1.0-dev"
 DEFAULT_PAGE_LIMIT = 50
 MAX_PAGE_LIMIT = 200
+SATOSHIS_PER_BITCOIN = 100_000_000
+
+
+class RPCError(Exception):
+    """Bitcoin-style JSON-RPC application error."""
+
+    def __init__(self, code: int, message: str):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+    def to_data(self) -> dict[str, Any]:
+        return {"code": self.code, "message": self.message}
 
 
 class APIError(Exception):
@@ -64,6 +79,13 @@ def _display_hash(value: str, field: str) -> bytes:
             f"{field} must contain exactly 64 hexadecimal characters",
         )
     return raw[::-1]
+
+
+def _display_hash_for_rpc(value: str, field: str) -> bytes:
+    try:
+        return _display_hash(value, field)
+    except APIError as error:
+        raise RPCError(-8, error.message) from error
 
 
 def _pagination(query: dict[str, list[str]]) -> tuple[int, int]:
@@ -135,6 +157,70 @@ def _format_transaction(tx: Tx) -> dict[str, Any]:
     }
 
 
+def _format_rpc_transaction(tx: Tx) -> dict[str, Any]:
+    """Render the subset of Bitcoin Core's decoded transaction shape we support."""
+    vin = []
+    for txin in tx.inputs:
+        if tx.is_coinbase:
+            vin.append({
+                "coinbase": txin.scriptsig.hex(),
+                "sequence": txin.sequence,
+            })
+        else:
+            vin.append({
+                "txid": txin.txid[::-1].hex(),
+                "vout": txin.vout,
+                "scriptSig": {"asm": "", "hex": txin.scriptsig.hex()},
+                "sequence": txin.sequence,
+            })
+    return {
+        "txid": tx.txid[::-1].hex(),
+        "hash": tx.wtxid[::-1].hex(),
+        "version": tx.version,
+        "size": tx.length,
+        "vsize": tx.vbytes,
+        "weight": tx.wu,
+        "locktime": tx.locktime,
+        "vin": vin,
+        "vout": [
+            {
+                "value": txout.amount / SATOSHIS_PER_BITCOIN,
+                "n": index,
+                "scriptPubKey": {
+                    "asm": "",
+                    "desc": "raw()",
+                    "hex": txout.scriptpubkey.hex(),
+                    "type": "nonstandard",
+                },
+            }
+            for index, txout in enumerate(tx.outputs)
+        ],
+        "hex": tx.to_bytes().hex(),
+        "is_coinbase": tx.is_coinbase,
+        "input_num": len(tx.inputs),
+        "output_num": len(tx.outputs),
+    }
+
+
+_MISSING = object()
+
+
+def _rpc_param(
+        params: list[Any] | dict[str, Any],
+        index: int,
+        name: str,
+        default: Any = _MISSING,
+) -> Any:
+    if isinstance(params, list):
+        if index < len(params):
+            return params[index]
+    elif name in params:
+        return params[name]
+    if default is _MISSING:
+        raise RPCError(-8, f"Missing required parameter: {name}")
+    return default
+
+
 class NodeApplicationService:
     """
     Stable operator-facing boundary around a running ``Node``.
@@ -156,6 +242,322 @@ class NodeApplicationService:
         if handler is None or operation_id.startswith("_"):
             raise APIError(404, "route_not_found", "The requested API route does not exist")
         return handler(path or {}, query or {})
+
+    @staticmethod
+    def rpc_required_scope(method: str) -> str:
+        return "admin" if method == "sendrawtransaction" else "read"
+
+    def dispatch_rpc(
+            self,
+            method: str,
+            params: list[Any] | dict[str, Any] | None = None,
+    ) -> Any:
+        if not isinstance(method, str) or not method:
+            raise RPCError(-32600, "Invalid Request")
+        normalized_params = [] if params is None else params
+        if not isinstance(normalized_params, (list, dict)):
+            raise RPCError(-32602, "Params must be an array or object")
+
+        unavailable = {
+            "getwalletinfo": "Wallet RPC is unavailable until Sprint 11.",
+            "listwallets": "Wallet RPC is unavailable until Sprint 11.",
+            "getnewaddress": "Wallet RPC is unavailable until Sprint 11.",
+            "sendtoaddress": "Wallet RPC is unavailable until Sprint 11.",
+            "getbalances": "Wallet RPC is unavailable until Sprint 11.",
+            "getmininginfo": "Mining RPC is unavailable until Sprint 10.",
+            "getblocktemplate": "Mining RPC is unavailable until Sprint 10.",
+            "submitblock": "Mining RPC is unavailable until Sprint 10.",
+            "generatetoaddress": "Mining RPC is unavailable until Sprint 10.",
+        }
+        if method in unavailable:
+            raise RPCError(-1, unavailable[method])
+
+        handler = getattr(self, f"_rpc_{method}", None)
+        if handler is None:
+            raise RPCError(-32601, "Method not found")
+        return handler(normalized_params)
+
+    def command_status(self) -> dict[str, Any]:
+        """CLI-compatible status through the shared service boundary."""
+        return self._node.status()
+
+    def command_chain_tip(self) -> dict[str, Any]:
+        entry = self._node.blockchain.db.get_active_tip()
+        return {
+            "found": entry is not None,
+            "tip": self._format_block_index(entry),
+        }
+
+    def command_remote_chain_info(self) -> dict[str, Any]:
+        info = self._node.remote_blockchain_info()
+        return {"configured": info is not None, "blockchain": info}
+
+    def command_block_header(self, display_hash: str) -> dict[str, Any]:
+        block_hash = _display_hash_for_rpc(display_hash, "block_hash")
+        index_entry = self._node.blockchain.get_block_index(block_hash)
+        block = (
+            self._node.blockchain.get_block(block_hash)
+            if index_entry is not None
+            else None
+        )
+        header = (
+            block.get_header()
+            if block is not None
+            else self._node.blockchain.get_remote_block_header(block_hash)
+        )
+        if header is None:
+            return {"found": False, "block_hash": display_hash}
+        return {
+            "found": True,
+            "height": index_entry.height if index_entry is not None else None,
+            "header": header.to_data(),
+            "index": self._format_block_index(index_entry),
+        }
+
+    def command_block(self, display_hash: str) -> dict[str, Any]:
+        block = self._node.blockchain.get_block(
+            _display_hash_for_rpc(display_hash, "block_hash")
+        )
+        if block is None:
+            return {"found": False, "block_hash": display_hash}
+        return {"found": True, "block": block.to_data()}
+
+    @staticmethod
+    def _format_block_index(entry) -> dict[str, Any] | None:
+        if entry is None:
+            return None
+        return {
+            "block_hash": entry.block_hash[::-1].hex(),
+            "prev_hash": entry.prev_hash[::-1].hex(),
+            "height": entry.height,
+            "bits": entry.bits.hex(),
+            "timestamp": entry.timestamp,
+            "work": entry.work,
+            "chainwork": entry.chainwork,
+            "active": entry.active,
+            "status": entry.status,
+        }
+
+    def _rpc_getblockchaininfo(self, params: list | dict) -> dict[str, Any]:
+        if params:
+            raise RPCError(-8, "getblockchaininfo takes no parameters")
+        status = self._node.status()
+        tip = self._node.blockchain.db.get_active_tip()
+        remote = (
+            self._node.remote_blockchain_info()
+            if self._node.config.block_storage is BlockStorageMode.BITCOIN_CORE_REMOTE
+            else None
+        )
+        blocks = remote.get("blocks", status["height"]) if remote else status["height"]
+        headers = remote.get("headers", status["best_header_height"]) if remote else status["best_header_height"]
+        best_hash = remote.get("bestblockhash", status["tip"]) if remote else status["tip"]
+        verification_progress = (
+            remote.get("verificationprogress", 0.0)
+            if remote
+            else (1.0 if headers <= blocks else blocks / max(1, headers))
+        )
+        return {
+            "chain": remote.get("chain") if remote else {
+                "mainnet": "main",
+                "testnet": "test",
+                "regtest": "regtest",
+                "signet": "signet",
+            }[status["network"]],
+            "blocks": blocks,
+            "headers": headers,
+            "bestblockhash": best_hash,
+            "difficulty": remote.get("difficulty") if remote else None,
+            "time": remote.get("time") if remote else getattr(self._node.blockchain.tip, "timestamp", 0),
+            "mediantime": remote.get("mediantime") if remote else getattr(self._node.blockchain.tip, "timestamp", 0),
+            "verificationprogress": verification_progress,
+            "initialblockdownload": remote.get("initialblockdownload", False) if remote else blocks < headers,
+            "chainwork": remote.get("chainwork") if remote else f"{tip.chainwork if tip else 0:064x}",
+            "size_on_disk": remote.get("size_on_disk") if remote else None,
+            "pruned": remote.get("pruned", False) if remote else (
+                self._node.config.block_storage is BlockStorageMode.PRUNED
+            ),
+            "warnings": remote.get("warnings", "") if remote else "",
+            "bitclone": {
+                "block_storage": status["block_storage"],
+                "trust": status["block_data"]["trust"],
+                "independently_validated": status["block_data"]["independently_validated"],
+            },
+        }
+
+    def _rpc_getnetworkinfo(self, params: list | dict) -> dict[str, Any]:
+        if params:
+            raise RPCError(-8, "getnetworkinfo takes no parameters")
+        peers = self._node.ready_peers
+        return {
+            "version": 100,
+            "subversion": NETWORK.USER_AGENT,
+            "protocolversion": NETWORK.PROTOCOL_VERSION,
+            "localservices": f"{0:016x}",
+            "localservicesnames": [],
+            "localrelay": True,
+            "timeoffset": 0,
+            "networkactive": self._node.started,
+            "connections": len(peers),
+            "connections_in": 0,
+            "connections_out": len(peers),
+            "networks": [],
+            "relayfee": self._node.mempool.min_fee / SATOSHIS_PER_BITCOIN,
+            "incrementalfee": self._node.mempool.min_fee / SATOSHIS_PER_BITCOIN,
+            "localaddresses": [],
+            "warnings": "",
+        }
+
+    def _rpc_getpeerinfo(self, params: list | dict) -> list[dict[str, Any]]:
+        if params:
+            raise RPCError(-8, "getpeerinfo takes no parameters")
+        return [
+            {
+                "id": index,
+                "addr": f"{peer.host}:{peer.port}",
+                "services": f"{int(peer.services or 0):016x}",
+                "servicesnames": (
+                    [] if peer.services is None else peer.services.name.split("|")
+                ),
+                "lastsend": int(peer.last_seen),
+                "lastrecv": int(peer.last_seen),
+                "bytessent": 0,
+                "bytesrecv": 0,
+                "conntime": int(peer.last_success or peer.last_seen),
+                "version": peer.protocol_version or 0,
+                "subver": peer.user_agent or "",
+                "startingheight": peer.last_block or 0,
+                "inbound": False,
+                "connection_type": "outbound-full-relay",
+            }
+            for index, peer in enumerate(self._node.ready_peers)
+        ]
+
+    def _rpc_getrawmempool(self, params: list | dict) -> list[str] | dict[str, Any]:
+        verbose = _rpc_param(params, 0, "verbose", False)
+        if not isinstance(verbose, bool):
+            raise RPCError(-3, "verbose must be a boolean")
+        if not verbose:
+            return self._node.mempool.get_txids()
+        return {
+            txid[::-1].hex(): {
+                "vsize": entry.tx.vbytes,
+                "weight": entry.tx.wu,
+                "time": entry.arrival_time,
+                "height": self._node.blockchain.height,
+                "fee": entry.fee,
+                "vbytes": entry.tx.vbytes,
+                "feerate": entry.feerate,
+                "ancestor_count": len(entry.ancestors),
+                "descendant_count": len(entry.descendants),
+                "fees": {
+                    "base": entry.fee / SATOSHIS_PER_BITCOIN,
+                    "modified": entry.fee / SATOSHIS_PER_BITCOIN,
+                    "ancestor": entry.fee / SATOSHIS_PER_BITCOIN,
+                    "descendant": entry.fee / SATOSHIS_PER_BITCOIN,
+                },
+                "depends": [ancestor.tx.txid[::-1].hex() for ancestor in entry.ancestors],
+                "spentby": [descendant.tx.txid[::-1].hex() for descendant in entry.descendants],
+            }
+            for txid, entry in self._node.mempool.mempool.items()
+        }
+
+    def _rpc_decoderawtransaction(self, params: list | dict) -> dict[str, Any]:
+        raw_hex = _rpc_param(params, 0, "hexstring")
+        if not isinstance(raw_hex, str):
+            raise RPCError(-3, "hexstring must be a string")
+        try:
+            tx = Tx.from_bytes(bytes.fromhex(raw_hex))
+        except (ValueError, ReadError, TransactionError) as error:
+            raise RPCError(-22, f"TX decode failed: {error}") from error
+        return _format_rpc_transaction(tx)
+
+    def _rpc_sendrawtransaction(self, params: list | dict) -> str:
+        raw_hex = _rpc_param(params, 0, "hexstring")
+        if not isinstance(raw_hex, str):
+            raise RPCError(-3, "hexstring must be a string")
+        try:
+            tx = Tx.from_bytes(bytes.fromhex(raw_hex))
+        except (ValueError, ReadError, TransactionError) as error:
+            raise RPCError(-22, f"TX decode failed: {error}") from error
+        if not self._node.submit_tx(tx):
+            raise RPCError(-26, "Transaction rejected by BitClone mempool policy")
+        return tx.txid[::-1].hex()
+
+    def _rpc_getrawtransaction(self, params: list | dict) -> str | dict[str, Any]:
+        display_txid = _rpc_param(params, 0, "txid")
+        verbose = _rpc_param(params, 1, "verbose", False)
+        display_block_hash = _rpc_param(params, 2, "blockhash", None)
+        if not isinstance(display_txid, str):
+            raise RPCError(-3, "txid must be a string")
+        txid = _display_hash_for_rpc(display_txid, "txid")
+        tx = self._node.mempool.get_tx(txid)
+        block = None
+        if tx is None and display_block_hash is not None:
+            if not isinstance(display_block_hash, str):
+                raise RPCError(-3, "blockhash must be a string")
+            block = self._node.blockchain.get_block(
+                _display_hash_for_rpc(display_block_hash, "blockhash")
+            )
+            if block is not None:
+                tx = next((candidate for candidate in block.txs if candidate.txid == txid), None)
+        if tx is None:
+            raise RPCError(
+                -5,
+                "No such mempool transaction. Use the blockhash argument for a confirmed transaction.",
+            )
+        if not isinstance(verbose, (bool, int)):
+            raise RPCError(-3, "verbose must be a boolean")
+        if not bool(verbose):
+            return tx.to_bytes().hex()
+        result = _format_rpc_transaction(tx)
+        if block is not None:
+            result["blockhash"] = block.block_id[::-1].hex()
+        return result
+
+    def _rpc_gettxout(self, params: list | dict) -> dict[str, Any] | None:
+        display_txid = _rpc_param(params, 0, "txid")
+        vout = _rpc_param(params, 1, "n")
+        include_mempool = _rpc_param(params, 2, "include_mempool", True)
+        if not isinstance(display_txid, str):
+            raise RPCError(-3, "txid must be a string")
+        if not isinstance(vout, int) or isinstance(vout, bool) or vout < 0 or vout > 0xffffffff:
+            raise RPCError(-8, "vout must be an unsigned 32-bit integer")
+        if not isinstance(include_mempool, bool):
+            raise RPCError(-3, "include_mempool must be a boolean")
+        txid = _display_hash_for_rpc(display_txid, "txid")
+        utxo = self._node.blockchain.get_utxo(txid + vout.to_bytes(4, "little"))
+        if utxo is None:
+            return None
+        tip = self._node.blockchain.tip
+        return {
+            "bestblock": tip.block_id[::-1].hex() if tip is not None else "00" * 32,
+            "confirmations": max(0, self._node.blockchain.height - utxo.block_height + 1),
+            "value": utxo.amount / SATOSHIS_PER_BITCOIN,
+            "amount_sats": utxo.amount,
+            "outpoint": utxo.outpoint.hex(),
+            "block_height": utxo.block_height,
+            "scriptPubKey": {
+                "asm": "",
+                "desc": "raw()",
+                "hex": utxo.scriptpubkey.hex(),
+                "type": "nonstandard",
+            },
+            "coinbase": utxo.is_coinbase,
+        }
+
+    def _rpc_help(self, params: list | dict) -> str:
+        command = _rpc_param(params, 0, "command", None)
+        methods = (
+            "decoderawtransaction getblockchaininfo getnetworkinfo getpeerinfo "
+            "getrawmempool getrawtransaction gettxout sendrawtransaction"
+        )
+        if command is None:
+            return methods
+        if not isinstance(command, str):
+            raise RPCError(-3, "command must be a string")
+        if not hasattr(self, f"_rpc_{command}"):
+            raise RPCError(-32601, "Method not found")
+        return f"{command} is supported by BitClone's compatibility RPC."
 
     def api_index(self, _path: dict, _query: dict) -> dict[str, Any]:
         return {

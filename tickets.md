@@ -31,15 +31,6 @@ Each item should be handled as a separate ticket with sufficient tests.
       dataclass defaults implicitly
 - [ ] Add database-row, mempool-metadata, and compact-block round-trip regression tests
 
-**Story 7.3 — Bitcoin-Compatible JSON-RPC and CLI**
-
-- [ ] Implement a local JSON-RPC server compatible with standard Bitcoin RPC where practical
-- [ ] Add `getblockchaininfo`, `getnetworkinfo`, `getpeerinfo`, and `getrawmempool`
-- [ ] Add `getrawtransaction`, `decoderawtransaction`, `sendrawtransaction`, and `gettxout`
-- [ ] Report unavailable wallet or mining capabilities explicitly until their later sprints are complete
-- [ ] Route CLI configuration, peer, chain, and transaction commands through the same application-service layer
-- [ ] Add JSON-RPC and CLI integration tests
-
 **Story 7.4 — Browser Operator Console**
 
 - [ ] Serve a same-origin browser application from the BitClone daemon

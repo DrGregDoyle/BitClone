@@ -378,6 +378,15 @@ BitClone process without reaching directly into consensus, wallet, or networking
 - [x] Expose one structured JSON snapshot through the authenticated `/api/v1/peers/address-book` endpoint
 - [x] Add tests for message updates, reduced warning output, redaction-safe JSON, and the address-book endpoint
 
+#### Story 7.3 — Bitcoin-Compatible JSON-RPC and CLI
+
+- [x] Implement a local JSON-RPC server compatible with standard Bitcoin RPC where practical
+- [x] Add `getblockchaininfo`, `getnetworkinfo`, `getpeerinfo`, and `getrawmempool`
+- [x] Add `getrawtransaction`, `decoderawtransaction`, `sendrawtransaction`, and `gettxout`
+- [x] Report unavailable wallet or mining capabilities explicitly until their later sprints are complete
+- [x] Route CLI configuration, peer, chain, and transaction commands through the same application-service layer
+- [x] Add JSON-RPC and CLI integration tests
+
 ### Chain Reorganisation & Storage Integrity — Early Groundwork
 
 Completed ahead of the active Chain Reorganisation & Storage Integrity sprint.

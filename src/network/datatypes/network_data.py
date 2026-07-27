@@ -174,7 +174,7 @@ class PrefilledTx(Serializable):
         self.tx = tx
 
     @classmethod
-    def from_bytes(cls, byte_stream: SERIALIZED, prev_ind: int = 0):
+    def from_bytes(cls, byte_stream: SERIALIZED, prev_ind: int = -1):
         """
         We deseriazlied a differentially encoded PrefilledTx. We use prev_ind to denote the previous BLOCK index in
         the corresponding list of prefilled transactions.
@@ -192,7 +192,7 @@ class PrefilledTx(Serializable):
 
         return cls(block_index, tx)
 
-    def to_bytes(self, prev_ind: int = 0) -> bytes:
+    def to_bytes(self, prev_ind: int = -1) -> bytes:
         """
         We differentially encoded the block_index to serialize our PrefilledTx. We use prev_ind to denote the
         previous BLOCK index in

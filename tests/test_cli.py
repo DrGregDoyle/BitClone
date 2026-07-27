@@ -41,6 +41,30 @@ def test_status_outputs_plain_text(tmp_path, capsys):
     assert "mempool_size: 0" in output
 
 
+@pytest.mark.parametrize(
+    ("command", "expected_key"),
+    [
+        ("getblockchaininfo", "bestblockhash"),
+        ("getnetworkinfo", "protocolversion"),
+        ("getpeerinfo", None),
+    ],
+)
+def test_cli_exposes_shared_read_only_rpc_methods(
+        tmp_path,
+        capsys,
+        command,
+        expected_key,
+):
+    exit_code = main(["--db-path", str(tmp_path / "node.db"), "--json", command])
+
+    assert exit_code == 0
+    output = json.loads(capsys.readouterr().out)
+    if expected_key is None:
+        assert output == []
+    else:
+        assert expected_key in output
+
+
 def test_node_initialization_error_is_reported_without_traceback(tmp_path, monkeypatch, capsys):
     def reject_config(**_kwargs):
         raise ValueError("Bitcoin Core network mismatch: BitClone=regtest, Core=mainnet")

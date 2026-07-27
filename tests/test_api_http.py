@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import base64
 from http.client import HTTPConnection
 import json
 from queue import Queue
@@ -60,6 +61,26 @@ def get_json(url, authenticated=True, origin=None):
         return response, json.loads(response.read())
 
 
+def post_rpc(base_url, payload, authenticated=True, basic=False):
+    parsed = urlsplit(base_url)
+    endpoint = f"{parsed.scheme}://{parsed.netloc}/"
+    headers = {"Content-Type": "application/json"}
+    if authenticated:
+        if basic:
+            credential = base64.b64encode(f"bitclone:{API_TOKEN}".encode()).decode()
+            headers["Authorization"] = f"Basic {credential}"
+        else:
+            headers["Authorization"] = f"Bearer {API_TOKEN}"
+    request = Request(
+        endpoint,
+        data=json.dumps(payload).encode(),
+        headers=headers,
+        method="POST",
+    )
+    with urlopen(request, timeout=5) as response:
+        return response, json.loads(response.read())
+
+
 def test_real_http_api_serves_versioned_status_and_contract(tmp_path):
     with running_api(tmp_path / "node.db") as (base_url, _genesis_hash, _server):
         response, status = get_json(f"{base_url}/node/status")
@@ -102,6 +123,61 @@ def test_real_http_api_serves_authenticated_peer_address_book(tmp_path):
     assert address_book["peers"][0]["host"] == "192.0.2.10"
     assert address_book["peers"][0]["last_known_message"] is None
     assert unauthenticated.value.code == 401
+
+
+def test_bitcoin_compatible_rpc_supports_basic_auth_and_batch_reads(tmp_path):
+    with running_api(tmp_path / "node.db") as (base_url, _genesis_hash, _server):
+        response, results = post_rpc(
+            base_url,
+            [
+                {"jsonrpc": "1.0", "id": 1, "method": "getblockchaininfo", "params": []},
+                {"jsonrpc": "2.0", "id": 2, "method": "getnetworkinfo", "params": []},
+                {"jsonrpc": "2.0", "id": 3, "method": "getpeerinfo", "params": []},
+                {"jsonrpc": "2.0", "id": 4, "method": "getrawmempool", "params": []},
+            ],
+            basic=True,
+        )
+        with pytest.raises(HTTPError) as unauthenticated:
+            post_rpc(
+                base_url,
+                {"jsonrpc": "2.0", "id": 5, "method": "getnetworkinfo"},
+                authenticated=False,
+            )
+
+    assert response.status == 200
+    assert [item["id"] for item in results] == [1, 2, 3, 4]
+    assert all(item["error"] is None for item in results)
+    assert results[0]["result"]["chain"] == "main"
+    assert results[1]["result"]["protocolversion"] > 0
+    assert results[2]["result"] == []
+    assert results[3]["result"] == []
+    assert unauthenticated.value.code == 401
+
+
+def test_rpc_returns_standard_method_and_capability_errors(tmp_path):
+    with running_api(tmp_path / "node.db") as (base_url, _genesis_hash, _server):
+        _, missing = post_rpc(
+            base_url,
+            {"jsonrpc": "2.0", "id": 1, "method": "notamethod"},
+        )
+        _, wallet = post_rpc(
+            base_url,
+            {"jsonrpc": "2.0", "id": 2, "method": "getwalletinfo"},
+        )
+        _, mining = post_rpc(
+            base_url,
+            {"jsonrpc": "2.0", "id": 3, "method": "getmininginfo"},
+        )
+
+    assert missing["error"]["code"] == -32601
+    assert wallet["error"] == {
+        "code": -1,
+        "message": "Wallet RPC is unavailable until Sprint 11.",
+    }
+    assert mining["error"] == {
+        "code": -1,
+        "message": "Mining RPC is unavailable until Sprint 10.",
+    }
 
 
 def test_real_http_api_returns_stable_error_contract(tmp_path):

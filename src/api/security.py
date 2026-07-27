@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -112,6 +114,37 @@ class BearerAuthenticator:
                 "Authorization must use the Bearer scheme",
             )
 
+        return self._authenticate_token(token, required_scope)
+
+    def authenticate_rpc(
+            self,
+            authorization: str | None,
+            required_scope: str,
+    ) -> AuthenticatedPrincipal:
+        """Accept Bearer auth or Bitcoin-compatible HTTP Basic auth."""
+        if authorization is None:
+            raise APIError(401, "authentication_required", "RPC authentication is required")
+        scheme, separator, value = authorization.partition(" ")
+        if not separator or not value:
+            raise APIError(401, "invalid_authorization", "RPC authorization is invalid")
+        if scheme.lower() == "bearer":
+            return self._authenticate_token(value, required_scope)
+        if scheme.lower() != "basic":
+            raise APIError(401, "invalid_authorization", "Use Basic or Bearer authentication")
+        try:
+            decoded = base64.b64decode(value, validate=True).decode("utf-8")
+        except (binascii.Error, UnicodeDecodeError) as error:
+            raise APIError(401, "invalid_authorization", "Basic authorization is invalid") from error
+        username, separator, token = decoded.partition(":")
+        if not separator or not username or not token:
+            raise APIError(401, "invalid_authorization", "Basic authorization is invalid")
+        return self._authenticate_token(token, required_scope)
+
+    def _authenticate_token(
+            self,
+            token: str,
+            required_scope: str,
+    ) -> AuthenticatedPrincipal:
         candidate = hashlib.sha256(token.encode("utf-8")).digest()
         credential = next(
             (

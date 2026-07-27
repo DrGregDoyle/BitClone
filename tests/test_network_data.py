@@ -70,9 +70,18 @@ def test_prefilled_txs(getrand_prefilledtx):
     assert from_bytes_prefilled_tx == random_prefilled_tx, "PrefilledTx failed to_bytes -> from_bytes construction."
 
 
+def test_prefilled_tx_at_block_index_zero_roundtrips(getrand_tx):
+    prefilled_tx = PrefilledTx(0, getrand_tx())
+
+    recovered = PrefilledTx.from_bytes(prefilled_tx.to_bytes())
+
+    assert recovered == prefilled_tx
+    assert recovered.block_index == 0
+
+
 def test_prefilled_tx_sequence(getrand_tx):
     """Test differential encoding across a sequence of PrefilledTx, which is the real use case for prev_ind"""
-    indices = [1, 4, 8, 11]  # avoid 0: __eq__ calls to_bytes(prev_ind=0) which raises when block_index==0
+    indices = [0, 4, 8, 11]
     prefilled_list = [PrefilledTx(i, getrand_tx()) for i in indices]
 
     # Serialize in sequence
