@@ -426,7 +426,7 @@ def test_would_reorganize_to_higher_work_inactive_header(chain):
     assert chain.would_reorganize_to(high_work_header.block_id)
 
 
-def test_reorganize_to_is_not_implemented_until_undo_data_exists(chain):
+def test_reorganize_to_requires_candidate_block_body(chain):
     high_work_header = Block(
         prev_block=chain.tip.block_id,
         bits=b"\x1c\x00\xff\xff",
@@ -434,5 +434,105 @@ def test_reorganize_to_is_not_implemented_until_undo_data_exists(chain):
     )
     chain.db.add_block_index(high_work_header, block_height=chain.height + 1, active=False)
 
-    with pytest.raises(NotImplementedError):
-        chain.reorganize_to(high_work_header.block_id)
+    assert not chain.reorganize_to(high_work_header.block_id)
+    assert chain.tip == genesis_block
+
+
+def _fork_block(parent: Block, marker: int, transactions: tuple[Tx, ...] = ()) -> Block:
+    return Block(
+        version=4,
+        prev_block=parent.block_id,
+        timestamp=parent.timestamp + 1,
+        bits=parent.bits,
+        nonce=marker,
+        txs=[
+            _coinbase_tx(scriptsig=b"\x02" + marker.to_bytes(2, "little")),
+            *transactions,
+        ],
+    )
+
+
+def test_longer_branch_reorganizes_utxos_and_active_index_by_chainwork(chain):
+    chain._validate_block = lambda block: True
+    chain._validate_side_block_candidate = lambda *args: True
+
+    funding = UTXO(b"\x77" * 32 + (0).to_bytes(4, "little"), 1_000, b"\x51", 0)
+    chain.db.add_utxo(funding)
+    active_spend = _dummy_tx(funding.outpoint, amount=900)
+    side_spend = _dummy_tx(funding.outpoint, amount=800)
+
+    active_one = _fork_block(chain.tip, 1, (active_spend,))
+    assert chain.add_block(active_one)
+    active_two = _fork_block(active_one, 2)
+    assert chain.add_block(active_two)
+
+    side_one = _fork_block(genesis_block, 101, (side_spend,))
+    assert chain.add_block(side_one)
+    side_two = _fork_block(side_one, 102)
+    assert chain.add_block(side_two)
+    assert chain.tip.block_id == active_two.block_id
+
+    side_three = _fork_block(side_two, 103)
+    assert chain.add_block(side_three)
+
+    assert chain.tip.block_id == side_three.block_id
+    assert chain.height == 3
+    assert chain.get_block_at_height(1).block_id == side_one.block_id
+    assert chain.get_block_at_height(2).block_id == side_two.block_id
+    assert chain.db.get_block_index(active_one.block_id).active is False
+    assert chain.db.get_block_index(active_two.block_id).active is False
+    assert chain.db.get_block_index(side_three.block_id).active is True
+    active_outpoint = active_two.txs[0].txid + (0).to_bytes(4, "little")
+    side_outpoint = side_three.txs[0].txid + (0).to_bytes(4, "little")
+    active_spend_outpoint = active_spend.txid + (0).to_bytes(4, "little")
+    side_spend_outpoint = side_spend.txid + (0).to_bytes(4, "little")
+    assert chain.get_utxo(active_outpoint) is None
+    assert chain.get_utxo(side_outpoint) is not None
+    assert chain.get_utxo(funding.outpoint) is None
+    assert chain.get_utxo(active_spend_outpoint) is None
+    assert chain.get_utxo(side_spend_outpoint) is not None
+
+
+def test_header_first_block_body_can_extend_the_active_chain(chain):
+    chain._validate_header_pow = lambda header: True
+    chain._validate_block = lambda block: True
+    block = _fork_block(chain.tip, 201)
+
+    assert chain.add_headers([block.get_header()]) == (block.get_header(),)
+    assert not chain.db.has_block_body(block.block_id)
+    assert chain.add_block(block)
+    assert chain.db.has_block_body(block.block_id)
+    assert chain.tip.block_id == block.block_id
+    assert chain.db.get_block_index(block.block_id).active is True
+
+
+def test_failed_candidate_reorganization_restores_previous_active_branch(chain):
+    chain._validate_block = lambda block: True
+    chain._validate_side_block_candidate = lambda *args: True
+
+    active_one = _fork_block(chain.tip, 11)
+    assert chain.add_block(active_one)
+    active_two = _fork_block(active_one, 12)
+    assert chain.add_block(active_two)
+
+    side_one = _fork_block(genesis_block, 111)
+    side_two = _fork_block(side_one, 112)
+    side_three = _fork_block(side_two, 113)
+    assert chain.add_block(side_one)
+    assert chain.add_block(side_two)
+
+    chain._validate_block = lambda block: block.block_id != side_two.block_id
+    assert not chain.add_block(side_three)
+
+    assert chain.tip.block_id == active_two.block_id
+    assert chain.height == 2
+    assert chain.get_block_at_height(1).block_id == active_one.block_id
+    assert chain.get_block_at_height(2).block_id == active_two.block_id
+    assert chain.db.get_block_index(active_one.block_id).active is True
+    assert chain.db.get_block_index(active_two.block_id).active is True
+    assert chain.db.get_block_index(side_one.block_id).active is False
+    assert chain.db.get_block_index(side_two.block_id).status == "invalid"
+    active_outpoint = active_two.txs[0].txid + (0).to_bytes(4, "little")
+    side_outpoint = side_one.txs[0].txid + (0).to_bytes(4, "little")
+    assert chain.get_utxo(active_outpoint) is not None
+    assert chain.get_utxo(side_outpoint) is None

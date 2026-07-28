@@ -36,33 +36,20 @@ class BlockUndo:
     created_outpoints: tuple[bytes, ...]
 
 
+@dataclass(frozen=True, slots=True, eq=True, repr=True, unsafe_hash=False)
 class BlockIndexEntry:
     """
     Metadata for a block/header in the chain index.
     """
-    __slots__ = ("block_hash", "prev_hash", "height", "bits", "timestamp", "work", "chainwork", "active", "status")
-
-    def __init__(
-            self,
-            block_hash: bytes,
-            prev_hash: bytes,
-            height: int,
-            bits: bytes,
-            timestamp: int,
-            work: int,
-            chainwork: int,
-            active: bool,
-            status: str,
-    ):
-        self.block_hash = block_hash
-        self.prev_hash = prev_hash
-        self.height = height
-        self.bits = bits
-        self.timestamp = timestamp
-        self.work = work
-        self.chainwork = chainwork
-        self.active = active
-        self.status = status
+    block_hash: bytes
+    prev_hash: bytes
+    height: int
+    bits: bytes
+    timestamp: int
+    work: int
+    chainwork: int
+    active: bool
+    status: str
 
 
 def calc_block_work(bits: bytes) -> int:
@@ -181,19 +168,21 @@ class BitCloneDatabase:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS blocks
                 (
-                    height INTEGER PRIMARY KEY,
-                    block_hash BLOB NOT NULL UNIQUE,
+                    block_hash BLOB PRIMARY KEY,
+                    height INTEGER NOT NULL,
                     prev_hash BLOB NOT NULL,
                     timestamp INTEGER NOT NULL,
                     file_number INTEGER NOT NULL,
                     file_offset INTEGER NOT NULL,
                     block_size INTEGER NOT NULL
-                )
+                ) WITHOUT ROWID
             """)
 
+            self._migrate_blocks_for_forks(conn)
+
             conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_block_hash
-                ON blocks(block_hash)
+                CREATE INDEX IF NOT EXISTS idx_blocks_height
+                ON blocks(height)
             """)
 
             conn.execute("""
@@ -221,6 +210,39 @@ class BitCloneDatabase:
                 CREATE INDEX IF NOT EXISTS idx_block_index_chainwork
                 ON block_index(chainwork)
             """)
+
+    @staticmethod
+    def _migrate_blocks_for_forks(conn: sqlite3.Connection) -> None:
+        """Replace the legacy height-keyed block table with a fork-capable layout."""
+        columns = conn.execute("PRAGMA table_info(blocks)").fetchall()
+        height = next((column for column in columns if column[1] == "height"), None)
+        block_hash = next((column for column in columns if column[1] == "block_hash"), None)
+        if height is None or block_hash is None or height[5] == 0 or block_hash[5] == 1:
+            return
+
+        conn.execute("ALTER TABLE blocks RENAME TO blocks_height_keyed")
+        conn.execute("""
+            CREATE TABLE blocks
+            (
+                block_hash BLOB PRIMARY KEY,
+                height INTEGER NOT NULL,
+                prev_hash BLOB NOT NULL,
+                timestamp INTEGER NOT NULL,
+                file_number INTEGER NOT NULL,
+                file_offset INTEGER NOT NULL,
+                block_size INTEGER NOT NULL
+            ) WITHOUT ROWID
+        """)
+        conn.execute("""
+            INSERT INTO blocks(
+                block_hash, height, prev_hash, timestamp,
+                file_number, file_offset, block_size
+            )
+            SELECT block_hash, height, prev_hash, timestamp,
+                   file_number, file_offset, block_size
+            FROM blocks_height_keyed
+        """)
+        conn.execute("DROP TABLE blocks_height_keyed")
 
     def _clear_db(self) -> None:
         """Wipe the database and recreate a fresh schema."""
@@ -326,7 +348,15 @@ class BitCloneDatabase:
         return utxos
 
     # --- BLOCKS --- #
-    def add_block(self, block: Block, block_height: int, undo: BlockUndo | None = None) -> None:
+    def add_block(
+            self,
+            block: Block,
+            block_height: int,
+            undo: BlockUndo | None = None,
+            *,
+            active: bool = True,
+            status: str = "valid",
+    ) -> None:
         """Add a block to storage."""
         block_bytes = block.to_bytes()
         location = self.block_store.write_block(block.block_id, block_bytes)
@@ -337,14 +367,14 @@ class BitCloneDatabase:
             conn.execute(
                 """
                 INSERT INTO blocks (
-                    height, block_hash, prev_hash, timestamp,
+                    block_hash, height, prev_hash, timestamp,
                     file_number, file_offset, block_size
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    block_height,
                     header.block_id,
+                    block_height,
                     block.prev_block,
                     block.timestamp,
                     location.file_number,
@@ -353,7 +383,13 @@ class BitCloneDatabase:
                 ),
             )
 
-            self._add_block_index_entry(block, block_height, active=True, conn=conn)
+            self._add_block_index_entry(
+                block,
+                block_height,
+                active=active,
+                conn=conn,
+                status=status,
+            )
             if undo is not None:
                 self._add_block_undo(header.block_id, undo, conn)
 
@@ -408,6 +444,37 @@ class BitCloneDatabase:
             ),
             created_outpoints=tuple(row[0] for row in created_rows),
         )
+
+    def replace_block_undo(self, block_hash: bytes, undo: BlockUndo) -> None:
+        """Replace undo data after a side-chain block is connected."""
+        conn = self._require_conn()
+        with conn:
+            conn.execute("DELETE FROM block_undo_spent WHERE block_hash = ?", (block_hash,))
+            conn.execute("DELETE FROM block_undo_created WHERE block_hash = ?", (block_hash,))
+            self._add_block_undo(block_hash, undo, conn)
+
+    def set_block_active(
+            self,
+            block_hash: bytes,
+            active: bool,
+            *,
+            status: str | None = None,
+    ) -> None:
+        """Update active-chain membership and, optionally, validation status."""
+        conn = self._require_conn()
+        with conn:
+            if status is None:
+                cursor = conn.execute(
+                    "UPDATE block_index SET active = ? WHERE block_hash = ?",
+                    (1 if active else 0, block_hash),
+                )
+            else:
+                cursor = conn.execute(
+                    "UPDATE block_index SET active = ?, status = ? WHERE block_hash = ?",
+                    (1 if active else 0, status, block_hash),
+                )
+            if cursor.rowcount != 1:
+                raise KeyError(f"Unknown block index entry: {block_hash.hex()}")
 
     def prune_blocks(self, tip_height: int) -> tuple[int, ...]:
         """Delete block bodies and undo data older than the configured safety window."""
@@ -512,6 +579,7 @@ class BitCloneDatabase:
             """
             SELECT block_hash, prev_hash, height, bits, timestamp, work, chainwork, active, status
             FROM block_index
+            WHERE status != 'invalid'
             ORDER BY chainwork DESC, height DESC
             LIMIT 1
             """
@@ -580,14 +648,23 @@ class BitCloneDatabase:
             return None
         return Block.from_bytes(block_bytes)
 
+    def has_block_body(self, block_hash: bytes) -> bool:
+        """Return whether a block body has been recorded locally."""
+        conn = self._require_conn()
+        return conn.execute(
+            "SELECT 1 FROM blocks WHERE block_hash = ?",
+            (block_hash,),
+        ).fetchone() is not None
+
     def get_block_at_height(self, height: int) -> Block | None:
         """Retrieve a block by height."""
         conn = self._require_conn()
         row = conn.execute(
             """
-            SELECT block_hash, file_number, file_offset, block_size
+            SELECT blocks.block_hash, blocks.file_number, blocks.file_offset, blocks.block_size
             FROM blocks
-            WHERE height = ?
+            JOIN block_index ON block_index.block_hash = blocks.block_hash
+            WHERE blocks.height = ? AND block_index.active = 1
             """,
             (height,),
         ).fetchone()

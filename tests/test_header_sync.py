@@ -61,6 +61,23 @@ def test_block_locator_starts_at_best_header_and_ends_at_genesis(tmp_path):
         chain.close()
 
 
+def test_competing_header_tips_are_ranked_by_cumulative_work(tmp_path):
+    chain = Blockchain(db_path=tmp_path / "chain.db")
+    shorter = _header_chain(genesis_block.block_id, 1, 2)
+    longer = _header_chain(genesis_block.block_id, 101, 3)
+    try:
+        assert chain.add_headers(shorter) == tuple(shorter)
+        assert chain.add_headers(longer) == tuple(longer)
+
+        best = chain.get_best_header()
+        assert best.block_hash == longer[-1].block_id
+        assert best.height == 3
+        assert best.chainwork > chain.get_block_index(shorter[-1].block_id).chainwork
+        assert chain.tip.block_id == genesis_block.block_id
+    finally:
+        chain.close()
+
+
 def test_header_sync_loops_on_full_batch_and_completes_on_short_batch(tmp_path):
     node = Node(db_path=tmp_path / "node.db")
     peer = _ready_peer()

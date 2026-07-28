@@ -11,38 +11,11 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 
 ---
 
-### Sprint 7 — Local Control Plane & Browser Console
-
-This sprint establishes BitClone as downloadable node software operated through a local browser. The daemon owns all
-node state; the browser, CLI, and future integrations use the same authenticated service boundary.
-
-**Story 0 — Cleanup and Maintenance**
-Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 7.
-Each item should be handled as a separate ticket with sufficient tests.
-
-**Cleanup 7.0.2 — Dataclass Conversion for Data Records**
-
-- [ ] Convert `BlockIndexEntry` to `@dataclass(frozen=True, slots=True)`
-- [ ] Convert mutable `MemPoolTx` to `@dataclass(slots=True)` with safe list and arrival-time factories
-- [ ] Preserve `MemPoolTx` byte-to-`Tx` normalization through explicit post-initialization
-- [ ] Convert `PrefilledTx`, `BlockTxns`, `BlockTxnsRequest`, and `HeaderAndShortIDs` to slotted dataclasses
-- [ ] Preserve compact-block validation, differential encoding, constructor signatures, and wire serialization
-- [ ] Explicitly select and test equality, representation, mutability, and hashing behavior instead of accepting
-      dataclass defaults implicitly
-- [ ] Add database-row, mempool-metadata, and compact-block round-trip regression tests
-
 ### Sprint 8 — Chain Reorganisation & Storage Integrity
 
 **Story 0 — Cleanup and Maintenance**
 Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 8.
 Each item should be handled as a separate ticket with sufficient tests.
-
-**Story 8.1 — Fork Detection and Reorganisation**
-
-- [ ] Track competing chain tips by cumulative work during normal block and header processing
-- [ ] Roll back UTXOs and apply the winning chain during a reorganisation
-- [ ] Mark active and inactive block-index entries during a reorganisation
-- [ ] Add reorganisation and fork-simulation tests
 
 **Story 8.2 — Atomic Chain Updates and Orphans**
 

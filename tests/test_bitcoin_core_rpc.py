@@ -77,6 +77,19 @@ def test_rpc_queries_tx_out_in_core_display_order_and_requests_verbose_header():
     )
 
 
+def test_rpc_exposes_mempool_and_raw_transaction_calls():
+    txid = "22" * 32
+    rpc = BitcoinCoreRPC("http://127.0.0.1:8332", username="user", password="pass")
+    rpc.call = MagicMock(side_effect=[{txid: {"vsize": 141}}, {"vsize": 141}, {"txid": txid}])
+
+    assert rpc.get_raw_mempool(True) == {txid: {"vsize": 141}}
+    assert rpc.get_mempool_entry(txid) == {"vsize": 141}
+    assert rpc.get_raw_transaction(txid, True) == {"txid": txid}
+    assert rpc.call.call_args_list[0].args == ("getrawmempool", True)
+    assert rpc.call.call_args_list[1].args == ("getmempoolentry", txid)
+    assert rpc.call.call_args_list[2].args == ("getrawtransaction", txid, True)
+
+
 def test_rpc_surfaces_core_error_without_credentials_in_message():
     rpc = BitcoinCoreRPC("http://127.0.0.1:8332", username="user", password="secret")
     with patch(

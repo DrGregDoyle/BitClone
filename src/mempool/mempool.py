@@ -2,6 +2,7 @@
 The MemPool class
 """
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from src.core import TX, ReadError, get_logger, TransactionError
@@ -17,17 +18,27 @@ logger = get_logger(__name__)
 TEST_DB_PATH = Path(__file__).parent / "db_files" / "test_db.sqlite3"
 
 
+@dataclass(slots=True, eq=False, repr=False, unsafe_hash=False)
 class MemPoolTx:
     """
-    A transaction along with mempool metadata
-    """
+    A transaction along with mutable mempool metadata.
 
-    def __init__(self, tx: bytes | Tx, fee: int, ancestors: list = None, descendants: list = None) -> None:
-        self.tx = tx if isinstance(tx, Tx) else Tx.from_bytes(tx)
-        self.fee = fee
-        self.ancestors = ancestors or []
-        self.descendants = descendants or []
-        self.arrival_time = int(time.time())
+    Equality, hashing, and representation intentionally retain object identity
+    semantics because ancestor and descendant relationships can form cycles.
+    """
+    tx: bytes | Tx
+    fee: int
+    ancestors: list["MemPoolTx"] = field(default_factory=list)
+    descendants: list["MemPoolTx"] = field(default_factory=list)
+    arrival_time: int = field(default_factory=lambda: int(time.time()), init=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.tx, Tx):
+            self.tx = Tx.from_bytes(self.tx)
+        if self.ancestors is None:
+            self.ancestors = []
+        if self.descendants is None:
+            self.descendants = []
 
     @property
     def feerate(self) -> float:

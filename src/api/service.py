@@ -8,6 +8,7 @@ from typing import Any
 from src.api.contracts import API_PREFIX, API_VERSION, ROUTES, build_openapi_document
 from src.config import BlockStorageMode
 from src.core import NETWORK, ReadError, TransactionError
+from src.database.bitcoin_core_rpc import BitcoinCoreRPCError
 from src.node.node import Node
 from src.tx.tx import Tx
 
@@ -436,6 +437,11 @@ class NodeApplicationService:
         verbose = _rpc_param(params, 0, "verbose", False)
         if not isinstance(verbose, bool):
             raise RPCError(-3, "verbose must be a boolean")
+        if self._uses_remote_mempool():
+            try:
+                return self._node.core_rpc.get_raw_mempool(verbose)
+            except BitcoinCoreRPCError as error:
+                raise RPCError(-342, "Bitcoin Core mempool is unavailable") from error
         if not verbose:
             return self._node.mempool.get_txids()
         return {
@@ -720,6 +726,8 @@ class NodeApplicationService:
 
     def list_mempool(self, _path: dict, query: dict[str, list[str]]) -> dict[str, Any]:
         limit, offset = _pagination(query)
+        if self._uses_remote_mempool():
+            return self._list_remote_mempool(limit, offset)
         entries = list(self._node.mempool.mempool.items())
         resources = [
             {
@@ -733,10 +741,34 @@ class NodeApplicationService:
             }
             for txid, entry in entries[offset:offset + limit]
         ]
-        return _page(resources, limit, offset, len(entries))
+        return {
+            **_page(resources, limit, offset, len(entries)),
+            "source": {
+                "type": "bitclone-local",
+                "trust": "independently-validated",
+                "independently_validated": True,
+            },
+        }
 
     def get_mempool_transaction(self, path: dict[str, str], _query: dict) -> dict[str, Any]:
         display_txid = path["txid"].lower()
+        _display_hash(display_txid, "txid")
+        if self._uses_remote_mempool():
+            try:
+                entry = self._node.core_rpc.get_mempool_entry(display_txid)
+                transaction = self._node.core_rpc.get_raw_transaction(display_txid, True)
+            except BitcoinCoreRPCError as error:
+                raise APIError(
+                    404,
+                    "transaction_not_found",
+                    "The transaction is not present in the trusted Bitcoin Core mempool",
+                    {"txid": display_txid},
+                ) from error
+            return {
+                "transaction": transaction,
+                **self._format_remote_mempool_entry(display_txid, entry),
+                "source": self._remote_mempool_source(),
+            }
         tx = self._node.mempool.get_tx(_display_hash(display_txid, "txid"))
         if tx is None:
             raise APIError(
@@ -751,6 +783,66 @@ class NodeApplicationService:
             "fee_sats": entry.fee,
             "feerate_sats_per_vbyte": entry.feerate,
             "arrival_at": _utc_timestamp(entry.arrival_time),
+            "source": {
+                "type": "bitclone-local",
+                "trust": "independently-validated",
+                "independently_validated": True,
+            },
+        }
+
+    def _uses_remote_mempool(self) -> bool:
+        return (
+            self._node.config.block_storage is BlockStorageMode.BITCOIN_CORE_REMOTE
+            and self._node.core_rpc is not None
+        )
+
+    @staticmethod
+    def _remote_mempool_source() -> dict[str, Any]:
+        return {
+            "type": "bitcoin-core-remote",
+            "trust": "trusted-remote",
+            "independently_validated": False,
+        }
+
+    @staticmethod
+    def _format_remote_mempool_entry(txid: str, entry: dict[str, Any]) -> dict[str, Any]:
+        fees = entry.get("fees") or {}
+        fee_btc = fees.get("base", entry.get("fee", 0))
+        fee_sats = round(float(fee_btc) * SATOSHIS_PER_BITCOIN)
+        vsize = int(entry.get("vsize", entry.get("size", 0)))
+        return {
+            "txid": txid,
+            "fee_sats": fee_sats,
+            "virtual_size_vbytes": vsize,
+            "feerate_sats_per_vbyte": fee_sats / vsize if vsize else 0.0,
+            "arrival_at": _utc_timestamp(entry.get("time")),
+            "ancestor_count": int(entry.get("ancestorcount", 0)),
+            "descendant_count": int(entry.get("descendantcount", 0)),
+        }
+
+    def _list_remote_mempool(self, limit: int, offset: int) -> dict[str, Any]:
+        try:
+            entries = self._node.core_rpc.get_raw_mempool(True)
+        except BitcoinCoreRPCError as error:
+            raise APIError(
+                503,
+                "remote_mempool_unavailable",
+                "The trusted Bitcoin Core mempool is currently unavailable",
+            ) from error
+        if not isinstance(entries, dict):
+            raise APIError(
+                502,
+                "invalid_remote_response",
+                "Bitcoin Core returned an invalid verbose mempool response",
+            )
+        ordered_entries = list(entries.items())
+        resources = [
+            self._format_remote_mempool_entry(txid, entry)
+            for txid, entry in ordered_entries[offset:offset + limit]
+        ]
+        return {
+            **_page(resources, limit, offset, len(ordered_entries)),
+            "source": self._remote_mempool_source(),
         }
 
     def event_snapshot(self) -> dict[str, dict[str, Any]]:

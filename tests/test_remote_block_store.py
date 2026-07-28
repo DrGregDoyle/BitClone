@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from src.api import NodeApplicationService
 from src.block.block import Block
 from src.blockchain.genesis_block import genesis_block
 from src.cli import _handle_command
@@ -50,6 +51,16 @@ class FakeCoreRPC:
             side_effect=lambda block_hash: Block.from_bytes(self.blocks[block_hash]).get_header().to_bytes()
         )
         self.get_blockchain_info = MagicMock(return_value=self.info)
+        self.mempool = {}
+        self.get_raw_mempool = MagicMock(
+            side_effect=lambda verbose=False: self.mempool if verbose else list(self.mempool)
+        )
+        self.get_mempool_entry = MagicMock(
+            side_effect=lambda txid: self.mempool[txid]
+        )
+        self.get_raw_transaction = MagicMock(
+            side_effect=lambda txid, verbose=False: {"txid": txid} if verbose else "00"
+        )
         self.tx_outs = {}
         self.block_header_infos = {}
         self.get_tx_out = MagicMock(
@@ -186,6 +197,53 @@ def test_node_remote_mode_queries_core_without_starting_ibd(tmp_path):
         assert node.blockchain.get_block_at_height(1).block_id == rpc.heights[1]
         assert node.blockchain.height == 0
         assert list(config.blocks_dir.glob("blk*.dat")) == []
+    finally:
+        node.close()
+
+
+def test_remote_mode_exposes_trusted_bitcoin_core_mempool(tmp_path):
+    txid = "22" * 32
+    rpc = FakeCoreRPC([genesis_block])
+    rpc.mempool[txid] = {
+        "vsize": 141,
+        "time": 1_700_000_000,
+        "ancestorcount": 2,
+        "descendantcount": 3,
+        "fees": {"base": 0.00001410},
+    }
+    config = BitCloneConfig.from_options(
+        data_dir=tmp_path,
+        block_storage="bitcoin-core-remote",
+        core_rpc_url="http://Skyscraper:8332",
+        core_rpc_user="bitclone",
+        core_rpc_password="secret",
+    )
+    node = Node(config=config, core_rpc=rpc)
+    service = NodeApplicationService(node)
+    try:
+        collection = service.list_mempool({}, {"limit": ["50"], "offset": ["0"]})
+        detail = service.get_mempool_transaction({"txid": txid}, {})
+        compatibility = service.dispatch_rpc("getrawmempool", [True])
+
+        assert collection["source"] == {
+            "type": "bitcoin-core-remote",
+            "trust": "trusted-remote",
+            "independently_validated": False,
+        }
+        assert collection["page"]["total"] == 1
+        assert collection["items"][0] == {
+            "txid": txid,
+            "fee_sats": 1410,
+            "virtual_size_vbytes": 141,
+            "feerate_sats_per_vbyte": 10.0,
+            "arrival_at": "2023-11-14T22:13:20Z",
+            "ancestor_count": 2,
+            "descendant_count": 3,
+        }
+        assert detail["transaction"] == {"txid": txid}
+        assert detail["source"]["trust"] == "trusted-remote"
+        assert compatibility == rpc.mempool
+        rpc.get_raw_mempool.assert_any_call(True)
     finally:
         node.close()
 

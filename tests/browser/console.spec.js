@@ -55,3 +55,35 @@ test("console remains operable at a narrow viewport", async ({ page }) => {
   await expect(page.getByRole("button", { name: "RPC console" })).toBeVisible();
   await expect(page.locator(".metric-card")).toHaveCount(4);
 });
+
+test("remote mempool is rendered with an explicit trusted-source label", async ({ page }) => {
+  await connect(page);
+  await page.route("**/api/v1/mempool?limit=200&offset=0", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [{
+          txid: "22".repeat(32),
+          fee_sats: 1410,
+          virtual_size_vbytes: 141,
+          feerate_sats_per_vbyte: 10,
+          arrival_at: "2023-11-14T22:13:20Z",
+          ancestor_count: 2,
+          descendant_count: 3,
+        }],
+        page: { limit: 200, offset: 0, count: 1, total: 1 },
+        source: {
+          type: "bitcoin-core-remote",
+          trust: "trusted-remote",
+          independently_validated: false,
+        },
+      }),
+    });
+  });
+
+  await page.getByRole("button", { name: "Mempool" }).click();
+
+  await expect(page.getByText("Trusted remote", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Trusted Bitcoin Core source/)).toBeVisible();
+  await expect(page.getByText("1,410 sats")).toBeVisible();
+});

@@ -57,6 +57,17 @@ def test_service_reports_sync_trust_and_unavailable_future_capabilities(service)
     assert capabilities["mining"]["available"] is False
 
 
+def test_local_mempool_is_explicitly_trust_labeled(service):
+    result = service.list_mempool({}, {})
+
+    assert result["page"]["total"] == 0
+    assert result["source"] == {
+        "type": "bitclone-local",
+        "trust": "independently-validated",
+        "independently_validated": True,
+    }
+
+
 def test_service_formats_block_with_explicit_consensus_and_amount_units(service, node):
     block_hash = node.blockchain.tip.block_id[::-1].hex()
 

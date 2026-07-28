@@ -348,6 +348,8 @@ within a timeout so that stale connections are cleaned up automatically.
 
 ### Sprint 7 — Local Control Plane & Browser Console
 
+**Status: Complete**
+
 #### Story 7.1 — Versioned Service API
 As a node operator, I want a stable local API so that the browser interface and automation tools can control a running
 BitClone process without reaching directly into consensus, wallet, or networking internals.
@@ -396,6 +398,34 @@ BitClone process without reaching directly into consensus, wallet, or networking
 - [x] Add an allowlisted advanced RPC console with warnings and confirmation for mutating commands
 - [x] Make the console responsive and keyboard accessible
 - [x] Add browser end-to-end tests for the primary operator workflows
+
+#### Cleanup 7.0.2 — Dataclass Conversion for Data Records
+
+- [x] Convert `BlockIndexEntry` to `@dataclass(frozen=True, slots=True)`
+- [x] Convert mutable `MemPoolTx` to `@dataclass(slots=True)` with safe list and arrival-time factories
+- [x] Preserve `MemPoolTx` byte-to-`Tx` normalization through explicit post-initialization
+- [x] Convert `PrefilledTx`, `BlockTxns`, `BlockTxnsRequest`, and `HeaderAndShortIDs` to slotted dataclasses
+- [x] Preserve compact-block validation, differential encoding, constructor signatures, and wire serialization
+- [x] Explicitly select and test equality, representation, mutability, and hashing behavior instead of accepting
+      dataclass defaults implicitly
+- [x] Add database-row, mempool-metadata, and compact-block round-trip regression tests
+
+### Sprint 8 — Chain Reorganisation & Storage Integrity
+
+#### Cleanup 8.0.1 — Storage-Aware Mempool View
+
+- [x] Read verbose Bitcoin Core mempool data when block storage is `bitcoin-core-remote`
+- [x] Preserve BitClone's independently validated local mempool for archival and pruned modes
+- [x] Expose the mempool source and trust model through REST and JSON-RPC
+- [x] Display the correct mempool count, source label, empty state, and degraded state in the browser console
+- [x] Add RPC-client, service, remote-mode, and browser-console regression tests
+
+#### Story 8.1 — Fork Detection and Reorganisation
+
+- [x] Track competing chain tips by cumulative work during normal block and header processing
+- [x] Roll back UTXOs and apply the winning chain during a reorganisation
+- [x] Mark active and inactive block-index entries during a reorganisation
+- [x] Add reorganisation and fork-simulation tests
 
 ### Chain Reorganisation & Storage Integrity — Early Groundwork
 

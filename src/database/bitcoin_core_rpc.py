@@ -90,6 +90,15 @@ class BitcoinCoreRPC:
     def get_block_header_info(self, display_hash: str) -> dict:
         return self.call("getblockheader", display_hash, True)
 
+    def get_raw_mempool(self, verbose: bool = False) -> list[str] | dict[str, dict]:
+        return self.call("getrawmempool", verbose)
+
+    def get_mempool_entry(self, display_txid: str) -> dict:
+        return self.call("getmempoolentry", display_txid)
+
+    def get_raw_transaction(self, display_txid: str, verbose: bool = False):
+        return self.call("getrawtransaction", display_txid, verbose)
+
     def get_tx_out(
             self,
             txid: bytes,

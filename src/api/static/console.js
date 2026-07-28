@@ -134,10 +134,11 @@ function rows(values) {
 }
 
 async function loadDashboard() {
-  const [status, sync, trust, chain] = await Promise.all([
+  const [status, sync, trust, chain, mempool] = await Promise.all([
     request("/node/status"), request("/node/sync"), request("/node/trust"), request("/chain"),
+    request("/mempool?limit=1&offset=0"),
   ]);
-  state.lastData = { status, sync, trust, chain };
+  state.lastData = { status, sync, trust, chain, mempool };
   setTrust(trust);
   const remote = trust.remote_source;
   const displayedHeight = remote?.tip_height ?? status.height;
@@ -156,7 +157,8 @@ async function loadDashboard() {
       ${metric("Chain height", formatNumber(displayedHeight), status.network)}
       ${metric("Known header", formatNumber(displayedHeaderHeight), sync.state)}
       ${metric("Ready peers", formatNumber(status.ready_peers), `Target ${formatNumber(status.target_outbound_peers)}`)}
-      ${metric("Mempool", formatNumber(status.mempool_size), "transactions")}
+      ${metric("Mempool", formatNumber(mempool.page.total),
+        mempool.source.independently_validated ? "BitClone local" : "Trusted Bitcoin Core")}
     </div>
     <div class="panel-grid">
       <article class="panel">
@@ -214,9 +216,20 @@ async function loadPeers() {
 
 async function loadMempool() {
   const data = await request("/mempool?limit=200&offset=0");
-  if (!data.items.length) return showEmpty("The mempool is empty", "Transactions accepted by BitClone will appear here.");
+  const remote = !data.source.independently_validated;
+  setTrust({ block_data: data.source });
+  if (!data.items.length) {
+    return showEmpty(
+      "The mempool is empty",
+      remote
+        ? "The trusted Bitcoin Core source currently reports no unconfirmed transactions."
+        : "Transactions accepted by BitClone will appear here.",
+    );
+  }
   content.innerHTML = `<article class="panel"><div class="panel-header"><div><h2>Mempool transactions</h2>
-    <p>${data.page.total} transaction${data.page.total === 1 ? "" : "s"}</p></div></div>
+    <p>${data.page.total} transaction${data.page.total === 1 ? "" : "s"} ·
+      ${remote ? "Trusted Bitcoin Core source" : "BitClone independently validated"}</p></div>
+      <span class="pill ${remote ? "warn" : "success"}">${remote ? "Trusted remote" : "Local"}</span></div>
     <div class="table-wrap"><table><thead><tr><th>Transaction ID</th><th>Fee</th><th>Virtual size</th><th>Fee rate</th><th>Ancestors</th></tr></thead>
     <tbody>${data.items.map((tx) => `<tr><td class="hash" title="${escapeHtml(tx.txid)}">${escapeHtml(shortHash(tx.txid, 10))}</td>
       <td>${formatNumber(tx.fee_sats)} sats</td><td>${formatNumber(tx.virtual_size_vbytes)} vB</td>

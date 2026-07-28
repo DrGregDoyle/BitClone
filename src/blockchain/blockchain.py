@@ -293,17 +293,93 @@ class Blockchain:
         """
         candidate = self.db.get_block_index(block_hash)
         active_tip = self.db.get_active_tip()
-        if candidate is None or active_tip is None or candidate.active:
+        if (
+                candidate is None
+                or active_tip is None
+                or candidate.active
+                or candidate.status == "invalid"
+        ):
             return False
         return candidate.chainwork > active_tip.chainwork
 
     def reorganize_to(self, block_hash: bytes) -> bool:
         """
-        Placeholder for future active-chain reorganisation.
+        Activate a fully available branch when it has more cumulative work.
+
+        Active blocks are disconnected back to the common ancestor using
+        persisted undo data. Candidate blocks are then validated and connected
+        in forward order. If candidate validation fails, the former active
+        branch is restored before returning.
         """
         if not self.would_reorganize_to(block_hash):
             return False
-        raise NotImplementedError("Chain reorganisation requires undo data and active-chain rewrites.")
+        if self.db.storage_mode == "bitcoin-core-remote":
+            return False
+
+        candidate = self.db.get_block_index(block_hash)
+        active_tip = self.db.get_active_tip()
+        disconnect, connect, fork = self._reorganization_paths(active_tip, candidate)
+
+        old_blocks = [self.db.get_block(entry.block_hash) for entry in disconnect]
+        candidate_blocks = [self.db.get_block(entry.block_hash) for entry in connect]
+        if (
+                any(block is None for block in old_blocks + candidate_blocks)
+                or any(self.db.get_block_undo(entry.block_hash) is None for entry in disconnect)
+        ):
+            logger.error("Chain reorganisation requires every block body and active undo record")
+            return False
+
+        disconnected_old = []
+        connected_candidates = []
+        try:
+            for entry, block in zip(disconnect, old_blocks):
+                self._disconnect_active_block(entry, block)
+                disconnected_old.append((entry, block))
+
+            for entry, block in zip(connect, candidate_blocks):
+                if not self._validate_block(block):
+                    self.db.set_block_active(entry.block_hash, False, status="invalid")
+                    raise NetworkDataError(
+                        f"Candidate block failed validation during reorganisation: "
+                        f"{entry.block_hash.hex()}"
+                    )
+                self._apply_candidate_block(entry, block)
+                connected_candidates.append((entry, block))
+        except Exception as error:
+            logger.error("Chain reorganisation failed; restoring prior tip: %s", error)
+            for entry, block in reversed(connected_candidates):
+                self._disconnect_active_block(entry, block, status="candidate")
+            self._set_cached_tip(self.db.get_block(fork.block_hash), fork.height)
+            for entry, block in reversed(disconnected_old):
+                self._apply_known_valid_block(entry, block)
+            return False
+
+        self.db.prune_blocks(self._height)
+        return True
+
+    def _reorganization_paths(self, active_tip, candidate):
+        """Return active disconnect path, candidate connect path, and fork entry."""
+        disconnect = []
+        connect = []
+        active = active_tip
+        other = candidate
+
+        while active.height > other.height:
+            disconnect.append(active)
+            active = self.db.get_block_index(active.prev_hash)
+        while other.height > active.height:
+            connect.append(other)
+            other = self.db.get_block_index(other.prev_hash)
+        while active.block_hash != other.block_hash:
+            disconnect.append(active)
+            connect.append(other)
+            active = self.db.get_block_index(active.prev_hash)
+            other = self.db.get_block_index(other.prev_hash)
+            if active is None or other is None:
+                raise NetworkDataError("Candidate branch does not share a known ancestor")
+
+        connect.reverse()
+        return disconnect, connect, active
 
     # --- Add block
 
@@ -315,28 +391,124 @@ class Blockchain:
             True if the block was accepted, False otherwise.
         """
         try:
-            if not self._validate_block(block):
-                logger.error(f"Block failed validation: {block.block_id.hex()}")
+            existing = self.db.get_block_index(block.block_id)
+            if (
+                    existing is not None
+                    and (existing.status == "invalid" or self.db.has_block_body(block.block_id))
+            ):
                 return False
 
-            new_height = self._height + 1
+            if self.tip is None or block.prev_block == self.tip.block_id:
+                return self._connect_tip_block(block)
 
-            undo = self._build_block_undo(block)
-            self.db.add_block(block, new_height, undo=undo)
-            self._update_utxo_set(block, new_height)
+            parent = self.db.get_block_index(block.prev_block)
+            if parent is None:
+                logger.error("Block parent is unknown: %s", block.prev_block.hex())
+                return False
+            new_height = parent.height + 1
+            if not self._validate_side_block_candidate(block, parent, new_height):
+                logger.error("Side-chain block failed preliminary validation: %s", block.block_id.hex())
+                return False
 
-            # Update cached state
-            self._height = new_height
-            self._tip = block
-            self._block_subsidy = self.calc_subsidy(new_height)
-            self._target = bits_to_target(block.bits)
-            self.db.prune_blocks(new_height)
-
+            self.db.add_block(
+                block,
+                new_height,
+                active=False,
+                status="candidate",
+            )
+            if self.would_reorganize_to(block.block_id):
+                return self.reorganize_to(block.block_id)
             return True
 
         except Exception as e:
             logger.error(f"Error adding block: {e}")
             return False
+
+    def _connect_tip_block(self, block: Block) -> bool:
+        if not self._validate_block(block):
+            logger.error(f"Block failed validation: {block.block_id.hex()}")
+            return False
+        new_height = self._height + 1
+        undo = self._build_block_undo(block)
+        self.db.add_block(block, new_height, undo=undo)
+        self._update_utxo_set(block, new_height)
+        self._set_cached_tip(block, new_height)
+        self.db.prune_blocks(new_height)
+        return True
+
+    def _validate_side_block_candidate(self, block: Block, parent, block_height: int) -> bool:
+        """Perform branch-aware checks that do not require the candidate UTXO view."""
+        if not block.txs or block.prev_block != parent.block_hash:
+            return False
+        if block.timestamp > int(time.time()) + MAX_FUTURE_BLOCK_TIME:
+            return False
+        timestamps = []
+        cursor = parent
+        for _ in range(MEDIAN_TIME_SPAN):
+            if cursor is None:
+                break
+            timestamps.append(cursor.timestamp)
+            cursor = self.db.get_block_index(cursor.prev_hash)
+        if timestamps and block.timestamp <= sorted(timestamps)[len(timestamps) // 2]:
+            return False
+        if block_height % 2016 != 0 and block.bits != parent.bits:
+            return False
+        if not self.validate_pow(block) or block.weight > self.MAX_WEIGHT:
+            return False
+        txids = [tx.txid for tx in block.txs]
+        if len(txids) != len(set(txids)):
+            return False
+        if MerkleTree(txids).merkle_root != block.get_header().merkle_root:
+            return False
+        if not block.txs[0].is_coinbase or any(tx.is_coinbase for tx in block.txs[1:]):
+            return False
+        scriptsig = block.txs[0].inputs[0].scriptsig
+        if not MIN_COINBASE_SCRIPT_SIZE <= len(scriptsig) <= MAX_COINBASE_SCRIPT_SIZE:
+            return False
+        if (
+                block_height >= self.chain_params.bip34_height
+                and not self._validate_bip34_height(scriptsig, block_height)
+        ):
+            return False
+        return self._validate_witness_commitment(block, block_height)
+
+    def _disconnect_active_block(self, entry, block: Block, *, status: str = "valid") -> None:
+        undo = self.db.get_block_undo(entry.block_hash)
+        if undo is None:
+            raise NetworkDataError(f"Missing undo data for {entry.block_hash.hex()}")
+        for outpoint in undo.created_outpoints:
+            self.db.remove_utxo(outpoint)
+        for utxo in undo.spent_utxos:
+            self.db.remove_utxo(utxo.outpoint)
+            self.db.add_utxo(utxo)
+        self.db.set_block_active(entry.block_hash, False, status=status)
+        parent = self.db.get_block_index(entry.prev_hash)
+        parent_block = self.db.get_block(entry.prev_hash) if parent is not None else None
+        self._set_cached_tip(parent_block, parent.height if parent is not None else -1)
+
+    def _apply_candidate_block(self, entry, block: Block) -> None:
+        undo = self._build_block_undo(block)
+        self._update_utxo_set(block, entry.height)
+        self.db.replace_block_undo(entry.block_hash, undo)
+        self.db.set_block_active(entry.block_hash, True, status="valid")
+        self._set_cached_tip(block, entry.height)
+
+    def _apply_known_valid_block(self, entry, block: Block) -> None:
+        undo = self._build_block_undo(block)
+        self._update_utxo_set(block, entry.height)
+        self.db.replace_block_undo(entry.block_hash, undo)
+        self.db.set_block_active(entry.block_hash, True, status="valid")
+        self._set_cached_tip(block, entry.height)
+
+    def _set_cached_tip(self, block: Block | None, height: int) -> None:
+        self._height = height
+        self._tip = block
+        self._block_subsidy = self.calc_subsidy(height)
+        self._target = (
+            bits_to_target(block.bits)
+            if block is not None
+            else bits_to_target(self.GENESIS_BLOCK_BITS)
+        )
 
     # --- UTXO management
 

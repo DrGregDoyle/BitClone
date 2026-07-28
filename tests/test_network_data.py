@@ -2,17 +2,50 @@
 Tests for Network data structures
 """
 
+import inspect
 import io
 from secrets import randbelow
 
 import pytest
 
 from src.block.block import Block
-from src.core import BLOCK, NETWORK, NetworkDataError
+from src.core import BLOCK, NETWORK, NetworkDataError, Serializable
 from src.data import encode_differential, decode_differential
 from src.network.datatypes.network_data import *
 from src.network.datatypes.network_types import InvType
 from src.network.messages.data_msg import CmpctBlock
+
+
+@pytest.mark.parametrize(
+    ("record_type", "parameter_names"),
+    [
+        (PrefilledTx, ["block_index", "tx"]),
+        (HeaderAndShortIDs, ["header", "nonce", "short_ids", "prefilled_txs"]),
+        (BlockTxns, ["block_hash", "txs"]),
+        (BlockTxnsRequest, ["block_hash", "indices"]),
+    ],
+)
+def test_compact_block_dataclasses_preserve_record_semantics(record_type, parameter_names):
+    assert list(inspect.signature(record_type).parameters) == parameter_names
+    assert record_type.__eq__ is Serializable.__eq__
+    assert record_type.__repr__ is Serializable.__repr__
+    assert record_type.__hash__ is None
+
+
+def test_compact_block_dataclasses_remain_mutable_and_wire_comparable(getrand_tx):
+    block_hash = b"\x11" * NETWORK.HASH_LENGTH
+    request = BlockTxnsRequest(block_hash, [0])
+    request.indices.append(2)
+    recovered_request = BlockTxnsRequest.from_bytes(request.to_bytes())
+
+    prefilled = PrefilledTx(0, getrand_tx())
+    recovered_prefilled = PrefilledTx.from_bytes(prefilled.to_bytes())
+
+    assert recovered_request == request
+    assert recovered_request.indices == [0, 2]
+    assert recovered_prefilled == prefilled
+    with pytest.raises(TypeError):
+        hash(request)
 
 
 @pytest.mark.parametrize("inv_type", list(InvType))

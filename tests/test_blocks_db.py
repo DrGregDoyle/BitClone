@@ -1,10 +1,14 @@
 """
 Test block storage and retrieval from database and block files - VIBECODED by CLAUDE
 """
+import sqlite3
 import time
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 from random import randint
 from secrets import token_bytes
+
+import pytest
 
 from src.block.block import Block
 from src.database import BitCloneDatabase
@@ -100,6 +104,46 @@ def test_add_and_get_block():
     assert retrieved.prev_block == block.prev_block, "Previous block hash mismatch"
 
     print("✓ Single block storage works!")
+
+
+def test_legacy_height_keyed_block_table_migrates_to_fork_capable_schema(tmp_path):
+    db_path = tmp_path / "legacy.db"
+    block_hash = b"\x91" * 32
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE blocks
+        (
+            height INTEGER PRIMARY KEY,
+            block_hash BLOB NOT NULL UNIQUE,
+            prev_hash BLOB NOT NULL,
+            timestamp INTEGER NOT NULL,
+            file_number INTEGER NOT NULL,
+            file_offset INTEGER NOT NULL,
+            block_size INTEGER NOT NULL
+        )
+    """)
+    conn.execute(
+        "INSERT INTO blocks VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (7, block_hash, b"\x90" * 32, 1_700_000_000, 0, 100, 200),
+    )
+    conn.commit()
+    conn.close()
+
+    db = BitCloneDatabase(db_path, blocks_dir=tmp_path / "blocks")
+    try:
+        columns = {
+            row[1]: row
+            for row in db.conn.execute("PRAGMA table_info(blocks)").fetchall()
+        }
+        stored = db.conn.execute(
+            "SELECT block_hash, height FROM blocks"
+        ).fetchone()
+
+        assert columns["block_hash"][5] == 1
+        assert columns["height"][5] == 0
+        assert stored == (block_hash, 7)
+    finally:
+        db.close()
 
 
 def test_multiple_blocks():
@@ -325,6 +369,11 @@ def test_block_index_entry_is_created_for_stored_block():
     assert entry.chainwork == entry.work
     assert entry.active
     assert entry.status == "valid"
+    assert entry == test_db.get_block_index(block_hash)
+    assert hash(entry) == hash(test_db.get_block_index(block_hash))
+    assert "BlockIndexEntry" in repr(entry)
+    with pytest.raises(FrozenInstanceError):
+        entry.height = 1
 
 
 def test_block_index_accumulates_parent_chainwork():

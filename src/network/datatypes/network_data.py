@@ -9,6 +9,7 @@ Classes for different types of Network data structures
 
 """
 import time
+from dataclasses import dataclass
 from typing import Union
 
 import siphash
@@ -157,6 +158,7 @@ class InvVector(Serializable):
         return False
 
 
+@dataclass(slots=True, eq=False, repr=False, unsafe_hash=False)
 class PrefilledTx(Serializable):
     """
     =============================================================================
@@ -167,11 +169,8 @@ class PrefilledTx(Serializable):
     =============================================================================
     NB: The index will be differentially encoded since the last PrefilledTx in a list
     """
-    __slots__ = ("block_index", "tx")
-
-    def __init__(self, block_index: int, tx: Tx):
-        self.block_index = block_index
-        self.tx = tx
+    block_index: int
+    tx: Tx
 
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED, prev_ind: int = -1):
@@ -303,6 +302,7 @@ class ShortID(Serializable):
         return siphash_result.to_bytes(NETWORK.SHORT_ID_HASH_LENGTH, "little")[:NETWORK.SHORT_ID_LENGTH]
 
 
+@dataclass(slots=True, eq=False, repr=False, unsafe_hash=False)
 class HeaderAndShortIDs(Serializable):
     """
     =============================================================================
@@ -317,16 +317,17 @@ class HeaderAndShortIDs(Serializable):
     =============================================================================
     """
 
-    def __init__(self, header: bytes | BlockHeader, nonce: int, short_ids: list[ShortID],
-                 prefilled_txs: list[PrefilledTx]):
+    header: bytes | BlockHeader
+    nonce: int
+    short_ids: list[ShortID]
+    prefilled_txs: list[PrefilledTx]
+
+    def __post_init__(self) -> None:
         # ---  Validation --- #
-        if isinstance(header, bytes) and len(header) != BLOCK.HEADER_LENGTH:
+        if isinstance(self.header, bytes) and len(self.header) != BLOCK.HEADER_LENGTH:
             raise NetworkDataError("Serialized BlockHeader of incorrect length")
 
-        self.header = header if isinstance(header, bytes) else header.to_bytes()
-        self.nonce = nonce
-        self.short_ids = short_ids
-        self.prefilled_txs = prefilled_txs
+        self.header = self.header if isinstance(self.header, bytes) else self.header.to_bytes()
 
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):
@@ -408,6 +409,7 @@ class HeaderAndShortIDs(Serializable):
         }
 
 
+@dataclass(slots=True, eq=False, repr=False, unsafe_hash=False)
 class BlockTxns(Serializable):
     """Provides some requested txs from a block
     =================================================================================
@@ -419,9 +421,8 @@ class BlockTxns(Serializable):
     =================================================================================
     """
 
-    def __init__(self, block_hash: bytes, txs: list[Tx]):
-        self.block_hash = block_hash
-        self.txs = txs
+    block_hash: bytes
+    txs: list[Tx]
 
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):
@@ -463,6 +464,7 @@ class BlockTxns(Serializable):
         }
 
 
+@dataclass(slots=True, eq=False, repr=False, unsafe_hash=False)
 class BlockTxnsRequest(Serializable):
     """Used to list tx indices in a block being requested
     =============================================================================
@@ -476,9 +478,8 @@ class BlockTxnsRequest(Serializable):
     * We assume indices are given as an ordered list of block tx indices
     """
 
-    def __init__(self, block_hash: bytes, indices: list[int]):
-        self.block_hash = block_hash
-        self.indices = indices
+    block_hash: bytes
+    indices: list[int]
 
     @classmethod
     def from_bytes(cls, byte_stream: SERIALIZED):

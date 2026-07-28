@@ -94,6 +94,34 @@ def make_mempool_with_utxos(utxos: list[UTXO]) -> MemPool:
 
 class TestAddTxHappyPath(unittest.TestCase):
 
+    def test_mempool_record_normalizes_bytes_and_owns_metadata_lists(self):
+        tx = make_spending_tx([make_utxo(make_txid())], output_amount=90_000)
+
+        with patch("src.mempool.mempool.time.time", side_effect=[10.9, 11.2]):
+            first = MemPoolTx(tx.to_bytes(), fee=10_000)
+            second = MemPoolTx(tx, fee=10_000)
+
+        self.assertIsInstance(first.tx, Tx)
+        self.assertEqual(first.tx.to_bytes(), tx.to_bytes())
+        self.assertIsNot(first.ancestors, second.ancestors)
+        self.assertIsNot(first.descendants, second.descendants)
+        self.assertEqual(first.arrival_time, 10)
+        self.assertEqual(second.arrival_time, 11)
+
+    def test_mempool_record_retains_mutable_identity_semantics(self):
+        tx = make_spending_tx([make_utxo(make_txid())], output_amount=90_000)
+        first = MemPoolTx(tx, fee=10_000)
+        second = MemPoolTx(tx, fee=10_000)
+
+        first.ancestors.append(second)
+        second.descendants.append(first)
+
+        self.assertIs(first.ancestors[0], second)
+        self.assertNotEqual(first, second)
+        self.assertIs(MemPoolTx.__eq__, object.__eq__)
+        self.assertIs(MemPoolTx.__hash__, object.__hash__)
+        self.assertIs(MemPoolTx.__repr__, object.__repr__)
+
     def test_short_p2sh_redeem_script_is_not_misclassified_as_p2wpkh(self):
         self.assertFalse(P2WPKH_Key.matches(ANYONE_CAN_SPEND_REDEEM_SCRIPT))
 

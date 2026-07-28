@@ -135,6 +135,9 @@ The console provides node and synchronization status, explicit local-versus-remo
 peer diagnostics, mempool inspection, block and transaction lookup, live node events, and an allowlisted advanced RPC
 console. Mutating RPC methods display a warning and require an additional confirmation.
 
+In `bitcoin-core-remote` storage mode, the mempool view reads Bitcoin Core's live verbose mempool and labels it as a
+trusted remote source. Archival and pruned BitClone nodes continue to show their independently maintained local mempool.
+
 The browser runtime has no JavaScript package dependencies. Playwright is used only for development tests:
 
 ```bash
