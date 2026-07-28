@@ -31,18 +31,6 @@ Each item should be handled as a separate ticket with sufficient tests.
       dataclass defaults implicitly
 - [ ] Add database-row, mempool-metadata, and compact-block round-trip regression tests
 
-**Story 7.4 — Browser Operator Console**
-
-- [ ] Serve a same-origin browser application from the BitClone daemon
-- [ ] Add dashboard, sync, chain, block, transaction, peer, and mempool views
-- [ ] Prominently distinguish independently validated local data from trusted remote Bitcoin Core data
-- [ ] Add loading, empty, degraded, offline, and recovery states for long-running node operations
-- [ ] Add an allowlisted advanced RPC console with warnings and confirmation for mutating commands
-- [ ] Make the console responsive and keyboard accessible
-- [ ] Add browser end-to-end tests for the primary operator workflows
-
----
-
 ### Sprint 8 — Chain Reorganisation & Storage Integrity
 
 **Story 0 — Cleanup and Maintenance**

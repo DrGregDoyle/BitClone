@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>BitClone Node Console</title>
+  <link rel="stylesheet" href="/assets/console.css">
+</head>
+<body>
+  <a class="skip-link" href="#workspace">Skip to node workspace</a>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">₿</span>
+        <span>
+          <strong>BitClone</strong>
+          <small>Node console</small>
+        </span>
+      </div>
+      <nav id="primary-nav">
+        <button class="nav-item active" data-view="dashboard" aria-current="page">
+          <span aria-hidden="true">◫</span> Overview
+        </button>
+        <button class="nav-item" data-view="chain"><span aria-hidden="true">◇</span> Chain</button>
+        <button class="nav-item" data-view="peers"><span aria-hidden="true">◎</span> Peers</button>
+        <button class="nav-item" data-view="mempool"><span aria-hidden="true">≋</span> Mempool</button>
+        <button class="nav-item" data-view="explorer"><span aria-hidden="true">⌕</span> Explorer</button>
+        <button class="nav-item" data-view="rpc"><span aria-hidden="true">›_</span> RPC console</button>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="connection-line">
+          <span id="connection-dot" class="status-dot idle" aria-hidden="true"></span>
+          <span id="connection-label">Token required</span>
+        </div>
+        <button id="change-token" class="text-button">Change API token</button>
+      </div>
+    </aside>
+
+    <main id="workspace" class="workspace" tabindex="-1">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Local control plane</p>
+          <h1 id="view-title">Node overview</h1>
+        </div>
+        <div class="topbar-actions">
+          <span id="trust-badge" class="trust-badge neutral">Trust source unknown</span>
+          <button id="refresh-view" class="icon-button" aria-label="Refresh current view" title="Refresh">↻</button>
+        </div>
+      </header>
+
+      <div id="notice-region" class="notice-region" role="status" aria-live="polite"></div>
+      <section id="view-content" class="view-content" aria-live="polite">
+        <div class="empty-state">
+          <span class="empty-icon" aria-hidden="true">₿</span>
+          <h2>Connect to your local node</h2>
+          <p>Enter the API token printed when BitClone started.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="token-dialog" class="token-dialog">
+    <form id="token-form" method="dialog">
+      <div class="dialog-mark" aria-hidden="true">₿</div>
+      <p class="eyebrow">BitClone operator access</p>
+      <h2>Connect to this node</h2>
+      <p>The token stays in this browser tab and is sent only to this same-origin BitClone process.</p>
+      <label for="api-token">API token</label>
+      <input id="api-token" name="api-token" type="password" autocomplete="off" required
+             placeholder="Paste BITCLONE_API_TOKEN">
+      <p id="token-error" class="form-error" role="alert"></p>
+      <div class="dialog-actions">
+        <button type="submit" class="primary-button">Connect</button>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="loading-template">
+    <div class="loading-grid" aria-label="Loading node information">
+      <div class="skeleton tall"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton wide"></div>
+    </div>
+  </template>
+
+  <script src="/assets/console.js" defer></script>
+</body>
+</html>

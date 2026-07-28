@@ -387,6 +387,16 @@ BitClone process without reaching directly into consensus, wallet, or networking
 - [x] Route CLI configuration, peer, chain, and transaction commands through the same application-service layer
 - [x] Add JSON-RPC and CLI integration tests
 
+#### Story 7.4 — Browser Operator Console
+
+- [x] Serve a same-origin browser application from the BitClone daemon
+- [x] Add dashboard, sync, chain, block, transaction, peer, and mempool views
+- [x] Prominently distinguish independently validated local data from trusted remote Bitcoin Core data
+- [x] Add loading, empty, degraded, offline, and recovery states for long-running node operations
+- [x] Add an allowlisted advanced RPC console with warnings and confirmation for mutating commands
+- [x] Make the console responsive and keyboard accessible
+- [x] Add browser end-to-end tests for the primary operator workflows
+
 ### Chain Reorganisation & Storage Integrity — Early Groundwork
 
 Completed ahead of the active Chain Reorganisation & Storage Integrity sprint.

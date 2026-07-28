@@ -37,3 +37,8 @@ venv/
 .venv/
 env/
 ENV/
+
+# Browser test artifacts
+node_modules/
+test-results/
+playwright-report/

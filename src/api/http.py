@@ -31,6 +31,13 @@ logger = get_logger(__name__)
 CSRF_HEADER = "X-BitClone-CSRF"
 RPC_PATHS = {"/", "/rpc", f"/api/{API_VERSION}/rpc"}
 MAX_RPC_BODY_BYTES = 1_000_000
+STATIC_ROOT = Path(__file__).with_name("static")
+STATIC_ROUTES = {
+    "/": ("index.html", "text/html; charset=utf-8"),
+    "/console": ("index.html", "text/html; charset=utf-8"),
+    "/assets/console.css": ("console.css", "text/css; charset=utf-8"),
+    "/assets/console.js": ("console.js", "text/javascript; charset=utf-8"),
+}
 
 
 def _match_route(path: str):
@@ -55,6 +62,10 @@ class _BitCloneRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
         target = urlsplit(self.path)
+        static_asset = STATIC_ROUTES.get(target.path)
+        if static_asset is not None:
+            self._write_static(*static_asset)
+            return
         route, path_parameters = _match_route(target.path)
         if route is None:
             self._write_error(
@@ -390,6 +401,32 @@ class _BitCloneRequestHandler(BaseHTTPRequestHandler):
         if allowed_origin is not None:
             self.send_header("Access-Control-Allow-Origin", allowed_origin)
             self.send_header("Vary", "Origin")
+
+    def _write_static(self, filename: str, content_type: str) -> None:
+        try:
+            body = (STATIC_ROOT / filename).read_bytes()
+        except OSError:
+            self._write_error(
+                APIError(500, "console_unavailable", "The browser console asset is unavailable")
+            )
+            return
+        try:
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header(
+                "Content-Security-Policy",
+                "default-src 'self'; script-src 'self'; style-src 'self'; "
+                "connect-src 'self'; img-src 'self' data:; object-src 'none'; "
+                "base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+            )
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            logger.debug("HTTP client disconnected before console asset completed")
 
     def log_message(self, message: str, *args) -> None:
         logger.info("%s - %s", self.address_string(), message % args)

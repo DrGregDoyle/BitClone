@@ -126,6 +126,24 @@ Supported compatibility methods are `getblockchaininfo`, `getnetworkinfo`, `getp
 `getrawtransaction`, `decoderawtransaction`, `sendrawtransaction`, and `gettxout`. Wallet and mining RPC methods return
 explicitly unavailable errors until their planned sprints.
 
+### Browser operator console
+
+Open `http://127.0.0.1:8334/` in a browser on the machine running BitClone. Enter the same
+`BITCLONE_API_TOKEN` used to start the server. The token is retained only in that browser tab's session storage.
+
+The console provides node and synchronization status, explicit local-versus-remote trust labeling, chain details,
+peer diagnostics, mempool inspection, block and transaction lookup, live node events, and an allowlisted advanced RPC
+console. Mutating RPC methods display a warning and require an additional confirmation.
+
+The browser runtime has no JavaScript package dependencies. Playwright is used only for development tests:
+
+```bash
+npm install
+sudo npx playwright install-deps chromium  # Ubuntu/Debian system libraries
+npx playwright install chromium
+npm run test:browser
+```
+
 Binding beyond loopback is rejected unless a TLS certificate, private key, and explicit browser origin are configured.
 The API applies exact origin checks, scoped bearer credentials, rate limits, secret redaction, CSRF groundwork, and a
 mode-`0600` audit log under the selected network's log directory.
