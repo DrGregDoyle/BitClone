@@ -2,6 +2,7 @@
 The Database class - holds the UTXO set
 """
 import sqlite3
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -105,10 +106,41 @@ class BitCloneDatabase:
         self._initialize_database()
         try:
             self._validate_storage_mode()
+            self._reconcile_block_store()
         except Exception:
             self.conn.close()
             self.conn = None
             raise
+
+    def _reconcile_block_store(self) -> None:
+        """Discard block-file writes that have no committed database row."""
+        if self.storage_mode == REMOTE_STORAGE:
+            return
+        conn = self._require_conn()
+        locations = tuple(
+            BlockLocation(file_number, file_offset, block_size)
+            for file_number, file_offset, block_size in conn.execute(
+                "SELECT file_number, file_offset, block_size FROM blocks"
+            ).fetchall()
+        )
+        recovered = self.block_store.reconcile(locations)
+        if recovered:
+            logger.warning("Recovered %d uncommitted block-file write(s)", recovered)
+
+    @contextmanager
+    def chain_transaction(self):
+        """Run a complete active-chain transition in one SQLite transaction."""
+        conn = self._require_conn()
+        if conn.in_transaction:
+            raise RuntimeError("A chain-state transaction is already active")
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            yield conn
+        except Exception:
+            conn.rollback()
+            raise
+        else:
+            conn.commit()
 
     def _require_conn(self) -> sqlite3.Connection:
         """Return the active connection or raise if the database is closed."""
@@ -363,35 +395,153 @@ class BitCloneDatabase:
 
         header = block.get_header()
         conn = self._require_conn()
-        with conn:
-            conn.execute(
-                """
-                INSERT INTO blocks (
-                    block_hash, height, prev_hash, timestamp,
-                    file_number, file_offset, block_size
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    header.block_id,
+        try:
+            with conn:
+                self._insert_block_body(block, block_height, location, conn)
+                self._add_block_index_entry(
+                    block,
                     block_height,
-                    block.prev_block,
-                    block.timestamp,
-                    location.file_number,
-                    location.file_offset,
-                    location.block_size,
-                ),
-            )
+                    active=active,
+                    conn=conn,
+                    status=status,
+                )
+                if undo is not None:
+                    self._add_block_undo(header.block_id, undo, conn)
+        except Exception:
+            self.block_store.rollback_write(location)
+            raise
 
-            self._add_block_index_entry(
-                block,
-                block_height,
-                active=active,
-                conn=conn,
-                status=status,
+    @staticmethod
+    def _insert_block_body(
+            block: Block,
+            block_height: int,
+            location: BlockLocation,
+            conn: sqlite3.Connection,
+    ) -> None:
+        conn.execute(
+            """
+            INSERT INTO blocks (
+                block_hash, height, prev_hash, timestamp,
+                file_number, file_offset, block_size
             )
-            if undo is not None:
-                self._add_block_undo(header.block_id, undo, conn)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                block.block_id,
+                block_height,
+                block.prev_block,
+                block.timestamp,
+                location.file_number,
+                location.file_offset,
+                location.block_size,
+            ),
+        )
+
+    def connect_block(
+            self,
+            block: Block,
+            block_height: int,
+            undo: BlockUndo,
+            spent_outpoints: tuple[bytes, ...],
+            created_utxos: tuple[UTXO, ...],
+    ) -> None:
+        """Atomically persist and activate a new tip block and its UTXO delta."""
+        block_bytes = block.to_bytes()
+        location = self.block_store.write_block(block.block_id, block_bytes)
+        conn = self._require_conn()
+        try:
+            with self.chain_transaction() as transaction:
+                self._insert_block_body(block, block_height, location, transaction)
+                self._add_block_index_entry(
+                    block,
+                    block_height,
+                    active=True,
+                    conn=transaction,
+                    status="valid",
+                )
+                self._add_block_undo(block.block_id, undo, transaction)
+                self._apply_utxo_delta(spent_outpoints, created_utxos, transaction)
+        except Exception:
+            self.block_store.rollback_write(location)
+            raise
+
+    @staticmethod
+    def _apply_utxo_delta(
+            spent_outpoints: tuple[bytes, ...],
+            created_utxos: tuple[UTXO, ...],
+            conn: sqlite3.Connection,
+    ) -> None:
+        conn.executemany(
+            "DELETE FROM utxos WHERE outpoint = ?",
+            ((outpoint,) for outpoint in spent_outpoints),
+        )
+        conn.executemany(
+            """
+            INSERT INTO utxos(outpoint, amount, script_pubkey, height, coinbase)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                (
+                    utxo.outpoint,
+                    utxo.amount,
+                    utxo.scriptpubkey,
+                    utxo.block_height,
+                    1 if utxo.is_coinbase else 0,
+                )
+                for utxo in created_utxos
+            ),
+        )
+
+    def disconnect_chain_block(
+            self,
+            block_hash: bytes,
+            undo: BlockUndo,
+            *,
+            status: str,
+            conn: sqlite3.Connection,
+    ) -> None:
+        """Disconnect one block inside an existing chain-state transaction."""
+        conn.executemany(
+            "DELETE FROM utxos WHERE outpoint = ?",
+            ((outpoint,) for outpoint in undo.created_outpoints),
+        )
+        conn.executemany(
+            "DELETE FROM utxos WHERE outpoint = ?",
+            ((utxo.outpoint,) for utxo in undo.spent_utxos),
+        )
+        conn.executemany(
+            """
+            INSERT INTO utxos(outpoint, amount, script_pubkey, height, coinbase)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                (
+                    utxo.outpoint,
+                    utxo.amount,
+                    utxo.scriptpubkey,
+                    utxo.block_height,
+                    1 if utxo.is_coinbase else 0,
+                )
+                for utxo in undo.spent_utxos
+            ),
+        )
+        self._set_block_active(block_hash, False, status, conn)
+
+    def activate_chain_block(
+            self,
+            block_hash: bytes,
+            undo: BlockUndo,
+            spent_outpoints: tuple[bytes, ...],
+            created_utxos: tuple[UTXO, ...],
+            *,
+            conn: sqlite3.Connection,
+    ) -> None:
+        """Activate one stored candidate inside an existing chain-state transaction."""
+        conn.execute("DELETE FROM block_undo_spent WHERE block_hash = ?", (block_hash,))
+        conn.execute("DELETE FROM block_undo_created WHERE block_hash = ?", (block_hash,))
+        self._add_block_undo(block_hash, undo, conn)
+        self._apply_utxo_delta(spent_outpoints, created_utxos, conn)
+        self._set_block_active(block_hash, True, "valid", conn)
 
     @staticmethod
     def _add_block_undo(block_hash: bytes, undo: BlockUndo, conn: sqlite3.Connection) -> None:
@@ -463,18 +613,48 @@ class BitCloneDatabase:
         """Update active-chain membership and, optionally, validation status."""
         conn = self._require_conn()
         with conn:
-            if status is None:
-                cursor = conn.execute(
-                    "UPDATE block_index SET active = ? WHERE block_hash = ?",
-                    (1 if active else 0, block_hash),
+            self._set_block_active(block_hash, active, status, conn)
+
+    def mark_block_branch_invalid(self, block_hash: bytes) -> None:
+        """Mark one invalid block and every indexed descendant invalid."""
+        conn = self._require_conn()
+        with conn:
+            conn.execute(
+                """
+                WITH RECURSIVE invalid_branch(block_hash) AS (
+                    SELECT block_hash FROM block_index WHERE block_hash = ?
+                    UNION ALL
+                    SELECT child.block_hash
+                    FROM block_index AS child
+                    JOIN invalid_branch AS parent
+                      ON child.prev_hash = parent.block_hash
                 )
-            else:
-                cursor = conn.execute(
-                    "UPDATE block_index SET active = ?, status = ? WHERE block_hash = ?",
-                    (1 if active else 0, status, block_hash),
-                )
-            if cursor.rowcount != 1:
-                raise KeyError(f"Unknown block index entry: {block_hash.hex()}")
+                UPDATE block_index
+                SET active = 0, status = 'invalid'
+                WHERE block_hash IN (SELECT block_hash FROM invalid_branch)
+                """,
+                (block_hash,),
+            )
+
+    @staticmethod
+    def _set_block_active(
+            block_hash: bytes,
+            active: bool,
+            status: str | None,
+            conn: sqlite3.Connection,
+    ) -> None:
+        if status is None:
+            cursor = conn.execute(
+                "UPDATE block_index SET active = ? WHERE block_hash = ?",
+                (1 if active else 0, block_hash),
+            )
+        else:
+            cursor = conn.execute(
+                "UPDATE block_index SET active = ?, status = ? WHERE block_hash = ?",
+                (1 if active else 0, status, block_hash),
+            )
+        if cursor.rowcount != 1:
+            raise KeyError(f"Unknown block index entry: {block_hash.hex()}")
 
     def prune_blocks(self, tip_height: int) -> tuple[int, ...]:
         """Delete block bodies and undo data older than the configured safety window."""

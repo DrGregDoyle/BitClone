@@ -11,18 +11,6 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 
 ---
 
-### Sprint 8 — Chain Reorganisation & Storage Integrity
-
-**Story 0 — Cleanup and Maintenance**
-Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 8.
-Each item should be handled as a separate ticket with sufficient tests.
-
-**Story 8.2 — Atomic Chain Updates and Orphans**
-
-- [ ] Atomically update block files, block index, chain tip, and UTXO set
-- [ ] Add an orphan-block pool for blocks whose parents are not known
-- [ ] Add a checkpoint map of hard-coded known-good hashes at key heights
-
 ### Sprint 9 — Mempool Policy & Package Handling
 
 **Story 0 — Cleanup and Maintenance**

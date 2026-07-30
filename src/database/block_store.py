@@ -49,6 +49,14 @@ class BlockStore(ABC):
     def clear(self) -> int:
         raise NotImplementedError
 
+    def rollback_write(self, location: BlockLocation) -> bool:
+        """Undo a body write whose database transaction did not commit."""
+        return self.delete_block(location)
+
+    def reconcile(self, locations: tuple[BlockLocation, ...]) -> int:
+        """Remove block bodies that have no committed database location."""
+        return 0
+
     def get_block_hash(self, height: int) -> bytes | None:
         return None
 
@@ -85,6 +93,22 @@ class ArchivalBlockStore(BlockStore):
         # Packed files can contain other retained blocks and are never deleted
         # individually in archival mode.
         return False
+
+    def rollback_write(self, location: BlockLocation) -> bool:
+        return self.manager.rollback_block(
+            location.file_number,
+            location.file_offset,
+            location.block_size,
+        )
+
+    def reconcile(self, locations: tuple[BlockLocation, ...]) -> int:
+        referenced_ends: dict[int, int] = {}
+        for location in locations:
+            referenced_ends[location.file_number] = max(
+                referenced_ends.get(location.file_number, 0),
+                location.file_offset + location.block_size,
+            )
+        return self.manager.reconcile(referenced_ends)
 
     def clear(self) -> int:
         return self.manager.clear_block_files()
@@ -130,6 +154,29 @@ class PrunedBlockStore(BlockStore):
             path.unlink()
         self.current_file_number = -1
         return len(files)
+
+    def rollback_write(self, location: BlockLocation) -> bool:
+        removed = self.delete_block(location)
+        existing = self._block_files()
+        self.current_file_number = max(
+            (self._file_number(path) for path in existing),
+            default=-1,
+        )
+        return removed
+
+    def reconcile(self, locations: tuple[BlockLocation, ...]) -> int:
+        referenced = {location.file_number for location in locations}
+        recovered = 0
+        for path in self._block_files():
+            if self._file_number(path) not in referenced:
+                path.unlink()
+                recovered += 1
+        existing = self._block_files()
+        self.current_file_number = max(
+            (self._file_number(path) for path in existing),
+            default=-1,
+        )
+        return recovered
 
     def _block_files(self) -> list[Path]:
         return list(self.blocks_dir.glob("blk*.dat"))

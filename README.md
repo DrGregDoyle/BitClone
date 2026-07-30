@@ -138,6 +138,10 @@ console. Mutating RPC methods display a warning and require an additional confir
 In `bitcoin-core-remote` storage mode, the mempool view reads Bitcoin Core's live verbose mempool and labels it as a
 trusted remote source. Archival and pruned BitClone nodes continue to show their independently maintained local mempool.
 
+Local chainstate updates commit block-index membership, undo data, and UTXO mutations as one transaction. Block-file
+writes are rolled back on commit failure and reconciled on startup. Competing branches are selected by cumulative work,
+with bounded orphan-block retention and hard-coded mainnet checkpoints at known historical heights.
+
 The browser runtime has no JavaScript package dependencies. Playwright is used only for development tests:
 
 ```bash

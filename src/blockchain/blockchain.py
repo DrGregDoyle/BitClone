@@ -7,6 +7,7 @@ import time
 
 from src.block.block import Block, BlockHeader
 from src.blockchain.genesis_block import genesis_block
+from src.blockchain.orphan_pool import OrphanBlockPool
 from src.core import (
     BLOCK,
     TX,
@@ -83,8 +84,10 @@ class Blockchain:
             core_rpc: BitcoinCoreRPC | None = None,
             network: NetworkName | str = NetworkName.MAINNET,
             chain_params: ChainParams | None = None,
+            orphan_pool: OrphanBlockPool | None = None,
     ):
         self.chain_params = chain_params or get_chain_params(network)
+        self.orphans = orphan_pool if orphan_pool is not None else OrphanBlockPool()
 
         # --- Main db
         self.db = BitCloneDatabase(
@@ -253,11 +256,16 @@ class Blockchain:
 
             existing = self.db.get_block_index(header.block_id)
             if existing is None:
+                header_height = parent.height + 1
+                if not self._checkpoint_matches(header_height, header.block_id):
+                    raise NetworkDataError(
+                        f"Header conflicts with checkpoint at height {header_height}"
+                    )
                 if not self._validate_header_pow(header):
                     raise NetworkDataError(f"Header failed proof of work: {header.block_id.hex()}")
                 if header.timestamp > int(time.time()) + MAX_FUTURE_BLOCK_TIME:
                     raise NetworkDataError(f"Header timestamp is too far in the future: {header.timestamp}")
-                self.db.add_block_header(header, parent.height + 1)
+                self.db.add_block_header(header, header_height)
                 accepted.append(header)
                 parent = self.db.get_block_index(header.block_id)
             else:
@@ -329,29 +337,51 @@ class Blockchain:
             logger.error("Chain reorganisation requires every block body and active undo record")
             return False
 
-        disconnected_old = []
-        connected_candidates = []
+        original_tip = self._tip
+        original_height = self._height
+        invalid_candidate = None
         try:
-            for entry, block in zip(disconnect, old_blocks):
-                self._disconnect_active_block(entry, block)
-                disconnected_old.append((entry, block))
-
-            for entry, block in zip(connect, candidate_blocks):
-                if not self._validate_block(block):
-                    self.db.set_block_active(entry.block_hash, False, status="invalid")
-                    raise NetworkDataError(
-                        f"Candidate block failed validation during reorganisation: "
-                        f"{entry.block_hash.hex()}"
+            with self.db.chain_transaction() as transaction:
+                for entry, block in zip(disconnect, old_blocks):
+                    undo = self.db.get_block_undo(entry.block_hash)
+                    self.db.disconnect_chain_block(
+                        entry.block_hash,
+                        undo,
+                        status="valid",
+                        conn=transaction,
                     )
-                self._apply_candidate_block(entry, block)
-                connected_candidates.append((entry, block))
+                    parent = self.db.get_block_index(entry.prev_hash)
+                    parent_block = self.db.get_block(entry.prev_hash) if parent is not None else None
+                    self._set_cached_tip(
+                        parent_block,
+                        parent.height if parent is not None else -1,
+                    )
+
+                for entry, block in zip(connect, candidate_blocks):
+                    if not self._validate_block(block):
+                        invalid_candidate = entry.block_hash
+                        raise NetworkDataError(
+                            f"Candidate block failed validation during reorganisation: "
+                            f"{entry.block_hash.hex()}"
+                        )
+                    undo = self._build_block_undo(block, entry.height)
+                    spent_outpoints, created_utxos = self._block_utxo_delta(
+                        block,
+                        entry.height,
+                    )
+                    self.db.activate_chain_block(
+                        entry.block_hash,
+                        undo,
+                        spent_outpoints,
+                        created_utxos,
+                        conn=transaction,
+                    )
+                    self._set_cached_tip(block, entry.height)
         except Exception as error:
-            logger.error("Chain reorganisation failed; restoring prior tip: %s", error)
-            for entry, block in reversed(connected_candidates):
-                self._disconnect_active_block(entry, block, status="candidate")
-            self._set_cached_tip(self.db.get_block(fork.block_hash), fork.height)
-            for entry, block in reversed(disconnected_old):
-                self._apply_known_valid_block(entry, block)
+            logger.error("Chain reorganisation failed atomically; retaining prior tip: %s", error)
+            self._set_cached_tip(original_tip, original_height)
+            if invalid_candidate is not None:
+                self.db.mark_block_branch_invalid(invalid_candidate)
             return False
 
         self.db.prune_blocks(self._height)
@@ -399,11 +429,18 @@ class Blockchain:
                 return False
 
             if self.tip is None or block.prev_block == self.tip.block_id:
-                return self._connect_tip_block(block)
+                accepted = self._connect_tip_block(block)
+                if accepted:
+                    self._process_orphan_children(block.block_id)
+                return accepted
 
             parent = self.db.get_block_index(block.prev_block)
             if parent is None:
-                logger.error("Block parent is unknown: %s", block.prev_block.hex())
+                if self._validate_orphan_candidate(block):
+                    self.orphans.add(block)
+                    logger.debug("Stored orphan block awaiting parent: %s", block.block_id.hex())
+                else:
+                    logger.error("Rejected malformed orphan candidate: %s", block.block_id.hex())
                 return False
             new_height = parent.height + 1
             if not self._validate_side_block_candidate(block, parent, new_height):
@@ -417,7 +454,11 @@ class Blockchain:
                 status="candidate",
             )
             if self.would_reorganize_to(block.block_id):
-                return self.reorganize_to(block.block_id)
+                accepted = self.reorganize_to(block.block_id)
+                if accepted:
+                    self._process_orphan_children(block.block_id)
+                return accepted
+            self._process_orphan_children(block.block_id)
             return True
 
         except Exception as e:
@@ -425,13 +466,21 @@ class Blockchain:
             return False
 
     def _connect_tip_block(self, block: Block) -> bool:
+        new_height = self._height + 1
+        if not self._checkpoint_matches(new_height, block.block_id):
+            return False
         if not self._validate_block(block):
             logger.error(f"Block failed validation: {block.block_id.hex()}")
             return False
-        new_height = self._height + 1
-        undo = self._build_block_undo(block)
-        self.db.add_block(block, new_height, undo=undo)
-        self._update_utxo_set(block, new_height)
+        undo = self._build_block_undo(block, new_height)
+        spent_outpoints, created_utxos = self._block_utxo_delta(block, new_height)
+        self.db.connect_block(
+            block,
+            new_height,
+            undo,
+            spent_outpoints,
+            created_utxos,
+        )
         self._set_cached_tip(block, new_height)
         self.db.prune_blocks(new_height)
         return True
@@ -439,6 +488,8 @@ class Blockchain:
     def _validate_side_block_candidate(self, block: Block, parent, block_height: int) -> bool:
         """Perform branch-aware checks that do not require the candidate UTXO view."""
         if not block.txs or block.prev_block != parent.block_hash:
+            return False
+        if not self._checkpoint_matches(block_height, block.block_id):
             return False
         if block.timestamp > int(time.time()) + MAX_FUTURE_BLOCK_TIME:
             return False
@@ -472,33 +523,32 @@ class Blockchain:
             return False
         return self._validate_witness_commitment(block, block_height)
 
-    def _disconnect_active_block(self, entry, block: Block, *, status: str = "valid") -> None:
-        undo = self.db.get_block_undo(entry.block_hash)
-        if undo is None:
-            raise NetworkDataError(f"Missing undo data for {entry.block_hash.hex()}")
-        for outpoint in undo.created_outpoints:
-            self.db.remove_utxo(outpoint)
-        for utxo in undo.spent_utxos:
-            self.db.remove_utxo(utxo.outpoint)
-            self.db.add_utxo(utxo)
-        self.db.set_block_active(entry.block_hash, False, status=status)
-        parent = self.db.get_block_index(entry.prev_hash)
-        parent_block = self.db.get_block(entry.prev_hash) if parent is not None else None
-        self._set_cached_tip(parent_block, parent.height if parent is not None else -1)
+    def _validate_orphan_candidate(self, block: Block) -> bool:
+        """Reject structurally invalid work before retaining a parentless block."""
+        if not block.txs or not self.validate_pow(block) or block.weight > self.MAX_WEIGHT:
+            return False
+        txids = [tx.txid for tx in block.txs]
+        if len(txids) != len(set(txids)):
+            return False
+        if MerkleTree(txids).merkle_root != block.get_header().merkle_root:
+            return False
+        return block.txs[0].is_coinbase and not any(
+            tx.is_coinbase for tx in block.txs[1:]
+        )
 
-    def _apply_candidate_block(self, entry, block: Block) -> None:
-        undo = self._build_block_undo(block)
-        self._update_utxo_set(block, entry.height)
-        self.db.replace_block_undo(entry.block_hash, undo)
-        self.db.set_block_active(entry.block_hash, True, status="valid")
-        self._set_cached_tip(block, entry.height)
+    def _process_orphan_children(self, parent_hash: bytes) -> None:
+        for orphan in self.orphans.pop_children(parent_hash):
+            self.add_block(orphan)
 
-    def _apply_known_valid_block(self, entry, block: Block) -> None:
-        undo = self._build_block_undo(block)
-        self._update_utxo_set(block, entry.height)
-        self.db.replace_block_undo(entry.block_hash, undo)
-        self.db.set_block_active(entry.block_hash, True, status="valid")
-        self._set_cached_tip(block, entry.height)
+    def _checkpoint_matches(self, height: int, block_hash: bytes) -> bool:
+        matches = self.chain_params.checkpoint_matches(height, block_hash)
+        if not matches:
+            logger.error(
+                "Block %s conflicts with checkpoint at height %d",
+                block_hash[::-1].hex(),
+                height,
+            )
+        return matches
 
     def _set_cached_tip(self, block: Block | None, height: int) -> None:
         self._height = height
@@ -512,8 +562,13 @@ class Blockchain:
 
     # --- UTXO management
 
-    def _build_block_undo(self, block: Block) -> BlockUndo:
+    def _build_block_undo(
+            self,
+            block: Block,
+            block_height: int | None = None,
+    ) -> BlockUndo:
         """Capture the pre-block UTXOs and new outpoints needed to disconnect a block."""
+        block_height = self._height + 1 if block_height is None else block_height
         created_outpoints = tuple(
             tx.txid + vout.to_bytes(TX.VOUT, "little")
             for tx in block.txs
@@ -521,6 +576,7 @@ class Blockchain:
         )
         created_set = set(created_outpoints)
         spent_utxos: list[UTXO] = []
+        captured_outpoints: set[bytes] = set()
         for tx in block.txs:
             if tx.is_coinbase:
                 continue
@@ -528,39 +584,58 @@ class Blockchain:
                 if txin.outpoint in created_set:
                     continue
                 utxo = self.db.get_utxo(txin.outpoint)
-                if utxo is not None:
+                if utxo is not None and utxo.outpoint not in captured_outpoints:
                     spent_utxos.append(utxo)
+                    captured_outpoints.add(utxo.outpoint)
+        if self.chain_params.is_bip30_exception(block_height, block.block_id):
+            for outpoint in created_outpoints:
+                overwritten = self.db.get_utxo(outpoint)
+                if overwritten is not None and outpoint not in captured_outpoints:
+                    spent_utxos.append(overwritten)
+                    captured_outpoints.add(outpoint)
         return BlockUndo(tuple(spent_utxos), created_outpoints)
+
+    def _block_utxo_delta(
+            self,
+            block: Block,
+            block_height: int,
+    ) -> tuple[tuple[bytes, ...], tuple[UTXO, ...]]:
+        """Return the final UTXO mutation for one validated block."""
+        spent_outpoints = {
+            txin.outpoint
+            for tx in block.txs
+            if not tx.is_coinbase
+            for txin in tx.inputs
+        }
+        created: list[UTXO] = []
+        for tx in block.txs:
+            for vout, output in enumerate(tx.outputs):
+                outpoint = tx.txid + vout.to_bytes(TX.VOUT, "little")
+                if outpoint in spent_outpoints:
+                    continue
+                created.append(
+                    UTXO.from_txoutput(
+                        outpoint=outpoint,
+                        txoutput=output,
+                        block_height=block_height,
+                        is_coinbase=tx.is_coinbase,
+                    )
+                )
+                if self.chain_params.is_bip30_exception(block_height, block.block_id):
+                    spent_outpoints.add(outpoint)
+        return tuple(spent_outpoints), tuple(created)
 
     def _update_utxo_set(self, block: Block, block_height: int):
         """
-        Update UTXO set for a block
-        Process transactions in order to handle intra-block dependencies
+        Compatibility helper for tests and maintenance tools.
 
-        Args:
-            block: Block whose transactions to process
-            block_height: Height of the block in the blockchain
+        Normal block connection uses ``BitCloneDatabase.connect_block`` so
+        UTXOs, undo data, the block index, and the active tip commit together.
         """
-        for tx in block.txs:
-            # Step 1: Remove spent UTXOs (skip for coinbase)
-            if not tx.is_coinbase:
-                for inp in tx.inputs:
-                    self.db.remove_utxo(inp.outpoint)
-
-            # Step 2: Add new UTXOs from this transaction
-            for vout, output in enumerate(tx.outputs):
-                outpoint = tx.txid + vout.to_bytes(TX.VOUT, "little")
-                if self.chain_params.is_bip30_exception(block_height, block.block_id):
-                    # The two historical exception blocks overwrite an older
-                    # unspent coinbase outpoint, matching Bitcoin's UTXO view.
-                    self.db.remove_utxo(outpoint)
-                utxo = UTXO.from_txoutput(
-                    outpoint=outpoint,
-                    txoutput=output,
-                    block_height=block_height,
-                    is_coinbase=tx.is_coinbase
-                )
-                self.db.add_utxo(utxo)
+        spent_outpoints, created_utxos = self._block_utxo_delta(block, block_height)
+        conn = self.db._require_conn()
+        with conn:
+            self.db._apply_utxo_delta(spent_outpoints, created_utxos, conn)
 
     # --- Block validation
 
@@ -576,6 +651,8 @@ class Blockchain:
         # --- Get validation elements
         block_header = block.get_header()
         next_height = self._height + 1
+        if not self._checkpoint_matches(next_height, block.block_id):
+            return False
 
         # --- Genesis block: check prev_block is all 0's
         if self.tip is None:

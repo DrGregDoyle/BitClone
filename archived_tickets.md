@@ -412,6 +412,8 @@ BitClone process without reaching directly into consensus, wallet, or networking
 
 ### Sprint 8 — Chain Reorganisation & Storage Integrity
 
+**Status: Complete**
+
 #### Cleanup 8.0.1 — Storage-Aware Mempool View
 
 - [x] Read verbose Bitcoin Core mempool data when block storage is `bitcoin-core-remote`
@@ -426,6 +428,12 @@ BitClone process without reaching directly into consensus, wallet, or networking
 - [x] Roll back UTXOs and apply the winning chain during a reorganisation
 - [x] Mark active and inactive block-index entries during a reorganisation
 - [x] Add reorganisation and fork-simulation tests
+
+#### Story 8.2 — Atomic Chain Updates and Orphans
+
+- [x] Atomically update block files, block index, chain tip, and UTXO set
+- [x] Add an orphan-block pool for blocks whose parents are not known
+- [x] Add a checkpoint map of hard-coded known-good hashes at key heights
 
 ### Chain Reorganisation & Storage Integrity — Early Groundwork
 

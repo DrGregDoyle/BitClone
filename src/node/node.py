@@ -834,6 +834,7 @@ class Node:
                 else self.blockchain.utxo_count()
             ),
             "mempool_size": len(self.mempool),
+            "orphan_blocks": len(self.blockchain.orphans),
             "outbound_peers": len(self.ready_peers),
             "target_outbound": self.peer_manager.target_outbound,
             "banned_peers": len(self.peer_discipline.active_bans()),

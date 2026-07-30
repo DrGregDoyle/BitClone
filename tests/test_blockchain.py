@@ -532,6 +532,7 @@ def test_failed_candidate_reorganization_restores_previous_active_branch(chain):
     assert chain.db.get_block_index(active_two.block_id).active is True
     assert chain.db.get_block_index(side_one.block_id).active is False
     assert chain.db.get_block_index(side_two.block_id).status == "invalid"
+    assert chain.db.get_block_index(side_three.block_id).status == "invalid"
     active_outpoint = active_two.txs[0].txid + (0).to_bytes(4, "little")
     side_outpoint = side_one.txs[0].txid + (0).to_bytes(4, "little")
     assert chain.get_utxo(active_outpoint) is not None

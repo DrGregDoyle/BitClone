@@ -96,6 +96,39 @@ class BlockFileManager:
 
         return block_bytes
 
+    def rollback_block(self, file_number: int, file_offset: int, block_size: int) -> bool:
+        """Remove the most recently appended block after a failed database commit."""
+        file_path = self._get_file_path(file_number)
+        if not file_path.exists() or file_path.stat().st_size != file_offset + block_size:
+            return False
+        with file_path.open("r+b") as stream:
+            stream.truncate(file_offset)
+        if file_offset == 0:
+            file_path.unlink()
+        self.current_file_number = self._get_latest_file_number()
+        self.current_file_size = self._get_file_size(self.current_file_number)
+        return True
+
+    def reconcile(self, referenced_ends: dict[int, int]) -> int:
+        """Trim uncommitted file tails and remove wholly unreferenced files."""
+        recovered = 0
+        for path in list(self.blocks_dir.glob("blk*.dat")):
+            try:
+                file_number = int(path.stem[3:])
+            except ValueError:
+                continue
+            referenced_end = referenced_ends.get(file_number)
+            if referenced_end is None:
+                path.unlink()
+                recovered += 1
+            elif path.stat().st_size > referenced_end:
+                with path.open("r+b") as stream:
+                    stream.truncate(referenced_end)
+                recovered += 1
+        self.current_file_number = self._get_latest_file_number()
+        self.current_file_size = self._get_file_size(self.current_file_number)
+        return recovered
+
     def clear_block_files(self) -> int:
         """
         Delete all blk*.dat files from the blocks directory.

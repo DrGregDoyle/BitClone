@@ -626,6 +626,7 @@ class NodeApplicationService:
             "best_header_height": status["best_header_height"],
             "best_header": status["best_header"],
             "mempool_size": status["mempool_size"],
+            "orphan_blocks": status["orphan_blocks"],
             "ready_peers": status["outbound_peers"],
             "target_outbound_peers": status["target_outbound"],
             "banned_peers": status["banned_peers"],

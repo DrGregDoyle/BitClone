@@ -65,6 +65,7 @@ class ChainParams:
     taproot_height: int
     script_flag_exceptions: Mapping[bytes, ScriptVerifyFlag]
     bip30_exceptions: Mapping[int, bytes]
+    checkpoints: Mapping[int, bytes]
 
     def consensus_script_flags(
             self,
@@ -108,6 +109,11 @@ class ChainParams:
         """Return whether this is one of Bitcoin's two historical BIP30 blocks."""
         return self.bip30_exceptions.get(height) == block_hash
 
+    def checkpoint_matches(self, height: int, block_hash: bytes) -> bool:
+        """Return whether a block agrees with the checkpoint at its height."""
+        expected = self.checkpoints.get(height)
+        return expected is None or expected == block_hash
+
 
 _MAINNET_BIP16_EXCEPTION = _internal_hash(
     "00000000000002dc756eebf4f49723ed8d30cc28a5f108eb94b1ba88ac4f9c22"
@@ -142,6 +148,33 @@ MAINNET_CHAIN_PARAMS: Final = ChainParams(
             "00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721"
         ),
     }),
+    checkpoints=MappingProxyType({
+        0: _internal_hash(
+            "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"
+        ),
+        91_842: _internal_hash(
+            "00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec"
+        ),
+        91_880: _internal_hash(
+            "00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721"
+        ),
+        227_931: _internal_hash(
+            "000000000000024b89b42a942fe0d9fea3bb44ab7bd1b19115dd6a759c0808b8"
+        ),
+        363_725: _internal_hash(
+            "00000000000000000379eaa19dce8c9b722d46ae6a57c2f1a988119488b50931"
+        ),
+        388_381: _internal_hash(
+            "000000000000000004c2b624ed5d7756c508d90fd0da2c7c679febfa6c4735f0"
+        ),
+        419_328: _internal_hash(
+            "000000000000000004a1b34462cb8aeebd5799177f7a29cf28f2d1961716b5b5"
+        ),
+        481_824: _internal_hash(
+            "0000000000000000001c8018d9cb3b742ef25114f27563e3fc4a1902167f9893"
+        ),
+        692_261: _MAINNET_TAPROOT_EXCEPTION,
+    }),
 )
 
 TESTNET_CHAIN_PARAMS: Final = ChainParams(
@@ -159,6 +192,7 @@ TESTNET_CHAIN_PARAMS: Final = ChainParams(
         _TESTNET_BIP16_EXCEPTION: ScriptVerifyFlag.NONE,
     }),
     bip30_exceptions=MappingProxyType({}),
+    checkpoints=MappingProxyType({}),
 )
 
 REGTEST_CHAIN_PARAMS: Final = ChainParams(
@@ -174,6 +208,7 @@ REGTEST_CHAIN_PARAMS: Final = ChainParams(
     taproot_height=0,
     script_flag_exceptions=MappingProxyType({}),
     bip30_exceptions=MappingProxyType({}),
+    checkpoints=MappingProxyType({}),
 )
 
 SIGNET_CHAIN_PARAMS: Final = ChainParams(
@@ -189,6 +224,7 @@ SIGNET_CHAIN_PARAMS: Final = ChainParams(
     taproot_height=0,
     script_flag_exceptions=MappingProxyType({}),
     bip30_exceptions=MappingProxyType({}),
+    checkpoints=MappingProxyType({}),
 )
 
 CHAIN_PARAMS: Final = MappingProxyType({
