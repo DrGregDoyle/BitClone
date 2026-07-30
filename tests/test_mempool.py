@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 
 from src.core import TX
 from src.mempool.mempool import MemPool, MemPoolTx
+from src.mempool.orphan_pool import OrphanTransactionPool
 from src.script import P2SH_Key, P2WPKH_Key
 from src.tx import TxIn, TxOut, Tx, UTXO
 
@@ -75,9 +76,15 @@ def make_mempool_with_utxos(utxos: list[UTXO]) -> MemPool:
     mp.max_size = MemPool.MAX_SIZE
     mp.max_time = MemPool.MAX_TIME
     mp.min_fee = MemPool.MIN_FEE
+    mp.max_block_weight = MemPool.MAX_BLOCK_WEIGHT
+    mp.max_ancestor_count = MemPool.MAX_ANCESTOR_COUNT
+    mp.max_ancestor_vbytes = MemPool.MAX_ANCESTOR_VBYTES
+    mp.max_descendant_count = MemPool.MAX_DESCENDANT_COUNT
+    mp.max_descendant_vbytes = MemPool.MAX_DESCENDANT_VBYTES
     mp.mempool = {}
     mp.total_vbytes = 0
     mp.spent_outpoints = set()
+    mp.orphans = OrphanTransactionPool()
     # Build a dict of outpoint -> UTXO so the mock db can serve lookups
     utxo_map = {u.outpoint: u for u in utxos}
 
@@ -191,6 +198,167 @@ class TestAddTxHappyPath(unittest.TestCase):
         child_mempool_tx: MemPoolTx = mp.mempool[child_tx.txid]
         self.assertEqual(len(child_mempool_tx.ancestors), 1)
         self.assertIs(child_mempool_tx.ancestors[0], mp.mempool[parent_tx.txid])
+
+    def test_unconfirmed_parent_output_is_resolved_without_database_entry(self):
+        utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([utxo])
+        parent = make_spending_tx([utxo], output_amount=90_000)
+        child_input = make_utxo(parent.txid, amount=90_000)
+        child = make_spending_tx([child_input], output_amount=80_000)
+
+        self.assertTrue(mp.add_tx(parent))
+        self.assertTrue(mp.add_tx(child))
+        self.assertEqual(mp.mempool[child.txid].fee, 10_000)
+
+    def test_ancestors_and_descendants_are_transitive(self):
+        utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([utxo])
+        parent = make_spending_tx([utxo], output_amount=90_000)
+        child = make_spending_tx(
+            [make_utxo(parent.txid, amount=90_000)],
+            output_amount=80_000,
+        )
+        grandchild = make_spending_tx(
+            [make_utxo(child.txid, amount=80_000)],
+            output_amount=70_000,
+        )
+
+        self.assertTrue(mp.add_tx(parent))
+        self.assertTrue(mp.add_tx(child))
+        self.assertTrue(mp.add_tx(grandchild))
+
+        self.assertEqual(
+            [entry.tx.txid for entry in mp.mempool[grandchild.txid].ancestors],
+            [parent.txid, child.txid],
+        )
+        self.assertEqual(
+            {entry.tx.txid for entry in mp.mempool[parent.txid].descendants},
+            {child.txid, grandchild.txid},
+        )
+
+
+class TestMempoolDependencies(unittest.TestCase):
+
+    def test_ancestor_count_limit_includes_candidate(self):
+        utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([utxo])
+        mp.max_ancestor_count = 2
+        parent = make_spending_tx([utxo], output_amount=90_000)
+        child = make_spending_tx(
+            [make_utxo(parent.txid, amount=90_000)],
+            output_amount=80_000,
+        )
+        grandchild = make_spending_tx(
+            [make_utxo(child.txid, amount=80_000)],
+            output_amount=70_000,
+        )
+
+        self.assertTrue(mp.add_tx(parent))
+        self.assertTrue(mp.add_tx(child))
+        self.assertFalse(mp.add_tx(grandchild))
+        self.assertNotIn(grandchild.txid, mp)
+
+    def test_descendant_count_limit_rejects_second_branch(self):
+        utxo = make_utxo(make_txid(), amount=200_000)
+        mp = make_mempool_with_utxos([utxo])
+        mp.max_descendant_count = 2
+        parent = Tx(
+            inputs=[
+                TxIn(
+                    txid=utxo.outpoint[:32],
+                    vout=utxo.outpoint[32:],
+                    scriptsig=ANYONE_CAN_SPEND_SCRIPTSIG,
+                    sequence=0xffffffff,
+                )
+            ],
+            outputs=[
+                TxOut(90_000, ANYONE_CAN_SPEND_SCRIPTPUBKEY),
+                TxOut(90_000, ANYONE_CAN_SPEND_SCRIPTPUBKEY),
+            ],
+        )
+        first_child = make_spending_tx(
+            [make_utxo(parent.txid, vout=0, amount=90_000)],
+            output_amount=80_000,
+        )
+        second_child = make_spending_tx(
+            [make_utxo(parent.txid, vout=1, amount=90_000)],
+            output_amount=80_000,
+        )
+
+        self.assertTrue(mp.add_tx(parent))
+        self.assertTrue(mp.add_tx(first_child))
+        self.assertFalse(mp.add_tx(second_child))
+        self.assertNotIn(second_child.txid, mp)
+
+    def test_template_selects_high_fee_package_in_dependency_order(self):
+        parent_utxo = make_utxo(make_txid(), amount=100_000)
+        independent_utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([parent_utxo, independent_utxo])
+        parent = make_spending_tx([parent_utxo], output_amount=99_900)
+        child = make_spending_tx(
+            [make_utxo(parent.txid, amount=99_900)],
+            output_amount=90_000,
+        )
+        independent = make_spending_tx([independent_utxo], output_amount=99_000)
+
+        self.assertTrue(mp.add_tx(parent))
+        self.assertTrue(mp.add_tx(child))
+        self.assertTrue(mp.add_tx(independent))
+        mp.max_block_weight = parent.wu + child.wu
+
+        template = mp.get_block_template()
+
+        self.assertEqual([tx.txid for tx in template], [parent.txid, child.txid])
+
+    def test_orphan_is_promoted_when_parent_arrives(self):
+        utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([utxo])
+        parent = make_spending_tx([utxo], output_amount=90_000)
+        child = make_spending_tx(
+            [make_utxo(parent.txid, amount=90_000)],
+            output_amount=80_000,
+        )
+
+        self.assertFalse(mp.add_tx(child))
+        self.assertIn(child.txid, mp.orphans)
+        self.assertTrue(mp.add_tx(parent))
+
+        self.assertNotIn(child.txid, mp.orphans)
+        self.assertIn(child.txid, mp)
+
+    def test_orphan_is_promoted_when_parent_is_confirmed(self):
+        mp = make_mempool_with_utxos([])
+        parent_txid = make_txid()
+        parent_output = make_utxo(parent_txid, amount=90_000)
+        child = make_spending_tx([parent_output], output_amount=80_000)
+
+        self.assertFalse(mp.add_tx(child))
+        self.assertIn(child.txid, mp.orphans)
+        mp.btcdb.get_utxo.side_effect = (
+            lambda outpoint: parent_output if outpoint == parent_output.outpoint else None
+        )
+
+        mp.confirm_block([parent_txid])
+
+        self.assertNotIn(child.txid, mp.orphans)
+        self.assertIn(child.txid, mp)
+
+    def test_orphan_pool_evicts_oldest_entry_at_count_limit(self):
+        pool = OrphanTransactionPool(max_count=1)
+        first = make_spending_tx(
+            [make_utxo(make_txid(), amount=100_000)],
+            output_amount=90_000,
+        )
+        second = make_spending_tx(
+            [make_utxo(make_txid(), amount=100_000)],
+            output_amount=90_000,
+        )
+
+        self.assertTrue(pool.add(first, {first.inputs[0].txid}))
+        self.assertTrue(pool.add(second, {second.inputs[0].txid}))
+
+        self.assertNotIn(first.txid, pool)
+        self.assertIn(second.txid, pool)
 
 
 class TestAddTxRejectionCases(unittest.TestCase):

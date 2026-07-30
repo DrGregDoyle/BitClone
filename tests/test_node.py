@@ -115,6 +115,7 @@ def test_node_initializes_components_with_shared_db_path(tmp_path):
     try:
         assert node.blockchain.db.db_path == db_path
         assert node.mempool.btcdb.db_path == db_path
+        assert node.mempool.btcdb is node.blockchain.db
         assert node.config.data_dir == tmp_path
         assert node.config.blocks_dir.is_relative_to(tmp_path)
         assert node.wallet is None

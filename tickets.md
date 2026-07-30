@@ -17,13 +17,6 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 9.
 Each item should be handled as a separate ticket with sufficient tests.
 
-**Story 9.1 — Active-Chain Admission and Dependencies**
-
-- [ ] Use the node's active-chain UTXO view for mempool admission
-- [ ] Finish dependency-aware block-template transaction selection
-- [ ] Enforce ancestor and descendant count and size limits
-- [ ] Add an orphan-transaction pool for spends whose parents are not known
-
 **Story 9.2 — Replacement, Eviction, and Relay Policy**
 
 - [ ] Implement Replace-by-Fee rules from BIP125

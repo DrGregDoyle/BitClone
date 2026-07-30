@@ -137,6 +137,9 @@ console. Mutating RPC methods display a warning and require an additional confir
 
 In `bitcoin-core-remote` storage mode, the mempool view reads Bitcoin Core's live verbose mempool and labels it as a
 trusted remote source. Archival and pruned BitClone nodes continue to show their independently maintained local mempool.
+Local mempool admission reads directly from the node's active-chain UTXO view and overlays outputs from unconfirmed
+parents. Transaction dependencies are bounded by ancestor and descendant count/size policy, unknown-parent transactions
+are retained briefly in a bounded orphan pool, and block templates select fee-paying packages in dependency order.
 
 Local chainstate updates commit block-index membership, undo data, and UTXO mutations as one transaction. Block-file
 writes are rolled back on commit failure and reconciled on startup. Competing branches are selected by cumulative work,

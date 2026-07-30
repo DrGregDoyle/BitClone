@@ -143,6 +143,7 @@ class Node:
             prune_keep_blocks=chain_prune_keep_blocks,
             core_rpc=self.core_rpc,
             network=self.config.network,
+            coin_view=self.blockchain.db,
         )
         self.wallet = wallet
         self.miner = miner or Miner()

@@ -441,3 +441,12 @@ Completed ahead of the active Chain Reorganisation & Storage Integrity sprint.
 
 - [x] Store undo data for every connected block
 - [x] Design optional pruning mode while retaining archival-node mode as the default
+
+### Sprint 9 — Mempool Policy & Package Handling
+
+#### Story 9.1 — Active-Chain Admission and Dependencies
+
+- [x] Use the node's active-chain UTXO view for mempool admission
+- [x] Finish dependency-aware block-template transaction selection
+- [x] Enforce ancestor and descendant count and size limits
+- [x] Add an orphan-transaction pool for spends whose parents are not known
