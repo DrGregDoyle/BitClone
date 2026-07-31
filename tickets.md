@@ -1,251 +1,262 @@
-# BitClone Active Tickets
+# Bitcoin Math Lab Active Tickets
 
 This file contains active work only. Completed tickets are maintained in [archived_tickets.md](archived_tickets.md).
+Deferred work from the former development path is maintained in [backlog.md](backlog.md).
 
 ---
 
-## 🌐 EPIC — Peer-to-Peer Networking
+# Release 0.1 — Public Presence
 
-Connect BitClone to the live Bitcoin network so it can discover peers, download the blockchain,
-and propagate transactions and blocks in accordance with the Bitcoin P2P protocol.
+## Objective
 
----
+Establish Bitcoin Math Lab as a professional public project before developing the core product.
 
-### Sprint 9 — Mempool Policy & Package Handling
+The goal of Release 0.1 is **not** to attract thousands of users.
 
-**Story 0 — Cleanup and Maintenance**
-Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 9.
-Each item should be handled as a separate ticket with sufficient tests.
-
-**Story 9.3 — Packages and Persistence**
-
-- [ ] Add package-validation and package-relay groundwork
-- [ ] Add optional mempool persistence across restarts
-- [ ] Add mempool eviction and RBF tests
+The goal is to create a solid foundation that allows people to discover the project, understand the vision, and follow its progress.
 
 ---
 
-### Sprint 10 — Mining & Regtest Development
+# Sprint 1 — Branding & Identity
 
-**Story 0 — Cleanup and Maintenance**
-Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 10.
-Each item should be handled as a separate ticket with sufficient tests.
+## Objective
 
-**Story 10.1 — Consensus-Correct Mining**
-
-- [ ] Fix mining proof-of-work integer byte order to match consensus validation
-- [ ] Wire `Miner` fully into the `Node` lifecycle
-- [ ] Build block templates from `MemPool.get_block_template()`
-- [ ] Add the correct SegWit witness commitment to mined blocks when needed
-- [ ] Use chain-derived `bits` and target values instead of node-local default difficulty
-- [ ] Stop and rebuild mining work when the chain tip or mempool changes
-- [ ] Add tests proving mined blocks pass `Blockchain.add_block()`
-
-**Story 10.2 — Regtest and Development Commands**
-
-- [ ] Add regtest-only easy-mining mode
-- [ ] Add CLI, REST, and RPC commands for `generateblock`, `wipe-chain`, and `loadblock`
-- [ ] Support mining blocks on demand in regtest mode
-
-**Story 10.3 — Mining API and Browser Workflows**
-
-- [ ] Expose mining status, block templates, candidate submission, start/stop controls, and found-block results
-- [ ] Provide `getblocktemplate` and `submitblock` for external mining software
-- [ ] Define a Stratum-compatible solo-mining endpoint or documented bridge for devices such as BitAxe
-- [ ] Add browser workflows for regtest generation and mining status
-- [ ] Clearly distinguish educational/regtest mining from realistic mainnet ASIC mining
+Create a professional identity for Bitcoin Math Lab.
 
 ---
 
-### Sprint 11 — Wallet Completion
+### Story 1.1 — Branding
 
-**Story 0 — Cleanup and Maintenance**
-Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 11.
-Each item should be handled as a separate ticket with sufficient tests.
+#### Tasks
 
-**Story 11.1 — Accounts, Storage, and Scanning**
-
-- [ ] Complete HD-wallet account scanning and gap-limit handling
-- [ ] Encrypt key storage on disk
-- [ ] Track UTXOs per address and key
-- [ ] Add watch-only wallet mode
-- [ ] Persist wallet metadata independently from chainstate
-
-**Story 11.2 — Transaction Construction and Signing**
-
-- [ ] Select UTXOs, construct outputs, and compute change
-- [ ] Estimate fees using a mempool fee-rate histogram
-- [ ] Sign ECDSA P2PKH/P2WPKH and Schnorr P2TR transactions
-- [ ] Add wallet signing and UTXO-selection tests
-
-**Story 11.3 — Wallet Runtime, API, and Browser Workflows**
-
-- [ ] Separate the wallet runtime from full-node consensus and node orchestration
-- [ ] Expose balances, addresses, UTXOs, transaction creation/signing, history, and rescan controls
-- [ ] Add browser workflows for receiving, coin selection, fee review, signing, and broadcasting
-- [ ] Require explicit confirmation for signing, broadcasting, key export, and destructive wallet operations
-- [ ] Never return seed material or private keys through ordinary API responses
-- [ ] Add watch-only and spending-wallet API and browser integration tests
+- [x] Confirm the Bitcoin Math Lab name
+- [ ] Purchase the primary domain
+- [ ] Purchase any additional strategic domains
+- [ ] Reserve social media usernames
+- [x] Design a simple logo
+- [x] Select typography
+- [x] Define colour palette
+- [x] Write a one-sentence mission statement
+- [x] Write a one-paragraph project description
 
 ---
 
-### Sprint 12 — Configuration, Operations & Local Packaging
+### Story 1.2 — Project Organization
 
-**Story 0 — Cleanup and Maintenance**
-Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 12.
-Each item should be handled as a separate ticket with sufficient tests.
+#### Tasks
 
-**Story 12.1 — Configuration and Logging**
-
-- [ ] Load configuration for data directories, ports, network selection, fixed peers, API binding, and browser launch
-- [ ] Add configurable logging levels, log rotation, and structured progress events
-- [ ] Expose safe configuration inspection while redacting credentials
-
-**Story 12.2 — Lifecycle and Recovery**
-
-- [ ] Add clean shutdown for database connections, peer connections, miner workers, APIs, and background tasks
-- [ ] Add startup recovery checks for interrupted block and UTXO writes
-- [ ] Add node lifecycle startup, shutdown, and API reconnection tests
-
-**Story 12.3 — Runtime Boundaries**
-
-- [ ] Split consensus, policy, node orchestration, wallet, transport, and presentation concerns into clear boundaries
-- [ ] Ensure HTTP handlers and browser code cannot mutate shared state outside application services
-
-**Story 12.4 — Downloadable Local Application**
-
-- [ ] Package the daemon and version-matched browser assets as one installable distribution
-- [ ] Start the local service safely and open the browser console without exposing it publicly
-- [ ] Provide sample full-node, pruned-node, and remote-development configurations
-- [ ] Add data-directory migrations, upgrade checks, and rollback-safe release procedures
-- [ ] Keep a desktop wrapper optional so the browser interface remains the primary client
+- [ ] Create GitHub Organization
+- [ ] Create Frontend repository
+- [ ] Create Backend repository
+- [ ] Create BitClone repository (or migrate existing repository)
+- [ ] Configure GitHub Projects
+- [ ] Configure issue templates
+- [ ] Configure pull request templates
+- [ ] Configure branch protection
+- [ ] Configure GitHub Actions CI
 
 ---
 
-### Sprint 13 — Independent Node Runtime & Release
+### Story 1.3 — Documentation
 
-This is the final local-product integration sprint. Its outcome is a distributable BitClone installation that can
-synchronize from the Bitcoin P2P network, operate without Bitcoin Core, remain online after IBD, and expose safe
-interfaces for node, wallet, and mining operations.
+#### Tasks
 
-**Story 0 — Cleanup and Maintenance**
-Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 13.
-Each item should be handled as a separate ticket with sufficient tests.
+Create
 
-**Story 13.1 — Local Initial Block Download**
-As a node operator, I want BitClone to build its own validated chainstate from Bitcoin peers
-so that archival and pruned installations can operate independently of Bitcoin Core.
-
-- [ ] Continue from header sync into a bounded parallel block-download scheduler
-- [ ] Select, rotate, and penalize download peers when blocks are invalid, unavailable, or stalled
-- [ ] Independently validate and atomically connect every downloaded block in chain order
-- [ ] Persist IBD checkpoints and resume safely after clean shutdown, interruption, or process failure
-- [ ] Support both archival retention and configured pruning throughout IBD
-- [ ] Report header, block, chainstate, verification, throughput, and estimated-completion progress through the API
-- [ ] Transition automatically from IBD into normal tip-following and relay operation
-- [ ] Complete IBD without requiring Bitcoin Core, its RPC service, or its block storage
-
-**Story 13.2 — Concurrent Long-Running Runtime**
-As a node operator, I want networking, synchronization, wallet services, mining, and control interfaces to remain
-responsive concurrently so that BitClone behaves as a continuously running node.
-
-- [ ] Define one asynchronous node runtime with bounded worker threads or processes for blocking and CPU-heavy work
-- [ ] Run peer networking, IBD, block validation, mempool maintenance, wallet scanning, mining coordination, and API
-      serving without blocking one another
-- [ ] Protect shared chain, mempool, wallet, and mining state with explicit ownership, queues, and synchronization
-- [ ] Add cancellation, backpressure, task supervision, and graceful shutdown across all background services
-- [ ] Prevent API, mining, and wallet operations from using stale chainstate during tip changes or reorganisations
-- [ ] Add concurrency, restart, long-running soak, and controlled-failure tests
-
-**Story 13.3 — Independent-Node Release Qualification**
-As a user, I want a documented and tested BitClone distribution
-so that I can install it, synchronize it, and keep it operating as a Bitcoin node.
-
-- [ ] Run end-to-end IBD, restart, reorganisation, pruning, API, browser, wallet, relay, and mining scenarios
-- [ ] Verify that a synchronized node remains at the network tip and recovers after peers or the API restart
-- [ ] Document storage, memory, bandwidth, security, backup, pruning, and upgrade requirements
-- [ ] Clearly label experimental features and establish release-readiness criteria for mainnet use
-- [ ] Demonstrate a fresh installation synchronizing and operating without any Bitcoin Core dependency
+- [ ] README.md
+- [ ] CONTRIBUTING.md
+- [ ] LICENSE
+- [ ] CODE_OF_CONDUCT.md
+- [ ] SECURITY.md
 
 ---
 
-### Sprint 14 — Optional Hosted & Fleet Services
+### Definition of Done
 
-This is a post-release commercial layer. It must remain optional: a local BitClone installation continues to work
-without an account, subscription, hosted control plane, or custody of wallet keys.
+Someone discovering the GitHub organization immediately understands:
 
-**Story 14.1 — Secure Remote Node Access**
-
-- [ ] Pair a local node with a remote account without exposing the node's RPC port directly to the internet
-- [ ] Use end-to-end authenticated channels and revocable, least-privilege device credentials
-- [ ] Keep wallet seeds and private keys on the user's node
-- [ ] Add remote session, device revocation, and account-recovery security tests
-
-**Story 14.2 — Monitoring and Fleet Management**
-
-- [ ] Add opt-in uptime, sync, storage, peer, and warning telemetry
-- [ ] Add alerts, historical health views, and multi-node fleet administration
-- [ ] Make every transmitted field visible to the operator and disable telemetry by default
-
-**Story 14.3 — Hosted Developer Environments**
-
-- [ ] Offer isolated, disposable regtest and signet BitClone environments through the same API
-- [ ] Add tenant isolation, quotas, usage metering, audit logs, and abuse controls
-- [ ] Validate demand before adding billing, hosted mainnet nodes, or managed wallet functionality
+- what Bitcoin Math Lab is,
+- what problem it solves,
+- where development is headed.
 
 ---
 
-## 🖥️ Hardware — Home Node + Mining Setup
+# Sprint 2 — Public Website
 
-> Estimated costs in CAD (Ottawa area). Prices are approximate and subject to change.
+## Objective
 
-### Storage — Full Archival Node
-
-The Bitcoin blockchain (with full transaction index) currently sits around **700 GB** and grows
-roughly 60–70 GB per year. A 4 TB drive is comfortable today; 8 TB gives you a longer runway
-and room for the database, indexes, and OS.
-
-| Item                     | Capacity | Estimated Cost (CAD) |
-|--------------------------|----------|----------------------|
-| Samsung 870 EVO SATA SSD | 4 TB     | ~$350                |
-| Samsung 870 EVO SATA SSD | 8 TB     | ~$650                |
-| WD Red SN700 NVMe SSD    | 4 TB     | ~$380                |
-| WD Red SN700 NVMe SSD    | 8 TB     | ~$700                |
-
-**Recommendation:** 4 TB NVMe if your machine has an M.2 slot — faster IBD times. 8 TB if you
-want to run a full archival node (no pruning) and keep years of growth without thinking about it.
+Launch the first public version of bitcoinmathlab.com.
 
 ---
 
-### Mining — BitAxe Setup
+### Story 2.1 — Angular Website
 
-BitAxe is an open-source solo ASIC miner. At current network difficulty, solo mining is essentially
-a lottery — but it's a fun and educational addition to a home node.
+#### Pages
 
-| Item                              | Notes                                    | Estimated Cost (CAD) |
-|-----------------------------------|------------------------------------------|----------------------|
-| BitAxe Gamma 601 (×1)             | ~1.2 TH/s, ~15W, USB-C powered           | ~$120–$150           |
-| BitAxe Gamma 601 (×2)             | Two units for ~2.4 TH/s                  | ~$240–$300           |
-| USB-C Power Adapter (65W+)        | One per unit, or a USB hub with PD       | ~$25–$40 each        |
-| Small 5V Fan (optional)           | Keeps the ASIC chip cool in an enclosure | ~$15                 |
-| Enclosure / Rack Mount (optional) | 3D-printable designs available on GitHub | ~$10–$30 materials   |
+- [ ] Home
+- [ ] About
+- [ ] Roadmap
+- [ ] Blog
+- [ ] Contact
 
 ---
 
-### Full Setup Budget
+### Story 2.2 — Landing Page
 
-| Component             | Choice    | Est. Cost (CAD) |
-|-----------------------|-----------|-----------------|
-| SSD — Storage         | 4 TB NVMe | ~$380           |
-| BitAxe Gamma 601      | ×2 units  | ~$280           |
-| USB-C PD Adapters     | ×2        | ~$70            |
-| Cooling & misc cables | —         | ~$30            |
-| **Total**             |           | **~$760**       |
+Include
 
-> **Power draw:** Two BitAxes at ~15W each = ~30W continuous. At Ontario's average residential rate
-> (~$0.13/kWh), that's roughly **$3–4/month** in electricity. Negligible, and noise is virtually silent
-> compared to traditional ASIC rigs.
+- [ ] Hero section
+- [ ] Mission statement
+- [ ] Product overview
+- [ ] Roadmap preview
+- [ ] GitHub links
+- [ ] Newsletter signup
+- [ ] Waitlist signup
 
-> **Solo mining odds:** At ~2.4 TH/s against the current network hashrate (~800 EH/s), you'd expect
-> to find a block statistically once every few hundred thousand years. You're buying a lottery ticket
-> and learning how mining works — not generating income.
+---
+
+### Story 2.3 — Deployment
+
+#### Tasks
+
+- [ ] Configure hosting
+- [ ] Configure HTTPS
+- [ ] Connect domain
+- [ ] Configure analytics
+- [ ] Configure error logging
+- [ ] Configure SEO metadata
+
+---
+
+### Definition of Done
+
+Anyone can visit Bitcoin Math Lab from anywhere in the world.
+
+---
+
+# Sprint 3 — Documentation & Communication
+
+## Objective
+
+Explain the project clearly.
+
+---
+
+### Story 3.1 — Documentation
+
+Write
+
+- [ ] Project Overview
+- [ ] Architecture
+- [ ] Roadmap
+- [ ] Development Philosophy
+- [ ] FAQ
+
+---
+
+### Story 3.2 — Blog
+
+Publish
+
+- [ ] Why Bitcoin Math Lab?
+- [ ] Why build BitClone?
+- [ ] Why an Interactive Script Visualizer?
+- [ ] Long-term vision
+
+---
+
+### Story 3.3 — Product Mockups
+
+Create wireframes for
+
+- [ ] Script Visualizer
+- [ ] Transaction Explorer
+- [ ] Script Studio
+- [ ] Landing page screenshots
+
+---
+
+### Definition of Done
+
+Visitors understand both the current project and the long-term vision.
+
+---
+
+# Sprint 4 — Community Foundation
+
+## Objective
+
+Allow people to follow the project.
+
+---
+
+### Story 4.1 — Newsletter
+
+#### Tasks
+
+- [ ] Newsletter signup
+- [ ] Welcome email
+- [ ] Monthly newsletter template
+
+---
+
+### Story 4.2 — Social Presence
+
+Create
+
+- [ ] X account
+- [ ] LinkedIn page
+- [ ] YouTube channel
+- [ ] GitHub profile customization
+
+---
+
+### Story 4.3 — Development Blog
+
+Publish the first development updates.
+
+Topics
+
+- [ ] Project announcement
+- [ ] Roadmap overview
+- [ ] First screenshots
+- [ ] First development progress report
+
+---
+
+### Definition of Done
+
+People can subscribe and follow the project's progress.
+
+---
+
+# Release 0.1 Exit Criteria
+
+Release 0.1 is complete when:
+
+- [ ] Website is publicly accessible
+- [ ] Documentation is complete
+- [ ] GitHub organization is organized
+- [ ] Branding is complete
+- [ ] Newsletter accepts subscriptions
+- [ ] Waitlist accepts signups
+- [ ] At least one blog article has been published
+- [ ] Analytics are collecting visitor statistics
+
+---
+
+# Success Metrics
+
+Target metrics for Release 0.1
+
+- 100 website visitors
+- 25 newsletter subscribers
+- 10 GitHub stars
+- 5 waitlist registrations
+- 1 external person provides feedback
+
+These numbers are intentionally modest.
+
+The purpose of Release 0.1 is not rapid growth.
+
+The purpose is to establish Bitcoin Math Lab as a credible public project with a professional presence before significant product development begins.

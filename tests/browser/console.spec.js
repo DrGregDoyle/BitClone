@@ -4,6 +4,8 @@ const TOKEN = "browser-test-token";
 
 async function connect(page) {
   await page.goto("/");
+  await expect(page.getByText("Bitcoin Math Lab", { exact: true })).toBeVisible();
+  await expect(page.getByText("Brand palette preview", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Connect to this node" })).toBeVisible();
   await page.getByLabel("API token").fill(TOKEN);
   await page.getByRole("button", { name: "Connect", exact: true }).click();

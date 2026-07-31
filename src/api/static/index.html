@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>BitClone Node Console</title>
+  <title>Bitcoin Math Lab — BitClone Console</title>
+  <link rel="icon" href="/assets/bitcoin-math-lab-mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/console.css">
 </head>
 <body>
@@ -12,11 +13,20 @@
   <div class="app-shell">
     <aside class="sidebar" aria-label="Primary navigation">
       <div class="brand">
-        <span class="brand-mark" aria-hidden="true">₿</span>
+        <img class="brand-mark" src="/assets/bitcoin-math-lab-mark.svg" alt="">
         <span>
-          <strong>BitClone</strong>
-          <small>Node console</small>
+          <strong>Bitcoin Math Lab</strong>
+          <small>BitClone engine console</small>
         </span>
+      </div>
+      <div class="palette-preview" aria-label="Bitcoin Math Lab brand palette">
+        <span class="palette-label">Brand palette preview</span>
+        <div class="palette-swatches">
+          <i class="swatch-amber" title="Signal Amber"></i>
+          <i class="swatch-blue" title="Trace Blue"></i>
+          <i class="swatch-green" title="Valid Green"></i>
+          <i class="swatch-coral" title="Error Coral"></i>
+        </div>
       </div>
       <nav id="primary-nav">
         <button class="nav-item active" data-view="dashboard" aria-current="page">
@@ -40,7 +50,7 @@
     <main id="workspace" class="workspace" tabindex="-1">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Local control plane</p>
+          <p class="eyebrow">Bitcoin Math Lab · BitClone engine</p>
           <h1 id="view-title">Node overview</h1>
         </div>
         <div class="topbar-actions">
@@ -52,9 +62,11 @@
       <div id="notice-region" class="notice-region" role="status" aria-live="polite"></div>
       <section id="view-content" class="view-content" aria-live="polite">
         <div class="empty-state">
-          <span class="empty-icon" aria-hidden="true">₿</span>
+          <span class="empty-icon" aria-hidden="true">
+            <img src="/assets/bitcoin-math-lab-mark.svg" alt="">
+          </span>
           <h2>Connect to your local node</h2>
-          <p>Enter the API token printed when BitClone started.</p>
+          <p>Enter the one-run API token printed when the BitClone engine started.</p>
         </div>
       </section>
     </main>
@@ -62,8 +74,8 @@
 
   <dialog id="token-dialog" class="token-dialog">
     <form id="token-form" method="dialog">
-      <div class="dialog-mark" aria-hidden="true">₿</div>
-      <p class="eyebrow">BitClone operator access</p>
+      <img class="dialog-mark" src="/assets/bitcoin-math-lab-mark.svg" alt="">
+      <p class="eyebrow">Bitcoin Math Lab operator access</p>
       <h2>Connect to this node</h2>
       <p>The token stays in this browser tab and is sent only to this same-origin BitClone process.</p>
       <label for="api-token">API token</label>

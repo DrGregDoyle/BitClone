@@ -37,6 +37,7 @@ STATIC_ROUTES = {
     "/console": ("index.html", "text/html; charset=utf-8"),
     "/assets/console.css": ("console.css", "text/css; charset=utf-8"),
     "/assets/console.js": ("console.js", "text/javascript; charset=utf-8"),
+    "/assets/bitcoin-math-lab-mark.svg": ("bitcoin-math-lab-mark.svg", "image/svg+xml"),
 }
 
 

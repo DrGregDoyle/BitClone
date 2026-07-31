@@ -105,14 +105,21 @@ def test_real_http_api_serves_same_origin_browser_console(tmp_path):
             stylesheet = response.read().decode()
         with urlopen(f"{origin}/assets/console.js", timeout=5) as response:
             script = response.read().decode()
+        with urlopen(f"{origin}/assets/bitcoin-math-lab-mark.svg", timeout=5) as response:
+            logo = response.read().decode()
+            logo_content_type = response.headers["Content-Type"]
 
-    assert "<title>BitClone Node Console</title>" in document
+    assert "<title>Bitcoin Math Lab — BitClone Console</title>" in document
+    assert "<strong>Bitcoin Math Lab</strong>" in document
+    assert "Brand palette preview" in document
     assert 'id="token-dialog"' in document
     assert "default-src 'self'" in content_security_policy
     assert "connect-src 'self'" in content_security_policy
     assert "--amber:" in stylesheet
     assert 'const allowedRpc = [' in script
     assert 'sessionStorage.getItem("bitclone-api-token")' in script
+    assert "<title" in logo
+    assert logo_content_type == "image/svg+xml"
 
 
 def test_real_http_api_returns_block_and_paginated_collections(tmp_path):
