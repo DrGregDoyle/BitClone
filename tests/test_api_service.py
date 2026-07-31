@@ -182,6 +182,7 @@ def test_transaction_rpc_rejects_invalid_or_policy_rejected_transactions(service
 
     assert decode_error.value.code == -22
     assert rejected.value.code == -26
+    assert "consensus-invalid" in rejected.value.message
 
 
 @pytest.mark.parametrize(

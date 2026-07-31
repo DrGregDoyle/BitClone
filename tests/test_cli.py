@@ -282,7 +282,7 @@ def test_sendrawtransaction_accepts_valid_tx_when_utxo_exists(tmp_path, capsys):
 
     tx = Tx(
         inputs=[TxIn(funding_txid, 0, ANYONE_CAN_SPEND_SCRIPTSIG, 0xffffffff)],
-        outputs=[TxOut(90_000, b"\x51")],
+        outputs=[TxOut(90_000, ANYONE_CAN_SPEND_SCRIPTPUBKEY)],
     )
 
     exit_code = main(["--db-path", str(db_path), "--json", "sendrawtransaction", tx.to_bytes().hex()])
@@ -333,7 +333,7 @@ def test_getrawmempool_verbose_outputs_transaction_metadata(tmp_path):
 
         tx = Tx(
             inputs=[TxIn(funding_txid, 0, ANYONE_CAN_SPEND_SCRIPTSIG, 0xffffffff)],
-            outputs=[TxOut(90_000, b"\x51")],
+            outputs=[TxOut(90_000, ANYONE_CAN_SPEND_SCRIPTPUBKEY)],
         )
         assert node.submit_tx(tx)
 
@@ -346,5 +346,6 @@ def test_getrawmempool_verbose_outputs_transaction_metadata(tmp_path):
         assert output[txid]["feerate"] == 10_000 / tx.vbytes
         assert output[txid]["ancestor_count"] == 0
         assert output[txid]["descendant_count"] == 0
+        assert output[txid]["bip125-replaceable"] is False
     finally:
         node.close()

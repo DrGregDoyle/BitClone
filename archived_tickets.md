@@ -450,3 +450,10 @@ Completed ahead of the active Chain Reorganisation & Storage Integrity sprint.
 - [x] Finish dependency-aware block-template transaction selection
 - [x] Enforce ancestor and descendant count and size limits
 - [x] Add an orphan-transaction pool for spends whose parents are not known
+
+#### Story 9.2 — Replacement, Eviction, and Relay Policy
+
+- [x] Implement Replace-by-Fee rules from BIP125
+- [x] Evict low-fee transactions under memory pressure
+- [x] Maintain a rolling minimum relay fee after eviction
+- [x] Reject non-standard transactions separately from consensus-invalid transactions

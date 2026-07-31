@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, patch
 from src.core import TX
 from src.mempool.mempool import MemPool, MemPoolTx
 from src.mempool.orphan_pool import OrphanTransactionPool
+from src.mempool.policy import AdmissionCategory
 from src.script import P2SH_Key, P2WPKH_Key
 from src.tx import TxIn, TxOut, Tx, UTXO
 
@@ -81,10 +82,14 @@ def make_mempool_with_utxos(utxos: list[UTXO]) -> MemPool:
     mp.max_ancestor_vbytes = MemPool.MAX_ANCESTOR_VBYTES
     mp.max_descendant_count = MemPool.MAX_DESCENDANT_COUNT
     mp.max_descendant_vbytes = MemPool.MAX_DESCENDANT_VBYTES
+    mp.max_replacement_evictions = MemPool.MAX_REPLACEMENT_EVICTIONS
     mp.mempool = {}
     mp.total_vbytes = 0
     mp.spent_outpoints = set()
+    mp.spends = {}
     mp.orphans = OrphanTransactionPool()
+    mp.rolling_min_fee = 0.0
+    mp.rolling_fee_updated_at = 0
     # Build a dict of outpoint -> UTXO so the mock db can serve lookups
     utxo_map = {u.outpoint: u for u in utxos}
 
@@ -359,6 +364,244 @@ class TestMempoolDependencies(unittest.TestCase):
 
         self.assertNotIn(first.txid, pool)
         self.assertIn(second.txid, pool)
+
+
+class TestReplacementPolicy(unittest.TestCase):
+
+    def test_signaled_transaction_can_be_replaced_for_higher_fee(self):
+        utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([utxo])
+        original = make_spending_tx(
+            [utxo],
+            output_amount=90_000,
+            sequence=0xfffffffd,
+        )
+        replacement = make_spending_tx(
+            [utxo],
+            output_amount=89_000,
+            sequence=0xfffffffd,
+        )
+
+        self.assertTrue(mp.add_tx(original))
+        result = mp.accept_tx(replacement)
+
+        self.assertTrue(result.accepted)
+        self.assertEqual(result.category, AdmissionCategory.ACCEPTED)
+        self.assertEqual(result.replaced_txids, (original.txid,))
+        self.assertNotIn(original.txid, mp)
+        self.assertIn(replacement.txid, mp)
+
+    def test_non_signaled_conflict_cannot_be_replaced(self):
+        utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([utxo])
+        original = make_spending_tx([utxo], output_amount=90_000)
+        replacement = make_spending_tx(
+            [utxo],
+            output_amount=80_000,
+            sequence=0xfffffffd,
+        )
+
+        self.assertTrue(mp.add_tx(original))
+        result = mp.accept_tx(replacement)
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.category, AdmissionCategory.POLICY)
+        self.assertIn("does not signal", result.reason)
+        self.assertIn(original.txid, mp)
+
+    def test_replacement_removes_conflict_descendants_and_covers_their_fees(self):
+        utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([utxo])
+        original = make_spending_tx(
+            [utxo],
+            output_amount=99_000,
+            sequence=0xfffffffd,
+        )
+        child = make_spending_tx(
+            [make_utxo(original.txid, amount=99_000)],
+            output_amount=98_000,
+        )
+        insufficient = make_spending_tx(
+            [utxo],
+            output_amount=98_000,
+            sequence=0xfffffffd,
+        )
+        replacement = make_spending_tx(
+            [utxo],
+            output_amount=97_000,
+            sequence=0xfffffffd,
+        )
+
+        self.assertTrue(mp.add_tx(original))
+        self.assertTrue(mp.add_tx(child))
+        rejected = mp.accept_tx(insufficient)
+        accepted = mp.accept_tx(replacement)
+
+        self.assertFalse(rejected.accepted)
+        self.assertIn("incremental relay fee", rejected.reason)
+        self.assertTrue(accepted.accepted)
+        self.assertEqual(set(accepted.replaced_txids), {original.txid, child.txid})
+        self.assertNotIn(original.txid, mp)
+        self.assertNotIn(child.txid, mp)
+
+    def test_replacement_cannot_add_a_new_unconfirmed_input(self):
+        conflict_utxo = make_utxo(make_txid(), amount=100_000)
+        parent_a_utxo = make_utxo(make_txid(), amount=100_000)
+        parent_b_utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([conflict_utxo, parent_a_utxo, parent_b_utxo])
+        parent_a = make_spending_tx([parent_a_utxo], output_amount=90_000)
+        parent_b = make_spending_tx([parent_b_utxo], output_amount=90_000)
+        original = make_spending_tx(
+            [conflict_utxo, make_utxo(parent_a.txid, amount=90_000)],
+            output_amount=180_000,
+            sequence=0xfffffffd,
+        )
+        replacement = make_spending_tx(
+            [conflict_utxo, make_utxo(parent_b.txid, amount=90_000)],
+            output_amount=170_000,
+            sequence=0xfffffffd,
+        )
+
+        self.assertTrue(mp.add_tx(parent_a))
+        self.assertTrue(mp.add_tx(parent_b))
+        self.assertTrue(mp.add_tx(original))
+        result = mp.accept_tx(replacement)
+
+        self.assertFalse(result.accepted)
+        self.assertIn("new unconfirmed input", result.reason)
+        self.assertIn(original.txid, mp)
+
+    def test_inherited_rbf_signal_allows_descendant_replacement(self):
+        root_utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([root_utxo])
+        signaling_parent = make_spending_tx(
+            [root_utxo],
+            output_amount=90_000,
+            sequence=0xfffffffd,
+        )
+        original = make_spending_tx(
+            [make_utxo(signaling_parent.txid, amount=90_000)],
+            output_amount=89_000,
+        )
+        replacement = make_spending_tx(
+            [make_utxo(signaling_parent.txid, amount=90_000)],
+            output_amount=88_000,
+        )
+
+        self.assertTrue(mp.add_tx(signaling_parent))
+        self.assertTrue(mp.add_tx(original))
+        result = mp.accept_tx(replacement)
+
+        self.assertTrue(result.accepted)
+        self.assertNotIn(original.txid, mp)
+        self.assertIn(signaling_parent.txid, mp)
+
+    def test_replacement_eviction_set_is_bounded(self):
+        utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([utxo])
+        mp.max_replacement_evictions = 1
+        original = make_spending_tx(
+            [utxo],
+            output_amount=99_000,
+            sequence=0xfffffffd,
+        )
+        child = make_spending_tx(
+            [make_utxo(original.txid, amount=99_000)],
+            output_amount=98_000,
+        )
+        replacement = make_spending_tx(
+            [utxo],
+            output_amount=90_000,
+            sequence=0xfffffffd,
+        )
+
+        self.assertTrue(mp.add_tx(original))
+        self.assertTrue(mp.add_tx(child))
+        result = mp.accept_tx(replacement)
+
+        self.assertFalse(result.accepted)
+        self.assertIn("would evict 2", result.reason)
+
+
+class TestMempoolPressurePolicy(unittest.TestCase):
+
+    def test_full_mempool_evicts_lowest_feerate_transaction(self):
+        low_utxo = make_utxo(make_txid(), amount=100_000)
+        high_utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([low_utxo, high_utxo])
+        low_fee = make_spending_tx([low_utxo], output_amount=99_000)
+        high_fee = make_spending_tx([high_utxo], output_amount=90_000)
+        mp.max_size = high_fee.vbytes
+
+        self.assertTrue(mp.add_tx(low_fee))
+        self.assertTrue(mp.add_tx(high_fee))
+
+        self.assertNotIn(low_fee.txid, mp)
+        self.assertIn(high_fee.txid, mp)
+        self.assertLessEqual(mp.total_vbytes, mp.max_size)
+
+    def test_eviction_raises_rolling_minimum_relay_fee(self):
+        low_utxo = make_utxo(make_txid(), amount=100_000)
+        high_utxo = make_utxo(make_txid(), amount=100_000)
+        later_utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([low_utxo, high_utxo, later_utxo])
+        low_fee = make_spending_tx([low_utxo], output_amount=99_000)
+        high_fee = make_spending_tx([high_utxo], output_amount=90_000)
+        later_low_fee = make_spending_tx([later_utxo], output_amount=99_000)
+        mp.max_size = high_fee.vbytes
+
+        self.assertTrue(mp.add_tx(low_fee))
+        self.assertTrue(mp.add_tx(high_fee))
+        result = mp.accept_tx(later_low_fee)
+
+        self.assertGreater(mp.get_min_relay_feerate(), mp.min_fee)
+        self.assertFalse(result.accepted)
+        self.assertIn("fee too low", result.reason)
+
+    def test_rolling_minimum_fee_decays_by_half_life(self):
+        mp = make_mempool_with_utxos([])
+        mp.rolling_min_fee = 8.0
+        mp.rolling_fee_updated_at = 1_000
+
+        self.assertEqual(
+            mp.get_min_relay_feerate(1_000 + MemPool.ROLLING_FEE_HALFLIFE),
+            4.0,
+        )
+
+
+class TestAdmissionCategories(unittest.TestCase):
+
+    def test_consensus_invalid_transaction_has_distinct_category(self):
+        utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([utxo])
+        tx = make_spending_tx([utxo], output_amount=90_000)
+        tx.inputs[0].scriptsig = b'\x01\x00'
+
+        result = mp.accept_tx(tx)
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.category, AdmissionCategory.CONSENSUS_INVALID)
+
+    def test_consensus_valid_nonstandard_output_has_distinct_category(self):
+        utxo = make_utxo(make_txid(), amount=100_000)
+        mp = make_mempool_with_utxos([utxo])
+        tx = Tx(
+            inputs=[
+                TxIn(
+                    txid=utxo.outpoint[:32],
+                    vout=utxo.outpoint[32:],
+                    scriptsig=ANYONE_CAN_SPEND_SCRIPTSIG,
+                    sequence=0xffffffff,
+                )
+            ],
+            outputs=[TxOut(amount=90_000, scriptpubkey=b"\x51")],
+        )
+
+        result = mp.accept_tx(tx)
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.category, AdmissionCategory.NONSTANDARD)
+        self.assertIn("non-standard output", result.reason)
 
 
 class TestAddTxRejectionCases(unittest.TestCase):

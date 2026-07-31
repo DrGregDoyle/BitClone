@@ -140,6 +140,9 @@ trusted remote source. Archival and pruned BitClone nodes continue to show their
 Local mempool admission reads directly from the node's active-chain UTXO view and overlays outputs from unconfirmed
 parents. Transaction dependencies are bounded by ancestor and descendant count/size policy, unknown-parent transactions
 are retained briefly in a bounded orphan pool, and block templates select fee-paying packages in dependency order.
+Opt-in BIP125 replacements evict their complete conflict set only when they cover its fees plus incremental relay cost.
+Under memory pressure, low-fee descendant packages are evicted and establish a decaying rolling minimum relay fee.
+Consensus-invalid, non-standard, orphan, and other policy outcomes remain distinct within mempool admission.
 
 Local chainstate updates commit block-index membership, undo data, and UTXO mutations as one transaction. Block-file
 writes are rolled back on commit failure and reconciled on startup. Competing branches are selected by cumulative work,

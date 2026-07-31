@@ -455,6 +455,7 @@ class NodeApplicationService:
                 "feerate": entry.feerate,
                 "ancestor_count": len(entry.ancestors),
                 "descendant_count": len(entry.descendants),
+                "bip125-replaceable": entry.bip125_replaceable,
                 "fees": {
                     "base": entry.fee / SATOSHIS_PER_BITCOIN,
                     "modified": entry.fee / SATOSHIS_PER_BITCOIN,
@@ -486,7 +487,13 @@ class NodeApplicationService:
         except (ValueError, ReadError, TransactionError) as error:
             raise RPCError(-22, f"TX decode failed: {error}") from error
         if not self._node.submit_tx(tx):
-            raise RPCError(-26, "Transaction rejected by BitClone mempool policy")
+            admission = getattr(self._node.mempool, "last_admission", None)
+            if admission is None:
+                raise RPCError(-26, "Transaction rejected by BitClone mempool policy")
+            raise RPCError(
+                -26,
+                f"Transaction rejected ({admission.category.value}): {admission.reason}",
+            )
         return tx.txid[::-1].hex()
 
     def _rpc_getrawtransaction(self, params: list | dict) -> str | dict[str, Any]:

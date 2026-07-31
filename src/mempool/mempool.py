@@ -2,6 +2,7 @@
 The MemPool class
 """
 import time
+from math import ceil
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -11,6 +12,11 @@ from src.database.bitcoin_core_rpc import BitcoinCoreRPC
 from src.tx import LoadedTx, Tx, UTXO
 from src.core import ChainParams, NetworkName, get_chain_params
 from src.mempool.orphan_pool import OrphanTransactionPool
+from src.mempool.policy import (
+    AdmissionCategory,
+    AdmissionResult,
+    check_transaction_standardness,
+)
 from src.tx.validation import TxValidationContext, validate_loaded_tx, validate_tx_scripts
 
 logger = get_logger(__name__)
@@ -51,6 +57,15 @@ class MemPoolTx:
         ancestor_vbytes = sum(a.tx.vbytes for a in self.ancestors)
         return (self.fee + ancestor_fees) / (self.tx.vbytes + ancestor_vbytes)
 
+    @property
+    def bip125_replaceable(self) -> bool:
+        """Return whether this entry explicitly or inheritably signals RBF."""
+        return any(
+            txin.sequence < 0xFFFFFFFE
+            for entry in [self, *self.ancestors]
+            for txin in entry.tx.inputs
+        )
+
 
 class MemPool:
     """
@@ -64,6 +79,9 @@ class MemPool:
     MAX_ANCESTOR_VBYTES = 101_000
     MAX_DESCENDANT_COUNT = 25
     MAX_DESCENDANT_VBYTES = 101_000
+    MAX_REPLACEMENT_EVICTIONS = 100
+    RBF_SEQUENCE_THRESHOLD = 0xFFFFFFFE
+    ROLLING_FEE_HALFLIFE = 12 * 60 * 60
 
     def __init__(
             self,
@@ -86,6 +104,7 @@ class MemPool:
         self.max_ancestor_vbytes = MemPool.MAX_ANCESTOR_VBYTES
         self.max_descendant_count = MemPool.MAX_DESCENDANT_COUNT
         self.max_descendant_vbytes = MemPool.MAX_DESCENDANT_VBYTES
+        self.max_replacement_evictions = MemPool.MAX_REPLACEMENT_EVICTIONS
 
         # The node injects its blockchain database here so admission always
         # observes the active chain selected by that exact node instance.
@@ -104,7 +123,15 @@ class MemPool:
         # --- Metadata
         self.total_vbytes = 0  # Update with every tx added or removed
         self.spent_outpoints = set()  # Update with every tx added or removed
+        self.spends: dict[bytes, bytes] = {}
         self.orphans = OrphanTransactionPool()
+        self.rolling_min_fee = 0.0
+        self.rolling_fee_updated_at = int(time.time())
+        self.last_admission = AdmissionResult(
+            False,
+            AdmissionCategory.POLICY,
+            "no transaction has been submitted",
+        )
 
     def __len__(self) -> int:
         return len(self.mempool)
@@ -116,6 +143,17 @@ class MemPool:
         """
         We validate the candidate_tx and return True or False based on whether the transaction was added to the pool.
         """
+        result = self.accept_tx(candidate_tx, _reconsidering=_reconsidering)
+        self.last_admission = result
+        return result.accepted
+
+    def accept_tx(
+            self,
+            candidate_tx: bytes | Tx,
+            *,
+            _reconsidering: bool = False,
+    ) -> AdmissionResult:
+        """Evaluate and, when accepted, insert a transaction into the mempool."""
         # --- Evict expired transactions
         self.evict_expired()
 
@@ -124,16 +162,19 @@ class MemPool:
             tx = Tx.from_bytes(candidate_tx) if isinstance(candidate_tx, bytes) else candidate_tx
         except (ReadError, ValueError) as e:
             logger.error(f"Failed to decode tx from byte stream: {e}")
-            return False
+            return self._result(AdmissionCategory.CONSENSUS_INVALID, f"transaction decode failed: {e}")
 
-        if not self._precheck_tx(tx):
-            return False
+        precheck = self._precheck_tx(tx)
+        if precheck is not None:
+            return precheck
+
+        direct_conflicts = self._get_direct_conflicts(tx)
 
         try:
             utxos = self._get_utxos(tx)
         except ReadError as error:
             logger.error(f"Validation error: {error}")
-            return False
+            return self._result(AdmissionCategory.CONSENSUS_INVALID, str(error))
 
         if utxos is None:
             missing_parents = {
@@ -148,21 +189,54 @@ class MemPool:
                     f"Stored orphan tx {tx.txid.hex()} waiting for "
                     f"{len(missing_parents)} parent(s)"
                 )
-            return False
+            return self._result(AdmissionCategory.ORPHAN, "transaction inputs are not known")
 
-        # --- Validate tx
+        try:
+            loaded_tx = LoadedTx(tx, utxos)
+            tx_fee = loaded_tx.fee
+        except (ReadError, TransactionError, ValueError) as error:
+            logger.error(f"Validation error: {error}")
+            return self._result(AdmissionCategory.CONSENSUS_INVALID, str(error))
         if not self._validate_tx(tx, utxos):
-            logger.error("Failed to validate tx")
-            return False
+            logger.error("Failed consensus validation")
+            return self._result(AdmissionCategory.CONSENSUS_INVALID, "transaction failed consensus validation")
+        standard_reason = self._check_standardness(loaded_tx)
+        if standard_reason is not None:
+            logger.error(f"Non-standard transaction {tx.txid.hex()}: {standard_reason}")
+            return self._result(AdmissionCategory.NONSTANDARD, standard_reason)
 
-        ancestors = self._get_ancestors(tx)
-        if not self._check_package_limits(tx, ancestors):
-            return False
+        minimum_feerate = self.get_min_relay_feerate()
+        required_fee = ceil(minimum_feerate * tx.vbytes)
+        if tx_fee < required_fee:
+            reason = (
+                f"fee too low: {tx_fee} sats, requires {required_fee} sats "
+                f"at {minimum_feerate:.2f} sat/vB"
+            )
+            logger.error(reason)
+            return self._result(AdmissionCategory.POLICY, reason)
+
+        eviction_set: set[bytes] = set()
+        if direct_conflicts:
+            replacement_reason, eviction_set = self._check_replacement(
+                tx,
+                tx_fee,
+                direct_conflicts,
+            )
+            if replacement_reason is not None:
+                logger.error(f"Replacement rejected: {replacement_reason}")
+                return self._result(AdmissionCategory.POLICY, replacement_reason)
+
+        ancestors = self._get_ancestors(tx, excluded_txids=eviction_set)
+        if not self._check_package_limits(tx, ancestors, ignored_txids=eviction_set):
+            return self._result(AdmissionCategory.POLICY, "transaction exceeds package limits")
+
+        replaced_txids = tuple(sorted(eviction_set))
+        self._remove_entries(eviction_set)
 
         # --- Create MemPoolTx
         mempool_tx = MemPoolTx(
             tx=tx,
-            fee=LoadedTx(tx, utxos).fee,
+            fee=tx_fee,
             ancestors=ancestors,
         )
 
@@ -174,11 +248,23 @@ class MemPool:
         # --- Add tx
         self.mempool.update({tx.txid: mempool_tx})
         self._add_metadata(tx)
+        self._trim_to_size()
+        if tx.txid not in self.mempool:
+            return self._result(
+                AdmissionCategory.POLICY,
+                "transaction evicted because the mempool is full",
+                replaced_txids,
+            )
         self._orphan_pool().remove(tx.txid)
         if not _reconsidering:
             self._reconsider_orphans(tx.txid)
 
-        return True
+        return AdmissionResult(
+            True,
+            AdmissionCategory.ACCEPTED,
+            "transaction accepted",
+            replaced_txids,
+        )
 
     def confirm_block(self, confirmed_txids: list[bytes]) -> None:
         for txid in confirmed_txids:
@@ -275,6 +361,7 @@ class MemPool:
                 "arrival_time": mptx.arrival_time,
                 "ancestor_count": len(mptx.ancestors),
                 "descendant_count": len(mptx.descendants),
+                "bip125_replaceable": mptx.bip125_replaceable,
             }
             for txid, mptx in self.mempool.items()
         }
@@ -286,23 +373,17 @@ class MemPool:
         if getattr(self, "_owns_btcdb", True):
             self.btcdb.close()
 
-    def _precheck_tx(self, tx: Tx) -> bool:
+    def _precheck_tx(self, tx: Tx) -> AdmissionResult | None:
         # --- Check if tx is in mempool
         if tx.txid in self.mempool:
             logger.error(f"Transaction with id {tx.txid} already exists in mempool.")
-            return False
+            return self._result(AdmissionCategory.POLICY, "transaction already exists in mempool")
 
         # --- Check not coinbase
         if tx.is_coinbase:
             logger.error(f"Cannot add coinbase tx to the mempool")
-            return False
-
-        # --- Mempool double-spend policy
-        for txin in tx.inputs:
-            if txin.outpoint in self.spent_outpoints:
-                logger.error(f"Double spend detected: {txin.outpoint.hex()}")
-                return False
-        return True
+            return self._result(AdmissionCategory.CONSENSUS_INVALID, "coinbase transaction is not valid in mempool")
+        return None
 
     def _validate_tx(self, tx: Tx, utxos: list[UTXO] | None = None) -> bool:
         try:
@@ -320,7 +401,7 @@ class MemPool:
             next_height = chain_height + 1 if isinstance(chain_height, int) else 0
             tip = self.btcdb.get_latest_block()
             tip_time = getattr(tip, "timestamp", None)
-            standard_flags = chain_params.standard_script_flags(
+            consensus_flags = chain_params.consensus_script_flags(
                 next_height,
                 block_time=tip_time if isinstance(tip_time, int) else None,
             )
@@ -330,7 +411,7 @@ class MemPool:
                         validate_scripts=True,
                         script_validator=lambda candidate: validate_tx_scripts(
                             candidate,
-                            flags=standard_flags,
+                            flags=consensus_flags,
                         ),
                     ),
             ):
@@ -342,20 +423,28 @@ class MemPool:
             logger.error(f"Transaction validation failed for {tx.txid.hex()}: {e}")
             return False
 
-        tx_fee = loaded_tx.fee
-
-        # --- Check fees
-        if tx_fee < self.min_fee * tx.vbytes:
-            logger.error(
-                f"Fee too low: {tx_fee} sats ({tx_fee / tx.vbytes:.2f} sat/vb), minimum is {self.min_fee} sat/vb")
-            return False
-
-        # --- Check size
-        if self.total_vbytes + tx.vbytes > self.max_size:
-            logger.error(f"Mempool full. Rejecting tx {tx.txid.hex()}")
-            return False
-
         return True
+
+    def _check_standardness(self, loaded_tx: LoadedTx) -> str | None:
+        """Apply relay policy after the transaction has passed consensus checks."""
+        shape_reason = check_transaction_standardness(loaded_tx.tx)
+        if shape_reason is not None:
+            return shape_reason
+        try:
+            chain_params = getattr(self, "chain_params", get_chain_params(NetworkName.MAINNET))
+            chain_height = self.btcdb.get_chain_height()
+            next_height = chain_height + 1 if isinstance(chain_height, int) else 0
+            tip = self.btcdb.get_latest_block()
+            tip_time = getattr(tip, "timestamp", None)
+            standard_flags = chain_params.standard_script_flags(
+                next_height,
+                block_time=tip_time if isinstance(tip_time, int) else None,
+            )
+            if not validate_tx_scripts(loaded_tx, flags=standard_flags):
+                return "transaction scripts fail standard relay flags"
+        except Exception as error:
+            return f"standard script validation failed: {error}"
+        return None
 
     def _get_utxo(self, outpoint: bytes) -> UTXO | None:
         """Resolve an output from an unconfirmed parent, then the active chain."""
@@ -418,16 +507,22 @@ class MemPool:
         self._remove_metadata(mempool_tx.tx)
         del self.mempool[txid]
 
-    def _get_ancestors(self, tx: Tx) -> list[MemPoolTx]:
+    def _get_ancestors(
+            self,
+            tx: Tx,
+            *,
+            excluded_txids: set[bytes] | None = None,
+    ) -> list[MemPoolTx]:
         """Return all in-mempool ancestors in topological order."""
+        excluded_txids = excluded_txids or set()
         ancestors: list[MemPoolTx] = []
         seen: set[bytes] = set()
         for txin in tx.inputs:
             parent = self.mempool.get(txin.txid)
-            if parent is None:
+            if parent is None or parent.tx.txid in excluded_txids:
                 continue
             for ancestor in [*parent.ancestors, parent]:
-                if ancestor.tx.txid in seen:
+                if ancestor.tx.txid in seen or ancestor.tx.txid in excluded_txids:
                     continue
                 ancestors.append(ancestor)
                 seen.add(ancestor.tx.txid)
@@ -445,8 +540,15 @@ class MemPool:
             ),
         )
 
-    def _check_package_limits(self, tx: Tx, ancestors: list[MemPoolTx]) -> bool:
+    def _check_package_limits(
+            self,
+            tx: Tx,
+            ancestors: list[MemPoolTx],
+            *,
+            ignored_txids: set[bytes] | None = None,
+    ) -> bool:
         """Enforce count and virtual-size limits in both graph directions."""
+        ignored_txids = ignored_txids or set()
         ancestor_count = len(ancestors) + 1
         ancestor_vbytes = tx.vbytes + sum(entry.tx.vbytes for entry in ancestors)
         if ancestor_count > getattr(self, "max_ancestor_count", self.MAX_ANCESTOR_COUNT):
@@ -457,10 +559,15 @@ class MemPool:
             return False
 
         for ancestor in ancestors:
-            descendant_count = len(ancestor.descendants) + 2
+            retained_descendants = [
+                entry
+                for entry in ancestor.descendants
+                if entry.tx.txid not in ignored_txids
+            ]
+            descendant_count = len(retained_descendants) + 2
             descendant_vbytes = (
                 ancestor.tx.vbytes
-                + sum(entry.tx.vbytes for entry in ancestor.descendants)
+                + sum(entry.tx.vbytes for entry in retained_descendants)
                 + tx.vbytes
             )
             if descendant_count > getattr(
@@ -480,6 +587,141 @@ class MemPool:
                 )
                 return False
         return True
+
+    def _get_direct_conflicts(self, tx: Tx) -> list[MemPoolTx]:
+        """Return mempool entries spending any candidate input."""
+        spend_index = self._spend_index()
+        conflict_txids = {
+            spend_index[txin.outpoint]
+            for txin in tx.inputs
+            if txin.outpoint in spend_index
+        }
+        return [self.mempool[txid] for txid in conflict_txids if txid in self.mempool]
+
+    def _check_replacement(
+            self,
+            tx: Tx,
+            tx_fee: int,
+            direct_conflicts: list[MemPoolTx],
+    ) -> tuple[str | None, set[bytes]]:
+        """Apply the five opt-in full-RBF rules from BIP125."""
+        if any(not self._signals_replaceability(entry) for entry in direct_conflicts):
+            return "conflicting transaction does not signal replaceability", set()
+
+        eviction_set: set[bytes] = set()
+        for conflict in direct_conflicts:
+            eviction_set.add(conflict.tx.txid)
+            eviction_set.update(entry.tx.txid for entry in conflict.descendants)
+        eviction_limit = getattr(
+            self,
+            "max_replacement_evictions",
+            self.MAX_REPLACEMENT_EVICTIONS,
+        )
+        if len(eviction_set) > eviction_limit:
+            return (
+                f"replacement would evict {len(eviction_set)} transactions; "
+                f"limit is {eviction_limit}"
+            ), set()
+
+        original_unconfirmed_inputs = {
+            txin.outpoint
+            for conflict in direct_conflicts
+            for txin in conflict.tx.inputs
+            if txin.txid in self.mempool
+        }
+        for txin in tx.inputs:
+            if txin.txid in self.mempool and txin.outpoint not in original_unconfirmed_inputs:
+                return "replacement adds a new unconfirmed input", set()
+
+        evicted_fee = sum(self.mempool[txid].fee for txid in eviction_set)
+        if tx_fee < evicted_fee:
+            return (
+                f"replacement fee {tx_fee} is below evicted fee {evicted_fee}"
+            ), set()
+        incremental_fee = ceil(self.min_fee * tx.vbytes)
+        if tx_fee - evicted_fee < incremental_fee:
+            return (
+                f"replacement fee increase {tx_fee - evicted_fee} is below "
+                f"incremental relay fee {incremental_fee}"
+            ), set()
+        return None, eviction_set
+
+    def _signals_replaceability(self, entry: MemPoolTx) -> bool:
+        """Check explicit or inherited opt-in RBF signaling."""
+        return any(
+            txin.sequence < self.RBF_SEQUENCE_THRESHOLD
+            for candidate in [entry, *entry.ancestors]
+            for txin in candidate.tx.inputs
+        )
+
+    def _remove_entries(self, txids: set[bytes]) -> None:
+        """Remove a known dependency-closed set, descendants before parents."""
+        entries = [
+            self.mempool[txid]
+            for txid in txids
+            if txid in self.mempool
+        ]
+        for entry in sorted(entries, key=lambda item: len(item.ancestors), reverse=True):
+            if entry.tx.txid in self.mempool:
+                self._remove_tx(entry.tx.txid)
+
+    def get_min_relay_feerate(self, now: int | None = None) -> float:
+        """Return the base or decayed rolling relay floor in sat/vB."""
+        current_time = int(time.time()) if now is None else now
+        rolling_fee = getattr(self, "rolling_min_fee", 0.0)
+        updated_at = getattr(self, "rolling_fee_updated_at", current_time)
+        elapsed = max(0, current_time - updated_at)
+        if rolling_fee > 0 and elapsed:
+            rolling_fee *= 0.5 ** (elapsed / self.ROLLING_FEE_HALFLIFE)
+            if rolling_fee < self.min_fee / 2:
+                rolling_fee = 0.0
+            self.rolling_min_fee = rolling_fee
+            self.rolling_fee_updated_at = current_time
+        return max(float(self.min_fee), rolling_fee)
+
+    def _trim_to_size(self) -> tuple[bytes, ...]:
+        """Evict the lowest descendant-feerate packages until within limits."""
+        evicted: list[bytes] = []
+        while self.total_vbytes > self.max_size and self.mempool:
+            candidates: list[tuple[float, bytes, set[bytes]]] = []
+            for txid, entry in self.mempool.items():
+                package_txids = {
+                    txid,
+                    *(descendant.tx.txid for descendant in entry.descendants),
+                }
+                package_fee = sum(self.mempool[item].fee for item in package_txids)
+                package_vbytes = sum(self.mempool[item].tx.vbytes for item in package_txids)
+                candidates.append((package_fee / package_vbytes, txid, package_txids))
+            package_feerate, _, package_txids = min(
+                candidates,
+                key=lambda item: (item[0], item[1]),
+            )
+            self._remove_entries(package_txids)
+            evicted.extend(sorted(package_txids))
+            self.rolling_min_fee = max(
+                getattr(self, "rolling_min_fee", 0.0),
+                package_feerate + self.min_fee,
+            )
+            self.rolling_fee_updated_at = int(time.time())
+        return tuple(evicted)
+
+    @staticmethod
+    def _result(
+            category: AdmissionCategory,
+            reason: str,
+            replaced_txids: tuple[bytes, ...] = (),
+    ) -> AdmissionResult:
+        return AdmissionResult(False, category, reason, replaced_txids)
+
+    def _spend_index(self) -> dict[bytes, bytes]:
+        """Return the outpoint index, rebuilding lightweight legacy fixtures."""
+        if not hasattr(self, "spends"):
+            self.spends = {
+                txin.outpoint: txid
+                for txid, entry in self.mempool.items()
+                for txin in entry.tx.inputs
+            }
+        return self.spends
 
     def _orphan_pool(self) -> OrphanTransactionPool:
         """Lazily initialize for compatibility with lightweight test fixtures."""
@@ -506,6 +748,7 @@ class MemPool:
         # --- spent_outpoints
         for txin in tx.inputs:
             self.spent_outpoints.add(txin.outpoint)
+            self._spend_index()[txin.outpoint] = tx.txid
 
     def _remove_metadata(self, tx: Tx) -> None:
         """
@@ -516,7 +759,8 @@ class MemPool:
 
         # --- spent_outpoints
         for txin in tx.inputs:
-            self.spent_outpoints.remove(txin.outpoint)
+            self.spent_outpoints.discard(txin.outpoint)
+            self._spend_index().pop(txin.outpoint, None)
 
 
 # ---TESING --- #

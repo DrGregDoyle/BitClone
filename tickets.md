@@ -17,13 +17,6 @@ and propagate transactions and blocks in accordance with the Bitcoin P2P protoco
 Use this story for focused refactors, maintenance tasks, and bug fixes discovered while implementing Sprint 9.
 Each item should be handled as a separate ticket with sufficient tests.
 
-**Story 9.2 — Replacement, Eviction, and Relay Policy**
-
-- [ ] Implement Replace-by-Fee rules from BIP125
-- [ ] Evict low-fee transactions under memory pressure
-- [ ] Maintain a rolling minimum relay fee after eviction
-- [ ] Reject non-standard transactions separately from consensus-invalid transactions
-
 **Story 9.3 — Packages and Persistence**
 
 - [ ] Add package-validation and package-relay groundwork
